@@ -11,21 +11,32 @@
  */
 
 #include <array>
+#include <utility>
 
 #include <rex/input/device.h>
 #include <rex/input/input.h>
 
 namespace rex::input {
 
-// XInput's published thresholds.
-constexpr int32_t kThumbDeadzone = 7849;
-constexpr uint8_t kTriggerThreshold = 30;
+constexpr int32_t kThumbDeadzone = X_INPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+constexpr uint8_t kTriggerThreshold = X_INPUT_GAMEPAD_TRIGGER_THRESHOLD;
 
 /// Folds src into dst: buttons OR, triggers max, stick axes larger magnitude,
 /// packet number newest.
 void MergeInto(X_INPUT_STATE& dst, const X_INPUT_STATE& src);
 
 bool IsNeutral(const X_INPUT_GAMEPAD& gamepad);
+
+/// A stick's {x, y} range as its device's capabilities report it (0xFFFF on
+/// every standard pad).
+using StickRange = std::pair<uint16_t, uint16_t>;
+
+/// Zeroes each axis inside `percentage` of the range, scaled along the stick's
+/// angle so a diagonal is not held to a larger push than a cardinal one. The
+/// scale matches Xenia Canary's deadzone cvars, so 0.12 of a standard pad is
+/// about XInput's own 7849. 0 or 1 and above leave the stick alone.
+std::pair<int16_t, int16_t> ApplyStickDeadzone(double percentage, StickRange range, int16_t x,
+                                               int16_t y);
 
 /// Tracks which device most recently produced real input, per guest user, so
 /// button glyphs follow the pad in the player's hands.

@@ -77,6 +77,27 @@ TEST_CASE("XInput motor speeds become GameInput rumble", "[gdk][gameinput]") {
   CHECK(params.rightTrigger == 0.0f);
 }
 
+TEST_CASE("GameInput device kinds become XInput subtypes", "[gdk][gameinput]") {
+  CHECK(SubtypeFromGameInput(GameInputKindGamepad) == XINPUT_DEVSUBTYPE_GAMEPAD);
+  CHECK(SubtypeFromGameInput(GameInputKindUnknown) == XINPUT_DEVSUBTYPE_GAMEPAD);
+  // Wheels and sticks usually offer the gamepad kind as well.
+  CHECK(SubtypeFromGameInput(GameInputKindGamepad | GameInputKindRacingWheel) ==
+        XINPUT_DEVSUBTYPE_WHEEL);
+  CHECK(SubtypeFromGameInput(GameInputKindGamepad | GameInputKindArcadeStick) ==
+        XINPUT_DEVSUBTYPE_ARCADE_STICK);
+  CHECK(SubtypeFromGameInput(GameInputKindGamepad | GameInputKindFlightStick) ==
+        XINPUT_DEVSUBTYPE_FLIGHT_STICK);
+}
+
+TEST_CASE("Only both body motors count as XInput vibration", "[gdk][gameinput]") {
+  CHECK(HasXInputRumble(GameInputRumbleLowFrequency | GameInputRumbleHighFrequency));
+  CHECK(HasXInputRumble(GameInputRumbleLowFrequency | GameInputRumbleHighFrequency |
+                        GameInputRumbleLeftTrigger | GameInputRumbleRightTrigger));
+  CHECK_FALSE(HasXInputRumble(GameInputRumbleNone));
+  CHECK_FALSE(HasXInputRumble(GameInputRumbleLeftTrigger | GameInputRumbleRightTrigger));
+  CHECK_FALSE(HasXInputRumble(GameInputRumbleLowFrequency));
+}
+
 TEST_CASE("The GameInput driver starts against the installed runtime", "[gdk][gameinput]") {
   GameInputDriver driver(nullptr, 0);
   REQUIRE(driver.Setup() == X_STATUS_SUCCESS);
@@ -87,6 +108,11 @@ TEST_CASE("The GameInput driver starts against the installed runtime", "[gdk][ga
     X_INPUT_STATE state = {};
     CHECK(driver.GetDeviceState(device.id, &state) == X_ERROR_SUCCESS);
     CHECK(state.packet_number >= 1);
+    // The capabilities carry what GameInput identified.
+    X_INPUT_CAPABILITIES caps = {};
+    REQUIRE(driver.GetDeviceCapabilities(device.id, 0, &caps) == X_ERROR_SUCCESS);
+    INFO(device.name);
+    CHECK(caps.sub_type == device.subtype);
   }
   X_INPUT_STATE state = {};
   CHECK(driver.GetDeviceState(DeviceId::kInvalid, &state) == X_ERROR_DEVICE_NOT_CONNECTED);

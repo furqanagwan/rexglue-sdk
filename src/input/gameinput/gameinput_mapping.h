@@ -82,6 +82,26 @@ inline X_INPUT_GAMEPAD GamepadToXInput(const GameInputGamepadState& state, bool 
   return gamepad;
 }
 
+// GameInput names a device's kind rather than an XInput subtype. A wheel or
+// stick usually also offers GameInputKindGamepad, so the specific kind wins.
+inline uint8_t SubtypeFromGameInput(GameInputKind supported) {
+  if (supported & GameInputKindRacingWheel) {
+    return XINPUT_DEVSUBTYPE_WHEEL;
+  }
+  if (supported & GameInputKindArcadeStick) {
+    return XINPUT_DEVSUBTYPE_ARCADE_STICK;
+  }
+  if (supported & GameInputKindFlightStick) {
+    return XINPUT_DEVSUBTYPE_FLIGHT_STICK;
+  }
+  return XINPUT_DEVSUBTYPE_GAMEPAD;
+}
+
+// XInput vibration needs both body motors; trigger motors alone do not count.
+inline bool HasXInputRumble(GameInputRumbleMotors motors) {
+  return (motors & GameInputRumbleLowFrequency) && (motors & GameInputRumbleHighFrequency);
+}
+
 // XInput's left motor is the low-frequency (heavy) one, the right the
 // high-frequency one. Trigger motors have no XInput equivalent and stay off.
 inline GameInputRumbleParams RumbleToGameInput(const Rumble& rumble) {

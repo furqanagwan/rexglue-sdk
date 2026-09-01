@@ -12,6 +12,7 @@
 #include <rex/input/state_merge.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace rex::input {
@@ -27,6 +28,25 @@ bool PastDeadzone(int16_t axis) {
 }
 
 }  // namespace
+
+std::pair<int16_t, int16_t> ApplyStickDeadzone(double percentage, StickRange range, int16_t x,
+                                               int16_t y) {
+  if (!(percentage > 0.0 && percentage < 1.0)) {
+    return {x, y};
+  }
+  const double theta = std::atan2(static_cast<double>(y), static_cast<double>(x));
+  // Magnitudes: upstream compared against the signed projection, so a stick
+  // pushed left or down never reached the deadzone.
+  const double cutoff_x = std::abs(std::cos(theta)) * range.first * percentage;
+  const double cutoff_y = std::abs(std::sin(theta)) * range.second * percentage;
+  if (std::abs(static_cast<double>(x)) < cutoff_x) {
+    x = 0;
+  }
+  if (std::abs(static_cast<double>(y)) < cutoff_y) {
+    y = 0;
+  }
+  return {x, y};
+}
 
 void MergeInto(X_INPUT_STATE& dst, const X_INPUT_STATE& src) {
   dst.gamepad.buttons =

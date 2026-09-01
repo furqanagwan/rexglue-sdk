@@ -141,14 +141,22 @@ void CALLBACK GameInputDriver::OnDeviceStatus(GameInputCallbackToken, void* cont
   std::lock_guard lock(self->mutex_);
   const void* key = device;
   if (connected) {
-    const bool wireless = (current & GameInputDeviceWireless) != 0;
-    DeviceId id = self->devices_.Connect(key, DeviceName(device), wireless);
+    const GameInputDeviceInfo* info = device->GetDeviceInfo();
+    PadTraits traits;
+    traits.wireless = (current & GameInputDeviceWireless) != 0;
+    traits.subtype = SubtypeFromGameInput(info->supportedInput);
+    traits.rumble = HasXInputRumble(info->supportedRumbleMotors);
+    DeviceId id = self->devices_.Connect(key, DeviceName(device), traits);
     if (!self->host_devices_.count(key)) {
       device->AddRef();
       self->host_devices_[key] = device;
     }
-    REXLOG_INFO("GameInput: connected {} as device {:X}", DeviceName(device),
-                static_cast<uint64_t>(id));
+    REXLOG_INFO(
+        "GameInput: connected {} as device {:X}: kinds 0x{:08X}, XInput subtype 0x{:02X}, "
+        "rumble motors 0x{:X}, {}",
+        DeviceName(device), static_cast<uint64_t>(id), uint32_t(info->supportedInput),
+        traits.subtype, uint32_t(info->supportedRumbleMotors),
+        traits.wireless ? "wireless" : "wired");
   } else {
     self->devices_.Disconnect(key);
     auto it = self->host_devices_.find(key);
