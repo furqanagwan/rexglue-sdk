@@ -152,6 +152,11 @@ class Window {
     kHidden,
   };
 
+  // Sized from the window_width / window_height, resolution and
+  // video_mode_* cvars, in that order.
+  static std::unique_ptr<Window> Create(WindowedAppContext& app_context,
+                                        const std::string_view title);
+  // An explicit size, ignoring the cvars.
   static std::unique_ptr<Window> Create(WindowedAppContext& app_context,
                                         const std::string_view title,
                                         uint32_t desired_logical_width,
@@ -268,6 +273,12 @@ class Window {
   }
   uint32_t GetActualLogicalWidth() const { return SizeToLogical(GetActualPhysicalWidth()); }
   uint32_t GetActualLogicalHeight() const { return SizeToLogical(GetActualPhysicalHeight()); }
+
+  virtual bool GetDisplayPixelSize(uint32_t& width, uint32_t& height) const {
+    (void)width;
+    (void)height;
+    return false;
+  }
 
   // Desired state stored by the common Window, modifiable both externally and
   // by the implementation (including from SetFullscreen itself).

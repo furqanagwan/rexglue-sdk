@@ -207,6 +207,19 @@ bool WindowSDL::WarpMouseToCenter(int32_t& x_out, int32_t& y_out) {
   return true;
 }
 
+bool WindowSDL::GetDisplayPixelSize(uint32_t& width, uint32_t& height) const {
+  if (!sdl_window_) {
+    return false;
+  }
+  const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(sdl_window_));
+  if (!mode) {
+    return false;
+  }
+  width = uint32_t(float(mode->w) * mode->pixel_density);
+  height = uint32_t(float(mode->h) * mode->pixel_density);
+  return width > 0 && height > 0;
+}
+
 float WindowSDL::GetPixelDensity() const {
   float density = sdl_window_ ? SDL_GetWindowPixelDensity(sdl_window_) : 1.0f;
   return density > 0.0f ? density : 1.0f;
