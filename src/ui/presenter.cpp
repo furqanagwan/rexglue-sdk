@@ -1432,6 +1432,7 @@ void Presenter::UpdateSurfaceMonitorFromUIThread(bool old_monitor_potentially_di
   // of `window_`.
 #if REX_PLATFORM_WIN32
   HMONITOR surface_new_win32_monitor = nullptr;
+#if !REX_PLATFORM_UWP
   if (surface_) {
     HWND hwnd = static_cast<HWND>(window_->GetNativeWindowHandle());
     // The HWND may be non-existent if the window has been closed and destroyed
@@ -1440,6 +1441,7 @@ void Presenter::UpdateSurfaceMonitorFromUIThread(bool old_monitor_potentially_di
       surface_new_win32_monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
     }
   }
+#endif
   if (old_monitor_potentially_disconnected || surface_win32_monitor_ != surface_new_win32_monitor) {
     surface_win32_monitor_ = surface_new_win32_monitor;
     if (dxgi_ui_tick_factory_ && !dxgi_ui_tick_factory_->IsCurrent()) {

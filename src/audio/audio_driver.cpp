@@ -10,6 +10,10 @@
  */
 
 #include <rex/audio/audio_driver.h>
+#include <rex/audio/flags.h>
+#include <rex/cvar.h>
+
+REXCVAR_DEFINE_BOOL(audio_mute, false, "Audio", "Mute audio output");
 
 namespace rex::audio {
 

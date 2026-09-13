@@ -236,6 +236,11 @@ add_library(imgui OBJECT
     ${IMGUI_DIR}/imgui_widgets.cpp
 )
 add_library(imgui::imgui ALIAS imgui)
+if(REXGLUE_PLATFORM_UWP)
+    target_compile_definitions(imgui PRIVATE
+        IMGUI_DISABLE_WIN32_FUNCTIONS
+        IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)
+endif()
 target_include_directories(imgui PUBLIC
     $<BUILD_INTERFACE:${IMGUI_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
@@ -301,7 +306,9 @@ if(UNIX AND NOT APPLE)
     set(SDL_PIPEWIRE_SHARED   ON  CACHE BOOL "" FORCE)
 endif()
 
-add_subdirectory(sdl3)
+if(NOT REXGLUE_PLATFORM_UWP)
+    add_subdirectory(sdl3)
+endif()
 
 #=============================================================================
 # DXC API headers (vendored from DirectXShaderCompiler, runtime-loaded)

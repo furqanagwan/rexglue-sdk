@@ -137,8 +137,8 @@ std::unique_ptr<MappedMemory> MappedMemory::Open(const std::filesystem::path& pa
   auto mm = std::make_unique<Win32MappedMemory>();
   mm->view_access_ = view_access;
 
-  mm->file_handle = CreateFileW(path.c_str(), file_access, file_share, nullptr, create_mode,
-                                FILE_ATTRIBUTE_NORMAL, nullptr);
+  mm->file_handle = platform_win::CreateFileForApp(path.c_str(), file_access, file_share,
+                                                  create_mode, FILE_ATTRIBUTE_NORMAL);
   if (mm->file_handle == Win32MappedMemory::kFileHandleInvalid) {
     return nullptr;
   }
@@ -252,8 +252,8 @@ class Win32ChunkedMappedMemoryWriter : public ChunkedMappedMemoryWriter {
       DWORD mapping_protect = PAGE_READWRITE;
       DWORD view_access = FILE_MAP_READ | FILE_MAP_WRITE;
 
-      file_handle_ = CreateFileW(path.c_str(), file_access, file_share, nullptr, create_mode,
-                                 FILE_ATTRIBUTE_NORMAL, nullptr);
+      file_handle_ = platform_win::CreateFileForApp(path.c_str(), file_access, file_share,
+                                                   create_mode, FILE_ATTRIBUTE_NORMAL);
       if (file_handle_ == Win32MappedMemory::kFileHandleInvalid) {
         return false;
       }

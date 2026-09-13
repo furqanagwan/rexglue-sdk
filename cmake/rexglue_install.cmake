@@ -7,7 +7,9 @@ set_target_properties(rexui PROPERTIES EXPORT_NAME ui)
 set_target_properties(rexinput PROPERTIES EXPORT_NAME input)
 set_target_properties(rexaudio PROPERTIES EXPORT_NAME audio)
 set_target_properties(rexruntime PROPERTIES EXPORT_NAME runtime)
-set_target_properties(rexcodegen PROPERTIES EXPORT_NAME codegen)
+if(TARGET rexcodegen)
+    set_target_properties(rexcodegen PROPERTIES EXPORT_NAME codegen)
+endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/rexglue_helpers.cmake)
 
@@ -52,11 +54,13 @@ install(TARGETS ${REXGLUE_INSTALL_TARGETS}
 )
 
 # A Debug codegen tool runs an order of magnitude slower, so only Release ships.
-install(TARGETS rexglue
-    EXPORT rexglueTargets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    CONFIGURATIONS Release
-)
+if(TARGET rexglue)
+    install(TARGETS rexglue
+        EXPORT rexglueTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        CONFIGURATIONS Release
+    )
+endif()
 
 if(REXGLUE_INSTALL_FIDELITYFX_TARGETS)
     install(TARGETS ${REXGLUE_INSTALL_FIDELITYFX_TARGETS}
@@ -124,6 +128,7 @@ endif()
 # Install the entry point source and ReXApp for SDK consumers
 install(FILES
     src/ui/windowed_app_main_sdl.cpp
+    src/ui/windowed_app_main_uwp.cpp
     src/ui/rex_app.cpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rexglue
 )
@@ -185,33 +190,35 @@ install(EXPORT rexglueTargets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rexglue
 )
 
-# Register in the CMake User Package Registry after install.
-# This makes find_package(rexglue) work with no REXSDK env var or CMAKE_PREFIX_PATH.
-# Multiple SxS installs coexist. Each prefix gets a unique hash entry.
-#
-# Windows: HKCU\Software\Kitware\CMake\Packages\rexglue  (REG_SZ, value name = MD5 hash)
-# Unix:    ~/.cmake/packages/rexglue/<hash>               (file containing prefix path)
-install(CODE [[
-    # Normalize path casing on Windows before hashing to avoid duplicate entries
-    if(CMAKE_HOST_WIN32)
-        string(TOLOWER "${CMAKE_INSTALL_PREFIX}" _reg_key)
-    else()
-        set(_reg_key "${CMAKE_INSTALL_PREFIX}")
-    endif()
-    string(MD5 _hash "${_reg_key}")
+if(NOT REXGLUE_PLATFORM_UWP)
+    # Register in the CMake User Package Registry after install.
+    # This makes find_package(rexglue) work with no REXSDK env var or CMAKE_PREFIX_PATH.
+    # Multiple SxS installs coexist. Each prefix gets a unique hash entry.
+    #
+    # Windows: HKCU\Software\Kitware\CMake\Packages\rexglue  (REG_SZ, value name = MD5 hash)
+    # Unix:    ~/.cmake/packages/rexglue/<hash>               (file containing prefix path)
+    install(CODE [[
+        # Normalize path casing on Windows before hashing to avoid duplicate entries
+        if(CMAKE_HOST_WIN32)
+            string(TOLOWER "${CMAKE_INSTALL_PREFIX}" _reg_key)
+        else()
+            set(_reg_key "${CMAKE_INSTALL_PREFIX}")
+        endif()
+        string(MD5 _hash "${_reg_key}")
 
-    if(CMAKE_HOST_WIN32)
-        # Windows CMake User Package Registry lives in HKCU (not the filesystem)
-        set(_reg_root "HKCU\\Software\\Kitware\\CMake\\Packages\\rexglue")
-        execute_process(
-            COMMAND reg add "${_reg_root}" /v "${_hash}" /t REG_SZ /d "${CMAKE_INSTALL_PREFIX}" /f
-            OUTPUT_QUIET ERROR_QUIET
-        )
-    else()
-        set(_reg_dir "$ENV{HOME}/.cmake/packages/rexglue")
-        file(MAKE_DIRECTORY "${_reg_dir}")
-        file(WRITE "${_reg_dir}/${_hash}" "${CMAKE_INSTALL_PREFIX}")
-    endif()
-    message(STATUS "Registered rexglue in CMake user package registry")
-    message(STATUS "  -> ${CMAKE_INSTALL_PREFIX}")
-]])
+        if(CMAKE_HOST_WIN32)
+            # Windows CMake User Package Registry lives in HKCU (not the filesystem)
+            set(_reg_root "HKCU\\Software\\Kitware\\CMake\\Packages\\rexglue")
+            execute_process(
+                COMMAND reg add "${_reg_root}" /v "${_hash}" /t REG_SZ /d "${CMAKE_INSTALL_PREFIX}" /f
+                OUTPUT_QUIET ERROR_QUIET
+            )
+        else()
+            set(_reg_dir "$ENV{HOME}/.cmake/packages/rexglue")
+            file(MAKE_DIRECTORY "${_reg_dir}")
+            file(WRITE "${_reg_dir}/${_hash}" "${CMAKE_INSTALL_PREFIX}")
+        endif()
+        message(STATUS "Registered rexglue in CMake user package registry")
+        message(STATUS "  -> ${CMAKE_INSTALL_PREFIX}")
+    ]])
+endif()

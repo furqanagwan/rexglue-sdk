@@ -83,12 +83,14 @@ target_link_libraries(rexruntime
         fmt::fmt
         spdlog::spdlog
         tomlplusplus
-        SDL3::SDL3
     PRIVATE
         aes128
         mspack
         xxHash::xxhash
 )
+if(NOT REXGLUE_PLATFORM_UWP)
+    target_link_libraries(rexruntime PUBLIC SDL3::SDL3)
+endif()
 
 if(REXGLUE_ENABLE_TRACY)
     # TARGET_NAME is what tells install(EXPORT) this text is a target to
@@ -105,8 +107,15 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
         $<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PERF_COUNTERS>)
 endif()
 
-if(WIN32)
+if(REXGLUE_PLATFORM_UWP)
+    target_compile_definitions(rexruntime PUBLIC REX_PLATFORM_UWP=1)
+    rexglue_apply_uwp_link_settings(rexruntime)
+endif()
+
+if(WIN32 AND NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexruntime PRIVATE ws2_32)
+endif()
+if(WIN32)
     target_link_libraries(rexruntime PUBLIC dxgi dxguid)
     target_compile_definitions(rexruntime PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()

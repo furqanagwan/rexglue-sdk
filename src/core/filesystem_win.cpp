@@ -22,6 +22,10 @@
 #include <rex/logging.h>
 #include <rex/string.h>
 
+#if REX_PLATFORM_UWP
+#include <winrt/Windows.Storage.h>
+#endif
+
 namespace rex {
 
 std::string path_to_utf8(const std::filesystem::path& path) {
@@ -53,6 +57,10 @@ std::filesystem::path GetExecutableFolder() {
 }
 
 std::filesystem::path GetUserFolder() {
+#if REX_PLATFORM_UWP
+  return std::filesystem::path(
+      winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path().c_str());
+#else
   std::filesystem::path result;
   PWSTR path;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &path))) {
@@ -60,11 +68,12 @@ std::filesystem::path GetUserFolder() {
     CoTaskMemFree(path);
   }
   return result;
+#endif
 }
 
 bool CreateEmptyFile(const std::filesystem::path& path) {
-  auto handle =
-      CreateFileW(path.c_str(), 0, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  auto handle = platform_win::CreateFileForApp(path.c_str(), 0, 0, CREATE_ALWAYS,
+                                              FILE_ATTRIBUTE_NORMAL);
   if (handle == INVALID_HANDLE_VALUE) {
     return false;
   }
@@ -203,8 +212,9 @@ std::unique_ptr<FileHandle> FileHandle::OpenExisting(const std::filesystem::path
   }
   // We assume we've already created the file in the caller.
   DWORD creation_disposition = OPEN_EXISTING;
-  HANDLE handle = CreateFileW(path.c_str(), open_access, share_mode, nullptr, creation_disposition,
-                              FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  HANDLE handle =
+      platform_win::CreateFileForApp(path.c_str(), open_access, share_mode, creation_disposition,
+                                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS);
   if (handle == INVALID_HANDLE_VALUE) {
     // TODO(benvanik): pick correct response.
     return nullptr;
@@ -217,7 +227,7 @@ std::unique_ptr<FileHandle> FileHandle::OpenExisting(const std::filesystem::path
 bool GetInfo(const std::filesystem::path& path, FileInfo* out_info) {
   *out_info = FileInfo{};
   WIN32_FILE_ATTRIBUTE_DATA data = {};
-  if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
+  if (!platform_win::GetFileAttributesForApp(path.c_str(), &data)) {
     return false;
   }
   if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
@@ -239,7 +249,7 @@ std::vector<FileInfo> ListFiles(const std::filesystem::path& path) {
   std::vector<FileInfo> result;
 
   WIN32_FIND_DATAW ffd;
-  HANDLE handle = FindFirstFileW((path / "*").c_str(), &ffd);
+  HANDLE handle = platform_win::FindFirstFileForApp((path / "*").c_str(), &ffd);
   if (handle == INVALID_HANDLE_VALUE) {
     return result;
   }

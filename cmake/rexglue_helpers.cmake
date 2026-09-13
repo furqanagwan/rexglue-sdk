@@ -39,12 +39,74 @@ function(_rexglue_stage_macos_vulkan_runtime target_name)
 endfunction()
 
 #==========================================================
+# Universal Windows Platform
+#
+# UWP binaries link the app-container CRT and the WindowsApp umbrella library
+# instead of the desktop import libraries, so an import that is unavailable to
+# UWP apps (and therefore on Xbox) fails at link time rather than at launch.
+#==========================================================
+if(REXGLUE_PLATFORM_UWP)
+    set(CMAKE_C_STANDARD_LIBRARIES "")
+    set(CMAKE_CXX_STANDARD_LIBRARIES "")
+endif()
+
+function(rexglue_uwp_cppwinrt_include_dir out_var)
+    if(NOT DEFINED ENV{WindowsSdkDir} OR NOT DEFINED ENV{WindowsSDKVersion})
+        message(FATAL_ERROR "REXGLUE_PLATFORM_UWP needs a Visual Studio developer environment")
+    endif()
+    string(REGEX REPLACE "[\\/]+$" "" _sdk_version "$ENV{WindowsSDKVersion}")
+    file(TO_CMAKE_PATH "$ENV{WindowsSdkDir}/Include/${_sdk_version}/cppwinrt" _dir)
+    set(${out_var} "${_dir}" PARENT_SCOPE)
+endfunction()
+
+function(rexglue_apply_uwp_link_settings target_name)
+    if(NOT REXGLUE_PLATFORM_UWP)
+        return()
+    endif()
+    if(NOT DEFINED ENV{VCToolsInstallDir})
+        message(FATAL_ERROR "REXGLUE_PLATFORM_UWP needs a Visual Studio developer environment")
+    endif()
+    file(TO_CMAKE_PATH "$ENV{VCToolsInstallDir}/lib/x64/store" _crt_dir)
+    rexglue_uwp_cppwinrt_include_dir(_cppwinrt_dir)
+    target_include_directories(${target_name} SYSTEM PRIVATE "${_cppwinrt_dir}")
+    target_compile_definitions(${target_name} PRIVATE REX_PLATFORM_UWP=1)
+    target_link_options(${target_name} PRIVATE
+        "LINKER:/APPCONTAINER"
+        "LINKER:/NODEFAULTLIB:msvcrt.lib"
+        "LINKER:/NODEFAULTLIB:msvcrtd.lib"
+        "LINKER:/NODEFAULTLIB:msvcprt.lib"
+        "LINKER:/NODEFAULTLIB:msvcprtd.lib"
+        "LINKER:/NODEFAULTLIB:vcruntime.lib"
+        "LINKER:/NODEFAULTLIB:vcruntimed.lib"
+        "LINKER:/NODEFAULTLIB:oldnames.lib"
+        "LINKER:/NODEFAULTLIB:kernel32.lib"
+        "LINKER:/NODEFAULTLIB:user32.lib"
+        "LINKER:/NODEFAULTLIB:gdi32.lib"
+        "LINKER:/NODEFAULTLIB:shell32.lib"
+        "LINKER:/NODEFAULTLIB:imm32.lib"
+        "LINKER:/NODEFAULTLIB:ole32.lib"
+        "LINKER:/NODEFAULTLIB:oleaut32.lib"
+        "LINKER:/NODEFAULTLIB:advapi32.lib"
+        "LINKER:/NODEFAULTLIB:ws2_32.lib"
+        "LINKER:/NODEFAULTLIB:mswsock.lib"
+    )
+    target_link_libraries(${target_name} PRIVATE
+        "$<IF:$<CONFIG:Debug>,${_crt_dir}/msvcrtd.lib,${_crt_dir}/msvcrt.lib>"
+        "$<IF:$<CONFIG:Debug>,${_crt_dir}/msvcprtd.lib,${_crt_dir}/msvcprt.lib>"
+        "$<IF:$<CONFIG:Debug>,${_crt_dir}/vcruntimed.lib,${_crt_dir}/vcruntime.lib>"
+        "${_crt_dir}/oldnames.lib"
+        WindowsApp
+    )
+endfunction()
+
+#==========================================================
 # rexglue_apply_target_settings(<target>) - Common flags
 #
 # Applied to both host apps and guest DLL modules. Compile/link flags only;
 # runtime DLL staging is the host's job (see rexglue_configure_target).
 #==========================================================
 function(rexglue_apply_target_settings target_name)
+    rexglue_apply_uwp_link_settings(${target_name})
     if(UNIX AND NOT APPLE)
         # Large executable support
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
@@ -77,9 +139,15 @@ endfunction()
 function(rexglue_configure_target target_name)
     cmake_parse_arguments(ARG "" "" "GPU_PLUGINS" ${ARGN})
 
-    target_sources(${target_name} PRIVATE
-        ${REXGLUE_SHARE_DIR}/windowed_app_main_sdl.cpp
-        ${REXGLUE_SHARE_DIR}/rex_app.cpp)
+    if(REXGLUE_PLATFORM_UWP)
+        target_sources(${target_name} PRIVATE
+            ${REXGLUE_SHARE_DIR}/windowed_app_main_uwp.cpp
+            ${REXGLUE_SHARE_DIR}/rex_app.cpp)
+    else()
+        target_sources(${target_name} PRIVATE
+            ${REXGLUE_SHARE_DIR}/windowed_app_main_sdl.cpp
+            ${REXGLUE_SHARE_DIR}/rex_app.cpp)
+    endif()
 
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")

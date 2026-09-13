@@ -19,13 +19,20 @@
 #include <rex/input/input_system.h>
 #include <rex/input/mnk/mnk_input_driver.h>
 #include <rex/input/nop/nop_input_driver.h>
+#if !REX_PLATFORM_UWP
 #include <rex/input/sdl/sdl_input_driver.h>
+#endif
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
 #include <rex/logging.h>
 
+#if REX_PLATFORM_UWP
+REXCVAR_DEFINE_STRING(input_backend, "xinput", "Input", "Input backend: xinput")
+    .allowed({"sdl", "xinput"});
+#else
 REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
     .allowed({"sdl", "xinput"});
+#endif
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
 namespace rex::input {
@@ -331,7 +338,7 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 
   if (!tool_mode) {
 #if REX_PLATFORM_WIN32
-    if (REXCVAR_GET(input_backend) == "xinput") {
+    if (REX_PLATFORM_UWP || REXCVAR_GET(input_backend) == "xinput") {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(xinput_driver));
@@ -339,12 +346,14 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     }
 #endif
 
+#if !REX_PLATFORM_UWP
     if (REXCVAR_GET(input_backend) == "sdl") {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
       }
     }
+#endif
 
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);

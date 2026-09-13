@@ -22,7 +22,7 @@ thread_local Fiber* Fiber::tls_current_ = nullptr;
 
 Fiber* Fiber::ConvertCurrentThread() {
   auto* f = new Fiber();
-  f->handle_ = ::ConvertThreadToFiber(nullptr);
+  f->handle_ = ::ConvertThreadToFiberEx(nullptr, 0);
   if (!f->handle_) {
     delete f;
     return nullptr;
@@ -34,7 +34,7 @@ Fiber* Fiber::ConvertCurrentThread() {
 
 Fiber* Fiber::Create(size_t stack_size, void (*entry)(void*), void* arg) {
   auto* f = new Fiber();
-  f->handle_ = ::CreateFiber(stack_size, reinterpret_cast<LPFIBER_START_ROUTINE>(entry), arg);
+  f->handle_ = ::CreateFiberEx(stack_size, 0, 0, reinterpret_cast<LPFIBER_START_ROUTINE>(entry), arg);
   if (!f->handle_) {
     delete f;
     return nullptr;

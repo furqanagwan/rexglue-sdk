@@ -88,6 +88,16 @@ XinputInputDriver::~XinputInputDriver() {
   }
 }
 
+#if REX_PLATFORM_UWP
+X_STATUS XinputInputDriver::Setup() {
+  XInputGetCapabilities_ = static_cast<void*>(&XInputGetCapabilities);
+  XInputGetState_ = static_cast<void*>(&XInputGetState);
+  XInputGetKeystroke_ = static_cast<void*>(&XInputGetKeystroke);
+  XInputSetState_ = static_cast<void*>(&XInputSetState);
+  XInputEnable_ = static_cast<void*>(&XInputEnable);
+  return X_STATUS_SUCCESS;
+}
+#else
 X_STATUS XinputInputDriver::Setup() {
   HMODULE module = LoadLibraryW(L"xinput1_4.dll");
   if (!module) {
@@ -124,6 +134,7 @@ X_STATUS XinputInputDriver::Setup() {
 
   return X_STATUS_SUCCESS;
 }
+#endif
 
 void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
   auto xigc = (decltype(&XInputGetCapabilities))XInputGetCapabilities_;
@@ -204,8 +215,9 @@ X_RESULT XinputInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_state
 
   // If the guide button is enabled use XInputGetStateEx, otherwise use the
   // default XInputGetState.
-  auto xigs = REXCVAR_GET(guide_button) ? (decltype(&XInputGetState))XInputGetStateEx_
-                                        : (decltype(&XInputGetState))XInputGetState_;
+  auto xigs = (REXCVAR_GET(guide_button) && XInputGetStateEx_)
+                  ? (decltype(&XInputGetState))XInputGetStateEx_
+                  : (decltype(&XInputGetState))XInputGetState_;
 
   DWORD result = xigs(user_index, &native_state.state);
   if (result) {

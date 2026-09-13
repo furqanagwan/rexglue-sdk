@@ -24,8 +24,6 @@
 #include <rex/perf/counter.h>
 #include <SDL3/SDL.h>
 
-REXCVAR_DEFINE_BOOL(audio_mute, false, "Audio", "Mute audio output");
-
 namespace rex::audio::sdl {
 
 SDLAudioDriver::SDLAudioDriver(memory::Memory* memory, rex::thread::Semaphore* semaphore)

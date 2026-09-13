@@ -111,6 +111,15 @@
             "inherits": "windows-base"
         },
         {
+            "name": "win-amd64-uwp",
+            "displayName": "Windows AMD64 UWP",
+            "description": "Multi-config Universal Windows Platform build for Xbox Developer Mode",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "REXGLUE_PLATFORM_UWP": "ON"
+            }
+        },
+        {
             "name": "win-arm64",
             "displayName": "Windows ARM64",
             "description": "Multi-config build for Windows ARM64 using Clang",
@@ -142,6 +151,16 @@
         }
     ],
     "buildPresets": [
+        {
+            "name": "win-amd64-uwp-debug",
+            "configurePreset": "win-amd64-uwp",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win-amd64-uwp-release",
+            "configurePreset": "win-amd64-uwp",
+            "configuration": "Release"
+        },
         {
             "name": "win-amd64-debug",
             "configurePreset": "win-amd64",

@@ -31,7 +31,15 @@ void ShowSimpleMessageBox(SimpleMessageBoxType type, std::string_view message) {
       break;
   }
   auto wide = rex::string::to_utf16(message);
+#if REX_PLATFORM_UWP
+  (void)flags;
+  ::OutputDebugStringW(title);
+  ::OutputDebugStringW(L": ");
+  ::OutputDebugStringW(reinterpret_cast<const wchar_t*>(wide.c_str()));
+  ::OutputDebugStringW(L"\n");
+#else
   ::MessageBoxW(nullptr, reinterpret_cast<const wchar_t*>(wide.c_str()), title, flags);
+#endif
 }
 
 }  // namespace rex

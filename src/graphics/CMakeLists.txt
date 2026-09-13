@@ -137,6 +137,7 @@ target_link_libraries(rexgpu-xenos PRIVATE
     rexruntime
     xxHash::xxhash
 )
+rexglue_apply_uwp_link_settings(rexgpu-xenos)
 
 if(REXGLUE_USE_VULKAN)
     target_link_libraries(rexgpu-xenos PRIVATE
