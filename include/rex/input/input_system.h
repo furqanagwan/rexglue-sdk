@@ -11,6 +11,7 @@
  */
 
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <rex/input/device_assignment.h>
@@ -53,6 +54,8 @@ class InputSystem : public system::IInputSystem {
   void RefreshDevices();
   InputDriver* DriverForDevice(DeviceId id);
   const DeviceInfo* DeviceInfoFor(DeviceId id) const;
+
+  std::mutex lock_;
 
   rex::ui::Window* window_ = nullptr;
 
