@@ -2284,6 +2284,8 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     return IssueCopy();
   }
 
+  rex::perf::IncrementCounter(rex::perf::CounterId::kDrawCalls);
+
   bool surface_pitch_is_zero = regs.Get<reg::RB_SURFACE_INFO>().surface_pitch == 0;
 
   // Vertex shader analysis.
