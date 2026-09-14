@@ -112,23 +112,20 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
       std::copy(alt_ids.cbegin(), alt_ids.cend(), std::back_inserter(title_ids));
     }
 
-    for (auto& title_id : title_ids) {
-      // Get user-specific content
-      auto content_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
-          static_cast<uint32_t>(DummyDeviceId::HDD), xuid, content_type_enum, title_id);
-      for (const auto& content_data : content_datas) {
-        auto item = e->AppendItem();
-        assert_not_null(item);
-        if (item) {
-          *item = content_data;
-        }
-      }
+    // A zero xuid asks for every signed-in user's content, so the local
+    // profile's packages are listed alongside the common (xuid=0) ones.
+    std::vector<uint64_t> xuids;
+    uint64_t owner_xuid = xuid != 0 ? uint64_t(xuid) : userxuid;
+    if (owner_xuid != 0) {
+      xuids.push_back(owner_xuid);
+    }
+    xuids.push_back(0);
 
-      // Also get common content (xuid=0)
-      if (userxuid != 0) {
-        auto common_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
-            static_cast<uint32_t>(DummyDeviceId::HDD), 0, content_type_enum, title_id);
-        for (const auto& content_data : common_datas) {
+    for (auto& title_id : title_ids) {
+      for (uint64_t content_xuid : xuids) {
+        auto content_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
+            static_cast<uint32_t>(DummyDeviceId::HDD), content_xuid, content_type_enum, title_id);
+        for (const auto& content_data : content_datas) {
           auto item = e->AppendItem();
           assert_not_null(item);
           if (item) {
@@ -143,8 +140,9 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
     AddODDContentTest(e, content_type_enum);
   }
 
-  REXKRNL_DEBUG("XamContentAggregateCreateEnumerator: added {} items to enumerator",
-                e->item_count());
+  REXKRNL_DEBUG(
+      "XamContentAggregateCreateEnumerator(xuid={:016X}, device={:08X}, type={:08X}): added {} items",
+      uint64_t(xuid), uint32_t(device_id), uint32_t(content_type), e->item_count());
 
   *handle_out = e->handle();
   return X_ERROR_SUCCESS;

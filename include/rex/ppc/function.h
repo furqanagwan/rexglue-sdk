@@ -131,6 +131,33 @@ struct ArgTranslator {
         *rex::memory::GuestPtr<uint32_t*>(base, ctx.r1.u32 + 0x54 + ((arg - 8) * 8)));
   }
 
+  // Get a 64-bit integer argument without truncating the register
+  static constexpr uint64_t GetWideIntegerArgumentValue(const PPCContext& ctx, uint8_t* base,
+                                                        size_t arg) noexcept {
+    switch (arg) {
+      case 0:
+        return ctx.r3.u64;
+      case 1:
+        return ctx.r4.u64;
+      case 2:
+        return ctx.r5.u64;
+      case 3:
+        return ctx.r6.u64;
+      case 4:
+        return ctx.r7.u64;
+      case 5:
+        return ctx.r8.u64;
+      case 6:
+        return ctx.r9.u64;
+      case 7:
+        return ctx.r10.u64;
+      default:
+        break;
+    }
+    return __builtin_bswap64(
+        *rex::memory::GuestPtr<uint64_t*>(base, ctx.r1.u32 + 0x50 + ((arg - 8) * 8)));
+  }
+
   // Get float/double argument value from FPR
   static double GetPrecisionArgumentValue(const PPCContext& ctx, [[maybe_unused]] uint8_t* base,
                                           size_t arg) noexcept {
@@ -279,6 +306,8 @@ struct ArgTranslator {
   static constexpr T GetValue(PPCContext& ctx, uint8_t* base, size_t idx) noexcept {
     if constexpr (is_precise_v<T>) {
       return static_cast<T>(GetPrecisionArgumentValue(ctx, base, idx));
+    } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
+      return static_cast<T>(GetWideIntegerArgumentValue(ctx, base, idx));
     } else {
       return static_cast<T>(GetIntegerArgumentValue(ctx, base, idx));
     }
