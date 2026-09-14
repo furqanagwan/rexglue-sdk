@@ -36,6 +36,10 @@ REXCVAR_DEFINE_INT32(window_height, 0, "UI/Window",
 // in sync whenever this cvar is changed at runtime.
 REXCVAR_DEFINE_BOOL(fullscreen, true, "UI/Window", "Start the window in fullscreen mode");
 
+REXCVAR_DEFINE_BOOL(fullscreen_exclusive, false, "UI/Window",
+                    "Switch the display mode in fullscreen instead of going "
+                    "borderless at the desktop mode");
+
 REXCVAR_DEFINE_INT32(monitor, 0, "UI/Window",
                      "Monitor index to display on (0 = default, 1 = primary, 2 = "
                      "second monitor, etc.)")

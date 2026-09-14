@@ -72,6 +72,7 @@ class WindowSDL final : public Window {
   void PerformClose();
   void DestroySDLWindow();
 
+  void ApplyFullscreenModeNow();
   void ApplyCursorVisibilityNow();
   void ApplyTextInputActiveNow();
   void RearmCursorAutoHideTimer();

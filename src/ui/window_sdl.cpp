@@ -110,7 +110,7 @@ bool WindowSDL::OpenImpl() {
   }
 
   if (IsFullscreen()) {
-    // Borderless desktop fullscreen (a NULL display mode is SDL3's default).
+    ApplyFullscreenModeNow();
     SDL_SetWindowFullscreen(sdl_window_, true);
   }
   // SDL3 requires explicit opt in for text input events. Reapplied from the
@@ -238,7 +238,47 @@ void WindowSDL::ApplyNewFullscreen() {
   if (!sdl_window_) {
     return;
   }
+  ApplyFullscreenModeNow();
   SDL_SetWindowFullscreen(sdl_window_, IsFullscreen());
+}
+
+void WindowSDL::ApplyFullscreenModeNow() {
+  if (!sdl_window_) {
+    return;
+  }
+  if (!REXCVAR_GET(fullscreen_exclusive)) {
+    SDL_SetWindowFullscreenMode(sdl_window_, nullptr);
+    return;
+  }
+
+  const SDL_DisplayID display = SDL_GetDisplayForWindow(sdl_window_);
+  int32_t width = 0;
+  int32_t height = 0;
+  if (!rex::graphics::video_mode_util::TryGetResolutionPresetFromCVar(width, height) ||
+      width <= 0 || height <= 0) {
+    const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(display);
+    if (!desktop) {
+      REXLOG_WARN("No desktop mode for display {}: staying borderless", uint32_t(display));
+      SDL_SetWindowFullscreenMode(sdl_window_, nullptr);
+      return;
+    }
+    width = desktop->w;
+    height = desktop->h;
+  }
+
+  SDL_DisplayMode mode = {};
+  if (!SDL_GetClosestFullscreenDisplayMode(display, width, height, 0.0f, true, &mode)) {
+    REXLOG_WARN("Display {} has no mode near {}x{}: staying borderless", uint32_t(display), width,
+                height);
+    SDL_SetWindowFullscreenMode(sdl_window_, nullptr);
+    return;
+  }
+  if (!SDL_SetWindowFullscreenMode(sdl_window_, &mode)) {
+    REXLOG_WARN("SDL_SetWindowFullscreenMode({}x{}) failed: {}", mode.w, mode.h, SDL_GetError());
+    return;
+  }
+  REXLOG_INFO("Exclusive fullscreen mode {}x{} @ {:.3g}Hz on display {}", mode.w, mode.h,
+              mode.refresh_rate, uint32_t(display));
 }
 
 void WindowSDL::ApplyNewTitle() {
