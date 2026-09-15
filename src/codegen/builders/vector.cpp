@@ -1501,22 +1501,29 @@ bool build_vupkd3d128(BuilderContext& ctx) {
 
     case 6:  // NORMPACKED64 - unpack 4:20:20:20 to floats
     {
+      // Format: w(4 bits):z(20 bits):y(20 bits):x(20 bits) in guest elements 2-3
+      // as one big-endian integer, which is host u64[0] in the reversed layout.
+      // Like NORMPACKED32 (and Xenia's ULONG_4202020): x, y, z are signed and
+      // stored as the bits of 3.0 plus the value, the most negative value becomes a
+      // quiet NaN, and w is unsigned on top of 1.0. Output lanes are reversed:
+      // x --> host u32[3], y --> u32[2], z --> u32[1], w --> u32[0].
+      // Before rexglue-sdk#419 this read u64[1], sign-extended through a 32-bit
+      // truncation (x was always 0) and wrote plain integer floats.
       auto vSrc = ctx.v(ctx.insn.operands[1]);
       auto vDst = ctx.v(ctx.insn.operands[0]);
-      // Format: w(4 bits):z(20 bits):y(20 bits):x(20 bits) in 64 bits
-      // x, y, z --> floats, w --> float
-      ctx.println("\t{}.u64[0] = {}.u64[1];", ctx.v_temp(), vSrc);
-      // x (bits 0-19) - sign extend from 20 bits
-      ctx.println("\t{}.s32 = (int32_t({}.u64[0] << 44) >> 44);", ctx.temp(), ctx.v_temp());
-      ctx.println("\t{}.f32[0] = float({}.s32);", vDst, ctx.temp());
-      // y (bits 20-39) - sign extend from 20 bits
-      ctx.println("\t{}.s32 = (int32_t({}.u64[0] << 24) >> 44);", ctx.temp(), ctx.v_temp());
-      ctx.println("\t{}.f32[1] = float({}.s32);", vDst, ctx.temp());
-      // z (bits 40-59) - sign extend from 20 bits
-      ctx.println("\t{}.s32 = (int32_t({}.u64[0] << 4) >> 44);", ctx.temp(), ctx.v_temp());
-      ctx.println("\t{}.f32[2] = float({}.s32);", vDst, ctx.temp());
-      // w (bits 60-63) - 4 bits
-      ctx.println("\t{}.f32[3] = float({}.u64[0] >> 60);", vDst, ctx.v_temp());
+      ctx.println("	{}.u64 = {}.u64[0];", ctx.temp(), vSrc);
+      constexpr struct {
+        int shift;
+        int lane;
+      } fields[] = {{0, 3}, {20, 2}, {40, 1}};
+      for (const auto& field : fields) {
+        ctx.println(
+            "	{}.s32[{}] = int32_t(int64_t({}.u64 << {}) >> 44) == -524288 ? int32_t(0x7FC00000) "
+            ": int32_t(int64_t({}.u64 << {}) >> 44) + 0x40400000;",
+            ctx.v_temp(), field.lane, ctx.temp(), 44 - field.shift, ctx.temp(), 44 - field.shift);
+      }
+      ctx.println("	{}.u32[0] = uint32_t({}.u64 >> 60) | 0x3F800000;", ctx.v_temp(), ctx.temp());
+      ctx.println("	{} = {};", vDst, ctx.v_temp());
       break;
     }
 
