@@ -12,9 +12,11 @@
 #include <cstring>
 
 #include <rex/kernel/xam/module.h>
+#include <rex/logging.h>
 #include <rex/platform.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xsocket.h>
+#include <rex/cvar.h>
 // #include <rex/system/xnet.h>
 
 #include <rex/net/socket.h>
@@ -31,6 +33,12 @@
 #include <sys/socket.h>
 #endif
 
+REXCVAR_DEFINE_BOOL(net_sockets_start_non_blocking, false, "Network",
+                    "Create guest sockets in non-blocking mode. Off matches the console; "
+                    "turn it on for titles that poll sockets without setting FIONBIO and "
+                    "hang in recvfrom() with no network peer.")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 namespace rex::system {
 
 XSocket::XSocket(KernelState* kernel_state) : XObject(kernel_state, kObjectType) {}
@@ -41,6 +49,11 @@ XSocket::XSocket(KernelState* kernel_state, uint64_t native_handle)
 XSocket::~XSocket() {
   Close();
 }
+
+// FIONBIO as the guest knows it (Winsock's _IOW('f', 126, u_long)). The host
+// value differs per platform, so this is only ever compared against, never
+// passed down - see socket_set_non_blocking.
+static constexpr uint32_t kGuestFionbio = 0x8004667E;
 
 X_STATUS XSocket::Initialize(AddressFamily af, Type type, Protocol proto) {
   af_ = af;
@@ -55,6 +68,19 @@ X_STATUS XSocket::Initialize(AddressFamily af, Type type, Protocol proto) {
   native_handle_ = socket(af, type, proto);
   if (native_handle_ == -1) {
     return X_STATUS_UNSUCCESSFUL;
+  }
+
+  // Console sockets start blocking, as in Winsock, and titles that poll set
+  // FIONBIO themselves. Some titles poll without doing so and rely on a read
+  // with no network failing fast; on a host with no peer their recvfrom()
+  // parks the guest thread forever (Ace Combat 6 stops on its main thread,
+  // rexglue-sdk#412). Such a title can opt in to non-blocking sockets.
+  if (REXCVAR_GET(net_sockets_start_non_blocking) &&
+      rex::net::socket_set_non_blocking(native_handle_, true) != 0) {
+    REXLOG_WARN(
+        "XSocket: could not set socket {} non-blocking; a guest read with no data "
+        "waiting will block the calling guest thread",
+        native_handle_);
   }
 
   return X_STATUS_SUCCESS;
@@ -96,6 +122,16 @@ X_STATUS XSocket::SetOption(uint32_t level, uint32_t optname, void* optval_ptr, 
 }
 
 X_STATUS XSocket::IOControl(uint32_t cmd, uint8_t* arg_ptr) {
+  // The guest's FIONBIO is Winsock's value, which is not what a POSIX host
+  // ioctl() expects - route it through the platform helper instead of passing
+  // the guest constant straight down.
+  if (cmd == kGuestFionbio) {
+    const bool non_blocking = arg_ptr && *reinterpret_cast<uint32_t*>(arg_ptr) != 0;
+    return rex::net::socket_set_non_blocking(native_handle_, non_blocking) == 0
+               ? X_STATUS_SUCCESS
+               : X_STATUS_UNSUCCESSFUL;
+  }
+
   int ret = rex::net::socket_ioctl(native_handle_, cmd, arg_ptr);
   if (ret < 0) {
     // TODO: Get last error
