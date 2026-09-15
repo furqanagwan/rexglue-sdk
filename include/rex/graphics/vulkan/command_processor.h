@@ -43,6 +43,10 @@
 #include <rex/ui/vulkan/provider.h>
 #include <rex/ui/vulkan/upload_buffer_pool.h>
 
+namespace rex::graphics::nrhi {
+class Device;
+}
+
 namespace rex::graphics::vulkan {
 
 class VulkanCommandProcessor : public CommandProcessor {
@@ -664,6 +668,10 @@ class VulkanCommandProcessor : public CommandProcessor {
   VkSampler swap_sampler_linear_clamp_ = VK_NULL_HANDLE;
 
   VkPipelineLayout swap_apply_gamma_pipeline_layout_ = VK_NULL_HANDLE;
+
+  // Native renderer RHI device (rex/graphics/native_rhi.h), created on the
+  // first swap after a game registers a native guest-output renderer.
+  nrhi::Device* native_rhi_device_ = nullptr;
   VkPipelineLayout swap_apply_gamma_compute_pipeline_layout_ = VK_NULL_HANDLE;
   VkPipelineLayout swap_fxaa_pipeline_layout_ = VK_NULL_HANDLE;
   // Has no dependencies on specific pipeline stages on both ends to simplify

@@ -53,6 +53,7 @@ set(REXGPU_XENOS_VULKAN_SOURCES
     vulkan/shader.cpp
     vulkan/shared_memory.cpp
     vulkan/texture_cache.cpp
+    vulkan/native_rhi_vulkan.cpp
 )
 
 # D3D12 backend
@@ -83,6 +84,7 @@ if(REXGLUE_USE_D3D12)
         d3d12/texture_cache.cpp
         d3d12/deferred_command_list.cpp
         d3d12/pipeline_cache.cpp
+        d3d12/native_rhi_d3d12.cpp
     )
 endif()
 
@@ -138,6 +140,11 @@ target_link_libraries(rexgpu-xenos PRIVATE
     rexruntime
     xxHash::xxhash
 )
+if(REXGLUE_USE_D3D12)
+    # The native renderer RHI compiles HLSL at runtime (d3dcompiler_47.dll ships
+    # with Windows 10 and later).
+    target_link_libraries(rexgpu-xenos PRIVATE d3dcompiler)
+endif()
 rexglue_apply_uwp_link_settings(rexgpu-xenos)
 
 if(REXGLUE_USE_VULKAN)

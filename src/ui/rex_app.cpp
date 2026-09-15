@@ -19,6 +19,7 @@
 #include <rex/kernel/crt/heap.h>
 #include <rex/filesystem.h>
 #include <rex/logging/sink.h>
+#include <rex/graphics/native_rhi.h>
 #include <rex/logging.h>
 #include <rex/ui/overlay/achievement_toast.h>
 #include <rex/ui/overlay/achievements_overlay.h>
@@ -196,6 +197,8 @@ bool ReXApp::SetupEnvironment() {
     REXLOG_DEBUG("  Update data:    {}", update_data_root_.string());
   }
   REXLOG_DEBUG("  Cache root:     {}", cache_root_.string());
+  // Native renderers compile HLSL at runtime on D3D12; keep the bytecode.
+  graphics::nrhi::SetShaderBytecodeCacheDirectory((cache_root_ / "nrhi_shaders").string().c_str());
   if (!metadata_root_.empty()) {
     REXLOG_DEBUG("  Metadata root:  {}", metadata_root_.string());
   }

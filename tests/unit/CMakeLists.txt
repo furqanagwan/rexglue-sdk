@@ -20,6 +20,7 @@ add_executable(unit_tests
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
+    graphics/native_guest_renderer_test.cpp
 )
 
 target_sources(unit_tests PRIVATE
@@ -36,9 +37,9 @@ target_include_directories(unit_tests PRIVATE
 target_link_libraries(unit_tests PRIVATE
     rexcodegen
     rexruntime
-    Catch2::Catch2WithMain
     # rex/hash.h includes xxhash.h, which the runtime keeps private.
     xxHash::xxhash
+    Catch2::Catch2WithMain
 )
 
 # ReXApp is shipped as source for recomp projects, rather than compiled into

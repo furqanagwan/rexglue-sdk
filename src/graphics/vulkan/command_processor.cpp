@@ -34,6 +34,9 @@
 #include <rex/graphics/pipeline/shader/spirv_translator.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/vulkan/command_processor.h>
+#include <rex/graphics/native_guest_renderer.h>
+#include <rex/perf/frame_stats.h>
+#include <rex/graphics/vulkan/native_rhi_vulkan.h>
 #include <rex/graphics/vulkan/pipeline_cache.h>
 #include <rex/graphics/vulkan/render_target_cache.h>
 #include <rex/graphics/vulkan/shader.h>
@@ -648,6 +651,19 @@ void VulkanCommandProcessor::InitializeShaderStorage(const std::filesystem::path
 
 bool VulkanCommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader,
                                                                 uint32_t packet, uint32_t count) {
+  // With native output active the draws inside the query are suppressed, so a
+  // host query would count 0 samples and the game would hide what the native
+  // renderer is drawing. Report the fake count, ending any open host query.
+  if (ShouldSuppressEmulatedDraws()) {
+    if (active_occlusion_query_.valid && occlusion_query_pool_ != VK_NULL_HANDLE &&
+        submission_open_) {
+      EndRenderPass();
+      deferred_command_buffer_.CmdVkEndQuery(occlusion_query_pool_,
+                                             active_occlusion_query_.host_index);
+    }
+    active_occlusion_query_ = {};
+    return CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(reader, packet, count);
+  }
   if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_) {
     return CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(reader, packet, count);
   }
@@ -1901,6 +1917,11 @@ void VulkanCommandProcessor::ShutdownContext() {
   InvalidateAllVertexBufferResidency();
   ShutdownOcclusionQueryResources();
 
+  if (native_rhi_device_ != nullptr) {
+    DestroyNativeRhiDevice(native_rhi_device_);
+    native_rhi_device_ = nullptr;
+  }
+
   const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
@@ -2407,12 +2428,16 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
   kernel::xboxkrnl::VdQueryVideoMode(&video_mode);
   uint32_t display_width = std::max(uint32_t(1), uint32_t(video_mode.display_width));
   uint32_t display_height = std::max(uint32_t(1), uint32_t(video_mode.display_height));
+  // While a native renderer serves frames it may draw wider than the
+  // frontbuffer (ultrawide); emulated frames keep the frontbuffer aspect.
+  const bool native_wide_output = ApplyNativeGuestOutputWideAspect(
+      guest_output_width, guest_output_height, display_width, display_height);
 
   presenter->RefreshGuestOutput(
       guest_output_width, guest_output_height, display_width, display_height,
-      [this, guest_output_width, guest_output_height, frontbuffer_format, swap_texture_view,
-       swap_post_effect,
-       swap_source_needs_rb_swap](ui::Presenter::GuestOutputRefreshContext& context) -> bool {
+      [this, guest_output_width, guest_output_height, display_width, display_height,
+       frontbuffer_format, swap_texture_view, swap_post_effect, swap_source_needs_rb_swap,
+       native_wide_output](ui::Presenter::GuestOutputRefreshContext& context) -> bool {
         // In case the swap command is the only one in the frame.
         if (!BeginSubmission(true)) {
           return false;
@@ -2439,6 +2464,44 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
         bool use_pwl_gamma_ramp =
             frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
             frontbuffer_format == xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
+
+        auto begin_native_frame = [&](bool image_written) {
+          NativeGuestOutputRenderContext native_context;
+          native_context.backend = NativeGuestOutputBackend::kVulkan;
+          native_context.guest_output_width = guest_output_width;
+          native_context.guest_output_height = guest_output_height;
+          native_context.display_width = display_width;
+          native_context.display_height = display_height;
+          if (native_rhi_device_ == nullptr) {
+            native_rhi_device_ = CreateNativeRhiDevice(this);
+          }
+          native_context.device = native_rhi_device_;
+          native_context.cmd = NativeRhiBeginFrame(
+              native_rhi_device_, vulkan_context.image(), vulkan_context.image_view(),
+              image_written, guest_output_width, guest_output_height,
+              &native_context.guest_output);
+          return native_context;
+        };
+
+        // Native renderer first: when it draws the frame the gamma/FXAA pass is
+        // skipped and the presenter shows its image unchanged.
+        if (HasNativeGuestOutputRenderer()) {
+          context.SetIs8bpc(!use_pwl_gamma_ramp && !use_fxaa);
+          const bool rendered = TryRenderNativeGuestOutput(
+              begin_native_frame(vulkan_context.image_ever_written_previously()));
+          // Closes any render pass the callback left open and records its
+          // release barrier, whether it rendered or yielded.
+          NativeRhiEndFrame(native_rhi_device_);
+          if (rendered) {
+            EndSubmission(true);
+            return true;
+          }
+          if (native_wide_output) {
+            // Sized wide for the renderer, which then yielded: keep the last
+            // image and size back on the next swap.
+            return false;
+          }
+        }
         bool swap_source_requires_compute_rb_swap =
             !vulkan_device->properties().imageViewFormatSwizzle && swap_source_needs_rb_swap;
         auto select_swap_apply_gamma_compute_pipeline = [&](bool use_pwl,
@@ -2915,6 +2978,12 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
                                  ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                  ui::vulkan::VulkanPresenter::kGuestOutputInternalLayout);
+        }
+
+        // Host effect over the emulated output, after gamma/FXAA wrote it.
+        if (IsNativeGuestOutputPostProcessRequested() && HasNativeGuestOutputPostProcessor()) {
+          InvokeNativeGuestOutputPostProcessor(begin_native_frame(true));
+          NativeRhiEndFrame(native_rhi_device_);
         }
 
         // Need to submit all the commands before giving the image back to the
@@ -3576,7 +3645,10 @@ void VulkanCommandProcessor::SetScissor(const VkRect2D& scissor) {
 }
 
 void VulkanCommandProcessor::OnPrimaryBufferEnd() {
-  if (REXCVAR_GET(vulkan_submit_on_primary_buffer_end) && submission_open_ &&
+  // While native output suppresses emulated draws, batch the few remaining
+  // passes into the end-of-frame submission instead of idling the GPU.
+  if (REXCVAR_GET(vulkan_submit_on_primary_buffer_end) && !ShouldSuppressEmulatedDraws() &&
+      submission_open_ &&
       CanEndSubmissionImmediately()) {
     EndSubmission(false);
   }
@@ -3695,6 +3767,20 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t 
   VulkanShader::VulkanTranslation* vertex_shader_translation;
   VulkanShader::VulkanTranslation* pixel_shader_translation;
   bool memexport_writes_possible = memexport_used_vertex || memexport_used_pixel;
+
+  // A native renderer is drawing this frame: skip emulated draws of the passes
+  // it replaces. Memexport draws still run because the game reads their
+  // results from memory; fences, queries and PM4 parsing are unaffected.
+  if (!memexport_writes_possible && ShouldSuppressEmulatedDraws()) {
+    if (ShouldSuppressPassAtPitch(regs.Get<reg::RB_SURFACE_INFO>().surface_pitch)) {
+      return true;
+    }
+    // Depth-only draws (shadow casters, z-prepasses) inside passes that still
+    // run feed only the suppressed passes.
+    if (pixel_shader == nullptr && ShouldSuppressExemptDepthOnlyDraws()) {
+      return true;
+    }
+  }
 
   // Two iterations because a submission (even the current one - in which case
   // it needs to be ended, and a new one must be started) may need to be awaited
@@ -4385,6 +4471,13 @@ bool VulkanCommandProcessor::IssueCopy() {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+  rex::perf::frame_stats::RecordResolve();
+  // Resolves must agree with draw suppression: a suppressed pass left garbage
+  // in EDRAM, and copying it out would overwrite guest textures.
+  if (ShouldSuppressEmulatedDraws() &&
+      ShouldSuppressPassAtPitch(register_file_->Get<reg::RB_SURFACE_INFO>().surface_pitch)) {
+    return true;
+  }
 
   if (!BeginSubmission(true)) {
     return false;
