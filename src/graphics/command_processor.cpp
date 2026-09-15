@@ -20,6 +20,7 @@
 #include <rex/cvar.h>
 #include <rex/dbg.h>
 #include <rex/perf/counter.h>
+#include <rex/perf/frame_stats.h>
 #include <rex/chrono/clock.h>
 #include <rex/graphics/command_processor.h>
 #include <rex/graphics/flags.h>
@@ -34,6 +35,8 @@
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
+
+#include "util/frame_trace.h"
 
 REXCVAR_DEFINE_BOOL(vsync, true, "GPU", "Enable vertical sync");
 
@@ -81,6 +84,11 @@ REXCVAR_DEFINE_BOOL(async_shader_compilation, true, "GPU",
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 namespace rex::graphics {
+
+namespace {
+// One command processor per process; see util/frame_trace.h.
+FrameTrace g_frame_trace;
+}  // namespace
 
 using namespace rex::graphics::xenos;
 
@@ -944,6 +952,7 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
   }
 #endif
   rex::perf::Profiler::Flip();
+  rex::perf::frame_stats::RecordFrame();
 
   // Xenia-specific VdSwap hook.
   // VdSwap will post this to tell us we need to swap the screen/fire an
@@ -960,6 +969,7 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
 
   IssueSwap(frontbuffer_ptr, frontbuffer_width, frontbuffer_height);
 
+  g_frame_trace.OnSwap(counter_);
   ++counter_;
   return true;
 }
@@ -1378,8 +1388,13 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
 
       bool major_mode_explicit =
           xenos::IsMajorModeExplicit(vgt_draw_initiator.major_mode, vgt_draw_initiator.prim_type);
-      draw_succeeded = IssueDraw(vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
-                                 is_indexed ? &index_buffer_info : nullptr, major_mode_explicit);
+      rex::perf::frame_stats::RecordDraw();
+      if (g_frame_trace.OnDraw(*register_file_, active_vertex_shader(), active_pixel_shader(),
+                               vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
+                               is_indexed)) {
+        draw_succeeded = IssueDraw(vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
+                                   is_indexed ? &index_buffer_info : nullptr, major_mode_explicit);
+      }
       if (!draw_succeeded) {
         auto vgt_output_path_cntl = register_file_->Get<reg::VGT_OUTPUT_PATH_CNTL>();
         auto vgt_hos_cntl = register_file_->Get<reg::VGT_HOS_CNTL>();

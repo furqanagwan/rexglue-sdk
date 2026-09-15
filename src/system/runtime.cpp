@@ -16,6 +16,7 @@
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
 #include <rex/perf/counter.h>
+#include <rex/perf/frame_stats.h>
 #include <rex/ppc/context.h>          // PPCFuncMapping
 #include <rex/platform/exceptions.h>  // SEH exception support
 #include <rex/kernel/crt/heap.h>
@@ -284,6 +285,7 @@ void Runtime::Shutdown() {
   memory_.reset();
 
   rex::perf::Profiler::Shutdown();
+  rex::perf::frame_stats::Shutdown();
   setup_complete_ = false;
 }
 
