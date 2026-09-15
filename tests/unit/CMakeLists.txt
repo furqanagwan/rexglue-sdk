@@ -37,6 +37,8 @@ target_link_libraries(unit_tests PRIVATE
     rexcodegen
     rexruntime
     Catch2::Catch2WithMain
+    # rex/hash.h includes xxhash.h, which the runtime keeps private.
+    xxHash::xxhash
 )
 
 # ReXApp is shipped as source for recomp projects, rather than compiled into
