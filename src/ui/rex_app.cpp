@@ -164,20 +164,16 @@ bool ReXApp::SetupEnvironment() {
   if (config_path_ != default_config_path && std::filesystem::exists(config_path_))
     rex::cvar::LoadConfig(config_path_);
 
-  // Late-phase logging
-  std::string log_file_cvar = REXCVAR_GET(log_file);
   std::string log_level_str = REXCVAR_GET(log_level);
   if (REXCVAR_GET(log_verbose) && log_level_str == "info")
     log_level_str = "trace";
 
-  auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);
-  auto log_config = rex::BuildLogConfig(log_file_cvar.empty() ? nullptr : log_file_cvar.c_str(),
-                                        log_level_str, category_levels);
-  if (log_file_cvar.empty()) {
-    log_config.app_name = std::string(GetName());
-    log_config.log_dir = (exe_dir / "logs").string();
-  }
-
+  auto log_config =
+      rex::BuildLogConfig(log_level_str, rex::ParseCategoryLevelsFromConfig(config_path_));
+  log_config.app_name = std::string(GetName());
+  log_config.log_dir = exe_dir / "logs";
+  OnConfigureLogging(log_config);
+  rex::ApplyLogCvarOverrides(log_config);
   rex::InitLogging(log_config);
   rex::RegisterLogLevelCallback();
 
@@ -255,15 +251,15 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     ppc_info_.register_modules(runtime_->kernel_state());
   }
 
-  if (imgui_drawer_) {
-    auto* input_sys = static_cast<rex::input::InputSystem*>(runtime_->input_system());
-    if (input_sys) {
-      input_sys->SetActiveCallback([this]() {
-        if (!debug_overlay_ && !console_overlay_ && !settings_overlay_ && !achievements_overlay_)
-          return true;
-        return !imgui_drawer_->GetIO().WantCaptureMouse;
-      });
-    }
+  if (auto* input_sys = static_cast<rex::input::InputSystem*>(runtime_->input_system())) {
+    input_sys->SetActiveCallback([this]() {
+      if (window_ && !window_->HasFocus())
+        return false;
+      if (!imgui_drawer_ ||
+          (!debug_overlay_ && !console_overlay_ && !settings_overlay_ && !achievements_overlay_))
+        return true;
+      return !imgui_drawer_->GetIO().WantCaptureMouse;
+    });
   }
 
   std::string xex_image = "game:\\default.xex";
@@ -345,7 +341,7 @@ bool ReXApp::SetupPresentation() {
   }
 
   // Create window
-  window_ = rex::ui::Window::Create(app_context(), GetName(), 1280, 720);
+  window_ = rex::ui::Window::Create(app_context(), GetName());
   if (!window_) {
     REXLOG_ERROR("Failed to create window");
     return false;
