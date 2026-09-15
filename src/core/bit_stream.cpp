@@ -68,40 +68,27 @@ uint64_t BitStream::Read(size_t num_bits) {
   return val;
 }
 
-// TODO: This is totally not tested!
 bool BitStream::Write(uint64_t val, size_t num_bits) {
   assert_false(num_bits > 57);
-  assert_false(offset_bits_ + num_bits >= size_bits_);
+  assert_false(offset_bits_ + num_bits > size_bits_);
 
   size_t offset_bytes = offset_bits_ >> 3;
   size_t rel_offset_bits = offset_bits_ - (offset_bytes << 3);
+  const unsigned shift = static_cast<unsigned>(64 - (rel_offset_bits + num_bits));
 
-  // Construct a mask
-  uint64_t mask = (1ULL << num_bits) - 1;
-  mask <<= 64 - (rel_offset_bits + num_bits);
-  mask = ~mask;
+  // Like Peek, work on the eight bytes at the offset as a big-endian value, so
+  // bits are counted from the most significant bit of the first byte.
+  uint64_t bits;
+  std::memcpy(&bits, buffer_ + offset_bytes, sizeof(bits));
+  bits = rex::byte_swap(bits);
 
-  // Shift the value left into position.
-  val <<= 64 - (rel_offset_bits + num_bits);
+  const uint64_t mask = ((1ULL << num_bits) - 1) << shift;
+  bits = (bits & ~mask) | ((val << shift) & mask);
 
-  // offset ----->
-  // ....[junk]...| target bits w/ junk |....[junk]......
-  uint64_t bits = *(uint64_t*)(buffer_ + offset_bytes);
+  bits = rex::byte_swap(bits);
+  std::memcpy(buffer_ + offset_bytes, &bits, sizeof(bits));
 
-  // AND with mask
-  // ....[junk]...| target bits (0) |........[junk]......
-  bits &= mask;
-
-  // OR with val
-  // ....[junk]...| target bits (val) |......[junk]......
-  bits |= val;
-
-  // Store into the bitstream.
-  *(uint64_t*)(buffer_ + offset_bytes) = bits;
-
-  // Advance the bitstream forward.
   Advance(num_bits);
-
   return true;
 }
 
