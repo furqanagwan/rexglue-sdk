@@ -116,9 +116,28 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   }
 
   // Find the device.
-  auto it = std::find_if(devices_.cbegin(), devices_.cend(), [&](const auto& d) {
-    return rex::string::utf8_starts_with_case(normalized_path, d->mount_path());
-  });
+  auto find_device = [&](const std::string& device_path) {
+    return std::find_if(devices_.cbegin(), devices_.cend(), [&](const auto& d) {
+      return rex::string::utf8_starts_with_case(device_path, d->mount_path());
+    });
+  };
+  auto it = find_device(normalized_path);
+
+  // A path with no device and no leading separator is relative. On hardware it
+  // resolves against the title's current directory, which is the launch device
+  // (game:) for a title started from disc.
+  if (it == devices_.cend() && !normalized_path.empty() && normalized_path.front() != '\\' &&
+      normalized_path.find(':') == std::string::npos) {
+    std::string launch_path;
+    if (ResolveSymbolicLink("game:\\" + normalized_path, launch_path)) {
+      auto launch_it = find_device(launch_path);
+      if (launch_it != devices_.cend()) {
+        normalized_path = std::move(launch_path);
+        it = launch_it;
+      }
+    }
+  }
+
   if (it == devices_.cend()) {
     REXFS_WARN("VFS: '{}' -> [no device]", path);
     // Supress logging the error for ShaderDumpxe:\CompareBackEnds as this is
