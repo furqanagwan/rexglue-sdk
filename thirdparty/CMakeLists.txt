@@ -169,7 +169,13 @@ target_compile_options(disasm PRIVATE -w)
 set(FMT_DOC OFF CACHE BOOL "" FORCE)
 set(FMT_TEST OFF CACHE BOOL "" FORCE)
 set(FMT_INSTALL ON CACHE BOOL "" FORCE)
+# fmt 12.2 enables C++ module support when CMake has it. The SDK uses the
+# headers, and module scanning of fmt breaks Ninja Multi-Config builds with
+# duplicate .modmap outputs, so turn both off for fmt.
+set(FMT_MODULE OFF CACHE BOOL "" FORCE)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 add_subdirectory(fmt)
+unset(CMAKE_CXX_SCAN_FOR_MODULES)
 target_compile_options(fmt PRIVATE -w)
 
 #=============================================================================
