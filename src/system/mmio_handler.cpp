@@ -18,6 +18,7 @@
 #include <rex/logging.h>
 #include <rex/memory.h>
 #include <rex/platform.h>
+#include <rex/system/guest_crash_report.h>
 #include <rex/system/mmio_handler.h>
 #include <rex/types.h>
 
@@ -416,10 +417,14 @@ bool MMIOHandler::ExceptionCallback(arch::Exception* ex) {
     }
     // The address is not found within any range, so either a write watch or an
     // actual access violation.
-    if (access_violation_callback_) {
-      return access_violation_callback_(std::move(lock), access_violation_callback_context_,
-                                        fault_host_address, is_write);
+    if (access_violation_callback_ &&
+        access_violation_callback_(std::move(lock), access_violation_callback_context_,
+                                   fault_host_address, is_write)) {
+      return true;
     }
+    rex::system::LogGuestCrashContext(is_write ? "unhandled guest memory write"
+                                               : "unhandled guest memory read",
+                                      ex->pc());
     return false;
   }
 

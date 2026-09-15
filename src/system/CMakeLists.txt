@@ -47,6 +47,7 @@ set(REXSYSTEM_SOURCES
     thread_state.cpp
     xex_module.cpp
     title_relaunch.cpp
+    guest_crash_report.cpp
 
     # Native renderer registry. It lives in the runtime, which games link, so a
     # game can register its renderer; the GPU plugin calls it every frame.
