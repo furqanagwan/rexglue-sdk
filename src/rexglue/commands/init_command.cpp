@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -66,6 +67,21 @@ std::string ModuleStem(const fs::path& xex) {
   return stem;
 }
 
+// DLL modules are identified by the XEX2 header's module flags rather than by
+// extension: games ship them as .dll or as .xex (Top Spin 4's Loader_DLL.xex).
+bool IsDllModule(const fs::path& path) {
+  constexpr uint32_t kXexModuleFlagDll = 0x08;
+  std::ifstream file(path, std::ios::binary);
+  unsigned char header[8] = {};
+  if (!file.read(reinterpret_cast<char*>(header), sizeof(header)))
+    return false;
+  if (header[0] != 'X' || header[1] != 'E' || header[2] != 'X' || header[3] != '2')
+    return false;
+  uint32_t module_flags = (uint32_t{header[4]} << 24) | (uint32_t{header[5]} << 16) |
+                          (uint32_t{header[6]} << 8) | uint32_t{header[7]};
+  return (module_flags & kXexModuleFlagDll) != 0;
+}
+
 std::string IsoUtcStamp() {
   auto now = std::chrono::system_clock::now();
   auto t = std::chrono::system_clock::to_time_t(now);
@@ -90,9 +106,9 @@ Result<void> InitProject(const InitOptions& opts, const CliContext& ctx) {
   (void)ctx;
 
   if (opts.project_name.empty())
-    return Err<void>(ErrorCategory::Config, "--project_name is required");
+    return Err<void>(ErrorCategory::Config, "--project-name is required");
   if (opts.xex_path.empty())
-    return Err<void>(ErrorCategory::Config, "--xex_path is required (path to entrypoint XEX)");
+    return Err<void>(ErrorCategory::Config, "--xex-path is required (path to entrypoint XEX)");
 
   std::string validation_error;
   if (!validate_app_name(opts.project_name, validation_error))
@@ -148,9 +164,10 @@ Result<void> InitProject(const InitOptions& opts, const CliContext& ctx) {
                                         ec);
     fs::recursive_directory_iterator end;
     for (; !ec && it != end; it.increment(ec)) {
-      if (!it->is_regular_file())
+      if (!it->is_regular_file() || it->path() == xexAbs)
         continue;
-      if (LowercaseAscii(it->path().extension().string()) != ".dll")
+      const std::string extension = LowercaseAscii(it->path().extension().string());
+      if ((extension != ".dll" && extension != ".xex") || !IsDllModule(it->path()))
         continue;
       dllPaths.push_back(it->path());
     }
@@ -565,18 +582,18 @@ void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pendi
   auto args = std::make_shared<InitArgs>();
   init->add_option("--project-name", args->project_name,
                    "Project name (becomes [project].name in the manifest)")
-      ->type_name("NAME")
-      ->required();
+      ->type_name("NAME");
+  // Not marked required: CLI11 would then demand them for the module and
+  // achievements subcommands too. InitProject checks them instead.
   init->add_option("--xex-path", args->xex_path, "Path to entrypoint XEX (e.g. assets/Default.xex)")
-      ->type_name("PATH")
-      ->required();
+      ->type_name("PATH");
   init->add_option("--game-root", args->game_root, "Game asset root for DLL guest-path derivation")
       ->type_name("PATH");
   init->add_option("--project-root", args->project_root,
                    "Where to create the project (defaults to current directory)")
       ->type_name("PATH");
   init->add_flag("--scan-dll", args->scan_dll,
-                 "Scan --game-root for .dll files and add each as a [[modules]] entry");
+                 "Scan --game-root for DLL modules (.dll or .xex) and add each as a [[modules]] entry");
   init->add_option("--template-dir", args->template_dir, "Custom template directory for overrides")
       ->type_name("PATH");
 
