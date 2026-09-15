@@ -30,6 +30,7 @@ using Clock = std::chrono::steady_clock;
 
 std::atomic<uint32_t> g_draws{0};
 std::atomic<uint32_t> g_resolves{0};
+std::atomic<uint64_t> g_gpu_wait_us{0};
 
 std::mutex g_mutex;
 FILE* g_file = nullptr;
@@ -52,7 +53,7 @@ bool EnsureOpen() {
     REXLOG_WARN("frame_stats: cannot open {}", path);
     return false;
   }
-  std::fputs("frame,frame_ms,draws,resolves\n", g_file);
+  std::fputs("frame,frame_ms,gpu_wait_ms,draws,resolves\n", g_file);
   return true;
 }
 
@@ -66,7 +67,12 @@ void RecordResolve() {
   g_resolves.fetch_add(1, std::memory_order_relaxed);
 }
 
+void RecordGpuWait(uint64_t microseconds) {
+  g_gpu_wait_us.fetch_add(microseconds, std::memory_order_relaxed);
+}
+
 void RecordFrame() {
+  const uint64_t gpu_wait_us = g_gpu_wait_us.exchange(0, std::memory_order_relaxed);
   const uint32_t draws = g_draws.exchange(0, std::memory_order_relaxed);
   const uint32_t resolves = g_resolves.exchange(0, std::memory_order_relaxed);
   std::lock_guard lock(g_mutex);
@@ -77,8 +83,8 @@ void RecordFrame() {
   if (g_frame > 0) {
     const float frame_ms = std::chrono::duration<float, std::milli>(now - g_last_frame).count();
     g_frame_ms.push_back(frame_ms);
-    std::fprintf(g_file, "%llu,%.3f,%u,%u\n", static_cast<unsigned long long>(g_frame), frame_ms,
-                 draws, resolves);
+    std::fprintf(g_file, "%llu,%.3f,%.3f,%u,%u\n", static_cast<unsigned long long>(g_frame),
+                 frame_ms, static_cast<double>(gpu_wait_us) / 1000.0, draws, resolves);
     // Runs are often ended by killing the process, so keep the file current.
     if (g_frame % 30 == 0) {
       std::fflush(g_file);
