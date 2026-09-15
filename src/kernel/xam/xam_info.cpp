@@ -209,6 +209,11 @@ u32 XamGetCurrentTitleId_entry() {
 }
 
 u32 XamGetExecutionId_entry(mapped_u32 info_ptr) {
+u32 XNetLogonGetTitleID_entry() {
+  // The stub this replaces returned whatever the caller left in r3.
+  return XamGetCurrentTitleId_entry();
+}
+
   auto module = REX_KERNEL_STATE()->GetExecutableModule();
   assert_not_null(module);
 
@@ -363,3 +368,4 @@ REX_EXPORT(__imp__XamFree, rex::kernel::xam::XamFree_entry)
 REX_EXPORT(__imp__XamQueryLiveHiveW, rex::kernel::xam::XamQueryLiveHiveW_entry)
 REX_EXPORT(__imp__XamLoaderGetDvdTrayState, rex::kernel::xam::XamLoaderGetDvdTrayState_entry)
 REX_EXPORT(__imp__XamSwapDisc, rex::kernel::xam::XamSwapDisc_entry)
+REX_EXPORT(__imp__XNetLogonGetTitleID, rex::kernel::xam::XNetLogonGetTitleID_entry)

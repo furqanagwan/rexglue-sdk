@@ -170,6 +170,19 @@ u32 ObDereferenceObject_entry(u32 native_ptr) {
   return 0;
 }
 
+void ObReferenceObject_entry(u32 native_ptr) {
+  REXKRNL_IMPORT_TRACE("ObReferenceObject", "ptr={:#x}", (uint32_t)native_ptr);
+  // Released by ObDereferenceObject, which the stub this replaces still let
+  // run: a game that took a reference this way could free the object early.
+  auto object = XObject::GetNativeObject<XObject>(
+      REX_KERNEL_STATE(), REX_KERNEL_MEMORY()->TranslateVirtual(native_ptr));
+  if (object) {
+    object->RetainHandle();
+  } else if (native_ptr) {
+    REXKRNL_WARN("ObReferenceObject: unregistered guest object {:08X}", native_ptr);
+  }
+}
+
 u32 ObCreateSymbolicLink_entry(ppc_ptr_t<X_ANSI_STRING> path_ptr,
                                ppc_ptr_t<X_ANSI_STRING> target_ptr) {
   auto path = rex::string::utf8_canonicalize_guest_path(
@@ -250,6 +263,7 @@ REX_EXPORT(__imp__ObLookupThreadByThreadId, rex::kernel::xboxkrnl::ObLookupThrea
 REX_EXPORT(__imp__ObReferenceObjectByHandle, rex::kernel::xboxkrnl::ObReferenceObjectByHandle_entry)
 REX_EXPORT(__imp__ObReferenceObjectByName, rex::kernel::xboxkrnl::ObReferenceObjectByName_entry)
 REX_EXPORT(__imp__ObDereferenceObject, rex::kernel::xboxkrnl::ObDereferenceObject_entry)
+REX_EXPORT(__imp__ObReferenceObject, rex::kernel::xboxkrnl::ObReferenceObject_entry)
 REX_EXPORT(__imp__ObCreateSymbolicLink, rex::kernel::xboxkrnl::ObCreateSymbolicLink_entry)
 REX_EXPORT(__imp__ObDeleteSymbolicLink, rex::kernel::xboxkrnl::ObDeleteSymbolicLink_entry)
 REX_EXPORT(__imp__NtDuplicateObject, rex::kernel::xboxkrnl::NtDuplicateObject_entry)
@@ -262,7 +276,6 @@ REX_EXPORT_STUB(__imp__ObInsertObject);
 REX_EXPORT_STUB(__imp__ObIsTitleObject);
 REX_EXPORT_STUB(__imp__ObLookupAnyThreadByThreadId);
 REX_EXPORT_STUB(__imp__ObMakeTemporaryObject);
-REX_EXPORT_STUB(__imp__ObReferenceObject);
 REX_EXPORT_STUB(__imp__ObTranslateSymbolicLink);
 REX_EXPORT_STUB(__imp__NtCreateDirectoryObject);
 REX_EXPORT_STUB(__imp__NtCreateSymbolicLinkObject);
