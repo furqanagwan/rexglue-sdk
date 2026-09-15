@@ -220,6 +220,7 @@ bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t co
       .image_size = image_size,
       .next_thunk_address = code_base + code_size,
       .thunk_limit = code_base + code_size + kThunkReserveSize,
+      .thunks = {},
   });
 
   if (is_entrypoint) {
@@ -303,6 +304,9 @@ uint32_t FunctionDispatcher::AllocateThunk(::PPCFunc* func, uint32_t caller_addr
     }
   }
 
+  if (auto existing = mod->thunks.find(func); existing != mod->thunks.end()) {
+    return existing->second;
+  }
   if (mod->next_thunk_address >= mod->thunk_limit) {
     REXLOG_ERROR("Thunk address space exhausted for module at {:08X}", mod->code_base);
     return 0;
@@ -313,6 +317,7 @@ uint32_t FunctionDispatcher::AllocateThunk(::PPCFunc* func, uint32_t caller_addr
     mod->next_thunk_address -= 4;
     return 0;
   }
+  mod->thunks.emplace(func, addr);
   return addr;
 }
 

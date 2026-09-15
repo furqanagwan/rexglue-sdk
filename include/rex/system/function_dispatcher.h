@@ -122,6 +122,9 @@ class FunctionDispatcher : public IModuleRegistrar {
     uint32_t image_size;
     uint32_t next_thunk_address;
     uint32_t thunk_limit;
+    // Thunks already handed out for this module, so repeated lookups of the
+    // same export return a stable address instead of consuming thunk space.
+    std::unordered_map<::PPCFunc*, uint32_t> thunks;
   };
 
   ModuleTableInfo* FindModuleByAddress(uint32_t guest_address);
