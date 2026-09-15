@@ -31,6 +31,10 @@ class DynamicLibrary {
   DynamicLibrary& operator=(DynamicLibrary&& other) noexcept;
 
   bool Load(const std::filesystem::path& path, SymbolResolution mode = SymbolResolution::kLazy);
+  // Takes a reference to a library the process has already loaded, without
+  // loading it otherwise. Use this for tools that inject themselves, where
+  // loading the library would change behaviour (RenderDoc's Vulkan layer).
+  bool LoadIfPresent(const std::filesystem::path& path);
   void Close();
   explicit operator bool() const { return handle_ != nullptr; }
 
