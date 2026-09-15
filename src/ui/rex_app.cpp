@@ -39,6 +39,7 @@
 #include <rex/system/achievement_manager.h>
 #include <rex/system/gpu_plugin.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/title_relaunch.h>
 #include <rex/system/xthread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/keybinds.h>
@@ -482,6 +483,9 @@ void ReXApp::LaunchModule() {
       main_thread->Wait(0, 0, 0, nullptr);
       OnGuestThreadExit(main_thread.get());
       REXLOG_INFO("Execution complete");
+      if (rex::system::IsTitleRelaunchRequested()) {
+        rex::system::RelaunchProcess(runtime_->user_data_root());
+      }
       if (!shutting_down_.load(std::memory_order_acquire)) {
         app_context().CallInUIThread([this]() { app_context().QuitFromUIThread(); });
       }

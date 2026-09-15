@@ -16,6 +16,7 @@
 #include <rex/types.h>
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/title_relaunch.h>
 #include <rex/system/user_module.h>
 #include <rex/system/xenumerator.h>
 #include <rex/system/xthread.h>
@@ -208,12 +209,12 @@ u32 XamGetCurrentTitleId_entry() {
   return 0;
 }
 
-u32 XamGetExecutionId_entry(mapped_u32 info_ptr) {
 u32 XNetLogonGetTitleID_entry() {
   // The stub this replaces returned whatever the caller left in r3.
   return XamGetCurrentTitleId_entry();
 }
 
+u32 XamGetExecutionId_entry(mapped_u32 info_ptr) {
   auto module = REX_KERNEL_STATE()->GetExecutableModule();
   assert_not_null(module);
 
@@ -289,11 +290,33 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
     assert_always("Game requested exit to dashboard via XamLoaderLaunchTitle");
   }
 
+  // A title launching its own executable restarts itself: the host process
+  // restarts with the launch data (see rex/system/title_relaunch.h). Any other
+  // executable cannot be loaded, so that ends the run.
+  const auto executable = REX_KERNEL_STATE()->GetExecutableModule();
+  const bool relaunch = raw_name_ptr && executable &&
+                        rex::string::utf8_equal_case(
+                            rex::string::utf8_find_name_from_guest_path(loader_data.launch_path),
+                            rex::string::utf8_find_name_from_guest_path(executable->path()));
+  if (relaunch) {
+    REXKRNL_INFO("XamLoaderLaunchTitle: title relaunches itself (flags {:#x}, {} bytes of launch "
+                 "data)",
+                 static_cast<uint32_t>(flags), loader_data.launch_data.size());
+    rex::system::RequestTitleRelaunch(
+        loader_data.launch_data_present ? loader_data.launch_data : std::vector<uint8_t>{},
+        flags);
+  } else {
+    REXKRNL_INFO("XamLoaderLaunchTitle: title asked to launch '{}' (flags {:#x}); terminating",
+                 raw_name_ptr ? loader_data.launch_path : std::string("dashboard"),
+                 static_cast<uint32_t>(flags));
+  }
+
   // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();
 }
 
 void XamLoaderTerminateTitle_entry() {
+  REXKRNL_INFO("XamLoaderTerminateTitle: title exited");
   // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();
 }
@@ -357,6 +380,7 @@ REX_EXPORT(__imp__XGetAVPack, rex::kernel::xam::XGetAVPack_entry)
 REX_EXPORT(__imp__XGetGameRegion, rex::kernel::xam::XGetGameRegion_entry)
 REX_EXPORT(__imp__XGetLanguage, rex::kernel::xam::XGetLanguage_entry)
 REX_EXPORT(__imp__XamGetCurrentTitleId, rex::kernel::xam::XamGetCurrentTitleId_entry)
+REX_EXPORT(__imp__XNetLogonGetTitleID, rex::kernel::xam::XNetLogonGetTitleID_entry)
 REX_EXPORT(__imp__XamGetExecutionId, rex::kernel::xam::XamGetExecutionId_entry)
 REX_EXPORT(__imp__XamLoaderSetLaunchData, rex::kernel::xam::XamLoaderSetLaunchData_entry)
 REX_EXPORT(__imp__XamLoaderGetLaunchDataSize, rex::kernel::xam::XamLoaderGetLaunchDataSize_entry)
@@ -368,4 +392,3 @@ REX_EXPORT(__imp__XamFree, rex::kernel::xam::XamFree_entry)
 REX_EXPORT(__imp__XamQueryLiveHiveW, rex::kernel::xam::XamQueryLiveHiveW_entry)
 REX_EXPORT(__imp__XamLoaderGetDvdTrayState, rex::kernel::xam::XamLoaderGetDvdTrayState_entry)
 REX_EXPORT(__imp__XamSwapDisc, rex::kernel::xam::XamSwapDisc_entry)
-REX_EXPORT(__imp__XNetLogonGetTitleID, rex::kernel::xam::XNetLogonGetTitleID_entry)

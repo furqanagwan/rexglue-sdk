@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <rex/kernel/xam/module.h>
+#include <rex/system/title_relaunch.h>
 #include <rex/kernel/xam/private.h>
 #include <rex/math.h>
 #include <rex/hook.h>
@@ -32,6 +33,11 @@ bool xeXamIsUIActive() {
 XamModule::XamModule(Runtime* emulator, KernelState* kernel_state)
     : KernelModule(kernel_state, "xe:\\xam.xex"), loader_data_() {
   RegisterExportTable(export_resolver_);
+
+  // Launch data from a previous run that relaunched this title.
+  if (system::TakeLaunchDataFile(loader_data_.launch_data, loader_data_.launch_flags)) {
+    loader_data_.launch_data_present = !loader_data_.launch_data.empty();
+  }
 
   // Register all exported functions.
   // #define XE_MODULE_EXPORT_GROUP(m, n) \
