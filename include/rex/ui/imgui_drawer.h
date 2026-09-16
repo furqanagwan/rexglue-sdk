@@ -61,6 +61,10 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
     SetImmediateDrawer(new_immediate_drawer);
   }
 
+  // The drawer a dialog creates its own textures through. Null until the
+  // presenter is up, and again once it goes away.
+  ImmediateDrawer* immediate_drawer() const { return immediate_drawer_; }
+
   void Draw(UIDrawContext& ui_draw_context) override;
 
  protected:

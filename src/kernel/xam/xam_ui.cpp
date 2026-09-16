@@ -20,6 +20,7 @@
 REXCVAR_DEFINE_BOOL(headless, false, "Kernel",
                     "Don't display any UI, using defaults for prompts as needed");
 #include <rex/kernel/xam/private.h>
+#include <rex/kernel/xam/system_ui.h>
 #include <rex/hook.h>
 #include <rex/types.h>
 #include <rex/system/xtypes.h>
@@ -516,6 +517,41 @@ u32 XamShowDeviceSelectorUI_entry(u32 user_index, u32 content_type, u32 content_
       overlapped.guest_address());
 }
 
+
+// The dashboard screens a title can ask for. A recompiled title has no
+// dashboard: the host shell shows its own (rex/kernel/xam/system_ui.h). These
+// return as soon as the screen is requested, never waiting for the user, so a
+// title that calls one from its main loop keeps running.
+u32 XamShowGuideUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kGuide, user_index);
+  return X_ERROR_SUCCESS;
+}
+
+u32 XamShowAchievementsUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kAchievements, user_index);
+  return X_ERROR_SUCCESS;
+}
+
+u32 XamShowFriendsUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kFriends, user_index);
+  return X_ERROR_SUCCESS;
+}
+
+u32 XamShowGamerCardUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kGamerCard, user_index);
+  return X_ERROR_SUCCESS;
+}
+
+u32 XamShowMessagesUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kMessages, user_index);
+  return X_ERROR_SUCCESS;
+}
+
+u32 XamShowPlayerReviewUI_entry(u32 user_index) {
+  ShowSystemUi(SystemUi::kPlayerReview, user_index);
+  return X_ERROR_SUCCESS;
+}
+
 void XamShowDirtyDiscErrorUI_entry(u32 user_index) {
   REXKRNL_ERROR("XamShowDirtyDiscErrorUI called! user_index={}", uint32_t(user_index));
   REXKRNL_ERROR("This indicates a disc/file read error - check that all game files exist");
@@ -565,6 +601,12 @@ uint32_t XamShowMessageBoxUIEx_entry() {
 }  // namespace rex
 
 REX_EXPORT(__imp__XamIsUIActive, rex::kernel::xam::XamIsUIActive_entry)
+REX_EXPORT(__imp__XamShowGuideUI, rex::kernel::xam::XamShowGuideUI_entry)
+REX_EXPORT(__imp__XamShowAchievementsUI, rex::kernel::xam::XamShowAchievementsUI_entry)
+REX_EXPORT(__imp__XamShowFriendsUI, rex::kernel::xam::XamShowFriendsUI_entry)
+REX_EXPORT(__imp__XamShowGamerCardUI, rex::kernel::xam::XamShowGamerCardUI_entry)
+REX_EXPORT(__imp__XamShowMessagesUI, rex::kernel::xam::XamShowMessagesUI_entry)
+REX_EXPORT(__imp__XamShowPlayerReviewUI, rex::kernel::xam::XamShowPlayerReviewUI_entry)
 REX_EXPORT(__imp__XamShowMessageBoxUI, rex::kernel::xam::XamShowMessageBoxUI_entry)
 REX_EXPORT(__imp__XamShowKeyboardUI, rex::kernel::xam::XamShowKeyboardUI_entry)
 REX_EXPORT(__imp__XamShowDeviceSelectorUI, rex::kernel::xam::XamShowDeviceSelectorUI_entry)
@@ -583,7 +625,6 @@ REX_EXPORT_STUB(__imp__XamNavigate);
 REX_EXPORT_STUB(__imp__XamNavigateBack);
 REX_EXPORT_STUB(__imp__XamOverrideHudOpenType);
 REX_EXPORT_STUB(__imp__XamShowAchievementDetailsUI);
-REX_EXPORT_STUB(__imp__XamShowAchievementsUI);
 REX_EXPORT_STUB(__imp__XamShowAchievementsUIEx);
 REX_EXPORT_STUB(__imp__XamShowAndWaitForMessageBoxEx);
 REX_EXPORT_STUB(__imp__XamShowAvatarAwardGamesUI);
@@ -609,18 +650,15 @@ REX_EXPORT_STUB(__imp__XamShowFitnessWarnAboutTimeUI);
 REX_EXPORT_STUB(__imp__XamShowFofUI);
 REX_EXPORT_STUB(__imp__XamShowForcedNameChangeUI);
 REX_EXPORT_STUB(__imp__XamShowFriendRequestUI);
-REX_EXPORT_STUB(__imp__XamShowFriendsUI);
 REX_EXPORT_STUB(__imp__XamShowFriendsUIp);
 REX_EXPORT_STUB(__imp__XamShowGameInviteUI);
 REX_EXPORT_STUB(__imp__XamShowGameVoiceChannelUI);
-REX_EXPORT_STUB(__imp__XamShowGamerCardUI);
 REX_EXPORT_STUB(__imp__XamShowGamerCardUIForXUID);
 REX_EXPORT_STUB(__imp__XamShowGamerCardUIForXUIDp);
 REX_EXPORT_STUB(__imp__XamShowGamesUI);
 REX_EXPORT_STUB(__imp__XamShowGenericOnlineAppUI);
 REX_EXPORT_STUB(__imp__XamShowGoldUpgradeUI);
 REX_EXPORT_STUB(__imp__XamShowGraduateUserUI);
-REX_EXPORT_STUB(__imp__XamShowGuideUI);
 REX_EXPORT_STUB(__imp__XamShowJoinPartyUI);
 REX_EXPORT_STUB(__imp__XamShowJoinSessionByIdInProgressUI);
 REX_EXPORT_STUB(__imp__XamShowJoinSessionInProgressUI);
@@ -636,7 +674,6 @@ REX_EXPORT_STUB(__imp__XamShowMarketplaceUI);
 REX_EXPORT_STUB(__imp__XamShowMarketplaceUIEx);
 REX_EXPORT_STUB(__imp__XamShowMessageBox);
 REX_EXPORT_STUB(__imp__XamShowMessageComposeUI);
-REX_EXPORT_STUB(__imp__XamShowMessagesUI);
 REX_EXPORT_STUB(__imp__XamShowMessagesUIEx);
 REX_EXPORT_STUB(__imp__XamShowMessengerUI);
 REX_EXPORT_STUB(__imp__XamShowMultiplayerUpgradeUI);
@@ -671,7 +708,6 @@ REX_EXPORT_STUB(__imp__XamShowPasscodeVerifyUI);
 REX_EXPORT_STUB(__imp__XamShowPasscodeVerifyUIEx);
 REX_EXPORT_STUB(__imp__XamShowPaymentOptionsUI);
 REX_EXPORT_STUB(__imp__XamShowPersonalizationUI);
-REX_EXPORT_STUB(__imp__XamShowPlayerReviewUI);
 REX_EXPORT_STUB(__imp__XamShowPlayersUI);
 REX_EXPORT_STUB(__imp__XamShowPrivateChatInviteUI);
 REX_EXPORT_STUB(__imp__XamShowQuickChatUI);

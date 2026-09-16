@@ -40,6 +40,12 @@ class InputSystem : public system::IInputSystem {
   void AttachWindow(rex::ui::Window* window);
   void SetActiveCallback(std::function<bool()> callback);
 
+  /// Last say over the gamepad state the caller sees, for a host shell that
+  /// owns some buttons: a compatibility guide opened with View + Menu holds
+  /// those two back until it knows whether they are a chord. Called for every
+  /// GetState with the merged state; pass nullptr to remove.
+  void SetStateFilter(std::function<void(uint32_t user_index, X_INPUT_STATE&)> filter);
+
   /// Replaces any previous assignment. Call before the guest starts polling.
   void SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignment);
 
@@ -60,6 +66,8 @@ class InputSystem : public system::IInputSystem {
   rex::ui::Window* window_ = nullptr;
 
   std::vector<std::unique_ptr<InputDriver>> drivers_;
+
+  std::function<void(uint32_t, X_INPUT_STATE&)> state_filter_;
 
   std::unique_ptr<DeviceAssignment> assignment_;
   ActiveDeviceTracker active_devices_;

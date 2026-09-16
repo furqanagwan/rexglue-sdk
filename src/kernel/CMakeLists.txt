@@ -3,6 +3,7 @@ set(REXKERNEL_SOURCES
 
     # XAM subsystem - provides __imp__Xam* symbols
     xam/xam_module.cpp
+    xam/system_ui.cpp
     xam/xam_avatar.cpp
     xam/xam_content.cpp
     xam/xam_content_aggregate.cpp

@@ -78,6 +78,11 @@ void InputSystem::SetActiveCallback(std::function<bool()> callback) {
   }
 }
 
+void InputSystem::SetStateFilter(std::function<void(uint32_t, X_INPUT_STATE&)> filter) {
+  std::lock_guard<std::mutex> guard(lock_);
+  state_filter_ = std::move(filter);
+}
+
 void InputSystem::SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignment) {
   std::lock_guard<std::mutex> guard(lock_);
   assignment_ = std::move(assignment);
@@ -254,6 +259,9 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
 
   if (!any) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  if (state_filter_) {
+    state_filter_(user_index, merged);
   }
   if (out_state) {
     *out_state = merged;

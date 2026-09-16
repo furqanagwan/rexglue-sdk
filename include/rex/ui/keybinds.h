@@ -71,6 +71,13 @@ void RegisterBind(std::string_view name, std::string_view default_key, std::stri
 void UnregisterBind(std::string_view name);
 
 /**
+ * Run a registered bind's callback, as if its key had been pressed. Lets a
+ * host shell offer the same actions as the keyboard shortcuts (a guide menu
+ * opening the achievements overlay). Returns false when no such bind exists.
+ */
+bool InvokeBind(std::string_view name);
+
+/**
  * Process a key-down event against all registered binds.
  *
  * Looks up each bind's current key from its CVAR, parses it, and compares

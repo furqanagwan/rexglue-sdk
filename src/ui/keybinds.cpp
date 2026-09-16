@@ -208,6 +208,25 @@ void UnregisterBind(std::string_view name) {
   }
 }
 
+bool InvokeBind(std::string_view name) {
+  std::function<void()> callback;
+  {
+    std::lock_guard lock(g_binds_mutex);
+    for (auto& entry : g_binds) {
+      if (entry.name == name && entry.callback) {
+        callback = entry.callback;
+        break;
+      }
+    }
+  }
+  if (!callback) {
+    return false;
+  }
+  // Outside the lock: a bind may register or remove another.
+  callback();
+  return true;
+}
+
 bool ProcessKeyEvent(KeyEvent& e) {
   std::lock_guard lock(g_binds_mutex);
   for (auto& entry : g_binds) {
