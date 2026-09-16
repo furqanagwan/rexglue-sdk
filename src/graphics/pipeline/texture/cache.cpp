@@ -9,6 +9,7 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <rex/perf/frame_stats.h>
 #include <algorithm>
 #include <cstdint>
 #include <utility>
@@ -881,6 +882,7 @@ TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key) {
 }
 
 bool TextureCache::LoadTextureData(Texture& texture) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kTextureLoad);
   PendingTextureLoad pending_load;
   PendingSharedMemoryRange pending_ranges[2];
   size_t pending_range_count = 0;

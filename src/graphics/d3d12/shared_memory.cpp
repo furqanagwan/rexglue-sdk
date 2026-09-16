@@ -10,6 +10,7 @@
  */
 
 #include <cstring>
+#include <rex/perf/frame_stats.h>
 #include <utility>
 #include <vector>
 
@@ -306,6 +307,7 @@ bool D3D12SharedMemory::UploadRanges(
   if (upload_page_ranges.empty()) {
     return true;
   }
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kMemoryUpload);
   CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATE_COPY_DEST);
   command_processor_.SubmitBarriers();
   auto& command_list = command_processor_.GetDeferredCommandList();
@@ -330,6 +332,7 @@ bool D3D12SharedMemory::UploadRanges(
       command_list.D3DCopyBufferRegion(buffer_, upload_range_start << page_size_log2(),
                                        upload_buffer, UINT64(upload_buffer_offset),
                                        UINT64(upload_buffer_size));
+      rex::perf::frame_stats::RecordUpload(upload_buffer_size);
       uint32_t upload_buffer_pages = uint32_t(upload_buffer_size >> page_size_log2());
       upload_range_start += upload_buffer_pages;
       upload_range_length -= upload_buffer_pages;

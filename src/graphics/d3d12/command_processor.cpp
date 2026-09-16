@@ -1912,6 +1912,7 @@ void D3D12CommandProcessor::OnGammaRampPWLValueWritten() {
 
 void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                                       uint32_t frontbuffer_height) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kSwap);
   SCOPE_profile_cpu_f("gpu");
   vertex_buffers_in_sync_[0] = 0;
   vertex_buffers_in_sync_[1] = 0;
@@ -2338,6 +2339,8 @@ Shader* D3D12CommandProcessor::LoadShader(xenos::ShaderType shader_type, uint32_
 bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint32_t index_count,
                                       IndexBufferInfo* index_buffer_info,
                                       bool major_mode_explicit) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kDraw);
+  rex::perf::frame_stats::StageTimer stages(rex::perf::frame_stats::Work::kDrawVertices);
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
@@ -2414,6 +2417,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     return false;
   }
 
+  stages.Mark(rex::perf::frame_stats::Work::kDrawSetup);
   // Process primitives.
   PrimitiveProcessor::ProcessingResult primitive_processing_result;
   if (!primitive_processor_->Process(primitive_processing_result)) {
@@ -2443,6 +2447,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
                 *pixel_shader, interpolator_mask, ps_param_gen_pos, normalized_depth_control)
           : DxbcShaderTranslator::Modification(0);
 
+  stages.Mark(rex::perf::frame_stats::Work::kDrawPrimitives);
   // Set up the render targets - this may perform dispatches and draws.
   uint32_t normalized_color_mask =
       pixel_shader ? draw_util::GetNormalizedColorMask(regs, pixel_shader->writes_color_targets())
@@ -2452,6 +2457,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     return false;
   }
 
+  stages.Mark(rex::perf::frame_stats::Work::kDrawRenderTargets);
   // Create the pipeline (for this, need the actually used render target formats
   // from the render target cache), translating the shaders - doing this now to
   // obtain the used textures.
@@ -2486,11 +2492,13 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     return true;
   }
 
+  stages.Mark(rex::perf::frame_stats::Work::kDrawPipeline);
   // Update the textures - this may bind pipelines.
   uint32_t used_texture_mask =
       vertex_shader->GetUsedTextureMaskAfterTranslation() |
       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
   texture_cache_->RequestTextures(used_texture_mask);
+  stages.Mark(rex::perf::frame_stats::Work::kDrawTextures);
 
   // Bind the pipeline after configuring it and doing everything that may bind
   // other pipelines.
@@ -2552,10 +2560,12 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
                              primitive_processing_result.host_shader_index_endian, viewport_info,
                              used_texture_mask, normalized_depth_control, normalized_color_mask);
 
+  stages.Mark(rex::perf::frame_stats::Work::kDrawState);
   // Update constant buffers, descriptors and root parameters.
   if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {
     return false;
   }
+  stages.Mark(rex::perf::frame_stats::Work::kDrawBindings);
   // Must not call anything that can change the descriptor heap from now on!
 
   // Ensure vertex buffers are resident.
@@ -2954,6 +2964,7 @@ bool D3D12CommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_s
 }
 
 bool D3D12CommandProcessor::IssueCopy() {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kResolve);
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
@@ -3462,6 +3473,7 @@ bool D3D12CommandProcessor::BeginSubmission(bool is_guest_command) {
 }
 
 bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kSubmission);
   const ui::d3d12::D3D12Provider& provider = GetD3D12Provider();
 
   // Make sure there is a command allocator to write commands to.

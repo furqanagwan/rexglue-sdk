@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <rex/perf/frame_stats.h>
 #include <cstring>
 #include <utility>
 
@@ -309,6 +310,7 @@ void SharedMemory::MakeRangeValid(uint32_t start, uint32_t length, bool written_
   }
 
   if (memory_invalidation_callback_handle_) {
+    rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kMemoryWatch);
     memory().EnablePhysicalMemoryAccessCallbacks(
         valid_page_first << page_size_log2_,
         (valid_page_last - valid_page_first + 1) << page_size_log2_, true, false);

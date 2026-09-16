@@ -207,6 +207,7 @@ void CommandProcessor::SetDesiredSwapPostEffect(SwapPostEffect swap_post_effect)
 }
 
 void CommandProcessor::WorkerThreadMain() {
+  rex::perf::frame_stats::MarkCommandThread();
   if (!SetupContext()) {
     rex::FatalError("Unable to setup command processor internal state");
     return;

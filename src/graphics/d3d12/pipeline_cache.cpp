@@ -9,6 +9,7 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <rex/perf/frame_stats.h>
 #include "thirdparty/dxbc/DXBCChecksum.h"
 
 #include <algorithm>
@@ -1059,6 +1060,7 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
                                             D3D12Shader::D3D12Translation& translation,
                                             IDxbcConverter* dxbc_converter, IDxcUtils* dxc_utils,
                                             IDxcCompiler* dxc_compiler) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kShaderTranslation);
   D3D12Shader& shader = static_cast<D3D12Shader&>(translation.shader());
 
   // Perform translation.
@@ -2677,6 +2679,7 @@ const std::vector<uint32_t>& PipelineCache::GetGeometryShader(GeometryShaderKey 
 
 ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     const PipelineRuntimeDescription& runtime_description) {
+  rex::perf::frame_stats::ScopedWork timed(rex::perf::frame_stats::Work::kPipelineCreation);
   const PipelineDescription& description = runtime_description.description;
 
   if (runtime_description.pixel_shader != nullptr) {
