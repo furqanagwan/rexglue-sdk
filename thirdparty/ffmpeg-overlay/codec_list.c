@@ -14,4 +14,8 @@ static const AVCodec* const codec_list[] = {
 #if CONFIG_XMAFRAMES_DECODER
     &ff_xmaframes_decoder,
 #endif
+    /* Whole XMA files (RIFF, 2048-byte packets), for host-side decoding of
+       console interface sounds. wmaprodec.c defines these unconditionally. */
+    &ff_xma1_decoder,
+    &ff_xma2_decoder,
     NULL};

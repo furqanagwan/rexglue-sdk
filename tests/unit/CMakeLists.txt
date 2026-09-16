@@ -21,6 +21,7 @@ add_executable(unit_tests
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
     graphics/native_guest_renderer_test.cpp
+    audio/ui_sound_test.cpp
 )
 
 target_sources(unit_tests PRIVATE
