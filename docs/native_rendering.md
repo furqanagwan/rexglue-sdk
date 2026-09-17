@@ -21,7 +21,9 @@ game's renderer needs.
 | Pass suppression | same | While the renderer draws, emulated draws and resolves of the passes it replaces are skipped and occlusion queries report the fake count. `SetNativeGuestOutputPassFilter` says which passes those are |
 | Ultrawide output | same | `SetNativeGuestOutputWideAspect` sizes the output wider than the frontbuffer while the renderer serves frames |
 | Guest function hooks | generated code | Every recompiled function is a weak symbol with an `__imp__` original, so a game can replace one, capture the arguments and call through |
-| Frame tools | cvars | `frame_stats_csv`, `gpu_trace_frame`, `gpu_skip_pixel_shaders` (see recomp-framework CONTRIBUTING) |
+| Frame tools | cvars | `frame_stats_csv`, `gpu_trace_frame`, `gpu_skip_pixel_shaders`, and for
+finding a game's own geometry `gpu_trace_shaders` (trace one shader program), `gpu_trace_constants`
+(its transform chain) and `gpu_trace_vertex_buffers` (see recomp-framework CONTRIBUTING) |
 
 Games that register nothing run exactly as before; none of this is active.
 
@@ -40,9 +42,12 @@ engine swaps ──────────────────────�
                                                   let emulation show the frame)
 ```
 
-1. **Find the submission points.** Use the frame trace to see which pixel
-   shaders draw the scene, then find the guest functions that submit those
-   meshes (the Skate 3 renderer hooks the render-mesh and sorted draw-list
+1. **Find the submission points.** Use the frame trace to see which shader
+   programs draw the scene: summarising it names them by draw count, and tracing
+   one of them with `gpu_trace_constants` says which of its constants are the
+   projection (never change), the camera (change per frame) and each object's
+   own transform (change per draw). Then find the guest functions that submit
+   those meshes (the Skate 3 renderer hooks the render-mesh and sorted draw-list
    functions). Menus, videos and loading screens can stay emulated: yield
    whenever the captured data is not a frame you can draw.
 2. **Hook them.** Define the function with `REX_FUNC(sub_XXXXXXXX)` in the game
