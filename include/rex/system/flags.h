@@ -26,5 +26,6 @@ REXCVAR_DECLARE(bool, ignore_thread_priorities);
 REXCVAR_DECLARE(bool, ignore_thread_affinities);
 REXCVAR_DECLARE(bool, writable_executable_memory);
 REXCVAR_DECLARE(bool, protect_zero);
+REXCVAR_DECLARE(bool, map_low_null_offset_page);
 REXCVAR_DECLARE(bool, protect_on_release);
 REXCVAR_DECLARE(bool, scribble_heap);

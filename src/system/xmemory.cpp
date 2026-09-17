@@ -36,6 +36,11 @@
 REXCVAR_DEFINE_BOOL(protect_zero, true, "Memory", "Protect the zero page from reads and writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(map_low_null_offset_page, false, "Memory",
+                    "Map guest 0x00010000-0x0001FFFF as zeroed read/write memory for titles that "
+                    "read through a null base with a small offset")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 REXCVAR_DEFINE_BOOL(protect_on_release, false, "Memory",
                     "Protect released memory to prevent accesses");
 
@@ -207,6 +212,16 @@ bool Memory::Initialize() {
                               !REXCVAR_GET(protect_zero)
                                   ? memory::kMemoryProtectRead | memory::kMemoryProtectWrite
                                   : memory::kMemoryProtectNoAccess);
+  // Skate 3 reads offset 0x12160 of a global pointer that is still null while it boots
+  // (the Skate 3 recompilation's SDK maps this page for the same read). The guest heap
+  // keeps the range free; only the host page is committed.
+  if (REXCVAR_GET(map_low_null_offset_page) &&
+      !rex::memory::AllocFixed(virtual_membase_ + 0x10000, 0x10000,
+                               rex::memory::AllocationType::kCommit,
+                               rex::memory::PageAccess::kReadWrite)) {
+    REXSYS_ERROR("Unable to map the low null-offset page at 0x00010000");
+    return false;
+  }
   heaps_.physical.AllocFixed(0x1FFF0000, 0x10000, 0x10000, memory::kMemoryAllocationReserve,
                              memory::kMemoryProtectNoAccess);
 
