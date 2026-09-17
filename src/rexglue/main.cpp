@@ -11,6 +11,7 @@
 #include "commands/extract_command.h"
 #include "commands/resources_command.h"
 #include "commands/init_command.h"
+#include "commands/package_command.h"
 #include "commands/test_recompiler.h"
 #include "ui/ui.h"
 
@@ -83,6 +84,7 @@ int main(int argc, char** argv) {
   rexglue::cli::RegisterCodegen(app, ctx, pending);
   rexglue::cli::RegisterInit(app, ctx, pending);
   rexglue::cli::RegisterExtract(app, ctx, pending);
+  rexglue::cli::RegisterPackage(app, ctx, pending);
   rexglue::cli::RegisterResources(app, ctx, pending);
   rexglue::cli::RegisterRecompileTests(app, ctx, pending);
 
