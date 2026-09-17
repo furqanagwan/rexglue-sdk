@@ -22,7 +22,8 @@ class HostPathEntry;
 class HostPathDevice : public Device {
  public:
   HostPathDevice(const std::string_view mount_path, const std::filesystem::path& host_path,
-                 bool read_only, bool allow_share_delete = false);
+                 bool read_only, bool allow_share_delete = false,
+                 const std::filesystem::path& fallback_path = {});
   ~HostPathDevice() override;
 
   bool Initialize() override;
@@ -47,10 +48,12 @@ class HostPathDevice : public Device {
   uint32_t bytes_per_sector() const override { return 0x200; }
 
  private:
-  void PopulateEntry(HostPathEntry* parent_entry);
+  void PopulateEntry(HostPathEntry* parent_entry, const std::filesystem::path& primary_path,
+                     const std::filesystem::path& fallback_path);
 
   std::string name_;
   std::filesystem::path host_path_;
+  std::filesystem::path fallback_path_;
   std::unique_ptr<Entry> root_entry_;
   bool read_only_;
   bool allow_share_delete_;

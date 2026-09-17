@@ -12,6 +12,7 @@
 #include <rex/filesystem/devices/host_path_entry.h>
 
 #include <algorithm>
+#include <vector>
 
 #include <rex/filesystem.h>
 #include <rex/filesystem/devices/host_path_device.h>
@@ -23,10 +24,12 @@ namespace rex::filesystem {
 
 HostPathDevice::HostPathDevice(const std::string_view mount_path,
                                const std::filesystem::path& host_path, bool read_only,
-                               bool allow_share_delete)
+                               bool allow_share_delete,
+                               const std::filesystem::path& fallback_path)
     : Device(mount_path),
       name_("STFS"),
       host_path_(host_path),
+      fallback_path_(fallback_path),
       read_only_(read_only),
       allow_share_delete_(allow_share_delete) {}
 
@@ -42,11 +45,15 @@ bool HostPathDevice::Initialize() {
       return false;
     }
   }
+  if (!fallback_path_.empty() && !std::filesystem::is_directory(fallback_path_)) {
+    REXFS_ERROR("Fallback host path does not exist or is not a directory");
+    return false;
+  }
 
   auto root_entry = new HostPathEntry(this, nullptr, "", host_path_);
   root_entry->attributes_ = kFileAttributeDirectory;
   root_entry_ = std::unique_ptr<Entry>(root_entry);
-  PopulateEntry(root_entry);
+  PopulateEntry(root_entry, host_path_, fallback_path_);
 
   return true;
 }
@@ -90,6 +97,26 @@ Entry* HostPathDevice::ResolvePath(const std::string_view path) {
         continue;
       }
 
+      if (!fallback_path_.empty()) {
+        std::error_code relative_error;
+        const auto relative =
+            std::filesystem::relative(current_entry->host_path(), host_path_, relative_error);
+        if (!relative_error) {
+          const auto fallback_exact = fallback_path_ / relative / rex::to_path(part);
+          rex::filesystem::FileInfo fallback_info;
+          if (rex::filesystem::GetInfo(fallback_exact, &fallback_info)) {
+            auto* fallback_child =
+                HostPathEntry::Create(this, current_entry, fallback_exact, fallback_info);
+            if (!fallback_child) {
+              return nullptr;
+            }
+            current_entry->children_.push_back(std::unique_ptr<Entry>(fallback_child));
+            current_entry = static_cast<HostPathEntry*>(fallback_child);
+            continue;
+          }
+        }
+      }
+
       auto child_infos = rex::filesystem::ListFiles(current_entry->host_path());
       auto match = std::find_if(child_infos.begin(), child_infos.end(), [&](const auto& info) {
         return rex::string::utf8_equal_case(rex::path_to_utf8(info.name), part);
@@ -113,15 +140,46 @@ Entry* HostPathDevice::ResolvePath(const std::string_view path) {
   return current_entry;
 }
 
-void HostPathDevice::PopulateEntry(HostPathEntry* parent_entry) {
-  auto child_infos = rex::filesystem::ListFiles(parent_entry->host_path());
-  for (auto& child_info : child_infos) {
-    auto child = HostPathEntry::Create(this, parent_entry,
-                                       parent_entry->host_path() / child_info.name, child_info);
+void HostPathDevice::PopulateEntry(HostPathEntry* parent_entry,
+                                   const std::filesystem::path& primary_path,
+                                   const std::filesystem::path& fallback_path) {
+  auto primary_infos = rex::filesystem::ListFiles(primary_path);
+  auto fallback_infos = fallback_path.empty() ? std::vector<rex::filesystem::FileInfo>{}
+                                               : rex::filesystem::ListFiles(fallback_path);
+
+  auto same_name = [](const auto& left, const auto& right) {
+    return rex::string::utf8_equal_case(rex::path_to_utf8(left.name),
+                                        rex::path_to_utf8(right.name));
+  };
+
+  for (auto& child_info : primary_infos) {
+    auto child_path = primary_path / child_info.name;
+    auto child = HostPathEntry::Create(this, parent_entry, child_path, child_info);
     parent_entry->children_.push_back(std::unique_ptr<Entry>(child));
 
     if (child_info.type == rex::filesystem::FileInfo::Type::kDirectory) {
-      PopulateEntry(child);
+      auto fallback = std::find_if(fallback_infos.begin(), fallback_infos.end(),
+                                   [&](const auto& info) { return same_name(child_info, info); });
+      const auto fallback_child =
+          fallback != fallback_infos.end() &&
+                  fallback->type == rex::filesystem::FileInfo::Type::kDirectory
+              ? fallback_path / fallback->name
+              : std::filesystem::path{};
+      PopulateEntry(child, child_path, fallback_child);
+    }
+  }
+
+  for (auto& child_info : fallback_infos) {
+    if (std::find_if(primary_infos.begin(), primary_infos.end(),
+                     [&](const auto& info) { return same_name(info, child_info); }) !=
+        primary_infos.end()) {
+      continue;
+    }
+    auto child_path = fallback_path / child_info.name;
+    auto child = HostPathEntry::Create(this, parent_entry, child_path, child_info);
+    parent_entry->children_.push_back(std::unique_ptr<Entry>(child));
+    if (child_info.type == rex::filesystem::FileInfo::Type::kDirectory) {
+      PopulateEntry(child, child_path, {});
     }
   }
 }

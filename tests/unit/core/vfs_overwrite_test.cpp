@@ -122,3 +122,58 @@ TEST_CASE("VFS overwrite of a file held open by a reader keeps the file", "[file
 
   CHECK(std::filesystem::exists(store.host_path()));
 }
+
+TEST_CASE("Host path title-update overlay replaces and extends the disc tree",
+          "[filesystem][vfs][title_update]") {
+  const auto root = std::filesystem::temp_directory_path() / "rexglue_title_update_overlay";
+  const auto disc = root / "disc";
+  const auto update = root / "update";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  std::filesystem::create_directories(disc / "data", ec);
+  std::filesystem::create_directories(update / "data", ec);
+
+  auto write = [](const std::filesystem::path& path, std::string_view value) {
+    FILE* file = rex::filesystem::OpenFile(path, "wb");
+    REQUIRE(file != nullptr);
+    REQUIRE(fwrite(value.data(), 1, value.size(), file) == value.size());
+    fclose(file);
+  };
+  write(disc / "data" / "disc_only.bin", "disc");
+  write(disc / "data" / "replaced.bin", "old");
+  write(update / "data" / "replaced.bin", "new");
+  write(update / "data" / "update_only.bin", "update");
+
+  VirtualFileSystem vfs;
+  auto device = std::make_unique<HostPathDevice>(kMountPath, update, true, false, disc);
+  REQUIRE(device->Initialize());
+  REQUIRE(vfs.RegisterDevice(std::move(device)));
+  REQUIRE(vfs.RegisterSymbolicLink(kSymlink, kMountPath));
+
+  auto* disc_only = vfs.ResolvePath("test:\\data\\disc_only.bin");
+  auto* replaced = vfs.ResolvePath("test:\\data\\replaced.bin");
+  auto* update_only = vfs.ResolvePath("test:\\data\\update_only.bin");
+  REQUIRE(disc_only != nullptr);
+  REQUIRE(replaced != nullptr);
+  REQUIRE(update_only != nullptr);
+
+  auto read = [&](std::string_view path) {
+    rex::filesystem::File* file = nullptr;
+    FileAction action = FileAction::kDoesNotExist;
+    REQUIRE(vfs.OpenFile(nullptr, path, FileDisposition::kOpen, FileAccess::kGenericRead, false,
+                         true, &file, &action) == X_STATUS_SUCCESS);
+    std::array<uint8_t, 16> bytes{};
+    size_t count = 0;
+    REQUIRE(file->ReadSync(std::span<uint8_t>(bytes), 0, &count) == X_STATUS_SUCCESS);
+    file->Destroy();
+    return std::string(reinterpret_cast<const char*>(bytes.data()), count);
+  };
+  CHECK(read("test:\\data\\disc_only.bin") == "disc");
+  CHECK(read("test:\\data\\replaced.bin") == "new");
+  CHECK(read("test:\\data\\update_only.bin") == "update");
+
+  auto* data = vfs.ResolvePath("test:\\data");
+  REQUIRE(data != nullptr);
+  CHECK(data->child_count() == 3);
+  std::filesystem::remove_all(root, ec);
+}

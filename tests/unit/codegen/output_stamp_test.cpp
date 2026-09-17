@@ -196,6 +196,20 @@ TEST_CASE("Config records every TOML it loaded", "[output_stamp]") {
   CHECK(config.loadedFiles[1].find("base.toml") != std::string::npos);
 }
 
+TEST_CASE("Config records an explicit title-update codegen image", "[output_stamp]") {
+  Scratch scratch("patched_file_path");
+  auto config_file = scratch.WriteFile(
+      "main.toml",
+      "file_path = \"assets/default.xex\"\n"
+      "patched_file_path = \"title_update/default.xex\"\n");
+
+  RecompilerConfig config;
+  REQUIRE(config.Load(config_file.string()));
+
+  CHECK(config.filePath == "assets/default.xex");
+  CHECK(config.patchedFilePath == "title_update/default.xex");
+}
+
 TEST_CASE("Depfile names the target and every input", "[output_stamp]") {
   Scratch scratch("depfile");
   auto depfile = scratch.root / "codegen.d";

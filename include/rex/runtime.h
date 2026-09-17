@@ -72,6 +72,10 @@ struct RuntimeConfig {
   std::function<std::unique_ptr<system::IInputSystem>(bool tool_mode)> input_factory;
   std::function<void(Runtime*, system::KernelState*)> kernel_init;
   bool tool_mode = false;
+  // Apply XEXP files found beside explicitly loaded XEX files. Disabled by
+  // default so a stray title-update patch can never change the data image of
+  // code that was recompiled from another executable version.
+  bool apply_xex_patches = false;
 };
 
 /// Helper macros for populating RuntimeConfig with concrete backends.
@@ -161,6 +165,7 @@ class Runtime {
 
   // Check if running in tool mode (no GPU)
   bool is_tool_mode() const { return tool_mode_; }
+  bool apply_xex_patches() const { return apply_xex_patches_; }
 
   void Shutdown();
 
@@ -192,6 +197,7 @@ class Runtime {
   ui::Window* display_window_ = nullptr;
   ui::ImGuiDrawer* imgui_drawer_ = nullptr;
   bool tool_mode_ = false;
+  bool apply_xex_patches_ = false;
   PPCCodegenFlags codegen_flags_{};
   bool setup_complete_ = false;
 

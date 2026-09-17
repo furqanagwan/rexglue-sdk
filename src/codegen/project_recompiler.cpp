@@ -61,6 +61,10 @@ std::vector<std::filesystem::path> CollectModuleInputs(const RecompilerConfig& c
 
   std::vector<fs::path> inputs;
   inputs.push_back(configDir / cfg.filePath);
+  if (!cfg.patchedFilePath.empty()) {
+    inputs.push_back(configDir / cfg.patchedFilePath);
+    inputs.push_back(configDir / (cfg.patchedFilePath + "p"));
+  }
   inputs.push_back(manifestPath);
   for (const auto& loaded : cfg.loadedFiles) {
     inputs.emplace_back(loaded);
@@ -209,17 +213,31 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
 
   const auto& entryConfig = targeted[0].config;
   auto configDir = manifest_.manifestDir;
-  fs::path entryXexPath = configDir / entryConfig.filePath;
+  const bool patchedCodegen = !entryConfig.patchedFilePath.empty();
+  fs::path entryXexPath =
+      configDir / (patchedCodegen ? entryConfig.patchedFilePath : entryConfig.filePath);
   if (!fs::exists(entryXexPath)) {
     return Err<void>(ErrorCategory::IO,
                      fmt::format("Entrypoint XEX not found: {}", entryXexPath.string()));
   }
   entryXexPath = fs::canonical(entryXexPath);
+  if (patchedCodegen) {
+    fs::path patchPath = entryXexPath;
+    patchPath += "p";
+    if (!fs::is_regular_file(patchPath)) {
+      return Err<void>(ErrorCategory::IO,
+                       fmt::format("Entrypoint XEXP not found: {}", patchPath.string()));
+    }
+  }
 
   // gameRoot anchors VFS root and DLL guest_path derivation. Honor the
   // manifest override if set; otherwise default to the entrypoint's parent.
   fs::path gameRoot;
-  if (manifest_.gameRoot && !manifest_.gameRoot->empty()) {
+  if (patchedCodegen) {
+    // patched_file_path points at a staged mirror: the base XEX and matching
+    // XEXP live together, with patched DLL pairs at their guest-relative paths.
+    gameRoot = fs::canonical(entryXexPath.parent_path());
+  } else if (manifest_.gameRoot && !manifest_.gameRoot->empty()) {
     fs::path resolved = configDir / *manifest_.gameRoot;
     if (!fs::exists(resolved) || !fs::is_directory(resolved)) {
       return Err<void>(ErrorCategory::Validation,
@@ -242,6 +260,7 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   auto rtStatus = runtime->Setup(rex::RuntimeConfig{
       .kernel_init = rex::kernel::InitializeKernel,
       .tool_mode = true,
+      .apply_xex_patches = patchedCodegen,
   });
   if (rtStatus != X_STATUS_SUCCESS) {
     return Err<void>(ErrorCategory::IO,
@@ -264,12 +283,26 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   std::vector<rex::system::object_ref<rex::system::UserModule>> dllModules;
   for (size_t i = 1; i < targeted.size(); ++i) {
     const auto& dllConfig = targeted[i].config;
-    fs::path dllXexPath = configDir / dllConfig.filePath;
+    const bool dllPatched = !dllConfig.patchedFilePath.empty();
+    if (dllPatched != patchedCodegen) {
+      return Err<void>(ErrorCategory::Validation,
+                       "patched_file_path must be set for the entrypoint and every targeted DLL");
+    }
+    fs::path dllXexPath =
+        configDir / (dllPatched ? dllConfig.patchedFilePath : dllConfig.filePath);
     if (!fs::exists(dllXexPath)) {
       return Err<void>(ErrorCategory::IO,
                        fmt::format("DLL XEX not found: {}", dllXexPath.string()));
     }
     dllXexPath = fs::canonical(dllXexPath);
+    if (dllPatched) {
+      fs::path patchPath = dllXexPath;
+      patchPath += "p";
+      if (!fs::is_regular_file(patchPath)) {
+        return Err<void>(ErrorCategory::IO,
+                         fmt::format("DLL XEXP not found: {}", patchPath.string()));
+      }
+    }
 
     auto relPath = fs::relative(dllXexPath, gameRoot);
     if (relPath.empty() || *relPath.begin() == "..") {

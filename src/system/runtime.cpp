@@ -114,6 +114,7 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
   thread::EnableAffinityConfiguration();
 
   tool_mode_ = config.tool_mode;
+  apply_xex_patches_ = config.apply_xex_patches;
 
   // Create memory system first
   memory_ = std::make_unique<memory::Memory>();
@@ -307,8 +308,20 @@ bool Runtime::SetupVfs() {
 
   // Mount game_data_root as \Device\Harddisk0\Partition1
   auto mount_path = "\\Device\\Harddisk0\\Partition1";
-  auto device = std::make_unique<rex::filesystem::HostPathDevice>(
-      mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes));
+  std::filesystem::path abs_update_root;
+  if (!update_data_root_.empty()) {
+    abs_update_root = std::filesystem::absolute(update_data_root_);
+    if (!std::filesystem::is_directory(abs_update_root)) {
+      REXSYS_ERROR("Runtime::SetupVfs: update_data_root does not exist: {}",
+                   abs_update_root.string());
+      return false;
+    }
+  }
+  auto device = abs_update_root.empty()
+                    ? std::make_unique<rex::filesystem::HostPathDevice>(
+                          mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes))
+                    : std::make_unique<rex::filesystem::HostPathDevice>(
+                          mount_path, abs_update_root, true, false, abs_game_root);
   if (!device->Initialize()) {
     REXSYS_ERROR("Runtime::SetupVfs: Failed to initialize host path device");
     return false;
@@ -326,7 +339,6 @@ bool Runtime::SetupVfs() {
 
   // Mount update_data_root as update:\ if provided
   if (!update_data_root_.empty()) {
-    auto abs_update_root = std::filesystem::absolute(update_data_root_);
     if (std::filesystem::exists(abs_update_root)) {
       auto update_mount = "\\Device\\Harddisk0\\PartitionUpdate";
       auto update_device =

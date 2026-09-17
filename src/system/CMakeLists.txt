@@ -89,10 +89,10 @@ target_link_libraries(rexruntime
         fmt::fmt
         spdlog::spdlog
         tomlplusplus
+        xxHash::xxhash
     PRIVATE
         aes128
         mspack
-        xxHash::xxhash
 )
 if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexruntime PUBLIC SDL3::SDL3)

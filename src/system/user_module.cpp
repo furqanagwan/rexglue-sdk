@@ -102,8 +102,12 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
     return result;
   }
 
-  // Search for sibling XEX patch file
-  auto patch_entry = kernel_state_->file_system()->ResolvePath(path_ + "p");
+  // Title-update patches are opt-in. Recompiled code is tied to one executable
+  // version, so silently applying a sibling XEXP would combine new data with
+  // old native code. Codegen and update-pinned builds enable this explicitly.
+  auto patch_entry = kernel_state_->emulator()->apply_xex_patches()
+                         ? kernel_state_->file_system()->ResolvePath(path_ + "p")
+                         : nullptr;
   if (patch_entry) {
     auto patch_path = patch_entry->absolute_path();
 

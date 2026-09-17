@@ -33,6 +33,20 @@ Latest SDK builds and releases are published on [GitHub Releases](https://github
 
 For quick start guide, full CLI reference, and config file options, see the [wiki](https://github.com/rexglue/rexglue-sdk/wiki).
 
+### Title-update codegen
+
+A codegen manifest may set `patched_file_path` beside `file_path` for its
+entrypoint and modules. The patched path must name a staged copy of the base XEX
+with its matching `.xexp` beside it. ReXGlue applies the patch before analysis
+and fingerprints the base XEX, staged XEX, and XEXP so a changed update cannot
+reuse stale generated code. All targeted modules must consistently use patched
+or disc codegen.
+
+Runtime XEX patching is disabled by default. A launcher for an update-targeted
+build must opt in with `RuntimeConfig::apply_xex_patches` after verifying the
+expected update. `update_data_root` overlays update files on `game_data_root`,
+with untouched files falling back to the disc tree.
+
 # **Disclaimer**
 ReXGlue is not affiliated with nor endorsed by Microsoft or Xbox. It is an independent project created for educational and development purposes. All trademarks and copyrights belong to their respective owners. 
 

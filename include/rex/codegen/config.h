@@ -80,6 +80,10 @@ struct RecompilerConfig {
   // === Required user-provided fields ===
   std::string projectName = "rex";  ///< Project name for output files
   std::string filePath;             ///< Path to XEX/ELF file
+  // Optional staged copy of filePath used for codegen. For an Xbox title
+  // update this is the base XEX beside its matching XEXP (for example,
+  // default.xex beside default.xexp). Runtime builds remain pinned separately.
+  std::string patchedFilePath;
   std::string outDirectoryPath;     ///< Output directory for generated code
   std::string templateDir;          ///< Optional custom template directory for overrides
 
