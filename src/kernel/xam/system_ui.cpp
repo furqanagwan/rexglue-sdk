@@ -20,6 +20,43 @@ namespace {
 std::mutex g_mutex;
 SystemUiHandler g_handler;
 KeyboardUiHandler g_keyboard_handler;
+MessageBoxUiHandler g_message_box_handler;
+
+// Hands a request to the host and waits on this (kernel worker) thread until the
+// host reports what the player did, for as long as that takes. The host calls
+// back from its own thread; a second call is ignored.
+template <typename Value, typename Request, typename Handler>
+std::optional<Value> RunHostUi(const Handler& handler, const Request& request, const char* what) {
+  if (!handler) {
+    return std::nullopt;
+  }
+  struct Completion {
+    std::mutex mutex;
+    std::condition_variable done;
+    bool finished = false;
+    std::optional<Value> value;
+  };
+  auto completion = std::make_shared<Completion>();
+  const bool shown = handler(request, [completion](std::optional<Value> value) {
+    std::lock_guard lock(completion->mutex);
+    if (completion->finished) {
+      return;
+    }
+    completion->value = std::move(value);
+    completion->finished = true;
+    completion->done.notify_all();
+  });
+  if (!shown) {
+    REXKRNL_INFO("System UI: title asked for the {}; the host did not show one", what);
+    return std::nullopt;
+  }
+  REXKRNL_INFO("System UI: title asked for the {} for user {}", what, request.user_index);
+
+  std::unique_lock lock(completion->mutex);
+  completion->done.wait(lock, [&] { return completion->finished; });
+  REXKRNL_INFO("System UI: {} {}", what, completion->value ? "answered" : "cancelled");
+  return std::move(completion->value);
+}
 
 }  // namespace
 
@@ -94,38 +131,26 @@ std::optional<std::u16string> RunKeyboardUi(const KeyboardUiRequest& request) {
     std::lock_guard lock(g_mutex);
     handler = g_keyboard_handler;
   }
-  if (!handler) {
-    return std::nullopt;
-  }
+  return RunHostUi<std::u16string>(handler, request, "keyboard");
+}
 
-  // Shared with the callback, which the host calls from its own thread whenever
-  // the player finishes; this thread waits for as long as they type.
-  struct Completion {
-    std::mutex mutex;
-    std::condition_variable done;
-    bool finished = false;
-    std::optional<std::u16string> text;
-  };
-  auto completion = std::make_shared<Completion>();
-  const bool shown = handler(request, [completion](std::optional<std::u16string> text) {
-    std::lock_guard lock(completion->mutex);
-    if (completion->finished) {
-      return;
-    }
-    completion->text = std::move(text);
-    completion->finished = true;
-    completion->done.notify_all();
-  });
-  if (!shown) {
-    REXKRNL_INFO("System UI: title asked for the keyboard; the host did not show one");
-    return std::nullopt;
-  }
-  REXKRNL_INFO("System UI: title asked for the keyboard for user {}", request.user_index);
+void SetMessageBoxUiHandler(MessageBoxUiHandler handler) {
+  std::lock_guard lock(g_mutex);
+  g_message_box_handler = std::move(handler);
+}
 
-  std::unique_lock lock(completion->mutex);
-  completion->done.wait(lock, [&] { return completion->finished; });
-  REXKRNL_INFO("System UI: keyboard {}", completion->text ? "entered text" : "cancelled");
-  return std::move(completion->text);
+bool HasMessageBoxUiHandler() {
+  std::lock_guard lock(g_mutex);
+  return static_cast<bool>(g_message_box_handler);
+}
+
+std::optional<uint32_t> RunMessageBoxUi(const MessageBoxUiRequest& request) {
+  MessageBoxUiHandler handler;
+  {
+    std::lock_guard lock(g_mutex);
+    handler = g_message_box_handler;
+  }
+  return RunHostUi<uint32_t>(handler, request, "message box");
 }
 
 }  // namespace rex::kernel::xam

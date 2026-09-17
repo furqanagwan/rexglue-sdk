@@ -302,6 +302,47 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
       return X_ERROR_SUCCESS;
     };
     result = xeXamDispatchHeadless(run, overlapped.guest_address());
+  } else if (HasMessageBoxUiHandler()) {
+    // The host's message box, waited for on a kernel worker thread.
+    MessageBoxUiRequest request;
+    request.user_index = user_index;
+    request.flags = flags;
+    request.active_button = active_button;
+    switch (flags & 0xF) {
+      case 1:
+        request.icon = MessageBoxUiRequest::Icon::kError;
+        break;
+      case 2:
+        request.icon = MessageBoxUiRequest::Icon::kWarning;
+        break;
+      case 3:
+        request.icon = MessageBoxUiRequest::Icon::kAlert;
+        break;
+      default:
+        break;
+    }
+    const auto load = [](uint32_t address) {
+      return address ? rex::memory::load_and_swap<std::u16string>(
+                           REX_KERNEL_MEMORY()->TranslateVirtual(address))
+                     : std::u16string();
+    };
+    request.title = load(title_ptr.guest_address());
+    request.text = load(text_ptr.guest_address());
+    for (uint32_t i = 0; i < button_count; ++i) {
+      request.buttons.push_back(load(button_ptrs[i]));
+    }
+    auto run = [request, result_ptr](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
+      length = 0;
+      const auto button = RunMessageBoxUi(request);
+      if (!button) {
+        extended_error = X_ERROR_CANCELLED;
+        return X_ERROR_SUCCESS;
+      }
+      *result_ptr = *button;
+      extended_error = X_ERROR_SUCCESS;
+      return X_ERROR_SUCCESS;
+    };
+    result = xeXamDispatchHeadlessEx(run, overlapped.guest_address());
   } else {
     // TODO(benvanik): setup icon states.
     switch (flags & 0xF) {
