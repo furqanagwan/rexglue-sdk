@@ -446,6 +446,34 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
       return X_ERROR_SUCCESS;
     };
     result = xeXamDispatchHeadless(run, overlapped.guest_address());
+  } else if (HasKeyboardUiHandler()) {
+    // The host's keyboard. The request is read now, while the title's strings are
+    // certain to be there; the player is waited for on a kernel worker thread.
+    auto load = [](mapped_wstring text) {
+      return text ? rex::memory::load_and_swap<std::u16string>(
+                        REX_KERNEL_MEMORY()->TranslateVirtual(text.guest_address()))
+                  : std::u16string();
+    };
+    KeyboardUiRequest request;
+    request.user_index = user_index;
+    request.flags = flags;
+    request.title = load(title);
+    request.description = load(description);
+    request.default_text = load(default_text);
+    request.max_length = buffer_length ? buffer_length - 1 : 0;
+    auto run = [request, buffer, buffer_length](uint32_t& extended_error,
+                                                uint32_t& length) -> X_RESULT {
+      length = 0;
+      auto text = RunKeyboardUi(request);
+      if (!text) {
+        extended_error = X_ERROR_CANCELLED;
+        return X_ERROR_SUCCESS;
+      }
+      rex::string::copy_and_swap_truncating(buffer, *text, buffer_length);
+      extended_error = X_ERROR_SUCCESS;
+      return X_ERROR_SUCCESS;
+    };
+    result = xeXamDispatchHeadlessEx(run, overlapped.guest_address());
   } else {
     auto close = [buffer, buffer_length](KeyboardInputDialog* dialog, uint32_t& extended_error,
                                          uint32_t& length) -> X_RESULT {

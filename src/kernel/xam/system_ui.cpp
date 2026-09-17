@@ -7,6 +7,8 @@
  */
 #include <rex/kernel/xam/system_ui.h>
 
+#include <condition_variable>
+#include <memory>
 #include <mutex>
 
 #include <rex/logging.h>
@@ -17,6 +19,7 @@ namespace {
 
 std::mutex g_mutex;
 SystemUiHandler g_handler;
+KeyboardUiHandler g_keyboard_handler;
 
 }  // namespace
 
@@ -73,6 +76,56 @@ bool ShowSystemUi(SystemUi ui, uint32_t user_index) {
   REXKRNL_INFO("System UI: title asked for the {} screen for user {} ({})", SystemUiName(ui),
                user_index, shown ? "shown" : "not shown");
   return shown;
+}
+
+void SetKeyboardUiHandler(KeyboardUiHandler handler) {
+  std::lock_guard lock(g_mutex);
+  g_keyboard_handler = std::move(handler);
+}
+
+bool HasKeyboardUiHandler() {
+  std::lock_guard lock(g_mutex);
+  return static_cast<bool>(g_keyboard_handler);
+}
+
+std::optional<std::u16string> RunKeyboardUi(const KeyboardUiRequest& request) {
+  KeyboardUiHandler handler;
+  {
+    std::lock_guard lock(g_mutex);
+    handler = g_keyboard_handler;
+  }
+  if (!handler) {
+    return std::nullopt;
+  }
+
+  // Shared with the callback, which the host calls from its own thread whenever
+  // the player finishes; this thread waits for as long as they type.
+  struct Completion {
+    std::mutex mutex;
+    std::condition_variable done;
+    bool finished = false;
+    std::optional<std::u16string> text;
+  };
+  auto completion = std::make_shared<Completion>();
+  const bool shown = handler(request, [completion](std::optional<std::u16string> text) {
+    std::lock_guard lock(completion->mutex);
+    if (completion->finished) {
+      return;
+    }
+    completion->text = std::move(text);
+    completion->finished = true;
+    completion->done.notify_all();
+  });
+  if (!shown) {
+    REXKRNL_INFO("System UI: title asked for the keyboard; the host did not show one");
+    return std::nullopt;
+  }
+  REXKRNL_INFO("System UI: title asked for the keyboard for user {}", request.user_index);
+
+  std::unique_lock lock(completion->mutex);
+  completion->done.wait(lock, [&] { return completion->finished; });
+  REXKRNL_INFO("System UI: keyboard {}", completion->text ? "entered text" : "cancelled");
+  return std::move(completion->text);
 }
 
 }  // namespace rex::kernel::xam

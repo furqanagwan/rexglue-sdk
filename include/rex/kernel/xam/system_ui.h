@@ -9,6 +9,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
+#include <string>
 
 namespace rex::kernel::xam {
 
@@ -45,5 +47,34 @@ void SetSystemUiHandler(SystemUiHandler handler);
 void SetSystemUiActive(bool active);
 bool HasSystemUiHandler();
 bool ShowSystemUi(SystemUi ui, uint32_t user_index);
+
+// XamShowKeyboardUI: the console's on-screen keyboard (vk.xex), which titles open
+// to name a save, a player or a team.
+struct KeyboardUiRequest {
+  uint32_t user_index = 0;
+  // The title's VKBD_* flags, passed through unread.
+  uint32_t flags = 0;
+  std::u16string title;
+  std::u16string description;
+  std::u16string default_text;
+  // Characters the title's buffer holds, not counting its terminator.
+  uint32_t max_length = 0;
+};
+
+// Called exactly once with what the player entered, or nullopt when they backed
+// out. Safe to call from any thread.
+using KeyboardUiResult = std::function<void(std::optional<std::u16string> text)>;
+
+// Called on a kernel worker thread while the title's overlapped call is pending.
+// Returns whether the host will show a keyboard; when it does not, the call
+// completes as cancelled and `done` is never called.
+using KeyboardUiHandler = std::function<bool(const KeyboardUiRequest& request,
+                                             KeyboardUiResult done)>;
+
+void SetKeyboardUiHandler(KeyboardUiHandler handler);
+bool HasKeyboardUiHandler();
+// Shows the host keyboard and waits for the player. nullopt when they cancel or
+// no host keyboard could be shown.
+std::optional<std::u16string> RunKeyboardUi(const KeyboardUiRequest& request);
 
 }  // namespace rex::kernel::xam
