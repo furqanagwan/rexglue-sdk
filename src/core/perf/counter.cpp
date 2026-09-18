@@ -15,12 +15,18 @@
 #include <rex/logging.h>
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <mutex>
+#include <vector>
 
 REXCVAR_DEFINE_STRING(perf_log_csv, "", "Perf",
                       "Path to write per-frame CSV log (empty = disabled)");
+REXCVAR_DEFINE_INT32(perf_capture_frames, 120, "Perf",
+                     "Number of frames collected by a programmatic performance capture");
 
 namespace rex::perf {
 
@@ -80,6 +86,50 @@ std::FILE* g_csv_file = nullptr;
 std::string g_csv_path;
 int g_csv_frame_count = 0;
 
+using CounterValues = std::array<int64_t, kNumCounters>;
+
+struct CaptureState {
+  bool active = false;
+  uint32_t frames_remaining = 0;
+  std::filesystem::path counters_path;
+  std::filesystem::path frame_samples_path;
+  CounterValues totals{};
+  std::vector<CounterValues> frames;
+};
+
+std::mutex g_capture_mutex;
+CaptureState g_capture;
+std::atomic<bool> g_capture_recording{false};
+
+bool SaveCapture(const CaptureState& capture) {
+  std::ofstream counters(capture.counters_path, std::ios::out | std::ios::trunc);
+  std::ofstream frames(capture.frame_samples_path, std::ios::out | std::ios::trunc);
+  if (!counters || !frames) {
+    return false;
+  }
+
+  const size_t frame_count = std::max<size_t>(capture.frames.size(), 1);
+  counters << "counter,total,avg_per_frame\n";
+  for (size_t i = 0; i < kNumCounters; ++i) {
+    counters << kCounterNames[i] << ',' << capture.totals[i] << ','
+             << static_cast<double>(capture.totals[i]) / static_cast<double>(frame_count) << '\n';
+  }
+
+  frames << "frame";
+  for (const char* name : kCounterNames) {
+    frames << ',' << name;
+  }
+  frames << '\n';
+  for (size_t frame_index = 0; frame_index < capture.frames.size(); ++frame_index) {
+    frames << frame_index;
+    for (int64_t value : capture.frames[frame_index]) {
+      frames << ',' << value;
+    }
+    frames << '\n';
+  }
+  return true;
+}
+
 }  // anonymous namespace
 
 const char* CounterName(CounterId id) {
@@ -102,6 +152,7 @@ int64_t GetCounter(CounterId id) {
 }
 
 void ResetFrameCounters() {
+  CounterValues frame{};
   for (size_t i = 0; i < kNumCounters; ++i) {
     if (kIsGauge[i]) {
       // Gauges: snapshot the current value, don't zero
@@ -110,6 +161,37 @@ void ResetFrameCounters() {
       // Accumulators: snapshot and zero for next frame
       g_snapshot[i].store(g_counters[i].exchange(0, std::memory_order_relaxed),
                           std::memory_order_relaxed);
+    }
+    frame[i] = g_snapshot[i].load(std::memory_order_relaxed);
+  }
+
+  CaptureState completed_capture;
+  bool capture_completed = false;
+  {
+    std::lock_guard lock(g_capture_mutex);
+    if (g_capture.active) {
+      g_capture.frames.push_back(frame);
+      for (size_t i = 0; i < kNumCounters; ++i) {
+        g_capture.totals[i] += frame[i];
+      }
+      if (--g_capture.frames_remaining == 0) {
+        completed_capture = std::move(g_capture);
+        g_capture = {};
+        g_capture_recording.store(false, std::memory_order_release);
+        capture_completed = true;
+      }
+    }
+  }
+
+  if (capture_completed) {
+    if (SaveCapture(completed_capture)) {
+      REXLOG_INFO("Saved performance capture to {} and {}",
+                  completed_capture.counters_path.string(),
+                  completed_capture.frame_samples_path.string());
+    } else {
+      REXLOG_WARN("Failed to save performance capture to {} and {}",
+                  completed_capture.counters_path.string(),
+                  completed_capture.frame_samples_path.string());
     }
   }
 }
@@ -123,6 +205,34 @@ void Init() {
     c.store(0, std::memory_order_relaxed);
   for (auto& s : g_snapshot)
     s.store(0, std::memory_order_relaxed);
+  std::lock_guard lock(g_capture_mutex);
+  g_capture = {};
+  g_capture_recording.store(false, std::memory_order_release);
+}
+
+bool StartCapture(const std::filesystem::path& counters_path,
+                  const std::filesystem::path& frame_samples_path) {
+  if (counters_path.empty() || frame_samples_path.empty()) {
+    return false;
+  }
+  std::lock_guard lock(g_capture_mutex);
+  if (g_capture.active) {
+    return false;
+  }
+
+  g_capture = {};
+  g_capture.active = true;
+  g_capture.frames_remaining =
+      static_cast<uint32_t>(std::max(INT32_C(1), REXCVAR_GET(perf_capture_frames)));
+  g_capture.counters_path = counters_path;
+  g_capture.frame_samples_path = frame_samples_path;
+  g_capture.frames.reserve(g_capture.frames_remaining);
+  g_capture_recording.store(true, std::memory_order_release);
+  return true;
+}
+
+bool IsCaptureRecording() {
+  return g_capture_recording.load(std::memory_order_acquire);
 }
 
 void SetCsvLogPath(const std::string& path) {

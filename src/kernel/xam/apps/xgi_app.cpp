@@ -10,6 +10,7 @@
  */
 
 #include <rex/kernel/xam/apps/xgi_app.h>
+#include <rex/kernel/guest_presence.h>
 #include <rex/logging.h>
 #include <rex/thread.h>
 
@@ -42,6 +43,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       uint32_t context_value = memory::load_and_swap<uint32_t>(buffer + 20);
       REXKRNL_DEBUG("XGIUserSetContextEx({:08X}, {:08X}, {:08X})", user_index, context_id,
                     context_value);
+      rex::kernel::guest_presence::NotifyContext(user_index, context_id, context_value);
       return X_E_SUCCESS;
     }
     case 0x000B0007: {

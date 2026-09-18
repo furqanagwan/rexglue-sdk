@@ -20,6 +20,9 @@ game's renderer needs.
 | Guest output hook | `rex/graphics/native_guest_renderer.h` | Register a renderer that draws the frame the presenter shows, or yields that frame back to emulation |
 | Pass suppression | same | While the renderer draws, emulated draws and resolves of the passes it replaces are skipped and occlusion queries report the fake count. `SetNativeGuestOutputPassFilter` says which passes those are |
 | Ultrawide output | same | `SetNativeGuestOutputWideAspect` sizes the output wider than the frontbuffer while the renderer serves frames |
+| Guest texture addressing | `rex/graphics/pipeline/texture/util.h` | `GetTiledOffset2D`/`3D` locate blocks in tiled guest textures; the matching `GetTiledAddressUpperBound2D`/`3D` functions bound safe reads |
+| Gameplay presence | `rex/kernel/guest_presence.h` | `GameplayContextValue` reports user 0's live gameplay context (`0x8001`), allowing a renderer to yield in frontends and loading screens |
+| Programmatic performance capture | `rex/perf/counter.h` | `StartCapture` records a bounded scene sample to summary and per-frame CSV files; `IsCaptureRecording` prevents overlapping captures |
 | Guest function hooks | generated code | Every recompiled function is a weak symbol with an `__imp__` original, so a game can replace one, capture the arguments and call through |
 | Frame tools | cvars | `frame_stats_csv`, `gpu_trace_frame`, `gpu_skip_pixel_shaders`, and for
 finding a game's own geometry `gpu_trace_shaders` (trace one shader program), `gpu_trace_constants`

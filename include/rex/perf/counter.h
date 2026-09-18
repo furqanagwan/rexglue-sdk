@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 #ifdef REXGLUE_ENABLE_PROFILING
@@ -78,6 +79,13 @@ void Init();
 void SetCsvLogPath(const std::string& path);
 void WriteCsvFrame();
 void FlushCsv();
+
+// Capture a bounded sequence of frames from code. The first CSV contains
+// counter totals and averages; the second contains the per-frame samples.
+// Returns false if a capture is already active or either path is empty.
+bool StartCapture(const std::filesystem::path& counters_path,
+                  const std::filesystem::path& frame_samples_path);
+bool IsCaptureRecording();
 
 // Profiler -- coordinates Tracy frame marks and counter snapshots.
 // Moved here from rex::debug to consolidate all perf code under rex::perf.
