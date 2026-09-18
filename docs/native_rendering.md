@@ -68,7 +68,13 @@ engine swaps ──────────────────────�
    suppresses only framebuffer-sized passes.
 5. **Port the shaders.** Recreate the game's material shading in HLSL (the
    Xenos shader disassembly in the frame trace names the constants and
-   textures each pass uses).
+   textures each pass uses). Build it to DXIL and SPIR-V offline with DXC at
+   `_6_0` and hand both to `ShaderDesc`; the recomp framework's
+   `recomp_add_shaders` does that and embeds the result. `ShaderDesc::hlsl_source`
+   without bytecode still works, but only on D3D12 and only through FXC at
+   `vs_5_0`/`ps_5_0`, which is a different compiler and shader model from what
+   Vulkan would be running. Keep it for shaders whose text is not known until
+   runtime.
 
 The smallest working renderer is recomp-framework's
 `common/src/debug/native_render_probe.cpp`: it clears every frame to a colour.

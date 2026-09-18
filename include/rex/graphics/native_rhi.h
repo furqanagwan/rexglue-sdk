@@ -331,15 +331,22 @@ struct ShaderDesc {
   ShaderStage stage = ShaderStage::kVertex;
   // Debug identity, used in compile-error logs.
   const char* name = nullptr;
-  // HLSL source + entry point; the D3D12 backend compiles this at runtime
-  // (vs_5_0 / ps_5_0), exactly as the scene renderer always has.
+  // HLSL source + entry point. Only the D3D12 backend can use these, and only
+  // by compiling at runtime with FXC at vs_5_0 / ps_5_0, which is a different
+  // compiler and a different shader model from the prebuilt bytecode below. A
+  // shader that has both should expect the prebuilt one to be used; leave these
+  // as the only thing set when the source is not known until runtime.
   const char* hlsl_source = nullptr;
   const char* entry_point = nullptr;
   const ShaderMacro* macros = nullptr;  // terminated by a {nullptr, nullptr}
-  // Prebuilt SPIR-V for the same (source, entry, macros), generated
-  // offline by the app's shader script; required by the Vulkan backend.
+  // Prebuilt bytecode for the same (source, entry, macros), both produced
+  // offline by DXC at the same _6_0 profile so the two backends are running
+  // the same shader. The app's shader script generates them; the Vulkan
+  // backend requires its one, the D3D12 backend falls back to hlsl_source.
   const uint32_t* spirv = nullptr;
   size_t spirv_size_bytes = 0;
+  const uint8_t* dxil = nullptr;
+  size_t dxil_size_bytes = 0;
 };
 
 struct InputElementDesc {

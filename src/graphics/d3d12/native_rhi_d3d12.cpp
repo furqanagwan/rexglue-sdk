@@ -319,7 +319,16 @@ class NrBindingLayoutD3D12 : public nrhi::BindingLayout {
 
 class NrShaderD3D12 : public nrhi::Shader {
  public:
+  // Either a blob this backend compiled, or a copy of the DXIL the app built
+  // offline. The pipeline only wants bytes, so it asks for them rather than
+  // caring which happened.
   ID3DBlob* blob = nullptr;
+  std::vector<uint8_t> dxil;
+
+  const void* bytecode() const {
+    return blob != nullptr ? blob->GetBufferPointer() : static_cast<const void*>(dxil.data());
+  }
+  size_t bytecode_size() const { return blob != nullptr ? blob->GetBufferSize() : dxil.size(); }
 };
 
 class NrPipelineD3D12 : public nrhi::Pipeline {
@@ -832,6 +841,20 @@ class NrDeviceD3D12 : public nrhi::Device {
 
   nrhi::Shader* CreateShader(const nrhi::ShaderDesc& desc) override {
     D3D_SHADER_MACRO macros[9] = {};
+    // Bytecode the app built offline, with the same compiler and profile as the
+    // SPIR-V the Vulkan backend gets. Nothing to compile, and nothing that can
+    // disagree between the two backends.
+    if (desc.dxil != nullptr && desc.dxil_size_bytes != 0) {
+      auto* shader = new NrShaderD3D12();
+      shader->dxil.assign(desc.dxil, desc.dxil + desc.dxil_size_bytes);
+      return shader;
+    }
+    if (desc.hlsl_source == nullptr) {
+      REXLOG_ERROR("nrhi-d3d12: shader {} has neither prebuilt DXIL nor HLSL source",
+                   desc.name != nullptr ? desc.name : "?");
+      return nullptr;
+    }
+
     uint32_t macro_count = 0;
     if (desc.macros != nullptr) {
       while (desc.macros[macro_count].name != nullptr && macro_count < 8) {
@@ -881,8 +904,8 @@ class NrDeviceD3D12 : public nrhi::Device {
     if (layout == nullptr || vs == nullptr || ps == nullptr) return nullptr;
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pd{};
     pd.pRootSignature = layout->root_signature;
-    pd.VS = {vs->blob->GetBufferPointer(), vs->blob->GetBufferSize()};
-    pd.PS = {ps->blob->GetBufferPointer(), ps->blob->GetBufferSize()};
+    pd.VS = {vs->bytecode(), vs->bytecode_size()};
+    pd.PS = {ps->bytecode(), ps->bytecode_size()};
     pd.BlendState.RenderTarget[0].BlendEnable = desc.blend.enable;
     pd.BlendState.RenderTarget[0].SrcBlend = ToBlend(desc.blend.src);
     pd.BlendState.RenderTarget[0].DestBlend = ToBlend(desc.blend.dst);
