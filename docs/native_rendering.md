@@ -75,13 +75,37 @@ The smallest working renderer is recomp-framework's
 Run a game with `--recomp_native_render_probe` to check the path works on a
 machine.
 
+## Measuring a pass
+
+A native renderer's claim is that it costs less than emulating the GPU, so the
+cost of each pass is worth having before any of it is written.
+
+Mark each pass with `cmd.ProfileRegion(stage)`. A mark closes the previous
+stage's span and opens its own, so the calls go at the start of each pass and
+`ProfileStage::kTail` goes after the last one.
+
+Run with `--frame_stats_csv=<file>`. Each row gains eleven `gpu_*_ms` columns
+and a `gpu_frame` column saying which frame they belong to: readback waits for
+the GPU to pass that submission, so the numbers arrive a few frames after the
+CPU counters for the same frame and the two are not on the same row.
+
+The probe renderer (`--recomp_native_render_probe` in the recomp framework)
+marks its clear as `kMain`, which is how this path is checked on a machine
+before a real renderer exists.
+
+`d3d12_gpu_timestamp_buckets` and `vulkan_gpu_timestamp_buckets` turn the
+collection off per backend. A device whose queue reports no timestamp support
+logs that once and leaves the columns at zero.
+
 ## Status
 
 - The interface and D3D12/Vulkan backends are ported from the Skate 3
   recompilation's SDK (github.com/mchughalex/rexglue-skate3), which runs a full
   game on them. Skate 3's surface-width pass selection became the per-game pass
   filter.
-- GPU time per render stage (`nrhi::Cmd::ProfileRegion`) is accepted but not
-  measured yet; it needs a timestamp profiler in the command processors.
+- GPU time per render stage (`nrhi::Cmd::ProfileRegion`) is measured: both
+  command processors keep three frames of timestamp queries and report each
+  stage's span in `frame_stats_csv`'s `gpu_*_ms` columns. Off unless that CSV
+  is set, so an ordinary run pays nothing. See "Measuring a pass" below.
 - No title in this organisation has a native renderer yet. The first target is
   a game whose emulated renderer is slow or shows artifacts.

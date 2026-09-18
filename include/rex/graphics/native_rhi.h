@@ -403,11 +403,12 @@ struct Rect {
 };
 
 // GPU-time attribution stages for ProfileRegion: the renderer marks the start
-// of each of its passes and the command processor's timestamp-bucket profiler
-// (d3d12_gpu_timestamp_buckets / vulkan_gpu_timestamp_buckets) reports the
-// per-stage GPU spans. kTail marks the end of the last stage; on Vulkan the
-// span from kTail to frame end is reported as its own bucket, on D3D12 it
-// stays in the profiler's untimed remainder.
+// of each of its passes and the command processor's timestamp profiler
+// (d3d12_gpu_timestamp_buckets / vulkan_gpu_timestamp_buckets, both on while
+// frame_stats_csv is set) reports the per-stage GPU spans in that CSV's gpu_*_ms
+// columns. kTail marks the end of the last stage; on Vulkan the span from kTail
+// to frame end is reported as its own bucket, on D3D12 it stays in the
+// profiler's untimed remainder.
 enum class ProfileStage : uint8_t {
   kCommit,     // content-store commits, decode uploads, eviction
   kShadow,     // dynamic caster shadow atlas + blur
