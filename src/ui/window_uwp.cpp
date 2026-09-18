@@ -8,6 +8,7 @@
 
 #include <rex/ui/window_uwp.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include <winrt/Windows.Foundation.h>
@@ -18,6 +19,7 @@
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
+#include <rex/graphics/video_mode_util.h>
 #include <rex/ui/flags.h>
 #include <rex/ui/surface_win.h>
 
@@ -82,10 +84,20 @@ bool IsPointerButtonPress(PointerUpdateKind kind) {
 }  // namespace
 
 std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
-                                       const std::string_view title, uint32_t desired_logical_width,
-                                       uint32_t desired_logical_height) {
-  return std::make_unique<WindowUWP>(app_context, title, desired_logical_width,
-                                     desired_logical_height);
+                                       const std::string_view title) {
+  // Window::Create stopped taking a size; the caller's preference now comes
+  // from the same cvars and video mode the SDL window reads, so resolve it the
+  // same way rather than inventing a default here. The UWP view is sized by the
+  // system regardless, but the requested size is what the presenter scales to
+  // until the view reports its own bounds.
+  int32_t configured_width = REXCVAR_GET(window_width);
+  int32_t configured_height = REXCVAR_GET(window_height);
+  if (configured_width <= 0 || configured_height <= 0) {
+    rex::graphics::video_mode_util::ResolveConfiguredSize(configured_width, configured_height);
+  }
+  return std::make_unique<WindowUWP>(app_context, title,
+                                     uint32_t(std::clamp(configured_width, 1, 8192)),
+                                     uint32_t(std::clamp(configured_height, 1, 8192)));
 }
 
 WindowUWP::WindowUWP(WindowedAppContext& app_context, const std::string_view title,
