@@ -12,6 +12,16 @@
 #include "crypto/TinySHA1.hpp"
 #include "crypto/rijndael-alg-fst.c"
 #include "crypto/rijndael-alg-fst.h"
+// pe_image.h skips its own PE struct definitions when the Windows SDK's
+// <winnt.h> has already been included, via its `#ifndef IMAGE_NT_SIGNATURE`
+// guard, and supplements the SDK's with the Xbox 360 PowerPC bits instead.
+// Include <windows.h> first so that is what happens, rather than leaving it to
+// whichever header happens to pull <winnt.h> in later - when pe_image.h wins
+// the race its own IMAGE_* structs collide with the SDK's. NOMINMAX and
+// WIN32_LEAN_AND_MEAN come from rexruntime's PUBLIC definitions.
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 #include "pe/pe_image.h"
 
 #include <algorithm>
