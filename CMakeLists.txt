@@ -1,5 +1,14 @@
 # ReXGlue SDK - Xbox 360 Recompilation Toolkit
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25...4.4)
+
+# CMP0155 (CMake 3.28) scans every C++ source for module imports. Nothing here
+# uses C++20 modules, and under Ninja Multi-Config the scan makes imgui emit one
+# modmap path from two configurations, which ninja rejects as a duplicate
+# output. Set before any target is defined, since a target takes its scanning
+# behaviour when it is created.
+if(POLICY CMP0155)
+    cmake_policy(SET CMP0155 OLD)
+endif()
 
 if(APPLE)
     set(REXGLUE_LANGUAGES C CXX OBJC OBJCXX)
