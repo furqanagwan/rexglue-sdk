@@ -36,8 +36,11 @@ namespace rex::codegen {
 //   High nibble (AAAA): Which source elements to multiply (bit 7=x, 6=y, 5=z, 4=w)
 //   Low nibble (BBBB):  Which destination elements receive the result
 //
-// 0xEF = 0b11101111: Dot product of elements y,z,w (bits 765 set), result to all (bits 3210 set)
-//        This computes dot(yzw) due to guest->host vector element reversal.
+// 0xEF = 0b11101111: bits 7,6,5 set, so by the legend above the sources are
+//        guest x, y, z; low nibble broadcasts the result to all four elements.
+//        In host terms those are elements 3, 2, 1, because guest element 0 sits
+//        at array index 3. Do not "simplify" this to 0x7F: that selects host
+//        0, 1, 2, which is guest w, z, y.
 // 0xFF = 0b11111111: Full 4-element dot product, result broadcast to all elements
 //
 // === Floating-Point Sign Bit ===
@@ -184,8 +187,9 @@ bool build_vlogefp(BuilderContext& ctx) {
 //=============================================================================
 
 bool build_vmsum3fp128(BuilderContext& ctx) {
-  // 3-element dot product accounting for guest->host vector element reversal
-  // 0xEF = dot(yzw) with result broadcast to all elements (see constants doc)
+  // 3-element dot product of guest x, y, z, broadcast to all elements. 0xEF
+  // selects host elements 3, 2, 1, which are those three reversed; see the
+  // constants block at the top of this file.
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, simde_mm_dp_ps(simde_mm_load_ps({}.f32), "
