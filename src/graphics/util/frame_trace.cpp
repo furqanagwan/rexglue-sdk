@@ -26,6 +26,12 @@ REXCVAR_DEFINE_INT32(gpu_trace_frame, 0, "GPU/Debug",
 REXCVAR_DEFINE_INT32(gpu_trace_frame_count, 1, "GPU/Debug",
                      "Number of consecutive frames to trace, starting at gpu_trace_frame.")
     .range(1, 600);
+REXCVAR_DEFINE_INT32(gpu_trace_min_draws, 0, "GPU/Debug",
+                     "Wait for a frame with at least this many draws before starting the "
+                     "trace. A game reaches its scene after a different number of frames "
+                     "every run, so a frame number alone can land in a menu. 0 disables "
+                     "the wait.")
+    .range(0, INT32_MAX);
 REXCVAR_DEFINE_STRING(gpu_trace_path, "gpu_trace.jsonl", "GPU/Debug",
                       "File the draw trace is written to, one JSON object per line.");
 REXCVAR_DEFINE_STRING(gpu_trace_shaders, "", "GPU/Debug",
@@ -52,22 +58,32 @@ namespace rex::graphics {
 
 void FrameTrace::OnSwap() {
   const uint64_t next = ++swaps_;
+  last_frame_draws_ = draws_this_frame_;
+  draws_this_frame_ = 0;
   const uint64_t first = static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame));
   if (first == 0) {
     return;
   }
-  const uint64_t end = first + static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame_count));
-  // A window rather than an instant: a trace that has to be opened on an exact
-  // frame is one missed call away from never happening.
-  if (next >= first && next < end && !file_) {
+  const uint64_t count = static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame_count));
+  // gpu_trace_frame is the earliest frame to start on rather than the only one:
+  // a trace that has to open on an exact frame is one missed call away from
+  // never happening. gpu_trace_min_draws then holds it shut until a frame that
+  // actually drew a scene, because the frame a game reaches its world on moves
+  // by thousands between runs. The window is counted from wherever it opens, so
+  // waiting does not eat into it.
+  const uint32_t min_draws = static_cast<uint32_t>(REXCVAR_GET(gpu_trace_min_draws));
+  if (next >= first && last_frame_draws_ >= min_draws && !file_ && !traced_) {
     const std::string path = REXCVAR_GET(gpu_trace_path);
     file_ = rex::filesystem::OpenFile(rex::to_path(path), "w");
+    traced_ = true;
+    trace_end_ = next + count;
     if (file_) {
-      REXGPU_INFO("gpu_trace: tracing frames {}..{} to {}", first, end - 1, path);
+      REXGPU_INFO("gpu_trace: tracing {} frame(s) from frame {} (the frame before it drew {}) to {}",
+                  count, next, last_frame_draws_, path);
     } else {
       REXGPU_WARN("gpu_trace: cannot open {}", path);
     }
-  } else if (next >= end && file_) {
+  } else if (next >= trace_end_ && file_) {
     std::fclose(file_);
     file_ = nullptr;
     REXGPU_INFO("gpu_trace: done");
@@ -157,6 +173,7 @@ bool FrameTrace::OnDraw(const RegisterFile& regs, const Shader* vertex_shader,
                         const Shader* pixel_shader, xenos::PrimitiveType primitive_type,
                         uint32_t index_count, bool indexed,
                         const SubmitterTrace::Sample* submitter) {
+  ++draws_this_frame_;
   UpdateSkipList();
   const bool skipped = pixel_shader && !skipped_pixel_shaders_.empty() &&
                        skipped_pixel_shaders_.contains(pixel_shader->ucode_data_hash());

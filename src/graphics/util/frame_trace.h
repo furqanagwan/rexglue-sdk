@@ -28,6 +28,11 @@ class Shader;
 //  gpu_trace_frame=N   writes one JSON line per draw of guest frame N (and the
 //                      gpu_trace_frame_count - 1 frames after it) to
 //                      gpu_trace_path: render target, shaders, textures.
+//  gpu_trace_min_draws=N
+//                      waits for a frame with at least N draws before opening
+//                      the trace, so a capture lands on the scene rather than
+//                      on whatever frame number the menus and loading happened
+//                      to end on.
 //  gpu_trace_shaders=VS[:PS],...
 //                      traces only the draws of these shader programs, which is
 //                      what a native renderer's work needs: a whole frame of a
@@ -78,6 +83,11 @@ class FrameTrace {
 
   FILE* file_ = nullptr;
   uint64_t swaps_ = 0;
+  uint32_t draws_this_frame_ = 0;
+  uint32_t last_frame_draws_ = 0;
+  // One trace per run: reopening on a later frame would overwrite it.
+  bool traced_ = false;
+  uint64_t trace_end_ = 0;
   uint64_t frame_ = 0;
   uint32_t draw_ = 0;
   std::string skip_list_text_;
