@@ -33,6 +33,7 @@ set(REXSYSTEM_SOURCES
     xam/content_manager.cpp
     xam/user_profile.cpp
 
+    guest_backtrace.cpp
     ppc_types.cpp
     elf_module.cpp
     entry_table.cpp

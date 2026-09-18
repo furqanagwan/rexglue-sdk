@@ -75,6 +75,28 @@ The smallest working renderer is recomp-framework's
 Run a game with `--recomp_native_render_probe` to check the path works on a
 machine.
 
+## Finding the code that submits a draw
+
+A renderer replaces the engine's own submission, so it has to hook the function
+that submits the meshes it draws. The command processor cannot say which one
+that is: it runs behind the game, and by the time it executes a draw packet the
+guest thread that wrote that packet has moved on.
+
+`gpu_trace_submitters` answers it from the writing end. While a trace is open,
+the buffers the game builds commands in are write-watched; the first write to
+each page faults on the guest thread, where the call stack still says which code
+is submitting, and that stack is kept against the page. Each traced draw then
+carries the stack covering its packet, as a `submitter` array of return
+addresses, innermost first.
+
+This samples rather than records: resolution is a page, not a packet, so one
+draw's stack can belong to the draw before it, and most draws get no sample at
+all - around one in ten carried one in a Skate capture. The reading that holds
+is the aggregate: `summarize_gpu_trace.py` in the recomp framework groups a
+shader program's draws by stack, and a site covering most of them is the
+submitter. It costs one page fault per command buffer page per frame, and
+nothing when no trace is open.
+
 ## Measuring a pass
 
 A native renderer's claim is that it costs less than emulating the GPU, so the

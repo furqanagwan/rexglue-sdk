@@ -38,6 +38,7 @@
 #include <rex/system/user_module.h>
 
 #include "util/frame_trace.h"
+#include "util/submitter_trace.h"
 
 REXCVAR_DEFINE_BOOL(vsync, true, "GPU", "Enable vertical sync");
 
@@ -89,6 +90,7 @@ namespace rex::graphics {
 namespace {
 // One command processor per process; see util/frame_trace.h.
 FrameTrace g_frame_trace;
+SubmitterTrace g_submitter_trace;
 }  // namespace
 
 using namespace rex::graphics::xenos;
@@ -634,7 +636,9 @@ uint32_t CommandProcessor::ExecutePrimaryBuffer(uint32_t read_index, uint32_t wr
   memory::RingBuffer reader(memory_->TranslatePhysical(primary_buffer_ptr_), primary_buffer_size_);
   reader.set_read_offset(read_index * sizeof(uint32_t));
   reader.set_write_offset(write_index * sizeof(uint32_t));
+  g_submitter_trace.NoteCommandBuffer(primary_buffer_ptr_, primary_buffer_size_);
   do {
+    packet_address_ = primary_buffer_ptr_ + uint32_t(reader.read_offset());
     if (!ExecutePacket(&reader)) {
       // This probably should be fatal - but we're going to continue anyways.
       REXGPU_ERROR("**** PRIMARY RINGBUFFER: Failed to execute packet.");
@@ -654,7 +658,9 @@ void CommandProcessor::ExecuteIndirectBuffer(uint32_t ptr, uint32_t count) {
   // Execute commands!
   memory::RingBuffer reader(memory_->TranslatePhysical(ptr), count * sizeof(uint32_t));
   reader.set_write_offset(count * sizeof(uint32_t));
+  g_submitter_trace.NoteCommandBuffer(ptr, count * uint32_t(sizeof(uint32_t)));
   do {
+    packet_address_ = ptr + uint32_t(reader.read_offset());
     if (!ExecutePacket(&reader)) {
       // Return up a level if we encounter a bad packet.
       REXGPU_ERROR("**** INDIRECT RINGBUFFER: Failed to execute packet.");
@@ -977,6 +983,10 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
   IssueSwap(frontbuffer_ptr, frontbuffer_width, frontbuffer_height);
 
   g_frame_trace.OnSwap(counter_);
+  // A watched page only faults on its first write, so the command buffers
+  // are re-armed every frame for as long as the trace is open.
+  g_submitter_trace.SetEnabled(g_frame_trace.wants_submitters(), memory_);
+  g_submitter_trace.RearmForFrame();
   ++counter_;
   return true;
 }
@@ -1398,7 +1408,7 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
       rex::perf::frame_stats::RecordDraw();
       if (g_frame_trace.OnDraw(*register_file_, active_vertex_shader(), active_pixel_shader(),
                                vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
-                               is_indexed)) {
+                               is_indexed, g_submitter_trace.Lookup(packet_address_))) {
         draw_succeeded = IssueDraw(vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
                                    is_indexed ? &index_buffer_info : nullptr, major_mode_explicit);
       }

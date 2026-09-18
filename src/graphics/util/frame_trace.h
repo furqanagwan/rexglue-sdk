@@ -16,6 +16,8 @@
 
 #include <rex/graphics/xenos.h>
 
+#include "submitter_trace.h"
+
 namespace rex::graphics {
 
 class RegisterFile;
@@ -37,6 +39,10 @@ class Shader;
 //  gpu_trace_vertex_buffers=true
 //                      records each traced draw's vertex buffers: fetch slot,
 //                      guest address, size and stride.
+//  gpu_trace_submitters=true
+//                      records the guest code that wrote each traced draw's
+//                      packet, which is how a native renderer finds the engine
+//                      function to hook. See submitter_trace.h.
 //  gpu_skip_pixel_shaders=HASH,...
 //                      drops draws whose pixel shader hash is listed, to bisect
 //                      which draw causes an artifact.
@@ -46,9 +52,13 @@ class FrameTrace {
  public:
   // Call once per guest swap with the index of the frame that just ended.
   void OnSwap(uint64_t frame_index);
-  // Returns false when the draw should be skipped.
+  // Whether a trace is open and asking for its draws' submitters, which is
+  // what the write watching is gated on.
+  bool wants_submitters() const;
+  // Returns false when the draw should be skipped. submitter may be null.
   bool OnDraw(const RegisterFile& regs, const Shader* vertex_shader, const Shader* pixel_shader,
-              xenos::PrimitiveType primitive_type, uint32_t index_count, bool indexed);
+              xenos::PrimitiveType primitive_type, uint32_t index_count, bool indexed,
+              const SubmitterTrace::Sample* submitter);
 
   // A gpu_trace_shaders entry: a vertex hash, a pixel hash, or a pair. 0 is a
   // wildcard, so "VS" matches that vertex shader with any pixel shader.

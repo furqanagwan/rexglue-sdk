@@ -39,6 +39,10 @@ REXCVAR_DEFINE_INT32(gpu_trace_constants, 0, "GPU/Debug",
 REXCVAR_DEFINE_BOOL(gpu_trace_vertex_buffers, false, "GPU/Debug",
                     "Record each traced draw's vertex buffers: fetch slot, guest address, size "
                     "and stride.");
+REXCVAR_DEFINE_BOOL(gpu_trace_submitters, false, "GPU/Debug",
+                    "Record the guest code that wrote each traced draw's packet: a return "
+                    "address chain, innermost first. Costs a page fault per command buffer "
+                    "page per frame, and only while a trace is open.");
 REXCVAR_DEFINE_STRING(gpu_skip_pixel_shaders, "", "GPU/Debug",
                       "Comma-separated pixel shader hashes (as written in the trace) whose "
                       "draws are dropped. Used to find which draw causes an artifact.")
@@ -53,7 +57,11 @@ void FrameTrace::OnSwap(uint64_t frame_index) {
   }
   const uint64_t next = frame_index + 1;
   const uint64_t end = first + static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame_count));
-  if (next == first && !file_) {
+  // The counter this rides on is also stepped by the vblank timer, so it can
+  // pass the frame asked for without ever being equal to it. Treat the request
+  // as a window rather than an instant, or whether a trace happens at all comes
+  // down to which of the two increments landed first.
+  if (next >= first && next < end && !file_) {
     const std::string path = REXCVAR_GET(gpu_trace_path);
     file_ = rex::filesystem::OpenFile(rex::to_path(path), "w");
     if (file_) {
@@ -61,13 +69,17 @@ void FrameTrace::OnSwap(uint64_t frame_index) {
     } else {
       REXGPU_WARN("gpu_trace: cannot open {}", path);
     }
-  } else if (next == end && file_) {
+  } else if (next >= end && file_) {
     std::fclose(file_);
     file_ = nullptr;
     REXGPU_INFO("gpu_trace: done");
   }
   frame_ = next;
   draw_ = 0;
+}
+
+bool FrameTrace::wants_submitters() const {
+  return file_ != nullptr && REXCVAR_GET(gpu_trace_submitters);
 }
 
 void FrameTrace::UpdateSkipList() {
@@ -145,7 +157,8 @@ bool FrameTrace::Traced(const Shader* vertex_shader, const Shader* pixel_shader)
 
 bool FrameTrace::OnDraw(const RegisterFile& regs, const Shader* vertex_shader,
                         const Shader* pixel_shader, xenos::PrimitiveType primitive_type,
-                        uint32_t index_count, bool indexed) {
+                        uint32_t index_count, bool indexed,
+                        const SubmitterTrace::Sample* submitter) {
   UpdateSkipList();
   const bool skipped = pixel_shader && !skipped_pixel_shaders_.empty() &&
                        skipped_pixel_shaders_.contains(pixel_shader->ucode_data_hash());
@@ -221,6 +234,16 @@ bool FrameTrace::OnDraw(const RegisterFile& regs, const Shader* vertex_shader,
                           first_buffer ? "" : ",", binding.fetch_constant, fetch.address << 2,
                           uint32_t(fetch.size), binding.stride_words);
       first_buffer = false;
+    }
+    line += "]";
+  }
+
+  // The guest code that wrote this draw's packet, innermost return address
+  // first. The summary groups a shader program's draws by this.
+  if (submitter && submitter->frames) {
+    line += R"(,"submitter":[)";
+    for (uint32_t frame = 0; frame < submitter->frames; ++frame) {
+      line += fmt::format(R"({}"0x{:08X}")", frame ? "," : "", submitter->backtrace[frame]);
     }
     line += "]";
   }
