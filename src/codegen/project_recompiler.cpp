@@ -123,6 +123,34 @@ void ReportBinaryInfo(ProgressReporter* reporter, std::string_view display_name,
   reporter->binaryInfo(info);
 }
 
+Result<void> DumpLoadedImage(const std::filesystem::path& output_directory,
+                             const RecompilerConfig& config,
+                             const rex::runtime::XexModule& xex) {
+  namespace fs = std::filesystem;
+
+  std::error_code ec;
+  fs::create_directories(output_directory, ec);
+  if (ec) {
+    return Err<void>(ErrorCategory::IO,
+                     fmt::format("Failed to create image dump directory '{}': {}",
+                                 output_directory.string(), ec.message()));
+  }
+
+  const auto module_name = fs::path(config.outDirectoryPath).filename().string();
+  const auto filename = module_name == "default" ? "image_dump.bin"
+                                                   : fmt::format("image_dump_{}.bin", module_name);
+  const auto output_path = output_directory / filename;
+  const auto* image = reinterpret_cast<const char*>(
+      xex.memory()->TranslateVirtual(xex.base_address()));
+  const std::string_view bytes(image, xex.image_size());
+  if (!WriteFileBytes(output_path, bytes)) {
+    return Err<void>(ErrorCategory::IO,
+                     fmt::format("Failed to write loaded image '{}'", output_path.string()));
+  }
+  REXLOG_INFO("Wrote loaded image {} ({} bytes)", output_path.string(), xex.image_size());
+  return Ok();
+}
+
 }  // namespace
 
 ProjectRecompiler::ProjectRecompiler(ManifestConfig manifest) : manifest_(std::move(manifest)) {}
@@ -323,6 +351,22 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     auto dll_display_name = std::filesystem::path(targeted[i].config.filePath).filename().string();
     ReportBinaryInfo(opts.reporter, dll_display_name, *userMod->xex_module());
     dllModules.push_back(std::move(userMod));
+  }
+
+  if (!opts.dumpImagesDirectory.empty()) {
+    auto execMod = runtime->kernel_state()->GetExecutableModule();
+    if (auto result = DumpLoadedImage(opts.dumpImagesDirectory, targeted[0].config,
+                                      *execMod->xex_module());
+        !result) {
+      return result;
+    }
+    for (size_t i = 0; i < dllModules.size(); ++i) {
+      if (auto result = DumpLoadedImage(opts.dumpImagesDirectory, targeted[i + 1].config,
+                                        *dllModules[i]->xex_module());
+          !result) {
+        return result;
+      }
+    }
   }
 
   struct ContextEntry {

@@ -10,6 +10,7 @@
 
 #include "../cli_utils.h"
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,8 @@ namespace rexglue::cli {
 using rex::Result;
 
 Result<void> CodegenFromConfig(const std::string& config_path, const CliContext& ctx,
-                               const std::vector<std::string>& targets, bool ignore_stamp = false);
+                               const std::vector<std::string>& targets, bool ignore_stamp = false,
+                               const std::filesystem::path& dump_images_directory = {});
 
 Result<std::string> DiscoverManifestInCwd();
 
