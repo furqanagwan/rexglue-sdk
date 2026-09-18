@@ -28,12 +28,17 @@
 #include <dxgi1_4.h>
 
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/cvar.h>
 #include <rex/logging.h>
+#include <rex/perf/frame_stats.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
 #include <rex/ui/d3d12/d3d12_util.h>
 
 namespace rex::graphics::d3d12 {
 namespace {
+
+REXCVAR_DEFINE_BOOL(d3d12_gpu_timestamp_buckets, true, "D3D12",
+                    "Collect native-renderer GPU stage timestamps while frame_stats_csv is set.");
 
 using nrhi::Backend;
 using nrhi::Format;
@@ -466,6 +471,7 @@ class NrDeviceD3D12 : public nrhi::Device {
     srv_slots_.capacity = kShaderVisibleViews;
     rtv_slots_.capacity = kRtvSlots;
     dsv_slots_.capacity = kDsvSlots;
+    InitializeTimestampQueries();
     // Resolve the device's adapter for the periodic VRAM telemetry
     // (process-local usage vs the OS-granted budget, the same numbers the
     // OS shows per process). Optional: the log line is skipped when any
@@ -509,6 +515,11 @@ class NrDeviceD3D12 : public nrhi::Device {
     if (srv_heap_) srv_heap_->Release();
     if (rtv_heap_) rtv_heap_->Release();
     if (dsv_heap_) dsv_heap_->Release();
+    if (timestamp_readback_ != nullptr) {
+      timestamp_readback_->Unmap(0, nullptr);
+      timestamp_readback_->Release();
+    }
+    if (timestamp_heap_ != nullptr) timestamp_heap_->Release();
   }
 
   Backend backend() const override { return Backend::kD3D12; }
@@ -952,6 +963,7 @@ class NrDeviceD3D12 : public nrhi::Device {
     guest_output_state_ = guest_output_internal_state;
     cmd_.ResetFrameState();
     cmd_.ResetProfileRegion();
+    BeginTimestampFrame();
     const auto maint_t0 = std::chrono::steady_clock::now();
     const size_t dissolved_count = dissolved_views_.size();
     FlushDissolvedViews();
@@ -1042,6 +1054,33 @@ class NrDeviceD3D12 : public nrhi::Device {
     return &cmd_;
   }
 
+  void EndFrame() {
+    if (!timestamp_frame_active_) return;
+    if (timestamp_marker_count_ != 0 &&
+        timestamp_stages_[timestamp_marker_count_ - 1] != nrhi::ProfileStage::kTail) {
+      WriteTimestamp(nrhi::ProfileStage::kTail);
+    }
+    TimestampSlot& slot = timestamp_slots_[timestamp_slot_];
+    slot.frame = cp_->GetCurrentFrame();
+    slot.submission = cp_->GetCurrentSubmission();
+    slot.marker_count = timestamp_marker_count_;
+    std::copy_n(timestamp_stages_, timestamp_marker_count_, slot.stages);
+    if (timestamp_marker_count_ != 0) {
+      const uint32_t first_query = timestamp_slot_ * kTimestampQueriesPerFrame;
+      cp_->GetDeferredCommandList().D3DResolveQueryData(
+          timestamp_heap_, D3D12_QUERY_TYPE_TIMESTAMP, first_query, timestamp_marker_count_,
+          timestamp_readback_, uint64_t(first_query) * sizeof(uint64_t));
+    }
+    timestamp_frame_active_ = false;
+  }
+
+  void WriteTimestamp(nrhi::ProfileStage stage) {
+    if (!timestamp_frame_active_ || timestamp_marker_count_ >= kTimestampQueriesPerFrame) return;
+    const uint32_t query = timestamp_slot_ * kTimestampQueriesPerFrame + timestamp_marker_count_;
+    cp_->GetDeferredCommandList().D3DEndQuery(timestamp_heap_, D3D12_QUERY_TYPE_TIMESTAMP, query);
+    timestamp_stages_[timestamp_marker_count_++] = stage;
+  }
+
   // --- internals shared with NrCmdD3D12 ---
 
   D3D12_CPU_DESCRIPTOR_HANDLE StagingHandle(uint32_t slot) const {
@@ -1115,6 +1154,71 @@ class NrDeviceD3D12 : public nrhi::Device {
   static constexpr uint32_t kShaderVisibleViews = 32768;
   static constexpr uint32_t kRtvSlots = 64;
   static constexpr uint32_t kDsvSlots = 8;
+  static constexpr uint32_t kTimestampFrameCount = 3;
+  static constexpr uint32_t kTimestampQueriesPerFrame =
+      uint32_t(nrhi::ProfileStage::kTail) + 2;
+
+  struct TimestampSlot {
+    uint64_t frame = 0;
+    uint64_t submission = 0;
+    uint32_t marker_count = 0;
+    nrhi::ProfileStage stages[kTimestampQueriesPerFrame] = {};
+  };
+
+  void InitializeTimestampQueries() {
+    if (!rex::perf::frame_stats::IsEnabled() || !REXCVAR_GET(d3d12_gpu_timestamp_buckets)) return;
+    if (FAILED(cp_->GetD3D12Provider().GetDirectQueue()->GetTimestampFrequency(
+            &timestamp_frequency_)) || timestamp_frequency_ == 0) {
+      REXLOG_WARN("nrhi-d3d12: GPU timestamps are unavailable");
+      return;
+    }
+    D3D12_QUERY_HEAP_DESC heap_desc{};
+    heap_desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+    heap_desc.Count = kTimestampFrameCount * kTimestampQueriesPerFrame;
+    if (FAILED(device_->CreateQueryHeap(&heap_desc, IID_PPV_ARGS(&timestamp_heap_)))) return;
+    D3D12_RESOURCE_DESC buffer_desc{};
+    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer_desc.Width = uint64_t(heap_desc.Count) * sizeof(uint64_t);
+    buffer_desc.Height = 1;
+    buffer_desc.DepthOrArraySize = 1;
+    buffer_desc.MipLevels = 1;
+    buffer_desc.SampleDesc.Count = 1;
+    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(device_->CreateCommittedResource(
+            &ui::d3d12::util::kHeapPropertiesReadback, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&timestamp_readback_))) ||
+        FAILED(timestamp_readback_->Map(0, nullptr,
+                                        reinterpret_cast<void**>(&timestamp_mapping_)))) {
+      if (timestamp_readback_ != nullptr) timestamp_readback_->Release();
+      timestamp_readback_ = nullptr;
+      timestamp_heap_->Release();
+      timestamp_heap_ = nullptr;
+      return;
+    }
+    REXLOG_INFO("nrhi-d3d12: native GPU stage timestamps enabled");
+  }
+
+  void BeginTimestampFrame() {
+    timestamp_frame_active_ = false;
+    timestamp_marker_count_ = 0;
+    if (timestamp_heap_ == nullptr) return;
+    timestamp_slot_ = uint32_t(cp_->GetCurrentFrame() % kTimestampFrameCount);
+    TimestampSlot& slot = timestamp_slots_[timestamp_slot_];
+    if (slot.submission != 0 && slot.submission <= cp_->GetCompletedSubmission()) {
+      double milliseconds[rex::perf::frame_stats::kGpuStageCount] = {};
+      const uint64_t* values = timestamp_mapping_ + timestamp_slot_ * kTimestampQueriesPerFrame;
+      for (uint32_t i = 0; i + 1 < slot.marker_count; ++i) {
+        const size_t stage = size_t(slot.stages[i]);
+        if (stage < rex::perf::frame_stats::kGpuStageCount) {
+          milliseconds[stage] += double(values[i + 1] - values[i]) * 1000.0 /
+                                 double(timestamp_frequency_);
+        }
+      }
+      rex::perf::frame_stats::RecordGpuStages(slot.frame, milliseconds);
+      slot = {};
+    }
+    timestamp_frame_active_ = true;
+  }
 
   struct RetiredObject {
     ID3D12Resource* resource;
@@ -1201,6 +1305,15 @@ class NrDeviceD3D12 : public nrhi::Device {
   IDXGIAdapter3* adapter3_ = nullptr;
   uint64_t frame_index_ = 0;
   NrCmdD3D12 cmd_;
+  ID3D12QueryHeap* timestamp_heap_ = nullptr;
+  ID3D12Resource* timestamp_readback_ = nullptr;
+  uint64_t* timestamp_mapping_ = nullptr;
+  uint64_t timestamp_frequency_ = 0;
+  TimestampSlot timestamp_slots_[kTimestampFrameCount];
+  nrhi::ProfileStage timestamp_stages_[kTimestampQueriesPerFrame] = {};
+  uint32_t timestamp_slot_ = 0;
+  uint32_t timestamp_marker_count_ = 0;
+  bool timestamp_frame_active_ = false;
 
   ID3D12DescriptorHeap* staging_heap_ = nullptr;
   ID3D12DescriptorHeap* srv_heap_ = nullptr;
@@ -1433,9 +1546,7 @@ void NrCmdD3D12::Barrier(nrhi::Texture* texture, ResourceState before, ResourceS
 
 void NrCmdD3D12::FlushBarriers() { device->cp()->SubmitBarriers(); }
 
-// GPU-time attribution needs the timestamp-bucket profiler, which this SDK does
-// not have yet; stages are accepted and ignored until it lands.
-void NrCmdD3D12::ProfileRegion(nrhi::ProfileStage /*stage*/) {}
+void NrCmdD3D12::ProfileRegion(nrhi::ProfileStage stage) { device->WriteTimestamp(stage); }
 
 }  // namespace
 
@@ -1454,6 +1565,10 @@ nrhi::Cmd* NativeRhiBeginFrame(nrhi::Device* device, ID3D12Resource* guest_outpu
   return static_cast<NrDeviceD3D12*>(device)->BeginFrame(
       guest_output_resource, guest_output_format, guest_output_internal_state, width, height,
       guest_output_out);
+}
+
+void NativeRhiEndFrame(nrhi::Device* device) {
+  static_cast<NrDeviceD3D12*>(device)->EndFrame();
 }
 
 }  // namespace rex::graphics::d3d12

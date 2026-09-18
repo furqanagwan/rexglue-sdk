@@ -41,14 +41,19 @@
 #include <utility>
 #include <vector>
 
+#include <rex/cvar.h>
 #include <rex/graphics/vulkan/command_processor.h>
 #include <rex/logging.h>
+#include <rex/perf/frame_stats.h>
 #include <rex/ui/vulkan/mem_alloc.h>
 #include <rex/ui/vulkan/presenter.h>
 #include <rex/ui/vulkan/util.h>
 
 namespace rex::graphics::vulkan {
 namespace {
+
+REXCVAR_DEFINE_BOOL(vulkan_gpu_timestamp_buckets, true, "Vulkan",
+                    "Collect native-renderer GPU stage timestamps while frame_stats_csv is set.");
 
 using nrhi::Backend;
 using nrhi::Format;
@@ -548,6 +553,7 @@ class NrDeviceVulkan : public nrhi::Device {
     } else {
       ring_mapping_ = static_cast<uint8_t*>(ring_result_info.pMappedData);
     }
+    InitializeTimestampQueries();
   }
 
   ~NrDeviceVulkan() override {
@@ -654,6 +660,9 @@ class NrDeviceVulkan : public nrhi::Device {
     }
     if (ring_buffer_ != VK_NULL_HANDLE) {
       vmaDestroyBuffer(allocator_, ring_buffer_, ring_allocation_);
+    }
+    if (timestamp_pool_ != VK_NULL_HANDLE) {
+      dfn.vkDestroyQueryPool(device, timestamp_pool_, nullptr);
     }
     if (allocator_ != VK_NULL_HANDLE) {
       vmaDestroyAllocator(allocator_);
@@ -1324,6 +1333,7 @@ class NrDeviceVulkan : public nrhi::Device {
     // raw commands recorded below (and by the app callback) go into the same
     // deferred command buffer and must be outside any render pass.
     cp_->SubmitBarriers(true);
+    BeginTimestampFrame();
     EnsureWhiteTexture();
 
     NrTextureVulkan*& wrapper = guest_outputs_[guest_output_image];
@@ -1373,6 +1383,7 @@ class NrDeviceVulkan : public nrhi::Device {
 
   void EndFrame() {
     cmd_.EndFrame();
+    EndTimestampFrame();
     // Render-thread CPU attribution for slow frames (throttled 8 per 5 s).
     const uint64_t total_us = prof_.Total();
     if (total_us >= 4000) {
@@ -1722,7 +1733,104 @@ class NrDeviceVulkan : public nrhi::Device {
 
   std::vector<NrTextureVulkan*>& pending_clear_textures() { return pending_clear_textures_; }
 
+  void WriteTimestamp(nrhi::ProfileStage stage) {
+    if (!timestamp_frame_active_ || timestamp_marker_count_ >= kTimestampQueriesPerFrame - 1) {
+      return;
+    }
+    const uint32_t query = timestamp_slot_ * kTimestampQueriesPerFrame + timestamp_marker_count_;
+    cp_->deferred_command_buffer().CmdVkWriteTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                                       timestamp_pool_, query);
+    timestamp_stages_[timestamp_marker_count_++] = stage;
+  }
+
  private:
+  static constexpr uint32_t kTimestampFrameCount = kCpFramesInFlight;
+  static constexpr uint32_t kTimestampQueriesPerFrame =
+      uint32_t(nrhi::ProfileStage::kTail) + 2;
+
+  struct TimestampSlot {
+    uint64_t frame = 0;
+    uint64_t submission = 0;
+    uint32_t marker_count = 0;
+    nrhi::ProfileStage stages[kTimestampQueriesPerFrame] = {};
+  };
+
+  void InitializeTimestampQueries() {
+    if (!rex::perf::frame_stats::IsEnabled() || !REXCVAR_GET(vulkan_gpu_timestamp_buckets)) return;
+    const auto& queue_family =
+        vulkan_device_->queue_families()[vulkan_device_->queue_family_graphics_compute()];
+    timestamp_valid_bits_ = queue_family.timestamp_valid_bits;
+    timestamp_period_ns_ = vulkan_device_->properties().timestampPeriod;
+    if (timestamp_valid_bits_ == 0 || timestamp_period_ns_ <= 0.0f) {
+      REXLOG_WARN("nrhi-vulkan: GPU timestamps are unavailable");
+      return;
+    }
+    VkQueryPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    info.queryCount = kTimestampFrameCount * kTimestampQueriesPerFrame;
+    if (vulkan_device_->functions().vkCreateQueryPool(vulkan_device_->device(), &info, nullptr,
+                                                       &timestamp_pool_) != VK_SUCCESS) {
+      timestamp_pool_ = VK_NULL_HANDLE;
+      return;
+    }
+    REXLOG_INFO("nrhi-vulkan: native GPU stage timestamps enabled");
+  }
+
+  void BeginTimestampFrame() {
+    timestamp_frame_active_ = false;
+    timestamp_marker_count_ = 0;
+    if (timestamp_pool_ == VK_NULL_HANDLE) return;
+    timestamp_slot_ = uint32_t(cp_->GetCurrentFrame() % kTimestampFrameCount);
+    TimestampSlot& slot = timestamp_slots_[timestamp_slot_];
+    if (slot.submission != 0 && slot.submission <= cp_->GetCompletedSubmission()) {
+      uint64_t values[kTimestampQueriesPerFrame] = {};
+      const VkResult result = vulkan_device_->functions().vkGetQueryPoolResults(
+          vulkan_device_->device(), timestamp_pool_, timestamp_slot_ * kTimestampQueriesPerFrame,
+          slot.marker_count, sizeof(values), values, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+      if (result == VK_SUCCESS) {
+        const uint64_t mask = timestamp_valid_bits_ >= 64
+                                  ? ~uint64_t(0)
+                                  : (uint64_t(1) << timestamp_valid_bits_) - 1;
+        double milliseconds[rex::perf::frame_stats::kGpuStageCount] = {};
+        for (uint32_t i = 0; i + 1 < slot.marker_count; ++i) {
+          const size_t stage = size_t(slot.stages[i]);
+          if (stage < rex::perf::frame_stats::kGpuStageCount) {
+            const uint64_t ticks = (values[i + 1] - values[i]) & mask;
+            milliseconds[stage] += double(ticks) * double(timestamp_period_ns_) / 1000000.0;
+          }
+        }
+        rex::perf::frame_stats::RecordGpuStages(slot.frame, milliseconds);
+      }
+      slot = {};
+    }
+    cp_->deferred_command_buffer().CmdVkResetQueryPool(
+        timestamp_pool_, timestamp_slot_ * kTimestampQueriesPerFrame,
+        kTimestampQueriesPerFrame);
+    timestamp_frame_active_ = true;
+  }
+
+  void EndTimestampFrame() {
+    if (!timestamp_frame_active_) return;
+    if (timestamp_marker_count_ == 0 ||
+        timestamp_stages_[timestamp_marker_count_ - 1] != nrhi::ProfileStage::kTail) {
+      WriteTimestamp(nrhi::ProfileStage::kTail);
+    }
+    if (timestamp_marker_count_ != 0) {
+      const uint32_t query =
+          timestamp_slot_ * kTimestampQueriesPerFrame + timestamp_marker_count_;
+      cp_->deferred_command_buffer().CmdVkWriteTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                                         timestamp_pool_, query);
+      ++timestamp_marker_count_;
+    }
+    TimestampSlot& slot = timestamp_slots_[timestamp_slot_];
+    slot.frame = cp_->GetCurrentFrame();
+    slot.submission = cp_->GetCurrentSubmission();
+    slot.marker_count = timestamp_marker_count_;
+    std::copy_n(timestamp_stages_, timestamp_marker_count_, slot.stages);
+    timestamp_frame_active_ = false;
+  }
+
   struct RetiredObject {
     uint64_t submission = 0;
     VkBuffer buffer = VK_NULL_HANDLE;
@@ -2102,6 +2210,14 @@ class NrDeviceVulkan : public nrhi::Device {
   VulkanCommandProcessor* cp_;
   const ui::vulkan::VulkanDevice* vulkan_device_;
   NrCmdVulkan cmd_;
+  VkQueryPool timestamp_pool_ = VK_NULL_HANDLE;
+  TimestampSlot timestamp_slots_[kTimestampFrameCount];
+  nrhi::ProfileStage timestamp_stages_[kTimestampQueriesPerFrame] = {};
+  float timestamp_period_ns_ = 0.0f;
+  uint32_t timestamp_valid_bits_ = 0;
+  uint32_t timestamp_slot_ = 0;
+  uint32_t timestamp_marker_count_ = 0;
+  bool timestamp_frame_active_ = false;
 
   VmaAllocator allocator_ = VK_NULL_HANDLE;
 
@@ -2697,9 +2813,7 @@ void NrCmdVulkan::FlushBarriers() {
   device->cp()->SubmitBarriers(true);
 }
 
-// GPU-time attribution needs the timestamp-bucket profiler, which this SDK does
-// not have yet; stages are accepted and ignored until it lands.
-void NrCmdVulkan::ProfileRegion(nrhi::ProfileStage /*stage*/) {}
+void NrCmdVulkan::ProfileRegion(nrhi::ProfileStage stage) { device->WriteTimestamp(stage); }
 
 }  // namespace
 

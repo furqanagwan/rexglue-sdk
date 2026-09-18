@@ -32,5 +32,6 @@ nrhi::Cmd* NativeRhiBeginFrame(nrhi::Device* device,
                                D3D12_RESOURCE_STATES guest_output_internal_state,
                                uint32_t width, uint32_t height,
                                nrhi::Texture** guest_output_out);
+void NativeRhiEndFrame(nrhi::Device* device);
 
 }  // namespace rex::graphics::d3d12

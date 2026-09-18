@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -55,6 +56,12 @@ uint64_t g_frame = 0;
 Clock::time_point g_last_frame;
 std::vector<float> g_frame_ms;
 
+struct GpuStages {
+  uint64_t frame;
+  double milliseconds[kGpuStageCount];
+};
+std::deque<GpuStages> g_gpu_stages;
+
 bool EnsureOpen() {
   if (g_opened) {
     return g_file != nullptr;
@@ -73,7 +80,9 @@ bool EnsureOpen() {
              "shader_bg_ms,pipelines,pipeline_ms,pipeline_bg_ms,draw_ms,resolve_ms,swap_ms,"
              "submit_ms,draw_setup_ms,draw_primitives_ms,draw_render_targets_ms,"
              "draw_pipeline_ms,draw_textures_ms,draw_state_ms,draw_bindings_ms,"
-             "draw_vertices_ms,upload_mb,upload_ms,watch_ms\n",
+             "draw_vertices_ms,upload_mb,upload_ms,watch_ms,gpu_frame,gpu_commit_ms,"
+             "gpu_shadow_ms,gpu_static_sun_ms,gpu_main_ms,gpu_resolve_ms,gpu_ao_ms,"
+             "gpu_ssr_ms,gpu_volumetrics_ms,gpu_bloom_ms,gpu_2d_ms,gpu_tail_ms\n",
              g_file);
   return true;
 }
@@ -94,6 +103,17 @@ void RecordGpuWait(uint64_t microseconds) {
 
 void RecordUpload(uint64_t bytes) {
   g_upload_bytes.fetch_add(bytes, std::memory_order_relaxed);
+}
+
+bool IsEnabled() {
+  return !REXCVAR_GET(frame_stats_csv).empty();
+}
+
+void RecordGpuStages(uint64_t frame, const double (&milliseconds)[kGpuStageCount]) {
+  std::lock_guard lock(g_mutex);
+  GpuStages& result = g_gpu_stages.emplace_back();
+  result.frame = frame;
+  std::copy(std::begin(milliseconds), std::end(milliseconds), result.milliseconds);
 }
 
 void MarkCommandThread() {
@@ -156,11 +176,16 @@ void RecordFrame() {
   }
   const auto now = Clock::now();
   if (g_frame > 0) {
+    GpuStages gpu{};
+    if (!g_gpu_stages.empty()) {
+      gpu = g_gpu_stages.front();
+      g_gpu_stages.pop_front();
+    }
     const float frame_ms = std::chrono::duration<float, std::milli>(now - g_last_frame).count();
     g_frame_ms.push_back(frame_ms);
     // Texture loads only happen on the command thread; their background time
     // is always zero, so it is folded in rather than given a column.
-    std::fprintf(g_file, "%llu,%.3f,%.3f,%u,%u,%u,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+    std::fprintf(g_file, "%llu,%.3f,%.3f,%u,%u,%u,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
                  static_cast<unsigned long long>(g_frame), frame_ms,
                  static_cast<double>(gpu_wait_us) / 1000.0, draws, resolves, textures.count,
                  textures.command_ms + textures.background_ms, shaders.count, shaders.command_ms,
@@ -172,7 +197,11 @@ void RecordFrame() {
                  phase_ms(Work::kDrawTextures), phase_ms(Work::kDrawState),
                  phase_ms(Work::kDrawBindings), phase_ms(Work::kDrawVertices),
                  double(upload_bytes) / (1024.0 * 1024.0), phase_ms(Work::kMemoryUpload),
-                 phase_ms(Work::kMemoryWatch));
+                 phase_ms(Work::kMemoryWatch), static_cast<unsigned long long>(gpu.frame),
+                 gpu.milliseconds[0], gpu.milliseconds[1], gpu.milliseconds[2],
+                 gpu.milliseconds[3], gpu.milliseconds[4], gpu.milliseconds[5],
+                 gpu.milliseconds[6], gpu.milliseconds[7], gpu.milliseconds[8],
+                 gpu.milliseconds[9], gpu.milliseconds[10]);
     // Runs are often ended by killing the process, so keep the file current.
     if (g_frame % 30 == 0) {
       std::fflush(g_file);

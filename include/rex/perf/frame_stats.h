@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 
 namespace rex::perf::frame_stats {
 
@@ -26,6 +27,15 @@ void RecordResolve();
 void RecordGpuWait(uint64_t microseconds);
 // Bytes of guest memory uploaded to the GPU.
 void RecordUpload(uint64_t bytes);
+// True when a CSV path was supplied. GPU backends use this to avoid allocating
+// timestamp resources or recording queries during ordinary runs.
+bool IsEnabled();
+
+// Publishes asynchronously resolved GPU stage durations. The frame number is
+// included in the CSV because these values normally become readable several
+// frames after the CPU counters for the same frame were written.
+inline constexpr size_t kGpuStageCount = 11;
+void RecordGpuStages(uint64_t frame, const double (&milliseconds)[kGpuStageCount]);
 // Called once per guest swap, before the frame is issued.
 void RecordFrame();
 

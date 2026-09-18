@@ -2093,7 +2093,9 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
         };
 
         if (HasNativeGuestOutputRenderer()) {
-          if (TryRenderNativeGuestOutput(make_native_context())) {
+          const bool native_rendered = TryRenderNativeGuestOutput(make_native_context());
+          NativeRhiEndFrame(native_rhi_device_);
+          if (native_rendered) {
             EndSubmission(true);
             return true;
           }

@@ -397,6 +397,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
        ++queue_family_index) {
     QueueFamily& queue_family = device->queue_families_[queue_family_index];
     const VkQueueFamilyProperties& queue_family_properties = queue_families[queue_family_index];
+    queue_family.timestamp_valid_bits = queue_family_properties.timestampValidBits;
 
     const VkQueueFlags queue_unsupported_flags = ~queue_family_properties.queueFlags;
 
@@ -625,6 +626,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   XE_UI_VULKAN_LIMIT(optimalBufferCopyOffsetAlignment)
   XE_UI_VULKAN_LIMIT(optimalBufferCopyRowPitchAlignment)
   XE_UI_VULKAN_LIMIT(nonCoherentAtomSize)
+  XE_UI_VULKAN_LIMIT(timestampPeriod)
 
   if (with_gpu_emulation) {
     XE_UI_VULKAN_FEATURE(robustBufferAccess)
