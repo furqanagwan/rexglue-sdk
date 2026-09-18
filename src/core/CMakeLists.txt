@@ -136,3 +136,7 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
     target_sources(rexcore PRIVATE perf/counter.cpp)
     target_compile_definitions(rexcore PUBLIC REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
+
+# The AMD64 copy_and_swap_* helpers in memory.cpp inline _mm_shuffle_epi8, which
+# Clang only recognises with the x86 flags this applies.
+rexglue_apply_target_settings(rexcore)

@@ -53,3 +53,8 @@ target_link_libraries(rexaudio
 if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexaudio PUBLIC SDL3::SDL3)
 endif()
+
+# xma_context.cpp uses _mm_shuffle_epi8 / _mm_packus_epi32 / _mm_packs_epi32 and
+# conversion.h inlines pshufb byte swaps, so this target needs the same x86
+# flags as the rest. Inert on MSVC; on Linux clang it is what makes them build.
+rexglue_apply_target_settings(rexaudio)

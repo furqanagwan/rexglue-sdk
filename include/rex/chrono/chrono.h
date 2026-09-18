@@ -116,8 +116,13 @@ using XSystemClock = detail::NtSystemClock<detail::Domain::Guest>;
 
 namespace std::chrono {
 
-#ifdef __APPLE__
-// Apple libc++ does not expose clock_time_conversion or clock_cast.
+// libc++ does not expose clock_time_conversion as a primary template, so the
+// explicit specializations below have nothing to specialize and fail to compile.
+// This is a property of the standard library, not of the platform: libstdc++
+// does provide it, and declaring it again there would be a redefinition. So the
+// guard is on the library macro rather than on __APPLE__ or __linux__.
+#if defined(_LIBCPP_VERSION)
+// libc++ does not expose clock_time_conversion or clock_cast.
 template <class, class>
 struct clock_time_conversion {};
 

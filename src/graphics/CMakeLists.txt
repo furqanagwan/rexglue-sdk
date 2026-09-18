@@ -168,3 +168,7 @@ if(REXGLUE_USE_D3D12)
         dxguid
     )
 endif()
+
+# primitive_processor.h uses _mm_shuffle_epi8 in ReplaceResetIndex32To24 and a
+# few inline helpers on the x86_64 path.
+rexglue_apply_target_settings(rexgpu-xenos)
