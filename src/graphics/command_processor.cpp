@@ -982,7 +982,7 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
 
   IssueSwap(frontbuffer_ptr, frontbuffer_width, frontbuffer_height);
 
-  g_frame_trace.OnSwap(counter_);
+  g_frame_trace.OnSwap();
   // A watched page only faults on its first write, so the command buffers
   // are re-armed every frame for as long as the trace is open.
   g_submitter_trace.SetEnabled(g_frame_trace.wants_submitters(), memory_);

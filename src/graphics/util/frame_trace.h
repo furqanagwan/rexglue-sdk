@@ -50,8 +50,11 @@ class Shader;
 // All are off by default and cost one branch per draw when unused.
 class FrameTrace {
  public:
-  // Call once per guest swap with the index of the frame that just ended.
-  void OnSwap(uint64_t frame_index);
+  // Call once per guest swap. Counts its own calls rather than taking the
+  // command processor's counter, which the vblank timer also steps: "frame 500"
+  // there is 500 swaps and vblanks interleaved, so which frame it lands on
+  // depends on the frame rate.
+  void OnSwap();
   // Whether a trace is open and asking for its draws' submitters, which is
   // what the write watching is gated on.
   bool wants_submitters() const;
@@ -74,6 +77,7 @@ class FrameTrace {
   bool Traced(const Shader* vertex_shader, const Shader* pixel_shader) const;
 
   FILE* file_ = nullptr;
+  uint64_t swaps_ = 0;
   uint64_t frame_ = 0;
   uint32_t draw_ = 0;
   std::string skip_list_text_;

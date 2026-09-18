@@ -20,8 +20,8 @@
 #include <rex/logging.h>
 
 REXCVAR_DEFINE_INT32(gpu_trace_frame, 0, "GPU/Debug",
-                     "Trace every draw of this guest frame (counted from 1) to gpu_trace_path. "
-                     "0 disables tracing.")
+                     "Trace every draw of this presented frame (counted from 1) to "
+                     "gpu_trace_path. 0 disables tracing.")
     .range(0, INT32_MAX);
 REXCVAR_DEFINE_INT32(gpu_trace_frame_count, 1, "GPU/Debug",
                      "Number of consecutive frames to trace, starting at gpu_trace_frame.")
@@ -50,17 +50,15 @@ REXCVAR_DEFINE_STRING(gpu_skip_pixel_shaders, "", "GPU/Debug",
 
 namespace rex::graphics {
 
-void FrameTrace::OnSwap(uint64_t frame_index) {
+void FrameTrace::OnSwap() {
+  const uint64_t next = ++swaps_;
   const uint64_t first = static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame));
   if (first == 0) {
     return;
   }
-  const uint64_t next = frame_index + 1;
   const uint64_t end = first + static_cast<uint64_t>(REXCVAR_GET(gpu_trace_frame_count));
-  // The counter this rides on is also stepped by the vblank timer, so it can
-  // pass the frame asked for without ever being equal to it. Treat the request
-  // as a window rather than an instant, or whether a trace happens at all comes
-  // down to which of the two increments landed first.
+  // A window rather than an instant: a trace that has to be opened on an exact
+  // frame is one missed call away from never happening.
   if (next >= first && next < end && !file_) {
     const std::string path = REXCVAR_GET(gpu_trace_path);
     file_ = rex::filesystem::OpenFile(rex::to_path(path), "w");
