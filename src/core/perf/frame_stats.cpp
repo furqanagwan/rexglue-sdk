@@ -185,7 +185,7 @@ void RecordFrame() {
     g_frame_ms.push_back(frame_ms);
     // Texture loads only happen on the command thread; their background time
     // is always zero, so it is folded in rather than given a column.
-    std::fprintf(g_file, "%llu,%.3f,%.3f,%u,%u,%u,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+    std::fprintf(g_file, "%llu,%.3f,%.3f,%u,%u,%u,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%llu,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
                  static_cast<unsigned long long>(g_frame), frame_ms,
                  static_cast<double>(gpu_wait_us) / 1000.0, draws, resolves, textures.count,
                  textures.command_ms + textures.background_ms, shaders.count, shaders.command_ms,
