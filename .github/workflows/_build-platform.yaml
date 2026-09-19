@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       platform:
-        description: "win-amd64 | mac-amd64 | mac-arm64 | linux-amd64 | linux-arm64"
+        description: "win-amd64 | win-amd64-uwp | mac-amd64 | mac-arm64 | linux-amd64 | linux-arm64"
         required: true
         type: string
       ref:
@@ -27,7 +27,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ fromJSON('{"win-amd64":"windows-latest","mac-amd64":"macos-26-intel","mac-arm64":"macos-26","linux-amd64":"ubuntu-latest","linux-arm64":"ubuntu-24.04-arm"}')[inputs.platform] }}
+    runs-on: ${{ fromJSON('{"win-amd64":"windows-latest","win-amd64-uwp":"windows-latest","mac-amd64":"macos-26-intel","mac-arm64":"macos-26","linux-amd64":"ubuntu-latest","linux-arm64":"ubuntu-24.04-arm"}')[inputs.platform] }}
     # linux-amd64 builds inside 22.04 so the glibc floor stays at 2.35, which is
     # what every downstream binary inherits. 24.04 puts it at 2.38, above Debian
     # stable and the older SteamOS releases. arm64 stays on the runner: FFmpeg's
@@ -56,8 +56,34 @@ jobs:
           fetch-tags: true
 
       - name: Install toolchain (Windows)
-        if: inputs.platform == 'win-amd64'
+        if: startsWith(inputs.platform, 'win-')
         run: choco install llvm cmake ninja -y
+
+      # UWP is the one configuration that reads the developer environment
+      # directly: rexglue_uwp_cppwinrt_include_dir needs WindowsSdkDir and
+      # WindowsSDKVersion to find the cppwinrt headers, and the link settings
+      # need VCToolsInstallDir for the store CRT. CMake stops with a fatal error
+      # when they are missing. win-amd64 does not need this, because clang finds
+      # an MSVC installation by itself, so this is scoped to UWP rather than run
+      # for every Windows build.
+      - name: Export the developer environment (UWP)
+        if: inputs.platform == 'win-amd64-uwp'
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          # -products alone matches any VS-shell product, including SQL Server
+          # Management Studio, which has no VC folder. Require the toolset.
+          $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $install) { throw 'No Visual Studio installation found' }
+          $vcvars = Join-Path $install 'VC\Auxiliary\Build\vcvars64.bat'
+          if (-not (Test-Path $vcvars)) { throw "vcvars64.bat not found at $vcvars" }
+          $wanted = 'WindowsSdkDir', 'WindowsSDKVersion', 'VCToolsInstallDir'
+          cmd /c "`"$vcvars`" >nul 2>&1 && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$' -and $wanted -contains $matches[1]) {
+              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+              Write-Host "$($matches[1])=$($matches[2])"
+            }
+          }
 
       - name: Install clang 20 (linux-amd64)
         if: inputs.platform == 'linux-amd64'
@@ -118,8 +144,8 @@ jobs:
 
       - name: Configure
         env:
-          CC: ${{ fromJSON('{"win-amd64":"clang","mac-amd64":"/usr/bin/clang","mac-arm64":"/usr/bin/clang","linux-amd64":"clang-20","linux-arm64":"clang-20"}')[inputs.platform] }}
-          CXX: ${{ fromJSON('{"win-amd64":"clang++","mac-amd64":"/usr/bin/clang++","mac-arm64":"/usr/bin/clang++","linux-amd64":"clang++-20","linux-arm64":"clang++-20"}')[inputs.platform] }}
+          CC: ${{ fromJSON('{"win-amd64":"clang","win-amd64-uwp":"clang","mac-amd64":"/usr/bin/clang","mac-arm64":"/usr/bin/clang","linux-amd64":"clang-20","linux-arm64":"clang-20"}')[inputs.platform] }}
+          CXX: ${{ fromJSON('{"win-amd64":"clang++","win-amd64-uwp":"clang++","mac-amd64":"/usr/bin/clang++","mac-arm64":"/usr/bin/clang++","linux-amd64":"clang++-20","linux-arm64":"clang++-20"}')[inputs.platform] }}
         run: cmake --preset ${{ inputs.platform }} -DCMAKE_C_COMPILER="${{ env.CC }}" -DCMAKE_CXX_COMPILER="${{ env.CXX }}" -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ${{ startsWith(inputs.platform, 'mac-') && '-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3' || '' }}
 
       - name: Build and install
@@ -139,14 +165,14 @@ jobs:
           echo "v=${v}" >> "$GITHUB_OUTPUT"
 
       - name: Package (Windows)
-        if: inputs.platform == 'win-amd64'
+        if: startsWith(inputs.platform, 'win-')
         shell: bash
         run: |
           cd out/install
           7z a "rexglue-sdk-${{ steps.version.outputs.v }}-${{ inputs.platform }}.zip" ${{ inputs.platform }}
 
       - name: Package (Unix)
-        if: inputs.platform != 'win-amd64'
+        if: ${{ !startsWith(inputs.platform, 'win-') }}
         run: |
           cd out/install
           zip -r "rexglue-sdk-${{ steps.version.outputs.v }}-${{ inputs.platform }}.zip" ${{ inputs.platform }}

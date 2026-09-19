@@ -118,6 +118,21 @@ jobs:
       artifact_name: nightly-linux-arm64
     secrets: inherit
 
+  # UWP is built for the signal, not for the artifact: nothing downloads a UWP
+  # SDK zip, it is built from source into C:\ReXGlue-UWP. It is deliberately not
+  # in publish's needs, so a break here shows up red without holding back the
+  # builds people actually install.
+  build-win-amd64-uwp:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    uses: ./.github/workflows/_build-platform.yaml
+    with:
+      platform: win-amd64-uwp
+      ref: ${{ needs.check.outputs.dev_sha }}
+      publish_mode: artifact
+      artifact_name: nightly-win-amd64-uwp
+    secrets: inherit
+
   publish:
     needs: [check, build-win-amd64, build-linux-amd64, build-mac-amd64, build-mac-arm64, build-linux-arm64]
     if: needs.check.outputs.should_build == 'true'
