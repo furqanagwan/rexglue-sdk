@@ -8,35 +8,6 @@
 #==========================================================
 include_guard(GLOBAL)
 
-function(_rexglue_stage_macos_vulkan_runtime target_name)
-    if(TARGET Vulkan::Loader AND TARGET MoltenVK::MoltenVK)
-        set(_rexglue_vulkan_loader Vulkan::Loader)
-        set(_rexglue_moltenvk MoltenVK::MoltenVK)
-        set(_rexglue_moltenvk_icd "${REXGLUE_ROOT}/cmake/MoltenVK_icd.json")
-    elseif(TARGET rex::vulkan-loader AND TARGET rex::moltenvk)
-        set(_rexglue_vulkan_loader rex::vulkan-loader)
-        set(_rexglue_moltenvk rex::moltenvk)
-        set(_rexglue_moltenvk_icd "${REXGLUE_MOLTENVK_ICD}")
-    else()
-        message(FATAL_ERROR "rexglue: pinned macOS Vulkan runtime targets are unavailable")
-    endif()
-
-    add_custom_command(TARGET ${target_name} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/share/vulkan/icd.d"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${_rexglue_vulkan_loader}>"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib/libvulkan.1.dylib"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${_rexglue_moltenvk}>"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib/libMoltenVK.dylib"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${_rexglue_moltenvk_icd}"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/share/vulkan/icd.d/MoltenVK_icd.json"
-        VERBATIM
-    )
-endfunction()
 
 
 #==========================================================
@@ -167,9 +138,6 @@ function(rexglue_configure_target target_name)
         unset(_plugin_target)
     endforeach()
 
-    if(APPLE AND REXGLUE_USE_VULKAN)
-        _rexglue_stage_macos_vulkan_runtime(${target_name})
-    endif()
 endfunction()
 
 #==========================================================

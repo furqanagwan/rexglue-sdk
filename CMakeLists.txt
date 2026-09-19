@@ -40,26 +40,12 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
     add_compile_definitions(REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
 
-# Graphics backend selection
-# D3D12: Windows only, ON by default.
-# Vulkan: Cross-platform, ON by default on Linux, OFF by default on Windows.
-if(WIN32)
-    option(REXGLUE_USE_D3D12  "Enable D3D12 graphics backend" ON)
-    option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" OFF)
-else()
-    set(REXGLUE_USE_D3D12 OFF)
-    option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" ON)
+# Graphics backend: Direct3D 12 and nothing else. The target is DirectX 12
+# Ultimate on Windows and Xbox, so there is one backend rather than a choice.
+if(NOT WIN32)
+    message(FATAL_ERROR "ReXGlue targets Windows and Xbox; Direct3D 12 is the only backend")
 endif()
-
-if(NOT REXGLUE_USE_D3D12 AND NOT REXGLUE_USE_VULKAN)
-    message(FATAL_ERROR "At least one graphics backend must be enabled (REXGLUE_USE_D3D12 or REXGLUE_USE_VULKAN)")
-endif()
-
-if (REXGLUE_ENABLE_FIDELITYFX AND
-    NOT (REXGLUE_USE_VULKAN OR REXGLUE_USE_D3D12))
-    message(FATAL_ERROR
-        "REXGLUE_ENABLE_FIDELITYFX requires at least one graphics backend")
-endif()
+set(REXGLUE_USE_D3D12 ON)
 
 # Root of the SDK source tree
 set(REXGLUE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -294,7 +280,7 @@ message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSIO
 message(STATUS "  Configurations: ${CMAKE_CONFIGURATION_TYPES}")
 message(STATUS "  Output Dir: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 message(STATUS "  C++ Standard: C++${CMAKE_CXX_STANDARD}")
-message(STATUS "  Graphics: D3D12=${REXGLUE_USE_D3D12} Vulkan=${REXGLUE_USE_VULKAN}")
+message(STATUS "  Graphics: Direct3D 12")
 message(STATUS "  FidelityFX: ${REXGLUE_ENABLE_FIDELITYFX}")
 message(STATUS "  Tracy: ${REXGLUE_ENABLE_TRACY}")
 message(STATUS "  Perf Counters: ${REXGLUE_ENABLE_PERF_COUNTERS}")

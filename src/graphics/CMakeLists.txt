@@ -33,29 +33,8 @@ set(REXGPU_XENOS_SOURCES
 )
 
 # SPIR-V shader translation
-set(REXGPU_XENOS_SPIRV_SOURCES
-    pipeline/shader/spirv_builder.cpp
-    pipeline/shader/spirv.cpp
-    pipeline/shader/spirv_translator.cpp
-    pipeline/shader/spirv_translator_alu.cpp
-    pipeline/shader/spirv_translator_fetch.cpp
-    pipeline/shader/spirv_translator_memexport.cpp
-    pipeline/shader/spirv_translator_rb.cpp
-)
 
 # Vulkan backend
-set(REXGPU_XENOS_VULKAN_SOURCES
-    vulkan/graphics_system.cpp
-    vulkan/deferred_command_buffer.cpp
-    vulkan/command_processor.cpp
-    vulkan/pipeline_cache.cpp
-    vulkan/primitive_processor.cpp
-    vulkan/render_target_cache.cpp
-    vulkan/shader.cpp
-    vulkan/shared_memory.cpp
-    vulkan/texture_cache.cpp
-    vulkan/native_rhi_vulkan.cpp
-)
 
 # D3D12 backend
 if(REXGLUE_USE_D3D12)
@@ -87,10 +66,6 @@ if(REXGLUE_USE_D3D12)
         d3d12/pipeline_cache.cpp
         d3d12/native_rhi_d3d12.cpp
     )
-endif()
-
-if(REXGLUE_USE_VULKAN)
-    list(APPEND REXGPU_XENOS_SOURCES ${REXGPU_XENOS_SPIRV_SOURCES} ${REXGPU_XENOS_VULKAN_SOURCES})
 endif()
 
 if(REXGLUE_USE_D3D12)
@@ -147,18 +122,6 @@ if(REXGLUE_USE_D3D12)
     target_link_libraries(rexgpu-xenos PRIVATE d3dcompiler)
 endif()
 
-if(REXGLUE_USE_VULKAN)
-    target_link_libraries(rexgpu-xenos PRIVATE
-        Vulkan::Headers
-        glslang::SPIRV
-        GPUOpen::VulkanMemoryAllocator
-        glslang
-        MachineIndependent
-        GenericCodeGen
-        OSDependent
-        OGLCompiler
-    )
-endif()
 
 if(REXGLUE_USE_D3D12)
     target_link_libraries(rexgpu-xenos PRIVATE
