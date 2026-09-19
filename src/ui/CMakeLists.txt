@@ -17,11 +17,11 @@ set(REXUI_CORE_SOURCES
     windowed_app_context.cpp
 )
 
-    list(APPEND REXUI_CORE_SOURCES
-        sdl_virtual_key.cpp
-        window_sdl.cpp
-        windowed_app_context_sdl.cpp
-    )
+list(APPEND REXUI_CORE_SOURCES
+    sdl_virtual_key.cpp
+    window_sdl.cpp
+    windowed_app_context_sdl.cpp
+)
 
 # Optional overlay dialogs
 set(REXUI_OVERLAY_SOURCES

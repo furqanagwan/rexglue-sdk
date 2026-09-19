@@ -2,7 +2,6 @@
 # Audio processing and XMA decoding for Xbox 360 emulation
 
 add_library(rexaudio OBJECT
-    
     audio_driver.cpp
     audio_system.cpp
     downmix.cpp
@@ -13,11 +12,11 @@ add_library(rexaudio OBJECT
     # NOP backend (always available)
     nop/nop_audio_system.cpp
 )
-    target_sources(rexaudio PRIVATE
-        sdl/sdl_audio_system.cpp
-        sdl/sdl_audio_driver.cpp
-        sdl/ui_sound_player.cpp
-    )
+target_sources(rexaudio PRIVATE
+    sdl/sdl_audio_system.cpp
+    sdl/sdl_audio_driver.cpp
+    sdl/ui_sound_player.cpp
+)
 add_library(rex::audio ALIAS rexaudio)
 
 rex_target_pch(rexaudio

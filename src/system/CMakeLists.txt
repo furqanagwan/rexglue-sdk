@@ -95,7 +95,7 @@ target_link_libraries(rexruntime
         aes128
         mspack
 )
-    target_link_libraries(rexruntime PUBLIC SDL3::SDL3)
+target_link_libraries(rexruntime PUBLIC SDL3::SDL3)
 
 if(REXGLUE_ENABLE_TRACY)
     # TARGET_NAME is what tells install(EXPORT) this text is a target to
