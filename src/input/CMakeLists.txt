@@ -37,6 +37,18 @@ else()
     target_sources(rexinput PRIVATE sdl/sdl_input_driver.cpp)
 endif()
 
+# GameInput is the current Microsoft input API and the one a GDK title is
+# expected to use. Only its header is needed: GameInput.dll is loaded at
+# runtime, so a build made with the GDK still starts where it is absent.
+set(REXGLUE_GDK_ROOT "C:/Program Files (x86)/Microsoft GDK/260404/windows" CACHE PATH
+    "Microsoft GDK windows folder, for the GameInput header")
+if(WIN32 AND NOT REXGLUE_PLATFORM_UWP AND EXISTS "${REXGLUE_GDK_ROOT}/include/GameInput.h")
+    message(STATUS "rexinput: GameInput header found at ${REXGLUE_GDK_ROOT}")
+    target_sources(rexinput PRIVATE gameinput/gameinput_input_driver.cpp)
+    target_compile_definitions(rexinput PUBLIC REX_HAS_GAMEINPUT=1)
+    target_include_directories(rexinput PRIVATE "${REXGLUE_GDK_ROOT}/include")
+endif()
+
 target_link_libraries(rexinput PUBLIC rexcore rexui)
 if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexinput PUBLIC SDL3::SDL3)

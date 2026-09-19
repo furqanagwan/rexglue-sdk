@@ -25,12 +25,22 @@
 #endif
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
+#if REX_HAS_GAMEINPUT
+#include <rex/input/gameinput/gameinput_input_driver.h>
+#endif
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
 #if REX_PLATFORM_UWP
 REXCVAR_DEFINE_STRING(input_backend, "xinput", "Input", "Input backend: xinput")
-    .allowed({"sdl", "xinput"});
+    .allowed({"sdl", "xinput", "gameinput"});
+#elif REX_HAS_GAMEINPUT
+// GameInput is the API a GDK title is expected to use, so a build made with the
+// GDK asks for it first. It falls back on its own when the runtime is absent,
+// which is the common case outside a packaged install.
+REXCVAR_DEFINE_STRING(input_backend, "gameinput", "Input",
+                      "Input backend: gameinput, sdl, xinput")
+    .allowed({"sdl", "xinput", "gameinput"});
 #else
 REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
     .allowed({"sdl", "xinput"});
@@ -539,17 +549,37 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
   auto input = std::make_unique<InputSystem>(nullptr);
 
   if (!tool_mode) {
+    // Whether GameInput ended up answering, so the fallbacks know to stand
+    // down rather than reporting the same pad a second time.
+    bool have_backend = false;
+#if REX_HAS_GAMEINPUT
+    if (REXCVAR_GET(input_backend) == "gameinput") {
+      auto gameinput_driver =
+          std::make_unique<gameinput::GameInputInputDriver>(nullptr, 0);
+      if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(gameinput_driver));
+        have_backend = true;
+      } else {
+        // The machine has no GameInput runtime. XInput is the closest thing it
+        // will have, and is what a Windows build would have used anyway.
+        REXLOG_INFO("Input: GameInput unavailable, falling back to XInput");
+      }
+    }
+#endif
 #if REX_PLATFORM_WIN32
-    if (REX_PLATFORM_UWP || REXCVAR_GET(input_backend) == "xinput") {
+    if (!have_backend &&
+        (REX_PLATFORM_UWP || REXCVAR_GET(input_backend) == "xinput" ||
+         REXCVAR_GET(input_backend) == "gameinput")) {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(xinput_driver));
+        have_backend = true;
       }
     }
 #endif
 
 #if !REX_PLATFORM_UWP
-    if (REXCVAR_GET(input_backend) == "sdl") {
+    if (!have_backend && REXCVAR_GET(input_backend) == "sdl") {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
