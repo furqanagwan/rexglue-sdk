@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 #include <rex/cvar.h>
 #include <rex/input/flags.h>
@@ -143,42 +144,44 @@ void GameInputInputDriver::ReleaseSlotsLocked() {
 // the console's four slots are kept here. A device holds its slot for as long
 // as it keeps producing readings; when it stops, the slot is freed for the
 // next one, which is what unplugging a pad looks like to the guest.
+//
+// A pad can arrive as more than one GameInput device - a wireless controller
+// with its own dongle reports both, and only one of them ever carries input.
+// Taking them in the order they turn up puts the silent one in slot 0 as often
+// as not, and then player one has a pad that reads as all zeros. So a device
+// only takes a slot once it has produced a gamepad reading of its own.
 void GameInputInputDriver::RefreshSlotsLocked() {
   if (!game_input_) {
     return;
   }
   std::array<bool, kSlotCount> seen{};
+
+  // Collect the devices with a reading this moment. GetNextReading walks
+  // forward in time rather than across devices, so several passes are needed
+  // to see a second pad; each pass starts from whatever is current.
+  IGameInputDevice* candidates[kSlotCount * 2] = {};
+  size_t candidate_count = 0;
   IGameInputReading* reading = nullptr;
   if (SUCCEEDED(game_input_->GetCurrentReading(GameInputKindGamepad, nullptr, &reading)) &&
       reading) {
-    // Walk every reading available this frame, one per connected device.
     IGameInputReading* current = reading;
     current->AddRef();
-    for (size_t guard = 0; guard < kSlotCount * 2 && current; ++guard) {
+    while (current && candidate_count < std::size(candidates)) {
       IGameInputDevice* device = nullptr;
       current->GetDevice(&device);
       if (device) {
-        size_t slot = kSlotCount;
-        for (size_t i = 0; i < kSlotCount; ++i) {
-          if (slots_[i].device == device) {
-            slot = i;
-            break;
-          }
+        // A device that cannot hand over a gamepad state is not a pad as far
+        // as the guest is concerned, whatever it enumerated as.
+        GameInputGamepadState ignored{};
+        bool already = false;
+        for (size_t i = 0; i < candidate_count; ++i) {
+          already = already || candidates[i] == device;
         }
-        if (slot == kSlotCount) {
-          for (size_t i = 0; i < kSlotCount; ++i) {
-            if (!slots_[i].device) {
-              device->AddRef();
-              slots_[i].device = device;
-              slot = i;
-              break;
-            }
-          }
+        if (!already && current->GetGamepadState(&ignored)) {
+          candidates[candidate_count++] = device;  // reference passes to the array
+        } else {
+          device->Release();
         }
-        if (slot < kSlotCount) {
-          seen[slot] = true;
-        }
-        device->Release();
       }
       IGameInputReading* next = nullptr;
       const HRESULT more =
@@ -190,6 +193,31 @@ void GameInputInputDriver::RefreshSlotsLocked() {
       current->Release();
     }
     reading->Release();
+  }
+
+  for (size_t c = 0; c < candidate_count; ++c) {
+    IGameInputDevice* device = candidates[c];
+    size_t slot = kSlotCount;
+    for (size_t i = 0; i < kSlotCount; ++i) {
+      if (slots_[i].device == device) {
+        slot = i;
+        break;
+      }
+    }
+    if (slot == kSlotCount) {
+      for (size_t i = 0; i < kSlotCount; ++i) {
+        if (!slots_[i].device) {
+          device->AddRef();
+          slots_[i].device = device;
+          slot = i;
+          break;
+        }
+      }
+    }
+    if (slot < kSlotCount) {
+      seen[slot] = true;
+    }
+    device->Release();
   }
 
   for (size_t i = 0; i < kSlotCount; ++i) {
@@ -238,7 +266,8 @@ X_RESULT GameInputInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_st
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
   IGameInputReading* reading = nullptr;
-  if (FAILED(game_input_->GetCurrentReading(GameInputKindGamepad, device, &reading)) || !reading) {
+  const HRESULT read_hr = game_input_->GetCurrentReading(GameInputKindGamepad, device, &reading);
+  if (FAILED(read_hr) || !reading) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
   GameInputGamepadState state{};

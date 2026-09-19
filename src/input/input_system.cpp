@@ -35,11 +35,13 @@
 REXCVAR_DEFINE_STRING(input_backend, "xinput", "Input", "Input backend: xinput")
     .allowed({"sdl", "xinput", "gameinput"});
 #elif REX_HAS_GAMEINPUT
-// GameInput is the API a GDK title is expected to use, so a build made with the
-// GDK asks for it first. It falls back on its own when the runtime is absent,
-// which is the common case outside a packaged install.
-REXCVAR_DEFINE_STRING(input_backend, "gameinput", "Input",
-                      "Input backend: gameinput, sdl, xinput")
+// GameInput is the API a GDK title is expected to use and will be the default
+// here once it is trusted. It is not yet: a pad that enumerates as more than
+// one GameInput device - a wireless controller reporting alongside its dongle -
+// can put the silent one in slot 0, and player one then reads a pad that never
+// moves. Both devices answer GetGamepadState, so telling them apart needs more
+// than asking. Until then this stays opt-in and SDL remains the default.
+REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput, gameinput")
     .allowed({"sdl", "xinput", "gameinput"});
 #else
 REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
