@@ -10,11 +10,7 @@ if(POLICY CMP0155)
     cmake_policy(SET CMP0155 OLD)
 endif()
 
-if(APPLE)
-    set(REXGLUE_LANGUAGES C CXX OBJC OBJCXX)
-else()
-    set(REXGLUE_LANGUAGES C CXX)
-endif()
+set(REXGLUE_LANGUAGES C CXX)
 
 project(ReXGlue
     VERSION 0.10.0
@@ -59,38 +55,13 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_helpers.cmake)
 
-if(UNIX AND NOT APPLE)
-    # Keep installed binaries self-contained by resolving shared libs relative
-    # to the install prefix (for example, bin -> ../lib).
-    set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
-    list(APPEND CMAKE_INSTALL_RPATH
-        "$ORIGIN"
-        "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
-    )
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
-elseif(APPLE)
-    # Use loader-relative install names on macOS so installed binaries remain
-    # self-contained within the install prefix.
-    list(APPEND CMAKE_INSTALL_RPATH
-        "@loader_path"
-        "@loader_path/../${CMAKE_INSTALL_LIBDIR}"
-    )
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
+# Enforce the LLVM Clang toolchain used by the GDK build
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "ReXGlue requires LLVM Clang. Please set CMAKE_CXX_COMPILER to clang++")
 endif()
 
-# Enforce a Clang toolchain (LLVM Clang or Apple's Clang)
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
-    message(FATAL_ERROR "ReXGlue requires the Clang compiler (LLVM Clang or AppleClang). Please set CMAKE_CXX_COMPILER to clang++")
-endif()
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "18.0")
-        message(FATAL_ERROR "ReXGlue requires Clang 18 or newer (found ${CMAKE_CXX_COMPILER_VERSION})")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0")
-        message(FATAL_ERROR "ReXGlue requires AppleClang 16 or newer / Xcode 16+ for C++23 support (found ${CMAKE_CXX_COMPILER_VERSION})")
-    endif()
+if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "18.0")
+    message(FATAL_ERROR "ReXGlue requires Clang 18 or newer (found ${CMAKE_CXX_COMPILER_VERSION})")
 endif()
 
 # Enforce x64 architecture
@@ -113,20 +84,6 @@ function(rex_config_postfix target)
         RELWITHDEBINFO_POSTFIX "${CMAKE_RELWITHDEBINFO_POSTFIX}")
 endfunction()
 
-if(NOT WIN32)
-    # Use appropriate code model based on architecture
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64" AND NOT APPLE)
-        # Large code model on Linux x86_64 for linking with very large recompiled executables (35MB+).
-        # macOS uses small: the ld64 linker on macOS 15+ rejects text relocations produced
-        # by -mcmodel=large, and macOS maps binaries in the low address space so ±2GB is sufficient.
-        add_compile_options(-mcmodel=large)
-    else()
-        add_compile_options(-mcmodel=small)
-    endif()
-    # Position-independent code for all targets
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-endif()
-
 # Global compile options
 add_compile_options(
     -fno-strict-aliasing
@@ -138,47 +95,13 @@ add_compile_options(
     -fno-char8_t
 )
 
-# Platform detection (supports AMD64 and ARM64)
+# The GDK and Project Helix baseline is AMD64 Windows.
 set(REX_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
-if(APPLE AND CMAKE_OSX_ARCHITECTURES)
-    list(LENGTH CMAKE_OSX_ARCHITECTURES REX_OSX_ARCH_COUNT)
-    if(REX_OSX_ARCH_COUNT GREATER 1)
-        message(FATAL_ERROR "ReXGlue macOS presets expect a single CMAKE_OSX_ARCHITECTURES value")
-    endif()
-    list(GET CMAKE_OSX_ARCHITECTURES 0 REX_TARGET_PROCESSOR)
+if(NOT REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
+    message(FATAL_ERROR "ReXGlue supports the AMD64 Windows GDK target only")
 endif()
-
-if(WIN32)
-    if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
-        set(REX_PLATFORM "win-amd64")
-    elseif(REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-        set(REX_PLATFORM "win-arm64")
-    else()
-        message(FATAL_ERROR "Unsupported Windows architecture: ${REX_TARGET_PROCESSOR}")
-    endif()
-    add_compile_definitions(REX_PLATFORM_WINDOWS=1)
-elseif(UNIX AND NOT APPLE)
-    if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
-        set(REX_PLATFORM "linux-amd64")
-    elseif(REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-        set(REX_PLATFORM "linux-arm64")
-    else()
-        set(REX_PLATFORM "linux-${REX_TARGET_PROCESSOR}")
-    endif()
-    add_compile_definitions(REX_PLATFORM_LINUX=1)
-elseif(APPLE)
-    if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
-        set(REX_PLATFORM "mac-amd64")
-    elseif(REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-        set(REX_PLATFORM "mac-arm64")
-    else()
-        set(REX_PLATFORM "mac-${REX_TARGET_PROCESSOR}")
-    endif()
-    add_compile_definitions(REX_PLATFORM_MAC=1)
-else()
-    message(FATAL_ERROR "Unsupported platform. ReXGlue supports Windows, Linux, and macOS only.")
-endif()
-
+set(REX_PLATFORM "win-amd64")
+add_compile_definitions(REX_PLATFORM_WINDOWS=1)
 
 # Build config as compile definition (multi-config generators don't know config at configure time)
 add_compile_definitions(REXGLUE_BUILD_CONFIG="$<CONFIG>")

@@ -3,12 +3,7 @@
 set(REXGLUE_VERSION_STRING "@REXGLUE_FULL_VERSION@")
 
 set(REXGLUE_SHARE_DIR "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_DATADIR@/rexglue")
-set(REXGLUE_MOLTENVK_ICD
-    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_DATADIR@/vulkan/icd.d/MoltenVK_icd.json")
-
 include(CMakeFindDependencyMacro)
-
-set(REXGLUE_PLATFORM_UWP @REXGLUE_PLATFORM_UWP@)
 
 include("${CMAKE_CURRENT_LIST_DIR}/rexglue_helpers.cmake")
 
@@ -18,7 +13,7 @@ list(PREPEND CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
 # tree that switches SDK installs keeps the old <dep>_DIR cache entries, which
 # would pair these headers with another install's libraries (link errors at
 # best), so forget locations that are outside this prefix.
-foreach(_rexglue_dep fmt spdlog utf8cpp SDL3 VulkanHeaders VulkanMemoryAllocator)
+foreach(_rexglue_dep fmt spdlog utf8cpp SDL3)
     if(${_rexglue_dep}_DIR)
         file(RELATIVE_PATH _rexglue_rel "${PACKAGE_PREFIX_DIR}" "${${_rexglue_dep}_DIR}")
         if(_rexglue_rel MATCHES "^\\.\\./" OR IS_ABSOLUTE "${_rexglue_rel}")
@@ -33,43 +28,11 @@ unset(_rexglue_rel)
 find_dependency(fmt CONFIG)
 find_dependency(spdlog CONFIG)
 find_dependency(utf8cpp CONFIG)
-if(NOT REXGLUE_PLATFORM_UWP)
-    find_dependency(SDL3 CONFIG)
-endif()
+find_dependency(SDL3 CONFIG)
 
-set(REXGLUE_USE_VULKAN @REXGLUE_USE_VULKAN@)
-if(REXGLUE_USE_VULKAN)
-    find_dependency(VulkanHeaders CONFIG)
-    find_dependency(VulkanMemoryAllocator CONFIG)
-    if(APPLE)
-        if(NOT TARGET rex::vulkan-loader)
-            add_library(rex::vulkan-loader SHARED IMPORTED)
-            set_target_properties(rex::vulkan-loader PROPERTIES
-                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/libvulkan.1.dylib")
-        endif()
-
-        if(NOT TARGET rex::moltenvk)
-            add_library(rex::moltenvk SHARED IMPORTED)
-            set_target_properties(rex::moltenvk PROPERTIES
-                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/libMoltenVK.dylib")
-        endif()
-    endif()
-endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/rexglueTargets.cmake")
 
-# UWP SDK installs carry no host tools. Codegen output is platform independent,
-# so borrow the desktop rexglue executable from the prefix path.
-if(REXGLUE_PLATFORM_UWP AND NOT TARGET rex::rexglue)
-    find_program(REXGLUE_CODEGEN_EXECUTABLE rexglue PATH_SUFFIXES bin)
-    if(REXGLUE_CODEGEN_EXECUTABLE)
-        add_executable(rex::rexglue IMPORTED)
-        set_target_properties(rex::rexglue PROPERTIES
-            IMPORTED_LOCATION "${REXGLUE_CODEGEN_EXECUTABLE}")
-    else()
-        message(WARNING "rexglue: no desktop rexglue executable found for UWP codegen")
-    endif()
-endif()
 
 # Only Release rexglue is installed, so every consumer config has to reach it.
 if(TARGET rex::rexglue)

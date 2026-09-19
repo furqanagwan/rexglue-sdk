@@ -2,7 +2,7 @@
 
 ReXGlue runs a title's graphics by emulating the Xbox 360 GPU: the game's D3D
 command stream (PM4 packets, Xenos shaders, EDRAM render targets) is translated
-to D3D12 or Vulkan every frame. That is accurate but costs frame rate and can
+to D3D12 every frame. That is accurate but costs frame rate and can
 show translation artifacts. A **native renderer** instead reads the game's own
 scene data and draws it with host shaders written for the host GPU, the way the
 Skate 3 recompilation does (twice the emulated frame rate at a quarter of the
@@ -16,7 +16,7 @@ game's renderer needs.
 
 | Piece | Header | Purpose |
 | --- | --- | --- |
-| Host render interface | `rex/graphics/native_rhi.h` | Buffers, textures, pipelines, binding layouts and a command recorder, implemented on D3D12 and Vulkan on top of the command processors. HLSL is compiled at runtime on D3D12; Vulkan takes prebuilt SPIR-V |
+| Host render interface | `rex/graphics/native_rhi.h` | Buffers, textures, pipelines, binding layouts and a command recorder, implemented on D3D12 on top of the command processor. HLSL is compiled to DXIL |
 | Guest output hook | `rex/graphics/native_guest_renderer.h` | Register a renderer that draws the frame the presenter shows, or yields that frame back to emulation |
 | Pass suppression | same | While the renderer draws, emulated draws and resolves of the passes it replaces are skipped and occlusion queries report the fake count. `SetNativeGuestOutputPassFilter` says which passes those are |
 | Ultrawide output | same | `SetNativeGuestOutputWideAspect` sizes the output wider than the frontbuffer while the renderer serves frames |
@@ -68,12 +68,11 @@ engine swaps ──────────────────────�
    suppresses only framebuffer-sized passes.
 5. **Port the shaders.** Recreate the game's material shading in HLSL (the
    Xenos shader disassembly in the frame trace names the constants and
-   textures each pass uses). Build it to DXIL and SPIR-V offline with DXC at
+   textures each pass uses). Build it to DXIL offline with DXC at
    `_6_0` and hand both to `ShaderDesc`; the recomp framework's
    `recomp_add_shaders` does that and embeds the result. `ShaderDesc::hlsl_source`
    without bytecode still works, but only on D3D12 and only through FXC at
    `vs_5_0`/`ps_5_0`, which is a different compiler and shader model from what
-   Vulkan would be running. Keep it for shaders whose text is not known until
    runtime.
 
 The smallest working renderer is recomp-framework's
@@ -121,13 +120,13 @@ The probe renderer (`--recomp_native_render_probe` in the recomp framework)
 marks its clear as `kMain`, which is how this path is checked on a machine
 before a real renderer exists.
 
-`d3d12_gpu_timestamp_buckets` and `vulkan_gpu_timestamp_buckets` turn the
+`d3d12_gpu_timestamp_buckets` turns the
 collection off per backend. A device whose queue reports no timestamp support
 logs that once and leaves the columns at zero.
 
 ## Status
 
-- The interface and D3D12/Vulkan backends are ported from the Skate 3
+- The interface and D3D12 backend are ported from the Skate 3
   recompilation's SDK (github.com/mchughalex/rexglue-skate3), which runs a full
   game on them. Skate 3's surface-width pass selection became the per-game pass
   filter.

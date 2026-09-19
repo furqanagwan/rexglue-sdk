@@ -56,8 +56,7 @@ body:
       label: Platform
       description: What platform are you running on?
       options:
-        - Windows
-        - Linux
+        - Windows GDK / Project Helix
     validations:
       required: true
 

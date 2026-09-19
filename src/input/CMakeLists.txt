@@ -37,10 +37,13 @@ endif()
 # GameInput is the current Microsoft input API and the one a GDK title is
 # expected to use. Only its header is needed: GameInput.dll is loaded at
 # runtime, so a build made with the GDK still starts where it is absent.
-# The GDK edition this targets, as its folder is named. Windows is a GDK-only
-# target now, so this is the one place to change when moving to a newer one.
-set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Microsoft GDK edition (April 2026)")
-set(REXGLUE_GDK_ROOT "C:/Program Files (x86)/Microsoft GDK/${REXGLUE_GDK_EDITION}/windows"
+# Microsoft keeps this variable pointed at the newest installed GDK core. The
+# cache entry remains overrideable for build machines with a custom layout.
+set(rexglue_gdk_default "")
+if(DEFINED ENV{GameDKCoreLatest})
+    file(TO_CMAKE_PATH "$ENV{GameDKCoreLatest}/windows" rexglue_gdk_default)
+endif()
+set(REXGLUE_GDK_ROOT "${rexglue_gdk_default}"
     CACHE PATH "Microsoft GDK windows folder, for the GameInput header")
 if(WIN32 AND EXISTS "${REXGLUE_GDK_ROOT}/include/GameInput.h")
     message(STATUS "rexinput: GameInput header found at ${REXGLUE_GDK_ROOT}")
