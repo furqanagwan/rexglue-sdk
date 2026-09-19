@@ -22,9 +22,6 @@
 #include <rex/logging.h>
 #include <rex/string.h>
 
-#if REX_PLATFORM_UWP
-#include <winrt/Windows.Storage.h>
-#endif
 
 namespace rex {
 
@@ -57,10 +54,6 @@ std::filesystem::path GetExecutableFolder() {
 }
 
 std::filesystem::path GetUserFolder() {
-#if REX_PLATFORM_UWP
-  return std::filesystem::path(
-      winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path().c_str());
-#else
   std::filesystem::path result;
   PWSTR path;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &path))) {
@@ -68,7 +61,6 @@ std::filesystem::path GetUserFolder() {
     CoTaskMemFree(path);
   }
   return result;
-#endif
 }
 
 bool CreateEmptyFile(const std::filesystem::path& path) {

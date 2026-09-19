@@ -29,20 +29,20 @@ target_include_directories(rexinput PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-if(REXGLUE_PLATFORM_UWP)
-    target_sources(rexinput PRIVATE xinput/xinput_input_driver.cpp)
-elseif(WIN32)
+if(WIN32)
     target_sources(rexinput PRIVATE sdl/sdl_input_driver.cpp xinput/xinput_input_driver.cpp)
-else()
     target_sources(rexinput PRIVATE sdl/sdl_input_driver.cpp)
 endif()
 
 # GameInput is the current Microsoft input API and the one a GDK title is
 # expected to use. Only its header is needed: GameInput.dll is loaded at
 # runtime, so a build made with the GDK still starts where it is absent.
-set(REXGLUE_GDK_ROOT "C:/Program Files (x86)/Microsoft GDK/260404/windows" CACHE PATH
-    "Microsoft GDK windows folder, for the GameInput header")
-if(WIN32 AND NOT REXGLUE_PLATFORM_UWP AND EXISTS "${REXGLUE_GDK_ROOT}/include/GameInput.h")
+# The GDK edition this targets, as its folder is named. Windows is a GDK-only
+# target now, so this is the one place to change when moving to a newer one.
+set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Microsoft GDK edition (April 2026)")
+set(REXGLUE_GDK_ROOT "C:/Program Files (x86)/Microsoft GDK/${REXGLUE_GDK_EDITION}/windows"
+    CACHE PATH "Microsoft GDK windows folder, for the GameInput header")
+if(WIN32 AND EXISTS "${REXGLUE_GDK_ROOT}/include/GameInput.h")
     message(STATUS "rexinput: GameInput header found at ${REXGLUE_GDK_ROOT}")
     target_sources(rexinput PRIVATE gameinput/gameinput_input_driver.cpp)
     target_compile_definitions(rexinput PUBLIC REX_HAS_GAMEINPUT=1)
@@ -50,6 +50,4 @@ if(WIN32 AND NOT REXGLUE_PLATFORM_UWP AND EXISTS "${REXGLUE_GDK_ROOT}/include/Ga
 endif()
 
 target_link_libraries(rexinput PUBLIC rexcore rexui)
-if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexinput PUBLIC SDL3::SDL3)
-endif()

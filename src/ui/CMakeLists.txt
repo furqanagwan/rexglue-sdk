@@ -17,18 +17,11 @@ set(REXUI_CORE_SOURCES
     windowed_app_context.cpp
 )
 
-if(REXGLUE_PLATFORM_UWP)
-    list(APPEND REXUI_CORE_SOURCES
-        window_uwp.cpp
-        windowed_app_context_uwp.cpp
-    )
-else()
     list(APPEND REXUI_CORE_SOURCES
         sdl_virtual_key.cpp
         window_sdl.cpp
         windowed_app_context_sdl.cpp
     )
-endif()
 
 # Optional overlay dialogs
 set(REXUI_OVERLAY_SOURCES
@@ -123,9 +116,7 @@ target_link_libraries(rexui PUBLIC
     renderdoc
     imgui::imgui
 )
-if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexui PUBLIC SDL3::SDL3)
-endif()
 target_link_libraries(rexui PRIVATE utf8cpp)
 
 if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")

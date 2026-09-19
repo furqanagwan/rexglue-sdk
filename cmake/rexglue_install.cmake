@@ -128,7 +128,6 @@ endif()
 # Install the entry point source and ReXApp for SDK consumers
 install(FILES
     src/ui/windowed_app_main_sdl.cpp
-    src/ui/windowed_app_main_uwp.cpp
     src/ui/rex_app.cpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rexglue
 )
@@ -190,7 +189,6 @@ install(EXPORT rexglueTargets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rexglue
 )
 
-if(NOT REXGLUE_PLATFORM_UWP)
     # Register in the CMake User Package Registry after install.
     # This makes find_package(rexglue) work with no REXSDK env var or CMAKE_PREFIX_PATH.
     # Multiple SxS installs coexist. Each prefix gets a unique hash entry.
@@ -221,4 +219,3 @@ if(NOT REXGLUE_PLATFORM_UWP)
         message(STATUS "Registered rexglue in CMake user package registry")
         message(STATUS "  -> ${CMAKE_INSTALL_PREFIX}")
     ]])
-endif()

@@ -13,19 +13,11 @@ add_library(rexaudio OBJECT
     # NOP backend (always available)
     nop/nop_audio_system.cpp
 )
-if(REXGLUE_PLATFORM_UWP)
-    target_sources(rexaudio PRIVATE
-        xaudio2/xaudio2_audio_system.cpp
-        xaudio2/xaudio2_audio_driver.cpp
-        nop/ui_sound_player_nop.cpp
-    )
-else()
     target_sources(rexaudio PRIVATE
         sdl/sdl_audio_system.cpp
         sdl/sdl_audio_driver.cpp
         sdl/ui_sound_player.cpp
     )
-endif()
 add_library(rex::audio ALIAS rexaudio)
 
 rex_target_pch(rexaudio
@@ -50,9 +42,7 @@ target_link_libraries(rexaudio
     PUBLIC rexcore
     PRIVATE libavcodec libavutil
 )
-if(NOT REXGLUE_PLATFORM_UWP)
     target_link_libraries(rexaudio PUBLIC SDL3::SDL3)
-endif()
 
 # xma_context.cpp uses _mm_shuffle_epi8 / _mm_packus_epi32 / _mm_packs_epi32 and
 # conversion.h inlines pshufb byte swaps, so this target needs the same x86

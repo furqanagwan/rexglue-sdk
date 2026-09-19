@@ -27,11 +27,7 @@
 #include <rex/ui/overlay/debug_overlay.h>
 #include <rex/ui/overlay/settings_overlay.h>
 #include <rex/audio/audio_system.h>
-#if REX_PLATFORM_UWP
-#include <rex/audio/xaudio2/xaudio2_audio_system.h>
-#else
 #include <rex/audio/sdl/sdl_audio_system.h>
-#endif
 #include <rex/input/input_system.h>
 #include <rex/kernel/init.h>
 #include <rex/string/numeric.h>
@@ -314,11 +310,7 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
 
 bool ReXApp::SetupPresentation() {
   config_.gpu_plugin = REXCVAR_GET(gpu_plugin);
-#if REX_PLATFORM_UWP
-  config_.audio_factory = REX_AUDIO_BACKEND(rex::audio::xaudio2::XAudio2AudioSystem);
-#else
   config_.audio_factory = REX_AUDIO_BACKEND(rex::audio::sdl::SDLAudioSystem);
-#endif
   config_.input_factory = REX_INPUT_BACKEND(rex::input::CreateDefaultInputSystem);
   config_.kernel_init = rex::kernel::InitializeKernel;
 

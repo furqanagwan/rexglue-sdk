@@ -29,7 +29,7 @@
 namespace rex {
 namespace ui {
 
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_GAMES) && !REX_PLATFORM_UWP
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_GAMES)
 class Win32HwndSurface final : public Surface {
  public:
   explicit Win32HwndSurface(HINSTANCE hinstance, HWND hwnd) : hinstance_(hinstance), hwnd_(hwnd) {}
@@ -46,24 +46,6 @@ class Win32HwndSurface final : public Surface {
 };
 #endif
 
-#if REX_PLATFORM_UWP
-class CoreWindowSurface final : public Surface {
- public:
-  explicit CoreWindowSurface(IUnknown* core_window) : core_window_(core_window) {
-    core_window_->AddRef();
-  }
-  ~CoreWindowSurface() override { core_window_->Release(); }
-
-  TypeIndex GetType() const override { return kTypeIndex_CoreWindow; }
-  IUnknown* core_window() const { return core_window_; }
-
- protected:
-  bool GetSizeImpl(uint32_t& width_out, uint32_t& height_out) const override;
-
- private:
-  IUnknown* core_window_;
-};
-#endif
 
 }  // namespace ui
 }  // namespace rex

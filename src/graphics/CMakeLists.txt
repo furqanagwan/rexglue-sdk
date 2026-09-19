@@ -146,7 +146,6 @@ if(REXGLUE_USE_D3D12)
     # with Windows 10 and later).
     target_link_libraries(rexgpu-xenos PRIVATE d3dcompiler)
 endif()
-rexglue_apply_uwp_link_settings(rexgpu-xenos)
 
 if(REXGLUE_USE_VULKAN)
     target_link_libraries(rexgpu-xenos PRIVATE

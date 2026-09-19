@@ -20,9 +20,7 @@
 #include <rex/input/input_system.h>
 #include <rex/input/mnk/mnk_input_driver.h>
 #include <rex/input/nop/nop_input_driver.h>
-#if !REX_PLATFORM_UWP
 #include <rex/input/sdl/sdl_input_driver.h>
-#endif
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
 #if REX_HAS_GAMEINPUT
@@ -31,10 +29,7 @@
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
-#if REX_PLATFORM_UWP
-REXCVAR_DEFINE_STRING(input_backend, "xinput", "Input", "Input backend: xinput")
-    .allowed({"sdl", "xinput", "gameinput"});
-#elif REX_HAS_GAMEINPUT
+#if REX_HAS_GAMEINPUT
 // GameInput is the API a GDK title is expected to use and will be the default
 // here once it is trusted. It is not yet: a pad that enumerates as more than
 // one GameInput device - a wireless controller reporting alongside its dongle -
@@ -570,7 +565,7 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 #endif
 #if REX_PLATFORM_WIN32
     if (!have_backend &&
-        (REX_PLATFORM_UWP || REXCVAR_GET(input_backend) == "xinput" ||
+        (REXCVAR_GET(input_backend) == "xinput" ||
          REXCVAR_GET(input_backend) == "gameinput")) {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
@@ -580,14 +575,12 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     }
 #endif
 
-#if !REX_PLATFORM_UWP
     if (!have_backend && REXCVAR_GET(input_backend) == "sdl") {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
       }
     }
-#endif
 
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);

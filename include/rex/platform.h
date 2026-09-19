@@ -59,10 +59,6 @@
 #ifndef REX_PLATFORM_LINUX
 #define REX_PLATFORM_LINUX 0
 #endif
-#ifndef REX_PLATFORM_UWP
-#define REX_PLATFORM_UWP 0
-#endif
-
 #if defined(__clang__)
 #define REX_COMPILER_CLANG 1
 #elif defined(__GNUC__)

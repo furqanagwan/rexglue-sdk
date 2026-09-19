@@ -90,17 +90,6 @@ XinputInputDriver::~XinputInputDriver() {
   }
 }
 
-#if REX_PLATFORM_UWP
-X_STATUS XinputInputDriver::Setup() {
-  XInputGetCapabilities_ = static_cast<void*>(&XInputGetCapabilities);
-  XInputGetState_ = static_cast<void*>(&XInputGetState);
-  XInputGetKeystroke_ = static_cast<void*>(&XInputGetKeystroke);
-  XInputGetBatteryInformation_ = static_cast<void*>(&XInputGetBatteryInformation);
-  XInputSetState_ = static_cast<void*>(&XInputSetState);
-  XInputEnable_ = static_cast<void*>(&XInputEnable);
-  return X_STATUS_SUCCESS;
-}
-#else
 X_STATUS XinputInputDriver::Setup() {
   HMODULE module = LoadLibraryW(L"xinput1_4.dll");
   if (!module) {
@@ -139,7 +128,6 @@ X_STATUS XinputInputDriver::Setup() {
 
   return X_STATUS_SUCCESS;
 }
-#endif
 
 void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
   auto xigc = (decltype(&XInputGetCapabilities))XInputGetCapabilities_;
