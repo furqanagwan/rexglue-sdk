@@ -13,6 +13,10 @@
 #define REXGLUE_BUILD_PLATFORM "@REX_PLATFORM@"
 #define REXGLUE_BUILD_TIMESTAMP "@REXGLUE_BUILD_TIMESTAMP@"
 
+// The Agility SDK this build carries. agility_exports.cpp exports it for
+// d3d12.dll to read, and the staged D3D12Core.dll is the matching binary.
+#define REXGLUE_AGILITY_SDK_VERSION @REXGLUE_AGILITY_SDK_VERSION@
+
 // Requires REXGLUE_BUILD_CONFIG compile definition
 // Title: "[rexglue-v0.7.5.38-dev.gb27f3f74-Release]"
 #define REXGLUE_BUILD_TITLE \

@@ -39,6 +39,11 @@ REXCVAR_DEFINE_INT32(d3d12_queue_priority, 1, "UI/D3D12",
 
 namespace rex::ui::d3d12 {
 
+// DirectX 12 Ultimate. Feature level 12_2 is what carries mesh shaders,
+// DirectX Raytracing 1.1, variable rate shading tier 2 and sampler feedback,
+// which is the floor this targets rather than a set of optional checks.
+static constexpr D3D_FEATURE_LEVEL kMinimumFeatureLevel = D3D_FEATURE_LEVEL_12_2;
+
 bool D3D12Provider::IsD3D12APIAvailable() {
   HMODULE library_d3d12 = LoadLibraryW(L"D3D12.dll");
   if (!library_d3d12) {
@@ -256,8 +261,8 @@ bool D3D12Provider::Initialize() {
   while (dxgi_factory->EnumAdapters1(adapter_index, &adapter) == S_OK) {
     DXGI_ADAPTER_DESC1 adapter_desc;
     if (SUCCEEDED(adapter->GetDesc1(&adapter_desc))) {
-      if (SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),
-                                             nullptr))) {
+      if (SUCCEEDED(pfn_d3d12_create_device_(adapter, kMinimumFeatureLevel,
+                                             _uuidof(ID3D12Device), nullptr))) {
         if (REXCVAR_GET(d3d12_adapter) >= 0) {
           if (adapter_index == REXCVAR_GET(d3d12_adapter)) {
             break;
@@ -279,8 +284,9 @@ bool D3D12Provider::Initialize() {
   }
   if (adapter == nullptr) {
     REXLOG_ERROR(
-        "Failed to get an adapter supporting Direct3D 12 with the feature "
-        "level of at least 11_0");
+        "No adapter supports DirectX 12 Ultimate (Direct3D feature level 12_2). "
+        "That needs an NVIDIA RTX, AMD RDNA 2 or newer, or Intel Arc GPU, with a "
+        "current driver.");
     dxgi_factory->Release();
     return false;
   }
@@ -305,8 +311,8 @@ bool D3D12Provider::Initialize() {
 
   // Create the Direct3D 12 device.
   ID3D12Device* device;
-  if (FAILED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)))) {
-    REXLOG_ERROR("Failed to create a Direct3D 12 feature level 11_0 device");
+  if (FAILED(pfn_d3d12_create_device_(adapter, kMinimumFeatureLevel, IID_PPV_ARGS(&device)))) {
+    REXLOG_ERROR("Failed to create a Direct3D 12 feature level 12_2 device");
     adapter->Release();
     dxgi_factory->Release();
     return false;

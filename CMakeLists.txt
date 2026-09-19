@@ -47,6 +47,10 @@ if(NOT WIN32)
 endif()
 set(REXGLUE_USE_D3D12 ON)
 
+# The application carries its own D3D12Core so DirectX 12 Ultimate and DirectSR
+# do not depend on what the player's Windows build happens to ship.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_agility.cmake)
+
 # Root of the SDK source tree
 set(REXGLUE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 

@@ -46,12 +46,53 @@ endfunction()
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
 #==========================================================
+# Copies the Agility SDK redistributable into the D3D12 folder beside a host
+# executable, which is the path agility_exports.cpp names. Without this the
+# exported version points at nothing and Direct3D quietly falls back to the
+# D3D12Core that ships with Windows, so the build would run but not on the
+# runtime it was built against.
+function(rexglue_stage_agility_sdk target_name)
+    # Installed SDK: beside the share files. In this tree: the fetched package,
+    # since nothing has been installed yet.
+    if(DEFINED REXGLUE_AGILITY_BIN_DIR AND EXISTS "${REXGLUE_AGILITY_BIN_DIR}/D3D12Core.dll")
+        set(_agility_dir "${REXGLUE_AGILITY_BIN_DIR}")
+    else()
+        set(_agility_dir "${REXGLUE_SHARE_DIR}/D3D12")
+    endif()
+    if(NOT EXISTS "${_agility_dir}/D3D12Core.dll")
+        message(WARNING
+            "Agility SDK runtime not found at ${_agility_dir}; ${target_name} will "
+            "use the Direct3D 12 runtime that ships with Windows")
+        return()
+    endif()
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${target_name}>/D3D12"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_agility_dir}/D3D12Core.dll"
+            "$<TARGET_FILE_DIR:${target_name}>/D3D12/D3D12Core.dll"
+        VERBATIM)
+    if(EXISTS "${_agility_dir}/d3d12SDKLayers.dll")
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_agility_dir}/d3d12SDKLayers.dll"
+                "$<TARGET_FILE_DIR:${target_name}>/D3D12/d3d12SDKLayers.dll"
+            VERBATIM)
+    endif()
+endfunction()
+
 function(rexglue_configure_target target_name)
     cmake_parse_arguments(ARG "" "" "GPU_PLUGINS" ${ARGN})
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main_sdl.cpp
-        ${REXGLUE_SHARE_DIR}/rex_app.cpp)
+        ${REXGLUE_SHARE_DIR}/rex_app.cpp
+        ${REXGLUE_SHARE_DIR}/agility_exports.cpp)
+    # d3d12.dll reads these from the executable itself, so they are compiled in
+    # here rather than exported from one of the DLLs, where nothing would see
+    # them. The version comes from <rex/version.h>, which a consumer already
+    # has, so this works the same in this tree and in an installed SDK.
+    rexglue_stage_agility_sdk(${target_name})
 
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")
