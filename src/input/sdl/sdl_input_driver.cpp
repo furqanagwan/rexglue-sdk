@@ -315,6 +315,59 @@ X_RESULT SDLInputDriver::GetDeviceCapabilities(DeviceId id, uint32_t flags,
   return X_ERROR_SUCCESS;
 }
 
+X_RESULT SDLInputDriver::GetDeviceBatteryInformation(DeviceId id, uint32_t /*type*/,
+                                                     X_INPUT_BATTERY_INFORMATION* out_battery) {
+  assert(sdl_events_initialized_ && SDL_Gamepad_initialized_);
+  if (!out_battery) {
+    return X_ERROR_BAD_ARGUMENTS;
+  }
+  out_battery->type = X_INPUT_BATTERY_TYPE_DISCONNECTED;
+  out_battery->level = X_INPUT_BATTERY_LEVEL_EMPTY;
+
+  QueueControllerUpdate();
+  auto guard = DrainAndLock();
+  auto controller = FindController(id);
+  if (!controller) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+
+  int percent = -1;
+  const SDL_PowerState power_state =
+      SDL_GetJoystickPowerInfo(SDL_GetGamepadJoystick(controller->sdl), &percent);
+  switch (power_state) {
+    case SDL_POWERSTATE_ON_BATTERY:
+    case SDL_POWERSTATE_CHARGING:
+    case SDL_POWERSTATE_CHARGED:
+      // SDL does not say what chemistry the cells are, and nothing downstream
+      // distinguishes them, so every pack reports as the rechargeable one.
+      out_battery->type = X_INPUT_BATTERY_TYPE_NIMH;
+      break;
+    case SDL_POWERSTATE_NO_BATTERY:
+      out_battery->type = X_INPUT_BATTERY_TYPE_WIRED;
+      return X_ERROR_SUCCESS;
+    default:
+      // Unknown or error: the backend has not worked out what is attached yet.
+      return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+
+  if (power_state == SDL_POWERSTATE_CHARGED) {
+    out_battery->level = X_INPUT_BATTERY_LEVEL_FULL;
+  } else if (percent < 0) {
+    // Attached, charge unknown. Claiming empty would read as a warning the
+    // backend never gave, so this reports the top of the scale.
+    out_battery->level = X_INPUT_BATTERY_LEVEL_FULL;
+  } else if (percent >= 70) {
+    out_battery->level = X_INPUT_BATTERY_LEVEL_FULL;
+  } else if (percent >= 40) {
+    out_battery->level = X_INPUT_BATTERY_LEVEL_MEDIUM;
+  } else if (percent >= 10) {
+    out_battery->level = X_INPUT_BATTERY_LEVEL_LOW;
+  } else {
+    out_battery->level = X_INPUT_BATTERY_LEVEL_EMPTY;
+  }
+  return X_ERROR_SUCCESS;
+}
+
 X_RESULT SDLInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_state) {
   assert(sdl_events_initialized_ && SDL_Gamepad_initialized_);
 

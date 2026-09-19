@@ -44,6 +44,18 @@ class InputDriver {
   virtual X_RESULT GetDeviceKeystroke(DeviceId id, uint32_t flags,
                                       X_INPUT_KEYSTROKE* out_keystroke) = 0;
 
+  /// A driver whose devices have no battery to report - a keyboard, a wired
+  /// pad on a backend that does not say - leaves this alone and the caller
+  /// shows no charge indicator.
+  virtual X_RESULT GetDeviceBatteryInformation(DeviceId /*id*/, uint32_t /*type*/,
+                                               X_INPUT_BATTERY_INFORMATION* out_battery) {
+    if (out_battery) {
+      out_battery->type = X_INPUT_BATTERY_TYPE_DISCONNECTED;
+      out_battery->level = X_INPUT_BATTERY_LEVEL_EMPTY;
+    }
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+
   virtual void OnWindowAvailable(rex::ui::Window* /*window*/) {}
 
   void set_is_active_callback(std::function<bool()> is_active_callback) {

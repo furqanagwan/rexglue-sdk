@@ -129,4 +129,28 @@ struct X_INPUT_KEYSTROKE {
 };
 static_assert_size(X_INPUT_KEYSTROKE, 8);
 
+// https://learn.microsoft.com/windows/win32/api/xinput/ns-xinput-xinput_battery_information
+enum X_INPUT_BATTERY_TYPE : uint8_t {
+  X_INPUT_BATTERY_TYPE_DISCONNECTED = 0x00,
+  X_INPUT_BATTERY_TYPE_WIRED = 0x01,
+  X_INPUT_BATTERY_TYPE_ALKALINE = 0x02,
+  X_INPUT_BATTERY_TYPE_NIMH = 0x03,
+  X_INPUT_BATTERY_TYPE_UNKNOWN = 0xFF,
+};
+
+// The console reported four steps, which is what its guide drew, so this is a
+// level rather than a percentage.
+enum X_INPUT_BATTERY_LEVEL : uint8_t {
+  X_INPUT_BATTERY_LEVEL_EMPTY = 0x00,
+  X_INPUT_BATTERY_LEVEL_LOW = 0x01,
+  X_INPUT_BATTERY_LEVEL_MEDIUM = 0x02,
+  X_INPUT_BATTERY_LEVEL_FULL = 0x03,
+};
+
+struct X_INPUT_BATTERY_INFORMATION {
+  uint8_t type;
+  uint8_t level;
+};
+static_assert_size(X_INPUT_BATTERY_INFORMATION, 2);
+
 }  // namespace rex::input

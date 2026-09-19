@@ -72,6 +72,7 @@ XinputInputDriver::XinputInputDriver(rex::ui::Window* window, size_t window_z_or
       XInputGetState_(nullptr),
       XInputGetStateEx_(nullptr),
       XInputGetKeystroke_(nullptr),
+      XInputGetBatteryInformation_(nullptr),
       XInputSetState_(nullptr),
       XInputEnable_(nullptr) {}
 
@@ -83,6 +84,7 @@ XinputInputDriver::~XinputInputDriver() {
     XInputGetState_ = nullptr;
     XInputGetStateEx_ = nullptr;
     XInputGetKeystroke_ = nullptr;
+    XInputGetBatteryInformation_ = nullptr;
     XInputSetState_ = nullptr;
     XInputEnable_ = nullptr;
   }
@@ -93,6 +95,7 @@ X_STATUS XinputInputDriver::Setup() {
   XInputGetCapabilities_ = static_cast<void*>(&XInputGetCapabilities);
   XInputGetState_ = static_cast<void*>(&XInputGetState);
   XInputGetKeystroke_ = static_cast<void*>(&XInputGetKeystroke);
+  XInputGetBatteryInformation_ = static_cast<void*>(&XInputGetBatteryInformation);
   XInputSetState_ = static_cast<void*>(&XInputSetState);
   XInputEnable_ = static_cast<void*>(&XInputEnable);
   return X_STATUS_SUCCESS;
@@ -117,6 +120,7 @@ X_STATUS XinputInputDriver::Setup() {
 
   // Not required.
   auto xie = GetProcAddress(module, "XInputEnable");
+  auto xigb = GetProcAddress(module, "XInputGetBatteryInformation");
 
   // Only fail when we don't have the bare essentials;
   if (!xigc || !xigs || !xigk || !xiss) {
@@ -129,6 +133,7 @@ X_STATUS XinputInputDriver::Setup() {
   XInputGetState_ = xigs;
   XInputGetStateEx_ = xigsEx;
   XInputGetKeystroke_ = xigk;
+  XInputGetBatteryInformation_ = xigb;
   XInputSetState_ = xiss;
   XInputEnable_ = xie;
 
@@ -195,6 +200,40 @@ X_RESULT XinputInputDriver::GetDeviceCapabilities(DeviceId id, uint32_t flags,
   out_caps->vibration.left_motor_speed = native_caps.Vibration.wLeftMotorSpeed;
   out_caps->vibration.right_motor_speed = native_caps.Vibration.wRightMotorSpeed;
 
+  return result;
+}
+
+X_RESULT XinputInputDriver::GetDeviceBatteryInformation(DeviceId id, uint32_t type,
+                                                        X_INPUT_BATTERY_INFORMATION* out_battery) {
+  if (!out_battery) {
+    return X_ERROR_BAD_ARGUMENTS;
+  }
+  out_battery->type = X_INPUT_BATTERY_TYPE_DISCONNECTED;
+  out_battery->level = X_INPUT_BATTERY_LEVEL_EMPTY;
+  // XInputGetBatteryInformation arrived in 1.3 and is not in every wrapper
+  // that answers the rest of the API, so a driver without it just reports no
+  // battery rather than failing to start.
+  if (!XInputGetBatteryInformation_) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  uint32_t user_index = 0;
+  if (!SlotForDevice(id, &user_index)) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  if (DWORD skipper = should_skip(user_index)) {
+    return skipper;
+  }
+  XINPUT_BATTERY_INFORMATION native_battery{};
+  auto xigb = (decltype(&XInputGetBatteryInformation))XInputGetBatteryInformation_;
+  DWORD result = xigb(user_index, static_cast<BYTE>(type), &native_battery);
+  if (result) {
+    if (result == ERROR_DEVICE_NOT_CONNECTED) {
+      set_skip(user_index);
+    }
+    return result;
+  }
+  out_battery->type = native_battery.BatteryType;
+  out_battery->level = native_battery.BatteryLevel;
   return result;
 }
 

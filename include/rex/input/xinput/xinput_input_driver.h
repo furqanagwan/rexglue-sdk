@@ -34,6 +34,8 @@ class XinputInputDriver final : public InputDriver {
   X_RESULT SetDeviceVibration(DeviceId id, X_INPUT_VIBRATION* vibration) override;
   X_RESULT GetDeviceKeystroke(DeviceId id, uint32_t flags,
                               X_INPUT_KEYSTROKE* out_keystroke) override;
+  X_RESULT GetDeviceBatteryInformation(DeviceId id, uint32_t type,
+                                       X_INPUT_BATTERY_INFORMATION* out_battery) override;
 
  private:
   void* module_;
@@ -41,6 +43,7 @@ class XinputInputDriver final : public InputDriver {
   void* XInputGetState_;
   void* XInputGetStateEx_;
   void* XInputGetKeystroke_;
+  void* XInputGetBatteryInformation_;
   void* XInputSetState_;
   void* XInputEnable_;
 };

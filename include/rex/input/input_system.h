@@ -59,6 +59,11 @@ class InputSystem : public system::IInputSystem {
   X_RESULT GetStateForUI(uint32_t user_index, X_INPUT_STATE* out_state);
   X_RESULT SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration);
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags, X_INPUT_KEYSTROKE* out_keystroke);
+  /// The charge in the pad answering for a slot. Devices with no battery to
+  /// report - a wired pad, a keyboard - answer X_ERROR_DEVICE_NOT_CONNECTED,
+  /// which a caller drawing an indicator treats as nothing to draw.
+  X_RESULT GetBatteryInformation(uint32_t user_index, uint32_t type,
+                                 X_INPUT_BATTERY_INFORMATION* out_battery);
 
   /// While any blocker is held the guest reads a neutral pad. Buttons still
   /// held when the last one drops stay masked until released, so the press

@@ -248,6 +248,23 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
   return driver->GetDeviceCapabilities(chosen, flags, out_caps);
 }
 
+X_RESULT InputSystem::GetBatteryInformation(uint32_t user_index, uint32_t type,
+                                            X_INPUT_BATTERY_INFORMATION* out_battery) {
+  std::lock_guard<std::mutex> guard(lock_);
+  SCOPE_profile_cpu_f("hid");
+  if (!out_battery || !assignment_) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+
+  RefreshDevices();
+  DeviceId chosen = ChooseDeviceForUser(user_index);
+  auto* driver = DriverForDevice(chosen);
+  if (!driver) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  return driver->GetDeviceBatteryInformation(chosen, type, out_battery);
+}
+
 void InputSystem::UpdateConnectedUser(uint32_t user_index, bool connected) {
   if (user_index >= kMaxGuestUsers || connected_users_.test(user_index) == connected) {
     return;
