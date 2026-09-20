@@ -13,7 +13,6 @@
 
 #include <rex/ui/window_sdl.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -91,23 +90,7 @@ bool WindowSDL::OpenImpl() {
   sdl_window_id_ = SDL_GetWindowID(sdl_window_);
   sdl_app_context().RegisterWindow(sdl_window_id_, this);
 
-  // Center on the requested display before fullscreen so SDL resolves
-  // fullscreen against it. 1-based enumeration order; 0 = system default.
-  if (int32_t monitor_index = REXCVAR_GET(monitor); monitor_index > 0) {
-    int display_count = 0;
-    SDL_DisplayID* displays = SDL_GetDisplays(&display_count);
-    if (displays) {
-      if (monitor_index <= display_count) {
-        SDL_DisplayID display = displays[monitor_index - 1];
-        SDL_SetWindowPosition(sdl_window_, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
-                              SDL_WINDOWPOS_CENTERED_DISPLAY(display));
-      } else {
-        REXLOG_WARN("monitor cvar is {} but only {} display(s) present; using default",
-                    monitor_index, display_count);
-      }
-      SDL_free(displays);
-    }
-  }
+  CenterOnConfiguredDisplay();
 
   if (IsFullscreen()) {
     ApplyFullscreenModeNow();
@@ -240,6 +223,56 @@ void WindowSDL::ApplyNewFullscreen() {
   }
   ApplyFullscreenModeNow();
   SDL_SetWindowFullscreen(sdl_window_, IsFullscreen());
+}
+
+void WindowSDL::ApplyNewMonitor() {
+  if (!sdl_window_) {
+    return;
+  }
+  const bool was_fullscreen = IsFullscreen();
+  if (was_fullscreen) {
+    SDL_SetWindowFullscreen(sdl_window_, false);
+    SDL_SyncWindow(sdl_window_);
+  }
+  CenterOnConfiguredDisplay();
+  if (was_fullscreen) {
+    ApplyFullscreenModeNow();
+    SDL_SetWindowFullscreen(sdl_window_, true);
+  }
+}
+
+void WindowSDL::ApplyNewDesiredLogicalSize() {
+  if (!sdl_window_ || (SDL_GetWindowFlags(sdl_window_) &
+                       (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MINIMIZED))) {
+    return;
+  }
+#if REX_PLATFORM_MAC
+  SDL_SetWindowSize(sdl_window_, int(GetDesiredLogicalWidth()), int(GetDesiredLogicalHeight()));
+#else
+  SDL_SetWindowSize(sdl_window_, int(SizeToPhysical(GetDesiredLogicalWidth())),
+                    int(SizeToPhysical(GetDesiredLogicalHeight())));
+#endif
+}
+
+void WindowSDL::CenterOnConfiguredDisplay() {
+  const int32_t monitor_index = GetMonitor();
+  if (!sdl_window_ || monitor_index <= 0) {
+    return;
+  }
+  int display_count = 0;
+  SDL_DisplayID* displays = SDL_GetDisplays(&display_count);
+  if (!displays) {
+    return;
+  }
+  if (monitor_index <= display_count) {
+    SDL_DisplayID display = displays[monitor_index - 1];
+    SDL_SetWindowPosition(sdl_window_, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+  } else {
+    REXLOG_WARN("monitor cvar is {} but only {} display(s) present; using default", monitor_index,
+                display_count);
+  }
+  SDL_free(displays);
 }
 
 void WindowSDL::ApplyFullscreenModeNow() {

@@ -51,6 +51,8 @@ class WindowSDL final : public Window {
   void RequestCloseImpl() override;
 
   void ApplyNewFullscreen() override;
+  void ApplyNewMonitor() override;
+  void ApplyNewDesiredLogicalSize() override;
   void ApplyNewTitle() override;
   void ApplyNewMouseCapture() override;
   void ApplyNewMouseRelease() override;
@@ -73,6 +75,7 @@ class WindowSDL final : public Window {
   void DestroySDLWindow();
 
   void ApplyFullscreenModeNow();
+  void CenterOnConfiguredDisplay();
   void ApplyCursorVisibilityNow();
   void ApplyTextInputActiveNow();
   void RearmCursorAutoHideTimer();

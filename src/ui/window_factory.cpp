@@ -23,23 +23,13 @@ namespace rex::ui {
 
 namespace {
 
-void ResolveWindowSize(uint32_t& width, uint32_t& height) {
-  int32_t configured_width = REXCVAR_GET(window_width);
-  int32_t configured_height = REXCVAR_GET(window_height);
-  if (configured_width <= 0 || configured_height <= 0) {
-    rex::graphics::video_mode_util::ResolveConfiguredSize(configured_width, configured_height);
-  }
-  width = uint32_t(std::clamp(configured_width, 1, 8192));
-  height = uint32_t(std::clamp(configured_height, 1, 8192));
-}
-
 }  // namespace
 
 std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
                                        const std::string_view title) {
   uint32_t width = 0;
   uint32_t height = 0;
-  ResolveWindowSize(width, height);
+  ResolveConfiguredLogicalSize(width, height);
   return Create(app_context, title, width, height);
 }
 
