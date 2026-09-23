@@ -54,8 +54,10 @@ The private project configured, compiled and linked against the installed
 Release SDK. Full assets and a
 reproducible scene are still required for a game run.
 Boot/gameplay/save/audio/rendering and AMD/NVIDIA/Intel results remain `not-run`.
-AMD hardware is unavailable locally; Intel Arc coverage is also unavailable.
-The local Intel Graphics and RTX 5080 Laptop adapters are detected, not validated.
+The user confirms NVIDIA is the only available GPU test target. AMD and Intel
+GPU coverage is untested and non-blocking under
+[ADR-007](adr/ADR-007-local-gpu-validation-scope.md). Earlier adapter enumeration
+does not establish usable Intel GPU test coverage. NVIDIA remains unvalidated.
 April 2026 GDK deployment remains untested. RG-GDK-001 stays open until its
 acceptance and evidence requirements are satisfied.
 

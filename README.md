@@ -155,10 +155,11 @@ yet. Do not infer results from Canary/Edge reports. Start with RG-GDK-001 and th
 [baseline strategy](docs/regression-strategy.md), which supplies representative
 workloads, record fields, vendor matrix and comparison thresholds.
 
-GPU changes require deterministic buffer/shader tests and recorded runs on AMD,
-NVIDIA and Intel. Test Intel Arc/non-Arc separately. Include driver, Windows,
+GPU changes require deterministic buffer/shader tests and recorded NVIDIA runs.
+AMD and Intel GPU coverage is untested, non-blocking follow-up under
+[ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md). Include driver, Windows,
 GDK, exact SDK/title commits, module hashes, config, selected rendering path,
-screenshots/logs and PIX/DRED where useful. Unavailable material/hardware remains
+screenshots/logs and PIX/DRED where useful. Missing required test material remains
 blocked, never a pass. A project that builds has not thereby passed compatibility.
 
 ## Troubleshooting

@@ -1,5 +1,12 @@
 # Compatibility baseline and regression strategy
 
+**Current hardware scope:** per the user's 2026-09-23 decision and
+[ADR-007](adr/ADR-007-local-gpu-validation-scope.md), NVIDIA is the required local
+GPU target. AMD and Intel GPU runs are unavailable, untested and non-blocking.
+This supersedes mandatory cross-vendor completion gates in the original roadmap
+issue bodies and matrix below. Record the coverage gap without holding work or
+issue completion open solely for it. An Intel CPU is not Intel GPU validation.
+
 Baseline tooling and the first-title workflow are documented in
 [baseline capture](baseline-capture.md). Quantum of Solace is the initial title;
 its compatibility and vendor gates remain unverified.
@@ -112,8 +119,8 @@ Major ports need: unit/PPC pass; targeted synthetic failures fixed; previously
 working representative scenes remain working; no new unexplained image/audio
 differences, hangs or device removal; relevant vendor/deployment matrix complete;
 and a tested rollback. Run save tests on disposable copies. A build-only pass
-cannot close a compatibility migration. When hardware is unavailable, keep that
-gate blocked and the issue open.
+cannot close a compatibility migration. Unavailable AMD/Intel GPU coverage does
+not block completion; required NVIDIA and other acceptance gates still apply.
 
 ## Regression tracking index
 

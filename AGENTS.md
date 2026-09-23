@@ -71,6 +71,15 @@ implied by this document. Otherwise follow the user's scope.
 
 ## Porting, regression and compatibility policy
 
+Hardware scope override (user decision, 2026-09-23; ADR-007): NVIDIA is the
+required local GPU validation target. The user's Intel CPU does not establish
+Intel GPU testing availability. AMD and Intel GPU testing is unavailable and
+must be recorded as untested, non-blocking follow-up. Their absence must not
+prevent implementation, issue completion or local delivery. This supersedes
+older mandatory cross-vendor gates in these instructions and roadmap issues;
+do not claim AMD/Intel compatibility without evidence. Other acceptance gates
+remain required.
+
 Pin source SHA and PR head/merge state; read the diff, motivation, comments and
 follow-up regressions. A closed PR may be rejected. Compare existing behavior
 before calling something missing. Record source repo, commit, PR/issues, date,

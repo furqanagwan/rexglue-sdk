@@ -8,6 +8,9 @@ The fork must selectively modernize Xenia-derived compatibility while preserving
 
 ## Decision
 
+The mandatory cross-vendor hardware completion requirement is superseded by
+[ADR-007](ADR-007-local-gpu-validation-scope.md). Other regression gates remain.
+
 Compatibility evidence, not compilation, gates subsystem migration and release.
 
 ## Consequences and rejected alternatives

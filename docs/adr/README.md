@@ -8,3 +8,4 @@ Accepted destination/policy decisions; implementation status remains staged. Sha
 - [Static recompilation boundary](ADR-004-static-recompilation-boundary.md)
 - [Explicit compatibility scope](ADR-005-game-specific-compatibility-policy.md)
 - [Regression-controlled migration](ADR-006-regression-testing-policy.md)
+- [NVIDIA local validation scope](ADR-007-local-gpu-validation-scope.md)
