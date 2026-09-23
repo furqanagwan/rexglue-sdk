@@ -2,6 +2,22 @@
 
 Snapshot: 2026-09-23. These are evaluated candidates, not imported patches. A–H classifications are defined in [the investigation](investigation.md). “Unknown” regressions means none verified during this review, not proven absence. Issue/PR comments contain upstream observations; no local title outcome is inferred. See [roadmap](roadmap.md) for live ReXGlue issue links.
 
+## Local Edge synchronization, 2026-09-23
+
+The local `xenia-edge/edge` branch was fast-forwarded from `80a3b891de741f20ee034ccea7162ec6950138bf`
+to `94de4f676dd21b778010a7431c6f7a7d76b42c8b`. The user's origin and the read-only
+upstream Edge branch matched at fetch time. Seven incoming commits contain
+texture mip/pitch/bounds fixes, sub-32bpp tiled resolve and host depth sample
+layout corrections, XAM changes, and the Canary merge. These commits were
+already included in this investigation's snapshot: GPU candidates remain under
+RG-GDK-008/009 and XAM under RG-GDK-017. No roadmap reordering is needed.
+
+The XAM additions include stubs, not complete behavior. No incoming commit was
+ported into the SDK in this synchronization. Quantum of Solace is now the first
+title baseline; the changes are candidates to assess against measured failures,
+not evidence that the game needs every patch. Existing detailed provenance and
+regression records below remain applicable.
+
 ## Compact upstream-to-roadmap index
 
 All implementation statuses are **investigated, not ported**. The roadmap resolves planning IDs to actual issue numbers. Closed-unmerged entries are retained as rejected/research evidence.

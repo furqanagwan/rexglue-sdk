@@ -1,12 +1,18 @@
 # Compatibility baseline and regression strategy
 
-## Current baseline
+Baseline tooling and the first-title workflow are documented in
+[baseline capture](baseline-capture.md). Quantum of Solace is the initial title;
+its compatibility and vendor gates remain unverified.
+
+## Initial investigation snapshot
 
 No title execution, image comparison, audio capture, PIX capture or cross-vendor
 run was performed for this investigation. **Working: unknown. Partially working:
 unknown.** Upstream game reports are not local compatibility results. Local unit
-and PPC tests exist but were not executed: configure requires initialized
-submodules. ReXGlue source gaps and upstream risk reports are listed separately.
+and PPC tests had not yet been executed at that snapshot. Subsequent baseline
+implementation built Debug/Release and ran 1,671 discovered tests in each; see
+[current results and remaining skips](baseline-capture.md#sdk-build-and-test-evidence-2026-09-23).
+ReXGlue source gaps and upstream risk reports are listed separately.
 
 | Baseline field | Snapshot / status |
 | --- | --- |

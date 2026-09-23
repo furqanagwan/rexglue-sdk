@@ -5,8 +5,9 @@ runtime services needed by the resulting native title applications. This fork
 targets **Windows PC, Microsoft GDK April 2026, and Direct3D 12**, with validation
 across compatible AMD, NVIDIA and Intel GPUs.
 
-**Status:** this repository is at the investigation/roadmap stage of that
-modernization. The starting runtime is upstream ReXGlue v0.10.0
+**Status:** baseline tooling implementation has started, with
+[007: Quantum of Solace as the first title](docs/baseline-capture.md).
+The starting runtime is upstream ReXGlue v0.10.0
 (`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518`). D3D12 exists and is the Windows
 default; Vulkan, Linux and macOS code still exists pending replacement tests and
 removal. GDK integration, native API migrations and vendor/title compatibility

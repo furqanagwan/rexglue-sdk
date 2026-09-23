@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReXGlue baseline capture v1",
+  "type": "object",
+  "required": ["schema_version", "timestamp", "title", "status", "execution_status", "compatibility_status", "command", "host", "environment", "artifacts", "material", "reason"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "title": {"type": "string"},
+    "status": {"enum": ["pass", "fail", "blocked", "not-run"]},
+    "execution_status": {"enum": ["not-run", "completed", "failed", "timeout"]},
+    "compatibility_status": {"enum": ["pass", "fail", "blocked", "not-run"]},
+    "command": {"type": "array", "items": {"type": "string"}},
+    "host": {"type": "object"},
+    "environment": {"type": "object"},
+    "artifacts": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+    "material": {"type": ["object", "null"]},
+    "reason": {"type": ["string", "null"]},
+    "sdk_commit": {"type": "string"},
+    "sdk_worktree_status": {"type": "string"},
+    "working_directory": {"type": "string"},
+    "executable_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "metadata_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "exit_code": {"type": "integer"}
+  },
+  "additionalProperties": false
+}
