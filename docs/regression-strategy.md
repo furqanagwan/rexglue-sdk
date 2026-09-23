@@ -25,7 +25,8 @@ For future changes, preserve the first result, rerun the same scene and compare
 module/generated-code hashes, config, selected GPU path, logs and images. Use
 disposable saves for failure tests. A compile pass cannot upgrade a title or
 vendor result. Missing hardware results are marked untested; per the user's
-decision, AMD and Intel GPU coverage does not block local completion.
+[documented decision](adr/ADR-007-local-gpu-validation-scope.md), AMD and Intel
+GPU coverage does not block local completion.
 
 The known generated branch from `0x824A287C` to `0x821C1BF8` emits `REX_FATAL`.
 The observed boot crash is an illegal instruction at a different generated code

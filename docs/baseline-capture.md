@@ -84,7 +84,8 @@ tool development. The second reviewed manifest SHA-256 is
 `a209e63c111974e3efc25f6afe25a2065a2a9b1e9525dd6ae02575478f12c102`.
 The recorder tests repeat a synthetic fixture and compare its stdout hashes.
 The user confirms NVIDIA is the only available GPU test target. AMD and Intel
-GPU coverage is untested and non-blocking by the user's explicit decision.
+GPU coverage is untested and non-blocking by the user's explicit decision
+([ADR-007](adr/ADR-007-local-gpu-validation-scope.md)).
 Earlier adapter enumeration
 does not establish usable Intel GPU test coverage. NVIDIA remains unvalidated.
 April 2026 GDK deployment remains untested. RG-GDK-001 stays open until its
