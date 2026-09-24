@@ -1,5 +1,4 @@
 # Third-party vendored dependencies for ReXGlue
-include(${PROJECT_SOURCE_DIR}/cmake/rexglue_vulkan_stack.cmake)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
@@ -33,14 +32,6 @@ set(REQUIRED_SUBMODULES
     imgui
     sdl3
 )
-
-if(REXGLUE_USE_VULKAN)
-    list(APPEND REQUIRED_SUBMODULES
-        vulkan-headers vulkan-memory-allocator
-        spirv-headers spirv-tools glslang
-    )
-endif()
-
 
 if(REXGLUE_ENABLE_TRACY)
     list(APPEND REQUIRED_SUBMODULES tracy)
@@ -174,24 +165,6 @@ target_compile_options(spdlog PRIVATE -w)
 add_subdirectory(utfcpp)
 
 #=============================================================================
-# Vulkan dependencies (only when Vulkan backend is enabled)
-#=============================================================================
-if(REXGLUE_USE_VULKAN)
-    message(STATUS "Vulkan stack: SDK ${REXGLUE_VULKAN_SDK_VERSION}")
-
-    # Vulkan-Headers
-    set(VULKAN_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    set(VULKAN_HEADERS_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
-    set(VULKAN_HEADERS_ENABLE_MODULE OFF CACHE BOOL "" FORCE)
-    add_subdirectory(vulkan-headers)
-
-    # VulkanMemoryAllocator
-    set(VMA_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
-    add_subdirectory(vulkan-memory-allocator)
-
-endif()
-
-#=============================================================================
 # FidelityFX (optional, fetched on demand)
 #=============================================================================
 include(${PROJECT_SOURCE_DIR}/cmake/rexglue_fidelityfx.cmake)
@@ -223,7 +196,7 @@ set(SDL_TEST OFF CACHE BOOL "" FORCE)
 set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
 
 # Video provides the windowing/event layer; presenters create their own
-# D3D12/Vulkan surfaces from native handles, so SDL_RENDER stays off.
+# D3D12 surfaces from native handles, so SDL_RENDER stays off.
 set(SDL_VIDEO ON CACHE BOOL "" FORCE)
 set(SDL_METAL OFF CACHE BOOL "" FORCE)
 # Windows presenters create surfaces straight from the HWND.
@@ -259,39 +232,6 @@ if(REXGLUE_USE_D3D12)
     target_include_directories(dxc-headers INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dxc/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/dxc>)
-endif()
-
-#=============================================================================
-# SPIR-V toolchain (only when Vulkan backend is enabled)
-#=============================================================================
-if(REXGLUE_USE_VULKAN)
-    # SPIRV-Headers
-    set(SPIRV_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    set(SPIRV_HEADERS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-    add_subdirectory(spirv-headers)
-
-    add_library(spirv-tools-headers INTERFACE)
-    target_include_directories(spirv-tools-headers SYSTEM INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/spirv-tools/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-
-    # glslang/SPIRV - SPIR-V code generation for shader translation
-    set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
-    set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
-    set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
-    set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "" FORCE)
-    # Enable RTTI for spv::Builder inheritance in SpirvBuilder
-    set(ENABLE_RTTI ON CACHE BOOL "" FORCE)
-
-    # Set policy minimum for older glslang versions with outdated cmake_minimum_required
-    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
-    add_subdirectory(glslang)
-    # Create alias for older glslang versions that don't provide it
-    if(NOT TARGET glslang::SPIRV)
-        add_library(glslang::SPIRV ALIAS SPIRV)
-    endif()
 endif()
 
 #=============================================================================

@@ -47,9 +47,7 @@ class DynamicLibrary {
 
 namespace lib_names {
 
-inline constexpr const char* kVulkanLoader = "vulkan-1.dll";
 inline constexpr const char* kRenderDoc = "renderdoc.dll";
-inline constexpr const char* kSpirvToolsSdkPath = "Bin/SPIRV-Tools-shared.dll";
 
 }  // namespace lib_names
 
