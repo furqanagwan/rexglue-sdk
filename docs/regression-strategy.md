@@ -106,17 +106,53 @@ leave the debug layer off; use `--d3d12_dred` there to keep DRED breadcrumbs and
 page-fault capture for device-removal diagnosis. DRED is still forced on with
 the debug layer.
 
-`gpu_tests` (CTest label `gpu`) creates real devices and checks this metadata:
+`gpu_tests` (CTest label `gpu`) creates real devices and runs the GPU fixtures:
 
 ```powershell
 ctest --preset win-amd64-debug -L gpu -V
 ```
 
-The WARP cases run on any Windows host, including CI. The hardware case uses the
-default adapter selection and skips when only a software adapter exists. Select
-another adapter with `--d3d12_adapter=<index>` in a title run. These tests prove
-device creation and capability reporting only, not rendering correctness; the
-PM4/shader/readback fixture host is the remaining RG-GDK-006 work.
+- **Capability metadata:** WARP and hardware devices report the values above.
+  The hardware case skips when only a software adapter exists.
+- **Fixture host (`tests/gpu/gpu_fixture.*`):** starts a `Runtime` with no
+  title image, loads the `xenos` GPU plugin through the plugin ABI, places the
+  primary ring buffer in guest physical memory and advances `CP_RB_WPTR`
+  through the MMIO path, as a title does. `Flush()` waits for an
+  `EVENT_WRITE_SHD` fence, so results read back afterwards are ordered after
+  all submitted work. Each fixture prints the adapter metadata it ran on.
+- **PM4 fixtures:** `MEM_WRITE` with and without endian swap, type-0 register
+  writes read back with `REG_TO_MEM`, `INDIRECT_BUFFER` ordering, and fence
+  ordering.
+- **Resolve fixture:** an EDRAM color clear resolved through the resolve
+  compute shaders into guest memory with `readback_resolve=full`; every texel
+  must match the clear color.
+- **Device removal:** `gpu.device_removal_is_reported` removes the device with
+  `ID3D12Device5::RemoveDevice` and requires the backend's fatal
+  "Graphics device lost" report after the `DEVICE_REMOVED` reason is logged.
+  Device loss is fatal by design today (`GraphicsSystem::OnHostGpuLossFromAnyThread`);
+  device re-creation is not implemented.
+
+Fixture environment variables:
+
+| Variable | Effect |
+| --- | --- |
+| `REXGLUE_GPU_FIXTURE_ADAPTER` | DXGI adapter like `d3d12_adapter`; `-2` runs the fixtures on WARP |
+| `REXGLUE_GPU_FIXTURE_CVARS` | `name=value;...` cvars applied before the GPU starts, e.g. `render_target_path_d3d12=rov` |
+| `REXGLUE_GPU_FIXTURE_LOG` | Log file for diagnosing a failing fixture |
+
+Debug CRT assertions in `gpu_tests` go to stderr, so an unattended run fails
+instead of blocking on a dialog.
+
+Recorded fixture results (2026-09-24, debug and release):
+
+| Adapter | Driver | RT path | PM4 | Resolve | Device removal |
+| --- | --- | --- | --- | --- | --- |
+| NVIDIA RTX 5080 Laptop (0x10DE), FL 12_2, SM 6.8 | 32.0.16.1714 | host RT and ROV | Pass | Pass (0x11223344, 4096/4096 texels) | Pass |
+| WARP (0x1414), FL 12_1, SM 6.8 | 10.0.26100.9502 | host RT and ROV | Pass | Pass (4096/4096 texels) | Not run |
+
+AMD and Intel are untested and non-blocking (ADR-007). The fixtures do not yet
+cover guest shader translation through a draw; RG-GDK-008 to RG-GDK-012 add
+fixtures for the paths they change.
 
 ### D3D12 vendor exceptions
 

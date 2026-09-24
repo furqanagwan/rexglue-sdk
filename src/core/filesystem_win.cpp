@@ -43,9 +43,20 @@ std::filesystem::path to_path(const std::u16string_view source) {
 namespace filesystem {
 
 std::filesystem::path GetExecutablePath() {
-  wchar_t* path;
-  auto error = _get_wpgmptr(&path);
-  return !error ? std::filesystem::path(path) : std::filesystem::path();
+  // _wpgmptr is only set for wmain entry points; a plain main (Catch2, SDL)
+  // leaves it null and the debug CRT asserts. Ask the loader instead.
+  std::wstring path(MAX_PATH, L'\0');
+  while (true) {
+    DWORD length = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
+    if (length == 0) {
+      return std::filesystem::path();
+    }
+    if (length < path.size()) {
+      path.resize(length);
+      return std::filesystem::path(path);
+    }
+    path.resize(path.size() * 2);
+  }
 }
 
 std::filesystem::path GetExecutableFolder() {
