@@ -173,11 +173,13 @@ bool D3D12RenderTargetCache::Initialize() {
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
   ID3D12Device* device = provider.GetDevice();
 
+  const char* path_reason = "render_target_path_d3d12";
   if (REXCVAR_GET(render_target_path_d3d12) == "rtv") {
     path_ = Path::kHostRenderTargets;
   } else if (REXCVAR_GET(render_target_path_d3d12) == "rov") {
     path_ = Path::kPixelShaderInterlock;
   } else {
+    path_reason = "vendor default";
     // As of April 2021 (driver version 27.20.0100.9316), on Intel (tested on
     // UHD Graphics 630), the "always" stencil comparison function isn't working
     // properly, so clears in the Xbox 360's Direct3D 9 don't work. Forcing ROV
@@ -200,7 +202,10 @@ bool D3D12RenderTargetCache::Initialize() {
   }
   if (path_ == Path::kPixelShaderInterlock && !provider.AreRasterizerOrderedViewsSupported()) {
     path_ = Path::kHostRenderTargets;
+    path_reason = "ROV unsupported, fallback";
   }
+  REXGPU_INFO("D3D12 render target path: {} ({})",
+              path_ == Path::kPixelShaderInterlock ? "ROV" : "host render targets", path_reason);
 
   // Create the buffer for reinterpreting EDRAM contents.
   uint32_t edram_buffer_size =
@@ -374,6 +379,8 @@ bool D3D12RenderTargetCache::Initialize() {
       provider.IsPSSpecifiedStencilReferenceSupported() &&
       (REXCVAR_GET(native_stencil_value_output_d3d12_intel) ||
        provider.GetAdapterVendorID() != ui::GraphicsProvider::GpuVendorID::kIntel);
+  REXGPU_INFO("D3D12 pixel-shader stencil reference output: {}",
+              use_stencil_reference_output_ ? "yes" : "no");
 
   if (path_ == Path::kHostRenderTargets) {
     // Host render targets.

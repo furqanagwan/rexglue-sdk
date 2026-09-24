@@ -12,6 +12,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include <rex/ui/d3d12/d3d12_api.h>
 #include <rex/ui/graphics_provider.h>
@@ -34,6 +35,12 @@ class D3D12Provider : public GraphicsProvider {
   IDXGIFactory2* GetDXGIFactory() const { return dxgi_factory_; }
   // nullptr if PIX not attached.
   IDXGraphicsAnalysis* GetGraphicsAnalysis() const { return graphics_analysis_; }
+  bool IsDredEnabled() const { return dred_enabled_; }
+  // Metadata a GPU fixture result has to be recorded with to be reproducible.
+  const std::string& GetDriverVersion() const { return driver_version_; }
+  bool IsAdapterSoftware() const { return adapter_is_software_; }
+  D3D_FEATURE_LEVEL GetMaxFeatureLevel() const { return max_feature_level_; }
+  D3D_SHADER_MODEL GetHighestShaderModel() const { return highest_shader_model_; }
   ID3D12Device* GetDevice() const { return device_; }
   ID3D12CommandQueue* GetDirectQueue() const { return direct_queue_; }
 
@@ -166,6 +173,11 @@ class D3D12Provider : public GraphicsProvider {
   uint32_t virtual_address_bits_per_resource_;
   bool ps_specified_stencil_reference_supported_;
   bool rasterizer_ordered_views_supported_;
+  bool dred_enabled_ = false;
+  std::string driver_version_;
+  bool adapter_is_software_ = false;
+  D3D_FEATURE_LEVEL max_feature_level_ = D3D_FEATURE_LEVEL_11_0;
+  D3D_SHADER_MODEL highest_shader_model_ = D3D_SHADER_MODEL_5_1;
   bool unaligned_block_textures_supported_;
 };
 
