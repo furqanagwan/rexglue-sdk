@@ -1393,8 +1393,8 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
     }
   };
   JumpTableType tableType = JumpTableType::kAbsolute;
-  uint8_t indexReg = 0xFF;       // Current reg being traced (0xFF = stop tracing)
-  uint8_t finalIndexReg = 0xFF;  // Last valid indexReg for scanForBounds/output
+  uint8_t indexReg = 0xFF;           // Current reg being traced (0xFF = stop tracing)
+  uint8_t finalIndexReg = 0xFF;      // Last valid indexReg for scanForBounds/output
   uint8_t alternateIndexReg = 0xFF;  // The other lwzx operand if RB is a static table base.
   uint8_t loadRaReg = 0xFF;
   int shiftAmount = 0;
