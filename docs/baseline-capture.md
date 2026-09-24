@@ -1,5 +1,18 @@
 # Baseline capture workflow
 
+## Current checkpoint (2026-09-24)
+
+The baseline recorder, assessment and negative tests are in place. Windows x64
+Debug and Release SDK builds pass; the latest full CTest runs discovered 1,675
+tests per configuration, with four existing explicit BitStream skips. The
+private Quantum of Solace title reaches changing early 3D views on the NVIDIA
+D3D12 path. This is a **partial rendering observation**, not a gameplay, input,
+audio, save/load, visual-accuracy or GDK deployment pass. The interactive route
+is owned by [007 issue #16](https://github.com/furqanagwan/007/issues/16), and
+the GDK build/deployment gates are [RG-GDK-002](https://github.com/furqanagwan/rexglue-sdk/issues/2)
+and [RG-GDK-022](https://github.com/furqanagwan/rexglue-sdk/issues/22).
+The 2026-09-23 failure sequence below is retained as historical evidence.
+
 Implementation starts with RG-GDK-001. The first title is **007: Quantum of
 Solace**. Keep its ISO, extracted modules, generated code, saves and captures
 outside this repository. Work through boot, menus, a repeatable gameplay scene,
@@ -87,7 +100,8 @@ The user confirms NVIDIA is the only available GPU test target. AMD and Intel
 GPU coverage is untested and non-blocking by the user's explicit decision
 ([ADR-007](adr/ADR-007-local-gpu-validation-scope.md)).
 Earlier adapter enumeration
-does not establish usable Intel GPU test coverage. NVIDIA remains unvalidated.
+does not establish usable Intel GPU test coverage. At this 2026-09-23 checkpoint,
+NVIDIA rendering remained unvalidated.
 April 2026 GDK deployment remains untested. RG-GDK-001 stays open until its
 acceptance and evidence requirements are satisfied.
 
@@ -149,3 +163,40 @@ unvalidated. The invalid guest call requires a separate investigation.
 | `rg001-build-release.log` | `9cc1a6c6f4c5f4d0c47b1fc3aa205b991f71457bd7a8ff80974357dfb343fd5c` |
 | `rg001-ctest-debug-final.log` | `d32070d8afa06eda427c5196052d34174aeea9e12a9fe1c3e7278f3545a77ce1` |
 | `rg001-ctest-release-final.log` | `077e2b433f211d37d076b17c5ff94b6f311c63fcf4f6720f76ae2908fe503d71` |
+
+## NVIDIA D3D12 evidence after the initial boot failures
+
+The 007 project remains the only selected game workload. Its owner is
+`furqanagwan`; the private XEX hash and title/media IDs above are unchanged.
+The SDK host/runtime and title configuration are tracked separately, so no
+game payload or private screenshot is committed here. Two 45-second launch
+runs after the relative-path fix reached their timeout without a fatal or
+`scaleform` path failure. Their recorder statuses are `fail`/`timeout` by
+design; a timeout is not a compatibility pass. These runs used an SDK worktree
+with the relative-path fix before merge, so they are diagnostic rather than a
+clean-revision last-good baseline.
+
+| Private evidence under `../007/Quantum of Solace/` | SHA-256 | Finding |
+| --- | --- | --- |
+| `baseline/rgfix003-boot-3/run.json` | `f5b93058c5abab9aca547f41a7f4a1fd810daee00ff0bc2ddc4cff4679d7bc62` | Repeated 45-second boot capture |
+| `baseline/rgfix003-boot-4/run.json` | `1af4ed78670a87b49b01e1c78e43f6e089aa54e53e1412cfa41821291c8c3c5b` | Repeated 45-second boot capture |
+| `recompiled/out/build/win-amd64-release/logs/quantumofsolace_058.log` | `fbd9708aed5421a0783721245232fcd4e76f62373c97b9c8f8bdb96c79480a96` | Final diagnostic boot log |
+| `baseline/rg007004-window-visual-1.png` | `c35de3155c9df028be5fcc8ea07731affe6c4aa8b1d122f35ef346b548667834` | Early 1280×720 D3D12 view |
+| `baseline/rg007004-window-visual-5.png` | `ab0e88ecc9b4b858eb2dbbd57a4028a45f379c1b3afe1796803362daf04ee279` | A later view of the changing scene |
+| `baseline/rg007005-window-1.png` | `b307d307e8add5c31ca2a326ad3acaa3dc8a16202155a44c37208dc0bc33fb7d` | Later mission-interface observation; input response inconclusive |
+
+The window crops were taken during separate live observations and are not
+claimed as artifacts of the timed recorder runs. [007's rendering record](https://github.com/furqanagwan/007/blob/main/docs/RG-007-004.md)
+and [interactive checkpoint](https://github.com/furqanagwan/007/blob/RG-007-005/docs/RG-007-005.md)
+contain the event sequence and limitations. The local adapter was NVIDIA RTX
+5080 Laptop GPU, driver `32.0.16.1714`; the D3D12 Xenos plugin was selected.
+RTV/ROV path and visual parity are not established. AMD and Intel GPU runs are
+unavailable locally and non-blocking under ADR-007. A GDK-packaged run has not
+occurred. No test here implies support for additional titles.
+
+On 2026-09-24, following [RG-GDK-003's merged import fix](https://github.com/furqanagwan/rexglue-sdk/pull/48),
+both full Windows x64 Debug and Release SDK builds passed. Each CTest run
+discovered 217 unit and 1,458 PPC cases (1,675 total); all runnable cases
+passed and four pre-existing BitStream tests were explicitly skipped. Six
+baseline recorder/assessment Python tests passed. These are current SDK
+build/test results, not a rerun of the private title on that exact revision.
