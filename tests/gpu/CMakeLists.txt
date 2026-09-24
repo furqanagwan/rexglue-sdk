@@ -4,10 +4,14 @@
 
 add_executable(gpu_tests
     d3d12_provider_test.cpp
+    gpu_fixture.cpp
+    pm4_fixture_test.cpp
+    resolve_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(gpu_tests PRIVATE
@@ -24,6 +28,15 @@ set_target_properties(gpu_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>
 )
 
+# The fixture host loads the GPU plugin through the plugin ABI, like a title.
+add_dependencies(gpu_tests rexgpu-xenos)
+add_custom_command(TARGET gpu_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:rexgpu-xenos>
+        $<TARGET_FILE_DIR:gpu_tests>
+    VERBATIM
+)
+
 include(Catch)
 catch_discover_tests(gpu_tests
     TEST_PREFIX "gpu."
@@ -31,4 +44,15 @@ catch_discover_tests(gpu_tests
         LABELS "gpu"
         TIMEOUT 60
         SKIP_RETURN_CODE 4
+)
+
+# Device loss is fatal in the backend, so the removal fixture runs as its own
+# process and passes on the fatal-error report rather than on its exit code.
+add_test(NAME gpu.device_removal_is_reported
+    COMMAND gpu_tests "[.device-removal]")
+set_tests_properties(gpu.device_removal_is_reported PROPERTIES
+    LABELS "gpu"
+    TIMEOUT 60
+    PASS_REGULAR_EXPRESSION "FATAL ERROR: Graphics device lost"
+    SKIP_REGULAR_EXPRESSION "GPU fixture host unavailable"
 )

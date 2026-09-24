@@ -325,7 +325,7 @@
     "risk": "Capability defaults or diagnostics could select an unsupported path, perturb performance measurements or hide device-loss causes.",
     "number": 6,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/6",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-007",
