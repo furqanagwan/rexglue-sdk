@@ -586,4 +586,9 @@ bool GetResolveInfo(const RegisterFile& regs, const memory::Memory& memory,
                     bool fixed_rg16_truncated_to_minus_1_to_1,
                     bool fixed_rgba16_truncated_to_minus_1_to_1, ResolveInfo& info_out);
 
+// Returns log2 of the copy destination texel size in bytes from a resolve's
+// copy_dest_info (format already normalized by GetResolveInfo) - the same
+// derivation GetResolveInfo used for the destination extent.
+uint32_t GetResolveDownscalePixelSizeLog2(reg::RB_COPY_DEST_INFO copy_dest_info);
+
 }  // namespace rex::graphics::draw_util

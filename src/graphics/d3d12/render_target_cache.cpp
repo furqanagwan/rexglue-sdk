@@ -1168,7 +1168,8 @@ void D3D12RenderTargetCache::WriteEdramUintPow2UAVDescriptor(D3D12_CPU_DESCRIPTO
 
 bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMemory& shared_memory,
                                      D3D12TextureCache& texture_cache,
-                                     uint32_t& written_address_out, uint32_t& written_length_out) {
+                                     uint32_t& written_address_out, uint32_t& written_length_out,
+                                     reg::RB_COPY_DEST_INFO* copy_dest_info_out) {
   written_address_out = 0;
   written_length_out = 0;
 
@@ -1180,6 +1181,11 @@ bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMe
                                  draw_resolution_scale_y(), fixed_16_truncated_to_minus_1_to_1,
                                  fixed_16_truncated_to_minus_1_to_1, resolve_info)) {
     return false;
+  }
+  if (copy_dest_info_out) {
+    // The format is normalized to the xenos::TextureFormat used for the copy
+    // (the depth format for depth copies, where the register may hold k_8).
+    *copy_dest_info_out = resolve_info.copy_dest_info;
   }
 
   // Nothing to copy/clear.

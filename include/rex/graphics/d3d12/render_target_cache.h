@@ -74,10 +74,11 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
 
   // Performs the resolve to a shared memory area according to the current
   // register values, and also clears the render targets if needed. Must be in a
-  // frame for calling.
+  // frame for calling. copy_dest_info_out receives the destination info with
+  // the format normalized by GetResolveInfo, as used for the written extent.
   bool Resolve(const memory::Memory& memory, D3D12SharedMemory& shared_memory,
                D3D12TextureCache& texture_cache, uint32_t& written_address_out,
-               uint32_t& written_length_out);
+               uint32_t& written_length_out, reg::RB_COPY_DEST_INFO* copy_dest_info_out = nullptr);
 
   // For host render targets.
 

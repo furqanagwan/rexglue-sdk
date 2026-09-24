@@ -45,13 +45,17 @@ struct ResolveTarget {
   xenos::MsaaSamples msaa = xenos::MsaaSamples::k1X;
 };
 
-// Writes the resolve rectangle (0, 0)-(width, height) for vertex fetch 0.
-uint32_t AllocRectangle(GpuFixture& fixture, uint32_t width, uint32_t height) {
+// Writes the resolve rectangle (x0, y0)-(x1, y1) for vertex fetch 0.
+uint32_t AllocRectangle(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1) {
   uint32_t vertices = fixture.AllocPhysical(0x100);
-  fixture.WriteDwords(
-      vertices, {0, 0, std::bit_cast<uint32_t>(float(width)), 0,
-                 std::bit_cast<uint32_t>(float(width)), std::bit_cast<uint32_t>(float(height))});
+  fixture.WriteDwords(vertices,
+                      {std::bit_cast<uint32_t>(float(x0)), std::bit_cast<uint32_t>(float(y0)),
+                       std::bit_cast<uint32_t>(float(x1)), std::bit_cast<uint32_t>(float(y0)),
+                       std::bit_cast<uint32_t>(float(x1)), std::bit_cast<uint32_t>(float(y1))});
   return vertices;
+}
+uint32_t AllocRectangle(GpuFixture& fixture, uint32_t width, uint32_t height) {
+  return AllocRectangle(fixture, 0, 0, width, height);
 }
 
 // Direct3D 9 resolves by drawing a 3-vertex rectangle list with RB_MODECONTROL
@@ -201,6 +205,92 @@ TEST_CASE("Sub-32bpp resolve keeps the macro tile phase of the base", "[gpu][res
   std::printf("bpp_log2 %u phase %u: %u missing, %u stray bytes\n", test.bpp_log2, test.phase,
               missing, stray);
   CHECK(missing == 0);
+  CHECK(stray == 0);
+}
+
+// A uniform clear can't show texels read back from the wrong place, so this
+// resolves a 4x4 grid of 8x8 cells, each with its own color, into the same
+// destination. Each cell's texels must hold one value, distinct per cell, at
+// the addresses the tiling oracle gives. Run with draw_resolution_scale_* to
+// cover the scaled readback (#58).
+TEST_CASE("Resolve readback keeps texel positions", "[gpu][resolve]") {
+  struct Case {
+    xenos::ColorFormat format;
+    uint32_t bpp_log2;
+    uint32_t phase;
+  };
+  auto test =
+      GENERATE(Case{xenos::ColorFormat::k_8, 0, 0}, Case{xenos::ColorFormat::k_8, 0, 1},
+               Case{xenos::ColorFormat::k_5_6_5, 1, 0}, Case{xenos::ColorFormat::k_5_6_5, 1, 1},
+               Case{xenos::ColorFormat::k_8_8_8_8, 2, 0});
+  std::string error;
+  auto fixture = GpuFixture::Create(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
+  INFO("bpp_log2 " << test.bpp_log2 << ", phase " << test.phase);
+
+  constexpr uint32_t kCells = 4;
+  constexpr uint32_t kCellSize = 8;
+  constexpr uint32_t kHeight = kCells * kCellSize;
+  constexpr uint32_t kPitch = 128;
+  constexpr uint32_t kBytes = 0x8000;
+  uint32_t surface = fixture->AllocPhysical(kBytes);
+  uint32_t macro_tile_bytes = uint32_t(1)
+                              << (2 * xenos::kTextureTileWidthHeightLog2 + test.bpp_log2);
+  ResolveTarget target{surface + test.phase * macro_tile_bytes, kPitch, kHeight, test.format};
+  for (uint32_t cell = 0; cell < kCells * kCells; ++cell) {
+    uint32_t x = (cell % kCells) * kCellSize, y = (cell / kCells) * kCellSize;
+    uint32_t vertices = AllocRectangle(*fixture, x, y, x + kCellSize, y + kCellSize);
+    // Channels of 15 * (cell + 1) stay distinct even when packed to 5 bits.
+    uint32_t color = 0x01010101 * (15 * (cell + 1));
+    SubmitResolve(*fixture, vertices, target, color);
+    SubmitResolve(*fixture, vertices, target, color);
+  }
+  REQUIRE(fixture->Flush());
+
+  const uint8_t* actual = fixture->memory()->TranslatePhysical<const uint8_t*>(surface);
+  uint32_t bytes_per_texel = uint32_t(1) << test.bpp_log2;
+  std::vector<bool> covered(kBytes, false);
+  std::vector<std::vector<uint8_t>> cell_values(kCells * kCells);
+  uint32_t mismatches = 0;
+  for (uint32_t y = 0; y < kHeight; ++y) {
+    for (uint32_t x = 0; x < kCells * kCellSize; ++x) {
+      int32_t offset = rex::graphics::texture_util::GetTiledOffset2D(
+          int32_t(x + test.phase * xenos::kTextureTileWidthHeight), int32_t(y), kPitch,
+          test.bpp_log2);
+      REQUIRE(uint32_t(offset) + bytes_per_texel <= kBytes);
+      std::vector<uint8_t> texel(actual + offset, actual + offset + bytes_per_texel);
+      std::fill_n(covered.begin() + offset, bytes_per_texel, true);
+      std::vector<uint8_t>& expected = cell_values[(y / kCellSize) * kCells + x / kCellSize];
+      if (expected.empty()) {
+        expected = texel;
+      } else if (texel != expected) {
+        ++mismatches;
+      }
+    }
+  }
+  uint32_t stray = 0;
+  for (uint32_t i = 0; i < kBytes; ++i) {
+    if (!covered[i] && actual[i]) {
+      ++stray;
+    }
+  }
+  uint32_t duplicates = 0;
+  for (uint32_t a = 0; a < cell_values.size(); ++a) {
+    CHECK(std::any_of(cell_values[a].begin(), cell_values[a].end(),
+                      [](uint8_t v) { return v != 0; }));
+    for (uint32_t b = a + 1; b < cell_values.size(); ++b) {
+      duplicates += cell_values[a] == cell_values[b];
+    }
+  }
+  std::printf(
+      "positions bpp_log2 %u phase %u: %u texels off their cell, %u duplicate cells, %u stray "
+      "bytes\n",
+      test.bpp_log2, test.phase, mismatches, duplicates, stray);
+  CHECK(mismatches == 0);
+  CHECK(duplicates == 0);
   CHECK(stray == 0);
 }
 
