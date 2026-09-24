@@ -21,6 +21,27 @@ for this title. The separate `functionPointerScan` is disabled in
 `src/codegen/analyze.cpp` because it produced too many false positives.
 These facts do not yet establish how each missing pointer is stored.
 
+## Private XEX probe, 2026-09-24
+
+A temporary read-only probe over decoded non-executable sections found all
+seven sampled missing targets as big-endian pointers in `.rdata`. Example:
+`0x82462590` at `0x82096A18` is between pointers to registered code, and
+`0x8211E798` occurs in five `.rdata` locations with registered code pointers
+on both sides. `0x821C1C20` also occurs in `.data` as part of the known
+jump table, so a generic executable-pointer scan would conflate different
+structures. Raw pointer logs remain private with the title material.
+
+An experimental rule after gap filling selected unknown executable addresses
+in `.rdata` only when at least two of the four adjacent dwords were already
+registered functions. Without title hints it proposed 49 unique entries and
+included all seven sampled missing targets. Registering all 49 is **rejected**:
+although codegen completed, it introduced unresolved conditional branches
+from `0x8211E7AC`, `0x8211E7EC`, `0x824E16C8`, `0x824E16F0`, and
+`0x824E1718`, plus an unresolved branch/function involving `0x825BC4D4`.
+The experiment was local and fully reverted; no generated experimental title
+binary was used for compatibility testing. Neighboring registered pointers
+alone are not sufficient evidence of safe function boundaries.
+
 ## Required diagnosis before changing discovery
 
 1. Trace an observed target from guest memory through its indirect call site
