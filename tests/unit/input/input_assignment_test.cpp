@@ -1,8 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <barrier>
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include <rex/input/device_assignment.h>
@@ -43,7 +47,7 @@ std::vector<DeviceId> For(const DeviceAssignment& a, uint32_t user) {
 }
 
 /// Exercises assignment with no SDL, window, or OS behind it.
-class FakeDriver final : public InputDriver {
+class FakeDriver : public InputDriver {
  public:
   FakeDriver() : InputDriver(nullptr, 0) {}
 
@@ -125,6 +129,46 @@ std::unique_ptr<InputSystem> SharedSystem(FakeDriver** out_driver) {
 }
 
 }  // namespace
+
+TEST_CASE("Concurrent input polls serialize device refresh", "[input]") {
+  class ConcurrentDriver final : public FakeDriver {
+   public:
+    void EnumerateDevices(std::vector<DeviceInfo>& out) override {
+      int count = active.fetch_add(1) + 1;
+      int previous = maximum.load();
+      while (count > previous && !maximum.compare_exchange_weak(previous, count)) {
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      FakeDriver::EnumerateDevices(out);
+      active.fetch_sub(1);
+    }
+
+    std::atomic<int> active{0};
+    std::atomic<int> maximum{0};
+  };
+
+  auto driver = std::make_unique<ConcurrentDriver>();
+  auto* observed = driver.get();
+  driver->Add(1);
+  auto system = std::make_unique<InputSystem>(nullptr);
+  system->AddDriver(std::move(driver));
+  system->SetDeviceAssignment(std::make_unique<SharedAssignment>());
+
+  std::barrier start(3);
+  auto poll = [&] {
+    start.arrive_and_wait();
+    for (int i = 0; i < 4; ++i) {
+      X_INPUT_STATE state = {};
+      system->GetState(0, &state);
+    }
+  };
+  std::thread first(poll);
+  std::thread second(poll);
+  start.arrive_and_wait();
+  first.join();
+  second.join();
+  REQUIRE(observed->maximum.load() == 1);
+}
 
 TEST_CASE("SharedAssignment puts every device on user 0", "[input]") {
   SharedAssignment shared;
