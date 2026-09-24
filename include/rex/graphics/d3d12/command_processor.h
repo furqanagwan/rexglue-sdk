@@ -601,7 +601,7 @@ class D3D12CommandProcessor : public CommandProcessor {
     uint32_t scale_x;
     uint32_t scale_y;
     uint32_t pixel_size_log2;
-    uint32_t tile_count;
+    uint32_t length_dwords;
     uint32_t half_pixel_offset;
   };
   enum class ResolveDownscaleRootParameter : UINT {

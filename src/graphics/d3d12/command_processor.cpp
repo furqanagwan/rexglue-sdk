@@ -2888,8 +2888,9 @@ bool D3D12CommandProcessor::IssueCopy() {
 
 bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   uint32_t written_address, written_length;
+  reg::RB_COPY_DEST_INFO copy_dest_info;
   if (!render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_, written_address,
-                                     written_length)) {
+                                     written_length, &copy_dest_info)) {
     return false;
   }
 
@@ -2902,6 +2903,8 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool is_scaled = texture_cache_->IsDrawResolutionScaled();
+  // Scaled readback covers whole scaled addressing groups only (see below).
+  uint32_t readback_length = written_length;
   uint64_t resolve_key = MakeReadbackResolveKey(written_address, written_length);
   ReadbackBuffer& rb = readback_buffers_[resolve_key];
   rb.last_used_frame = frame_current_;
@@ -2946,29 +2949,52 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
       return true;
     }
 
-    reg::RB_COPY_DEST_INFO copy_dest_info = register_file_->Get<reg::RB_COPY_DEST_INFO>();
-    const FormatInfo* format_info = FormatInfo::Get(uint32_t(copy_dest_info.copy_dest_format));
-    uint32_t bits_per_pixel = format_info->bits_per_pixel;
-    if (bits_per_pixel != 8 && bits_per_pixel != 16 && bits_per_pixel != 32 &&
-        bits_per_pixel != 64) {
+    // As in xenia-canary a635ac64f, the texel size comes from the normalized
+    // destination info the extent was calculated with, and the source window
+    // starts at the written extent's scaled address. The shader reads the
+    // scaled layout of this repository's resolve shaders (see
+    // resolve_downscale.cs.hlsl).
+    uint32_t pixel_size_log2 = draw_util::GetResolveDownscalePixelSizeLog2(copy_dest_info);
+    if (pixel_size_log2 > 3) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to a 128bpp destination - not "
+          "supported by the downscale shader");
       return true;
     }
+    // Keep the start aligned to whole scaled units (Canary's 128-byte groups
+    // are a multiple of them).
+    uint32_t group_bytes_log2 = pixel_size_log2 <= 2 ? 7 : 6;
+    if (written_address & ((UINT32_C(1) << group_bytes_log2) - 1)) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to 0x{:08X} - not aligned to the "
+          "scaled addressing group size",
+          written_address);
+      return true;
+    }
+    // Units map independently, so any whole number of groups can be read back
+    // (Canary truncates to whole 32x32 tiles instead).
+    readback_length = written_length & ~((UINT32_C(1) << group_bytes_log2) - 1);
+    if (!readback_length) {
+      return true;
+    }
+    uint32_t tile_size_1x = (32 * 32) << pixel_size_log2;
+    uint32_t tile_count = (readback_length + tile_size_1x - 1) / tile_size_1x;
 
-    uint32_t pixel_size_log2;
-    if (!rex::bit_scan_forward(bits_per_pixel >> 3, &pixel_size_log2)) {
+    uint32_t scale_area =
+        texture_cache_->draw_resolution_scale_x() * texture_cache_->draw_resolution_scale_y();
+    uint64_t scaled_address = uint64_t(written_address) * scale_area;
+    uint64_t scaled_length_64 = uint64_t(readback_length) * scale_area;
+    uint64_t range_start = texture_cache_->GetCurrentScaledResolveRangeStartScaled();
+    uint64_t range_length = texture_cache_->GetCurrentScaledResolveRangeLengthScaled();
+    if (!range_length || scaled_address < range_start ||
+        scaled_address + scaled_length_64 > range_start + range_length) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to 0x{:08X} - outside the current "
+          "scaled resolve range",
+          written_address);
       return true;
     }
-    uint32_t tile_size_1x = 32 * 32 * (uint32_t(1) << pixel_size_log2);
-    uint32_t tile_count = written_length / tile_size_1x;
-    if (!tile_count) {
-      return true;
-    }
-
-    uint32_t scaled_length = uint32_t(texture_cache_->GetCurrentScaledResolveRangeLengthScaled());
-    uint64_t scaled_address = texture_cache_->GetCurrentScaledResolveRangeStartScaled();
-    if (!scaled_length) {
-      return true;
-    }
+    uint32_t scaled_length = uint32_t(scaled_length_64);
 
     uint32_t downscale_buffer_size = AlignReadbackBufferSize(written_length);
     if (downscale_buffer_size > resolve_downscale_buffer_size_) {
@@ -3021,10 +3047,11 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     ui::d3d12::util::CreateBufferRawSRV(device, downscale_descriptors[0].first,
                                         scaled_resolve_buffer, aligned_scaled_length,
                                         source_offset);
-    uint32_t aligned_written_length =
-        rex::align(written_length, uint32_t(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
+    uint32_t aligned_readback_length =
+        rex::align(readback_length, uint32_t(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
     ui::d3d12::util::CreateBufferRawUAV(device, downscale_descriptors[1].first,
-                                        resolve_downscale_buffer_.Get(), aligned_written_length, 0);
+                                        resolve_downscale_buffer_.Get(), aligned_readback_length,
+                                        0);
 
     PushUAVBarrier(scaled_resolve_buffer);
     texture_cache_->TransitionCurrentScaledResolveRange(
@@ -3037,7 +3064,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     constants.scale_x = texture_cache_->draw_resolution_scale_x();
     constants.scale_y = texture_cache_->draw_resolution_scale_y();
     constants.pixel_size_log2 = pixel_size_log2;
-    constants.tile_count = tile_count;
+    constants.length_dwords = readback_length >> 2;
     constants.half_pixel_offset = (REXCVAR_GET(readback_resolve_half_pixel_offset) &&
                                    (constants.scale_x > 1 || constants.scale_y > 1))
                                       ? 1u
@@ -3056,7 +3083,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
                           D3D12_RESOURCE_STATE_COPY_SOURCE);
     SubmitBarriers();
     deferred_command_list_.D3DCopyBufferRegion(rb.buffers[write_index], 0,
-                                               resolve_downscale_buffer_.Get(), 0, written_length);
+                                               resolve_downscale_buffer_.Get(), 0, readback_length);
     PushTransitionBarrier(resolve_downscale_buffer_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE,
                           D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     texture_cache_->TransitionCurrentScaledResolveRange(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -3080,7 +3107,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool is_cache_miss = false;
-  if (use_delayed_sync && (!rb.buffers[read_index] || written_length > rb.sizes[read_index] ||
+  if (use_delayed_sync && (!rb.buffers[read_index] || readback_length > rb.sizes[read_index] ||
                            !rb.mapped_data[read_index])) {
     is_cache_miss = true;
     read_index = write_index;
@@ -3090,11 +3117,11 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool should_copy = (readback_mode == ReadbackResolveMode::kSome) ? is_cache_miss : true;
-  if (should_copy && rb.buffers[read_index] && written_length <= rb.sizes[read_index] &&
+  if (should_copy && rb.buffers[read_index] && readback_length <= rb.sizes[read_index] &&
       rb.mapped_data[read_index]) {
     uint8_t* destination = memory_->TranslatePhysical(written_address);
     if (destination) {
-      std::memcpy(destination, static_cast<uint8_t*>(rb.mapped_data[read_index]), written_length);
+      std::memcpy(destination, static_cast<uint8_t*>(rb.mapped_data[read_index]), readback_length);
     }
   }
 

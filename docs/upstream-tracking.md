@@ -397,6 +397,16 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Tests: `tests/unit/graphics/texture_layout_test.cpp` (`[texture_layout]`): hand-derived D3D offsets for 2D array, 3D and packed 3D mips and linear row pitches, plus a per-texel `GetTiledOffset2D/3D` oracle that the 2D/3D bounds must contain (and match exactly for whole 32x32x4 tiles). Every case except the whole-tile tightness check fails on the pre-port code.
 - Regression evidence: none known upstream at adoption.
 
+### xenia-canary/xenia-canary a635ac64f — [GPU] Scaled resolve readback through downscale CS
+
+- Source: xenia-canary commit `a635ac64f5ca37c0b789e8b4166b53dc673b213f` (2026-07-06, `goldislead`), present in Edge at `94de4f676`.
+- Classification: correctness; A/B applicability. **Partially adopted 2026-09-24 for #58.**
+- Adopted: texel size from the resolve's normalized `copy_dest_info` (`draw_util::GetResolveDownscalePixelSizeLog2`, `Resolve(..., copy_dest_info_out)`), the source window at the written extent's scaled address instead of the scaled range start, and skipping 128bpp, unaligned and out-of-range extents.
+- Not adopted: the shader's group layout. Canary reads the scaled layout introduced by `0f23f0568` (2026-01-13); this repository's resolve shaders are byte-identical in disassembly to Canary `04d5c40d0` (2025-08-19), which writes Nx1 units. `resolve_downscale.cs.hlsl` reverses the Nx1 layout instead. Reading the group layout passes at 2x but misplaces texels at 3x.
+- Local changes: the extent is limited in dwords rather than truncated to whole 32x32 tiles, so a resolve ending inside a tile reads back completely. The HLSL shifts before masking because fxc 10.1 compiles `(a & mask(n + s)) >> s` into a `ubfe` of width `n + s`, which shifted 16bpp and 32bpp texels by one unit.
+- Tests: `Resolve readback keeps texel positions` and `gpu.resolve_readback_scaled_3x2`; see `docs/regression-strategy.md`.
+- Follow-up: syncing the resolve and texture-load shaders to Canary's current layout needs the downscale shader to move with them.
+
 ### xenia-canary/xenia-canary #1240 — [GPU] Fix tiled resolve offsets below 32bpp
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1240](https://github.com/xenia-canary/xenia-canary/pull/1240); created 2026-09-21T04:23:51Z; updated 2026-09-21T04:50:35Z; author `goldislead`.

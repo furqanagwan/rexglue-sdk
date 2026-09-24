@@ -56,3 +56,15 @@ set_tests_properties(gpu.device_removal_is_reported PROPERTIES
     PASS_REGULAR_EXPRESSION "FATAL ERROR: Graphics device lost"
     SKIP_REGULAR_EXPRESSION "GPU fixture host unavailable"
 )
+
+# Resolves at a non-power-of-two resolution scale, read back through the
+# downscale shader (#58). 3x2 exercises both axes and the unit arithmetic that
+# power-of-two scales can hide.
+add_test(NAME gpu.resolve_readback_scaled_3x2
+    COMMAND gpu_tests "[resolve]")
+set_tests_properties(gpu.resolve_readback_scaled_3x2 PROPERTIES
+    LABELS "gpu"
+    TIMEOUT 120
+    SKIP_RETURN_CODE 4
+    ENVIRONMENT "REXGLUE_GPU_FIXTURE_CVARS=draw_resolution_scale_x=3\;draw_resolution_scale_y=2"
+)
