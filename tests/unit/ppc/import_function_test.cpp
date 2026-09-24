@@ -26,8 +26,7 @@ alignas(64) static uint8_t g_test_mem[0x10000] = {};
 static uint32_t g_share_access = 0;
 static uint32_t g_open_options = 0;
 
-static u32 CaptureNtOpenFileRegisters(mapped_u32, u32,
-                                      ppc_ptr_t<rex::system::X_OBJECT_ATTRIBUTES>,
+static u32 CaptureNtOpenFileRegisters(mapped_u32, u32, ppc_ptr_t<rex::system::X_OBJECT_ATTRIBUTES>,
                                       ppc_ptr_t<rex::system::X_IO_STATUS_BLOCK>, u32 share_access,
                                       u32 open_options) {
   g_share_access = share_access;

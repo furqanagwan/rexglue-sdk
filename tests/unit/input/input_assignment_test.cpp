@@ -136,8 +136,7 @@ TEST_CASE("Concurrent input polls serialize device refresh", "[input]") {
     void EnumerateDevices(std::vector<DeviceInfo>& out) override {
       int count = active.fetch_add(1) + 1;
       int previous = maximum.load();
-      while (count > previous && !maximum.compare_exchange_weak(previous, count)) {
-      }
+      while (count > previous && !maximum.compare_exchange_weak(previous, count)) {}
       std::this_thread::sleep_for(std::chrono::milliseconds(5));
       FakeDriver::EnumerateDevices(out);
       active.fetch_sub(1);
