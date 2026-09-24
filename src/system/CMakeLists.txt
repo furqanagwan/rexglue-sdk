@@ -84,10 +84,10 @@ target_link_libraries(rexruntime
         spdlog::spdlog
         tomlplusplus
         SDL3::SDL3
+        xxHash::xxhash # Public rex/hash.h is also exposed by the runtime SDK.
     PRIVATE
         aes128
         mspack
-        xxHash::xxhash
 )
 
 if(REXGLUE_ENABLE_TRACY)

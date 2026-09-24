@@ -31,6 +31,12 @@ Latest SDK builds and releases are published on [GitHub Releases](https://github
 
 ## Quickstart
 
+For the Windows D3D12 compatibility baseline and the first Quantum of Solace
+run, see [baseline capture](docs/baseline-capture.md). The title currently fails
+on initial boot; no game or GPU compatibility claim is made.
+Only NVIDIA GPU testing is available locally; AMD and Intel coverage is
+non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md).
+
 For quick start guide, full CLI reference, and config file options, see the [wiki](https://github.com/rexglue/rexglue-sdk/wiki).
 
 # **Disclaimer**
