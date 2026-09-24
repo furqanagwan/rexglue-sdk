@@ -31,19 +31,11 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
 
 # Graphics backend selection
-# D3D12: ON by default.
-# Vulkan: OFF by default; scheduled for removal by RG-GDK-023.
-option(REXGLUE_USE_D3D12  "Enable D3D12 graphics backend" ON)
-option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" OFF)
-
-if(NOT REXGLUE_USE_D3D12 AND NOT REXGLUE_USE_VULKAN)
-    message(FATAL_ERROR "At least one graphics backend must be enabled (REXGLUE_USE_D3D12 or REXGLUE_USE_VULKAN)")
-endif()
-
-if (REXGLUE_ENABLE_FIDELITYFX AND
-    NOT (REXGLUE_USE_VULKAN OR REXGLUE_USE_D3D12))
-    message(FATAL_ERROR
-        "REXGLUE_ENABLE_FIDELITYFX requires at least one graphics backend")
+# D3D12 is the only graphics backend (Vulkan was removed by RG-GDK-023).
+# REXGLUE_USE_D3D12 stays defined for existing build logic and consumers.
+set(REXGLUE_USE_D3D12 ON)
+if(DEFINED REXGLUE_USE_VULKAN AND REXGLUE_USE_VULKAN)
+    message(FATAL_ERROR "The Vulkan backend was removed (RG-GDK-023); D3D12 is the only backend.")
 endif()
 
 # Root of the SDK source tree
@@ -207,7 +199,7 @@ message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSIO
 message(STATUS "  Configurations: ${CMAKE_CONFIGURATION_TYPES}")
 message(STATUS "  Output Dir: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 message(STATUS "  C++ Standard: C++${CMAKE_CXX_STANDARD}")
-message(STATUS "  Graphics: D3D12=${REXGLUE_USE_D3D12} Vulkan=${REXGLUE_USE_VULKAN}")
+message(STATUS "  Graphics: D3D12")
 message(STATUS "  FidelityFX: ${REXGLUE_ENABLE_FIDELITYFX}")
 message(STATUS "  Tracy: ${REXGLUE_ENABLE_TRACY}")
 message(STATUS "  Perf Counters: ${REXGLUE_ENABLE_PERF_COUNTERS}")

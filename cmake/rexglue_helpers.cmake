@@ -58,7 +58,7 @@ function(rexglue_configure_target target_name)
     if(WIN32)
         # FidelityFX is linked PRIVATE by rexui (to avoid propagating DLL
         # requirements to tool-mode targets), so copy its DLLs explicitly.
-        foreach(_fx amd_fidelityfx_vk amd_fidelityfx_dx12)
+        foreach(_fx amd_fidelityfx_dx12)
             if(TARGET ${_fx})
                 add_custom_command(TARGET ${target_name} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different

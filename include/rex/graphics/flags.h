@@ -74,23 +74,6 @@ REXCVAR_DECLARE(bool, use_fuzzy_alpha_epsilon);
 REXCVAR_DECLARE(std::string, dump_shaders);
 REXCVAR_DECLARE(std::string, swap_post_effect);
 
-#if REX_HAS_VULKAN
-REXCVAR_DECLARE(bool, vulkan_sparse_shared_memory);
-REXCVAR_DECLARE(bool, vulkan_submit_on_primary_buffer_end);
-REXCVAR_DECLARE(bool, vulkan_dynamic_rendering);
-REXCVAR_DECLARE(bool, vulkan_async_skip_incomplete_frames);
-REXCVAR_DECLARE(int32_t, vulkan_pipeline_creation_threads);
-REXCVAR_DECLARE(bool, vulkan_tessellation_wireframe);
-REXCVAR_DECLARE(bool, vulkan_force_expand_point_sprites_in_vs);
-REXCVAR_DECLARE(bool, vulkan_force_expand_rectangle_lists_in_vs);
-REXCVAR_DECLARE(bool, vulkan_force_convert_quad_lists_to_triangle_lists);
-REXCVAR_DECLARE(std::string, render_target_path_vulkan);
-// Legacy backend compatibility aliases for shared readback controls.
-REXCVAR_DECLARE(bool, vulkan_readback_resolve);
-REXCVAR_DECLARE(bool, vulkan_readback_memexport);
-#endif  // REX_HAS_VULKAN
-
-#if REX_HAS_D3D12
 REXCVAR_DECLARE(bool, dxbc_switch);
 REXCVAR_DECLARE(bool, dxbc_source_map);
 REXCVAR_DECLARE(bool, d3d12_bindless);
@@ -104,6 +87,5 @@ REXCVAR_DECLARE(std::string, render_target_path_d3d12);
 // Legacy backend compatibility aliases for shared readback controls.
 REXCVAR_DECLARE(bool, d3d12_readback_memexport);
 REXCVAR_DECLARE(bool, d3d12_readback_resolve);
-#endif  // REX_HAS_D3D12
 
 #define XE_GPU_FINE_GRAINED_DRAW_SCOPES 1
