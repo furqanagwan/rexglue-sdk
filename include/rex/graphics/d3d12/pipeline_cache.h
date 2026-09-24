@@ -65,6 +65,8 @@ class PipelineCache {
 
   void EndSubmission();
   bool IsCreatingPipelines();
+  // Blocks until the asynchronous pipeline creation queue is empty.
+  void AwaitPipelineCompletion();
 
   D3D12Shader* LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
                           uint32_t dword_count);
@@ -340,6 +342,8 @@ class PipelineCache {
 
   // Empty depth-only pixel shader for writing to depth buffer via ROV when no
   // Xenos pixel shader provided.
+  // Also bound to RTV draws that write nothing so they stay rasterized for
+  // occlusion queries.
   std::vector<uint8_t> depth_only_pixel_shader_;
 
   struct Pipeline {

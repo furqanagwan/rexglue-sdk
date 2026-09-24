@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include <rex/graphics/register_file.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/xenos.h>
+#include <rex/graphics/xenos_zpd_report.h>
 #include <rex/memory.h>
 #include <rex/memory/ring_buffer.h>
 #include <rex/system/xthread.h>
@@ -45,6 +47,30 @@ enum class ReadbackResolveMode {
   kSome,
   kFull,
 };
+
+// Occlusion queries - ZPD report mode (occlusion_query cvar).
+enum class ZPDMode {
+  kFake,     // Fake counter walk, no real GPU queries (fake)
+  kFast,     // Real queries, speculative writes biased visible (fast)
+  kFastAlt,  // Fast, but replays cached zero deltas too (fast-alt)
+  kStrict,   // Real queries, waits before writeback (strict)
+};
+
+ZPDMode GetZPDMode();
+
+// Host query pool capacity.
+constexpr uint32_t kZPDQueryPoolCapacity = 8192;
+
+// Clock backstop for strict retire, triggered on the first failed guest wait.
+constexpr uint64_t kStrictZPDRetireDeadlineMs = 2;
+// The fast modes only need to keep queue growth in check.
+constexpr uint64_t kFastZPDRetireDeadlineMs = 250;
+
+// Cap for the fast-mode cached delta map. Games reuse a small set of report
+// addresses so this should never be hit, but prevents unbounded growth if a
+// title cycles through unique addresses. Clearing the cache has no
+// correctness impact - it only removes speculative writeback hints.
+constexpr size_t kFastZPDCacheMaxEntries = 1024;
 
 struct SwapState {
   // Lock must be held when changing data in this structure.
@@ -169,8 +195,106 @@ class CommandProcessor {
   virtual void PrepareForWait();
   virtual void ReturnFromWait();
 
+  virtual void PollCompletedSubmission() {}
+
+  // Used by strict ZPD to distinguish normal in flight latency from a
+  // genuinely stuck report.
+  virtual uint64_t GetCompletedSubmission() const { return 0; }
+
   uint32_t ExecutePrimaryBuffer(uint32_t start_index, uint32_t end_index);
   virtual void OnPrimaryBufferEnd() {}
+
+  // ZPD occlusion queries, ported from xenia-canary 3d233a5b2 (PR #1218).
+  using ReportHandle = uint64_t;
+  static constexpr ReportHandle kInvalidReportHandle = 0;
+
+  enum class QueryOpenResult {
+    kOpened,
+    kDeferred,
+    kPoolExhausted,
+    kFailed,
+  };
+
+  // One EVENT_WRITE_ZPD. Measures the host query segments since the previous
+  // report and owes the guest one write of the running counter. Reports
+  // retire strictly in stream order.
+  struct ZPDReport {
+    ReportHandle handle = kInvalidReportHandle;
+    // Set by the event that ends the measurement.
+    uint32_t address = 0;
+    // Guest sample counts. Each segment is normalized by its own scale area
+    // when it resolves.
+    XenosZPDReport delta;
+    // Submission containing the most recently closed segment's resolve.
+    uint64_t last_segment_end_submission = 0;
+    uint32_t pending_segments = 0;
+    // Fast modes write a guess at event time and correct it on retire.
+    // The guessed delta is kept so later guesses can be re-based.
+    XenosZPDReport speculative_value;
+    XenosZPDReport speculative_delta;
+    bool speculative = false;
+    // For strict, when a report holds the D3D sentinel.
+    // Only these are worth blocking a wait for.
+    bool awaited = false;
+  };
+
+  // Host query segment open for the report currently being measured.
+  struct ActiveZPDSegment {
+    uint32_t scale_area = 0;
+    bool segment_active = false;
+    bool segment_pending_begin = false;
+  };
+
+  virtual void EnsureZPDQueryResources() {}
+  virtual bool IsZPDQueryPoolReady() const { return false; }
+  virtual bool CanOpenZPDQuery() const { return true; }
+
+  // Backend acquires a pool slot, records BeginQuery, tracks it internally.
+  virtual QueryOpenResult OpenZPDQuery(bool can_close_submission) {
+    return QueryOpenResult::kFailed;
+  }
+  // Backend records EndQuery, queues a resolve for the active slot.
+  virtual bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) {
+    return false;
+  }
+  // Backend drains completed resolves and calls OnZPDQueryResolved for each.
+  virtual void PumpQueryResolves() {}
+  // Backend waits for all pending segments of report_handle to resolve.
+  virtual bool AwaitQueryResolve(ReportHandle report_handle, uint64_t wait_for_submission) {
+    return false;
+  }
+
+  // Queues the current interval at report_address and starts the next one.
+  void QueueZPDReport(uint32_t report_address);
+  // Opens a new host query segment when CanOpenZPDQuery is true.
+  void OpenQuerySegment(bool can_close_submission);
+  // Closes the current segment at a submission boundary. The report stays
+  // open and a new segment will open at the next opportunity.
+  void CloseQuerySegment();
+  void EndZPDFrame() {
+    CloseQuerySegment();
+    zpd_active_segment_.segment_pending_begin = false;
+  }
+  // Splits the open segment when the draw scale changes so each segment
+  // normalizes with one scale. Also opens a pending segment, once per draw.
+  void UpdateZPDSegment(uint32_t scale_area);
+
+  // Called by backends when a host query resolve completes.
+  // Accumulates the normalized sample counts into the report.
+  void OnZPDQueryResolved(ReportHandle report_handle, const XenosZPDReport& raw_counts,
+                          uint32_t scale_area);
+  // Queued or current report, nullptr once retired. Handles are issued in
+  // order, so the queue is indexed by the front handle.
+  ZPDReport* FindZPDReport(ReportHandle report_handle);
+  // Handles a strict report the guest is waiting on while the ring is empty.
+  void PrepareZPDForWait();
+  // Called from PrepareForWait and submission boundaries so retired reports
+  // reach the guest before it loops again. Fast modes give up on a stuck front
+  // report after kFastZPDRetireDeadlineMs.
+  void PumpPendingRetire();
+  // Guest writeback.
+  void WriteZPDReport(uint32_t report_address, const XenosZPDReport& value);
+  void ResetZPDState();
   void ExecuteIndirectBuffer(uint32_t ptr, uint32_t length);
   bool ExecutePacket(memory::RingBuffer* reader);
   bool ExecutePacketType0(memory::RingBuffer* reader, uint32_t packet);
@@ -193,8 +317,8 @@ class CommandProcessor {
                                           uint32_t count);
   bool ExecutePacketType3_EVENT_WRITE_EXT(memory::RingBuffer* reader, uint32_t packet,
                                           uint32_t count);
-  virtual bool ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader, uint32_t packet,
-                                                  uint32_t count);
+  bool ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader, uint32_t packet,
+                                          uint32_t count);
   bool ExecutePacketType3Draw(memory::RingBuffer* reader, uint32_t packet, const char* opcode_name,
                               uint32_t viz_query_condition, uint32_t count_remaining);
   bool ExecutePacketType3_DRAW_INDX(memory::RingBuffer* reader, uint32_t packet, uint32_t count);
@@ -272,6 +396,41 @@ class CommandProcessor {
   // "Desired" is for the external thread managing the post-processing effect.
   SwapPostEffect swap_post_effect_desired_ = SwapPostEffect::kNone;
   SwapPostEffect swap_post_effect_actual_ = SwapPostEffect::kNone;
+
+  ZPDMode zpd_mode_ = ZPDMode::kFast;
+
+  ReportHandle zpd_next_report_handle_ = 1;
+  // The report the next event will end. No handle means nothing is measuring.
+  ZPDReport zpd_current_report_;
+  ActiveZPDSegment zpd_active_segment_{};
+  // Reports owed to the guest, in stream order.
+  std::deque<ZPDReport> zpd_reports_;
+  // Strict reports containing the D3D sentinel the guest polls.
+  uint32_t zpd_awaited_report_count_ = 0;
+
+  // The retired counter advances as intervals retire. The speculative counter
+  // tracks the latest queued report so fast modes can monotonically write
+  // increasing values at EVENT_WRITE_ZPD, using each report's last retired
+  // delta as its next speculative prediction.
+  XenosZPDReport zpd_sample_counter_;
+  XenosZPDReport zpd_speculative_sample_counter_;
+  std::unordered_map<uint32_t, XenosZPDReport> fast_zpd_report_cached_deltas_;
+
+  bool zpd_force_fake_fallback_ = false;
+
+  // Uptime in ms when the current retire backstop was armed.
+  uint64_t zpd_pending_retire_start_ms_ = 0;
+
+  // Set by the backend when resolution scale changes.
+  uint32_t zpd_draw_resolution_scale_x_ = 1;
+  uint32_t zpd_draw_resolution_scale_y_ = 1;
+
+  // Scale area for the segment being closed.
+  uint32_t GetZPDScaleArea() const {
+    return zpd_active_segment_.scale_area
+               ? zpd_active_segment_.scale_area
+               : zpd_draw_resolution_scale_x_ * zpd_draw_resolution_scale_y_;
+  }
 
   // Set by backend command processors to their legacy memexport readback cvar
   // name (for explicit-override compatibility).

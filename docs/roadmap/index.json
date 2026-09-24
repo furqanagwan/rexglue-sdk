@@ -545,7 +545,7 @@
     "risk": "Query reuse or retirement errors can leave guest reports unresolved, produce false visibility or force severe GPU stalls.",
     "number": 10,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/10",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-011",

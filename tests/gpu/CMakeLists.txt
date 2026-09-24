@@ -8,6 +8,7 @@ add_executable(gpu_tests
     pm4_fixture_test.cpp
     resolve_fixture_test.cpp
     edram_layout_fixture_test.cpp
+    zpd_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE
@@ -64,6 +65,17 @@ set_tests_properties(gpu.device_removal_is_reported PROPERTIES
 add_test(NAME gpu.resolve_readback_scaled_3x2
     COMMAND gpu_tests "[resolve]")
 set_tests_properties(gpu.resolve_readback_scaled_3x2 PROPERTIES
+    LABELS "gpu"
+    TIMEOUT 120
+    SKIP_RETURN_CODE 4
+    ENVIRONMENT "REXGLUE_GPU_FIXTURE_CVARS=draw_resolution_scale_x=3\;draw_resolution_scale_y=2"
+)
+
+# ZPD occlusion query counts are normalized by the draw resolution scale, so the
+# strict-mode fixtures must report the same guest sample counts at 3x2.
+add_test(NAME gpu.zpd_scaled_3x2
+    COMMAND gpu_tests "[zpd]")
+set_tests_properties(gpu.zpd_scaled_3x2 PROPERTIES
     LABELS "gpu"
     TIMEOUT 120
     SKIP_RETURN_CODE 4
