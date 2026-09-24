@@ -124,8 +124,11 @@ ctest --preset win-amd64-debug -L gpu -V
   writes read back with `REG_TO_MEM`, `INDIRECT_BUFFER` ordering, and fence
   ordering.
 - **Resolve fixture:** an EDRAM color clear resolved through the resolve
-  compute shaders into guest memory with `readback_resolve=full`; every texel
-  must match the clear color.
+  compute shaders into guest memory with `readback_resolve=full` at 1x, 2x
+  and 4x MSAA; every texel must match the clear color.
+- **Sub-32bpp resolve phase (RG-GDK-008):** k_8 and k_5_6_5 resolves to bases
+  0, 1 or 3 macro tiles into a 4 KB subresource; every byte of the destination
+  must match the `GetTiledOffset2D` oracle, with no stray writes.
 - **Device removal:** `gpu.device_removal_is_reported` removes the device with
   `ID3D12Device5::RemoveDevice` and requires the backend's fatal
   "Graphics device lost" report after the `DEVICE_REMOVED` reason is logged.
@@ -149,6 +152,14 @@ Recorded fixture results (2026-09-24, debug and release):
 | --- | --- | --- | --- | --- | --- |
 | NVIDIA RTX 5080 Laptop (0x10DE), FL 12_2, SM 6.8 | 32.0.16.1714 | host RT and ROV | Pass | Pass (0x11223344, 4096/4096 texels) | Pass |
 | WARP (0x1414), FL 12_1, SM 6.8 | 10.0.26100.9502 | host RT and ROV | Pass | Pass (4096/4096 texels) | Not run |
+
+RG-GDK-008 resolve fixtures (2026-09-24, debug): NVIDIA and WARP, host RT
+and ROV, pass at native resolution for every MSAA and phase case. With
+`draw_resolution_scale_x=2;draw_resolution_scale_y=2` the 32bpp case passes
+but every sub-32bpp case loses texels, including phase 0, which the port does
+not change: scaled sub-32bpp readback is a pre-existing defect tracked in
+[#58](https://github.com/furqanagwan/rexglue-sdk/issues/58). Texture layout is covered by the `[texture_layout]` CPU unit tests;
+no fixture uploads a guest texture through a draw yet.
 
 AMD and Intel are untested and non-blocking (ADR-007). The fixtures do not yet
 cover guest shader translation through a draw; RG-GDK-008 to RG-GDK-012 add

@@ -6,14 +6,18 @@
  * @license     BSD 3-Clause License
  */
 
+#include <algorithm>
 #include <bit>
 #include <cstdio>
+#include <vector>
 
 #include <wrl/client.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <rex/cvar.h>
+#include <rex/graphics/pipeline/texture/util.h>
 #include <rex/graphics/registers.h>
 
 #include "gpu_fixture.h"
@@ -33,12 +37,31 @@ uint32_t PackXY(uint32_t x, uint32_t y) {
   return x | (y << 16);
 }
 
+struct ResolveTarget {
+  uint32_t dest;
+  uint32_t pitch = kSize;
+  uint32_t height = kSize;
+  xenos::ColorFormat format = xenos::ColorFormat::k_8_8_8_8;
+  xenos::MsaaSamples msaa = xenos::MsaaSamples::k1X;
+};
+
+// Writes the resolve rectangle (0, 0)-(width, height) for vertex fetch 0.
+uint32_t AllocRectangle(GpuFixture& fixture, uint32_t width, uint32_t height) {
+  uint32_t vertices = fixture.AllocPhysical(0x100);
+  fixture.WriteDwords(
+      vertices, {0, 0, std::bit_cast<uint32_t>(float(width)), 0,
+                 std::bit_cast<uint32_t>(float(width)), std::bit_cast<uint32_t>(float(height))});
+  return vertices;
+}
+
 // Direct3D 9 resolves by drawing a 3-vertex rectangle list with RB_MODECONTROL
 // in copy mode. The rectangle comes from vertex fetch constant 0.
-void SubmitResolve(GpuFixture& fixture, uint32_t vertices, uint32_t dest, uint32_t clear_color) {
+void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& target,
+                   uint32_t clear_color) {
   reg::RB_SURFACE_INFO surface_info = {};
-  surface_info.surface_pitch = kSize;
-  surface_info.msaa_samples = xenos::MsaaSamples::k1X;
+  // The EDRAM pitch is in samples, two per pixel horizontally with 4x MSAA.
+  surface_info.surface_pitch = kSize * (target.msaa == xenos::MsaaSamples::k4X ? 2 : 1);
+  surface_info.msaa_samples = target.msaa;
   reg::RB_COLOR_INFO color_info = {};
   color_info.color_format = xenos::ColorRenderTargetFormat::k_8_8_8_8;
   reg::PA_SC_WINDOW_SCISSOR_TL window_tl = {};
@@ -49,11 +72,11 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, uint32_t dest, uint32
   copy_control.color_clear_enable = 1;
   copy_control.copy_command = xenos::CopyCommand::kRaw;
   reg::RB_COPY_DEST_PITCH dest_pitch = {};
-  dest_pitch.copy_dest_pitch = kSize;
-  dest_pitch.copy_dest_height = kSize;
+  dest_pitch.copy_dest_pitch = target.pitch;
+  dest_pitch.copy_dest_height = target.height;
   reg::RB_COPY_DEST_INFO dest_info = {};
   dest_info.copy_dest_endian = xenos::Endian128::k8in32;
-  dest_info.copy_dest_format = xenos::ColorFormat::k_8_8_8_8;
+  dest_info.copy_dest_format = target.format;
   xenos::xe_gpu_vertex_fetch_t fetch = {};
   fetch.type = xenos::FetchConstantType::kVertex;
   fetch.address = vertices >> 2;
@@ -70,7 +93,8 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, uint32_t dest, uint32
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_PA_SU_VTX_CNTL, {0}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_MODECONTROL, {mode_control.value}));
   fixture.Submit(GpuFixture::SetRegisters(
-      XE_GPU_REG_RB_COPY_CONTROL, {copy_control.value, dest, dest_pitch.value, dest_info.value}));
+      XE_GPU_REG_RB_COPY_CONTROL,
+      {copy_control.value, target.dest, dest_pitch.value, dest_info.value}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_COLOR_CLEAR, {clear_color, clear_color}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0,
                                           {fetch.dword_0, fetch.dword_1}));
@@ -85,6 +109,7 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, uint32_t dest, uint32
 }  // namespace
 
 TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][resolve]") {
+  auto msaa = GENERATE(xenos::MsaaSamples::k1X, xenos::MsaaSamples::k2X, xenos::MsaaSamples::k4X);
   std::string error;
   auto fixture = GpuFixture::Create(&error);
   if (!fixture) {
@@ -93,18 +118,17 @@ TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][reso
   std::printf("GPU fixture: %s\n", fixture->Metadata().c_str());
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
 
-  uint32_t vertices = fixture->AllocPhysical(0x100);
-  fixture->WriteDwords(
-      vertices, {std::bit_cast<uint32_t>(0.0f), std::bit_cast<uint32_t>(0.0f),
-                 std::bit_cast<uint32_t>(float(kSize)), std::bit_cast<uint32_t>(0.0f),
-                 std::bit_cast<uint32_t>(float(kSize)), std::bit_cast<uint32_t>(float(kSize))});
+  uint32_t vertices = AllocRectangle(*fixture, kSize, kSize);
   uint32_t dest = fixture->AllocPhysical(kSize * kSize * 4);
   constexpr uint32_t kClearColor = 0x11223344;
+  ResolveTarget target{dest};
+  target.msaa = msaa;
+  INFO("MSAA samples log2 " << uint32_t(msaa));
 
   // The clear happens after the copy, so the first resolve clears EDRAM and
   // the second one copies the cleared color out.
-  SubmitResolve(*fixture, vertices, dest, kClearColor);
-  SubmitResolve(*fixture, vertices, dest, kClearColor);
+  SubmitResolve(*fixture, vertices, target, kClearColor);
+  SubmitResolve(*fixture, vertices, target, kClearColor);
   REQUIRE(fixture->Flush());
 
   uint32_t mismatches = 0;
@@ -118,6 +142,68 @@ TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][reso
   CHECK(mismatches == 0);
 }
 
+// D3D advances RB_COPY_DEST_BASE by whole 32x32 macro tiles, which are 1 KB at
+// 8bpp and 2 KB at 16bpp, so the base can sit inside a 4 KB tiled subresource.
+// The texel at (x, y) then belongs at (x + 32 * phase, y) of the surface that
+// starts at the 4 KB boundary. Source: xenia-canary #1240.
+TEST_CASE("Sub-32bpp resolve keeps the macro tile phase of the base", "[gpu][resolve]") {
+  struct Case {
+    xenos::ColorFormat format;
+    uint32_t bpp_log2;
+    uint32_t phase;
+  };
+  auto test = GENERATE(Case{xenos::ColorFormat::k_8, 0, 0}, Case{xenos::ColorFormat::k_5_6_5, 1, 0},
+                       Case{xenos::ColorFormat::k_8, 0, 3}, Case{xenos::ColorFormat::k_8, 0, 1},
+                       Case{xenos::ColorFormat::k_5_6_5, 1, 1});
+  std::string error;
+  auto fixture = GpuFixture::Create(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
+  INFO("bpp_log2 " << test.bpp_log2 << ", phase " << test.phase);
+
+  constexpr uint32_t kRect = 32;
+  constexpr uint32_t kPitch = 128;
+  constexpr uint32_t kHeight = 32;
+  constexpr uint32_t kBytes = 0x4000;
+  uint32_t vertices = AllocRectangle(*fixture, kRect, kRect);
+  uint32_t surface = fixture->AllocPhysical(kBytes);
+  uint32_t macro_tile_bytes = uint32_t(1)
+                              << (2 * xenos::kTextureTileWidthHeightLog2 + test.bpp_log2);
+  ResolveTarget target{surface + test.phase * macro_tile_bytes, kPitch, kHeight, test.format};
+  SubmitResolve(*fixture, vertices, target, 0xFFFFFFFF);
+  SubmitResolve(*fixture, vertices, target, 0xFFFFFFFF);
+  REQUIRE(fixture->Flush());
+
+  // Every byte of the allocation must be written exactly where the oracle
+  // places the rectangle's texels, and nowhere else.
+  std::vector<uint8_t> expected(kBytes, 0);
+  uint32_t bytes_per_texel = uint32_t(1) << test.bpp_log2;
+  for (uint32_t y = 0; y < kRect; ++y) {
+    for (uint32_t x = 0; x < kRect; ++x) {
+      int32_t offset = rex::graphics::texture_util::GetTiledOffset2D(
+          int32_t(x + test.phase * xenos::kTextureTileWidthHeight), int32_t(y), kPitch,
+          test.bpp_log2);
+      REQUIRE(uint32_t(offset) + bytes_per_texel <= kBytes);
+      std::fill_n(expected.begin() + offset, bytes_per_texel, uint8_t(0xFF));
+    }
+  }
+  const uint8_t* actual = fixture->memory()->TranslatePhysical<const uint8_t*>(surface);
+  uint32_t missing = 0, stray = 0;
+  for (uint32_t i = 0; i < kBytes; ++i) {
+    if (expected[i] && actual[i] != 0xFF) {
+      ++missing;
+    } else if (!expected[i] && actual[i]) {
+      ++stray;
+    }
+  }
+  std::printf("bpp_log2 %u phase %u: %u missing, %u stray bytes\n", test.bpp_log2, test.phase,
+              missing, stray);
+  CHECK(missing == 0);
+  CHECK(stray == 0);
+}
+
 // Hidden: the backend treats device loss as fatal, so this case ends the
 // process. CTest runs it on its own and requires the fatal-error report.
 TEST_CASE("Device removal before a submission is reported", "[.device-removal]") {
@@ -127,18 +213,15 @@ TEST_CASE("Device removal before a submission is reported", "[.device-removal]")
   if (!fixture) {
     SKIP("GPU fixture host unavailable: " << error);
   }
-  uint32_t vertices = fixture->AllocPhysical(0x100);
-  fixture->WriteDwords(
-      vertices, {0, 0, std::bit_cast<uint32_t>(float(kSize)), 0,
-                 std::bit_cast<uint32_t>(float(kSize)), std::bit_cast<uint32_t>(float(kSize))});
-  uint32_t dest = fixture->AllocPhysical(kSize * kSize * 4);
+  uint32_t vertices = AllocRectangle(*fixture, kSize, kSize);
+  ResolveTarget target{fixture->AllocPhysical(kSize * kSize * 4)};
 
   Microsoft::WRL::ComPtr<ID3D12Device5> device;
   REQUIRE(SUCCEEDED(fixture->provider().GetDevice()->QueryInterface(IID_PPV_ARGS(&device))));
   device->RemoveDevice();
 
   // The resolve opens a submission, which checks the device first.
-  SubmitResolve(*fixture, vertices, dest, 0);
+  SubmitResolve(*fixture, vertices, target, 0);
   fixture->Flush(std::chrono::seconds(10));
   FAIL("device loss was not reported");
 }

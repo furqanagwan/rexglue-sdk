@@ -52,8 +52,8 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1222](https://github.com/xenia-canary/xenia-canary/pull/1222) | merged | `9da693480d0995326b81c3a14f8b1a4c226066eb` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-009 |
 | [xenia-canary/xenia-canary #1227](https://github.com/xenia-canary/xenia-canary/pull/1227) | merged | `dcf2994ea1d604e841b5553b2bf941b809e36e79` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-014 |
 | [xenia-canary/xenia-canary #1238](https://github.com/xenia-canary/xenia-canary/pull/1238) | merged | `0bd090dbe979bc64959efe519aa320db8e3eb467` | B/H; regression-related; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-009 |
-| [xenia-canary/xenia-canary #1240](https://github.com/xenia-canary/xenia-canary/pull/1240) | merged | `89609297c7ae25dc5ba404c6a977260b806bb725` | A/B; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-008 |
-| [xenia-canary/xenia-canary #1243](https://github.com/xenia-canary/xenia-canary/pull/1243) | merged | `c9c8e483b13249ba5f0060fc4b36071da6d67261` | A/B; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-008 |
+| [xenia-canary/xenia-canary #1240](https://github.com/xenia-canary/xenia-canary/pull/1240) | merged | `89609297c7ae25dc5ba404c6a977260b806bb725` | A/B; adopted (RG-GDK-008) | See scoped record below; never assume absence | RG-GDK-008 |
+| [xenia-canary/xenia-canary #1243](https://github.com/xenia-canary/xenia-canary/pull/1243) | merged | `c9c8e483b13249ba5f0060fc4b36071da6d67261` | A/B; adopted (RG-GDK-008) | See scoped record below; never assume absence | RG-GDK-008 |
 | [has207/xenia-edge #38](https://github.com/has207/xenia-edge/issues/38) | open | `not identified` | B/H; candidate for later port | See scoped record below; never assume absence | RG-GDK-017 |
 | [has207/xenia-edge #234](https://github.com/has207/xenia-edge/issues/234) | open | `not identified` | C/H; regression-related | See scoped record below; never assume absence | RG-GDK-015 |
 | [has207/xenia-edge #268](https://github.com/has207/xenia-edge/issues/268) | open | `not identified` | D; useful research; emulator-specific | See scoped record below; never assume absence | RG-GDK-015 |
@@ -389,20 +389,26 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1243](https://github.com/xenia-canary/xenia-canary/pull/1243); created 2026-09-22T07:40:19Z; updated 2026-09-22T17:46:24Z; author `goldislead`.
 - Upstream status: **merged upstream**. Merge commit `c9c8e483b13249ba5f0060fc4b36071da6d67261`.
 - Scope / reason / applicability: Array/volume mip layout, 96bpp pitch and 3D bounds differ locally; CPU fixtures plus texture readback.
-- Classification: candidate for later port; relevant and merged upstream; A/B applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-008**, whose complete issue body specifies files, tests and acceptance gates.
+- Classification: correctness; A/B applicability. **Adopted 2026-09-24 in RG-GDK-008.**
+- Adaptation and validation owner: **RG-GDK-008**.
 - Source files: `src/xenia/gpu/texture_util.cc`; `src/xenia/gpu/texture_util.h`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Commits: `94cb5e349f` array/volume mip layout (Edge `bc6b7a020`), `21543817f2` linear 96bpp mip row pitch (Edge `19da17403`), `19f5a08556` tiled 3D address bounds (not in Edge at `94de4f676`; taken from the PR head).
+- Adaptation: applied unchanged to `src/graphics/pipeline/texture/util.cpp` and `include/rex/graphics/pipeline/texture/util.h`; no texture-cache lifetime change.
+- Tests: `tests/unit/graphics/texture_layout_test.cpp` (`[texture_layout]`): hand-derived D3D offsets for 2D array, 3D and packed 3D mips and linear row pitches, plus a per-texel `GetTiledOffset2D/3D` oracle that the 2D/3D bounds must contain (and match exactly for whole 32x32x4 tiles). Every case except the whole-tile tightness check fails on the pre-port code.
+- Regression evidence: none known upstream at adoption.
 
 ### xenia-canary/xenia-canary #1240 — [GPU] Fix tiled resolve offsets below 32bpp
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1240](https://github.com/xenia-canary/xenia-canary/pull/1240); created 2026-09-21T04:23:51Z; updated 2026-09-21T04:50:35Z; author `goldislead`.
 - Upstream status: **merged upstream**. Merge commit `89609297c7ae25dc5ba404c6a977260b806bb725`.
 - Scope / reason / applicability: Sub-32bpp tiled resolve macro phase, title 534307D5 water; general addressing candidate.
-- Classification: candidate for later port; relevant and merged upstream; A/B applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-008**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/gpu/draw_util.cc`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Classification: correctness; A/B applicability. **Adopted 2026-09-24 in RG-GDK-008.**
+- Adaptation and validation owner: **RG-GDK-008**.
+- Source files: `src/xenia/gpu/draw_util.cc` (Edge `89609297c`).
+- Adaptation: applied unchanged to `GetResolveInfo` in `src/graphics/util/draw.cpp`.
+- Tests: GPU fixture `Sub-32bpp resolve keeps the macro tile phase of the base` resolves 32x32 rectangles to k_8 (phase 0, 1, 3) and k_5_6_5 (phase 0, 1) bases and checks every byte of a 16 KB allocation against `GetTiledOffset2D`. Phase 1/3 cases fail on the pre-port code (every texel misplaced).
+- Title 534307D5 (Golden Axe: Beast Rider) is not available locally; no title result is claimed.
+- Regression evidence: none known upstream at adoption.
 
 ### xenia-canary/xenia-canary #1238 — [GPU] Fix 2x & 4x host depth copy sample layout
 
