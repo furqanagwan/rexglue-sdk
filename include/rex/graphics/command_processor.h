@@ -254,9 +254,7 @@ class CommandProcessor {
     return QueryOpenResult::kFailed;
   }
   // Backend records EndQuery, queues a resolve for the active slot.
-  virtual bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) {
-    return false;
-  }
+  virtual bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) { return false; }
   // Backend drains completed resolves and calls OnZPDQueryResolved for each.
   virtual void PumpQueryResolves() {}
   // Backend waits for all pending segments of report_handle to resolve.

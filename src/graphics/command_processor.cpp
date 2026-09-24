@@ -349,7 +349,9 @@ bool CommandProcessor::SetupContext() {
   return true;
 }
 
-void CommandProcessor::ShutdownContext() { ResetZPDState(); }
+void CommandProcessor::ShutdownContext() {
+  ResetZPDState();
+}
 
 void CommandProcessor::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) {
   read_ptr_index_ = 0;
