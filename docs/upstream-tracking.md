@@ -402,10 +402,19 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Source: xenia-canary commit `a635ac64f5ca37c0b789e8b4166b53dc673b213f` (2026-07-06, `goldislead`), present in Edge at `94de4f676`.
 - Classification: correctness; A/B applicability. **Partially adopted 2026-09-24 for #58.**
 - Adopted: texel size from the resolve's normalized `copy_dest_info` (`draw_util::GetResolveDownscalePixelSizeLog2`, `Resolve(..., copy_dest_info_out)`), the source window at the written extent's scaled address instead of the scaled range start, and skipping 128bpp, unaligned and out-of-range extents.
-- Not adopted: the shader's group layout. Canary reads the scaled layout introduced by `0f23f0568` (2026-01-13); this repository's resolve shaders are byte-identical in disassembly to Canary `04d5c40d0` (2025-08-19), which writes Nx1 units. `resolve_downscale.cs.hlsl` reverses the Nx1 layout instead. Reading the group layout passes at 2x but misplaces texels at 3x.
+- Not adopted: the shader's group layout. Canary reads the scaled layout introduced by `0f23f0568` (2026-01-13); this repository's resolve shaders are Canary `0b2ffa314` (2025-08-20; see the shader sources record below), which writes Nx1 units. `resolve_downscale.cs.hlsl` reverses the Nx1 layout instead. Reading the group layout passes at 2x but misplaces texels at 3x.
 - Local changes: the extent is limited in dwords rather than truncated to whole 32x32 tiles, so a resolve ending inside a tile reads back completely. The HLSL shifts before masking because fxc 10.1 compiles `(a & mask(n + s)) >> s` into a `ubfe` of width `n + s`, which shifted 16bpp and 32bpp texels by one unit.
 - Tests: `Resolve readback keeps texel positions` and `gpu.resolve_readback_scaled_3x2`; see `docs/regression-strategy.md`.
 - Follow-up: syncing the resolve and texture-load shaders to Canary's current layout needs the downscale shader to move with them.
+
+### xenia-canary/xenia-canary 0b2ffa314 — precompiled shader sources
+
+- Source: xenia-canary commit `0b2ffa3143` (2025-08-20, "[GPU] Change texture load cbuffer to push constants"), `src/xenia/gpu/shaders` and `src/xenia/ui/shaders/xesl.xesli`, taken from the Edge clone.
+- Classification: provenance; A applicability. **Adopted 2026-09-24 for RG-GDK-009.**
+- Evidence: FXC 10.1 (Windows SDK 10.0.26100.0) with Canary's `xenia-build buildshaders` arguments rebuilds all 107 checked-in `src/graphics/shaders/bytecode/d3d12_5_1` headers that have sources byte for byte. The earlier `04d5c40d0` attribution matched the resolve shaders only; its texture-load shaders differ.
+- Vendored: every `src/xenia/gpu/shaders` XeSL/HLSL source except `fxaa.cs.hlsl`, `fxaa_extreme.cs.hlsl` and `fxaa.hlsli`, which need `third_party/fxaa/FXAA3_11.h`; their bytecode stays as checked in. `src/ui/shaders/bytecode` sources are not vendored.
+- Tooling: `scripts/build_shaders.py` builds the bytecode with the same arguments and clang-formats it; `--check` compares with the checked-in headers and runs as CTest `shaders.bytecode_reproducible` on Windows. `resolve_downscale_cs.h` is rebuilt with these arguments instead of `/O3` and the strip flags.
+- Not adopted: Canary's later shader changes, including the `0f23f0568` scaled group layout; later ports edit these sources and rebuild.
 
 ### xenia-canary/xenia-canary #1240 — [GPU] Fix tiled resolve offsets below 32bpp
 

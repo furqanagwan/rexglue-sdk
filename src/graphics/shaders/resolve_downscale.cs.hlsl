@@ -14,8 +14,8 @@
 // xe_downscale_half_pixel_offset is set.
 //
 // The source is not a flat scale_x * scale_y expansion of each guest texel.
-// The resolve shaders in this repository are xenia-canary's from 04d5c40d0
-// (2025-08-19), which scale Nx1 units of horizontally consecutive guest blocks
+// The resolve shaders in this repository are xenia-canary's from 0b2ffa314
+// (2025-08-20), which scale Nx1 units of horizontally consecutive guest blocks
 // (XeTextureScaledTiledOffset in that revision's texture_address.xesli):
 // - 1bpp and 2bpp - 8 blocks, 4bpp - 4, 8bpp - 2, 16bpp - 1.
 // A guest unit at guest address A occupies scale_x * scale_y host sub-units of
