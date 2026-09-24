@@ -186,9 +186,12 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
 
 u32 NtOpenFile_entry(mapped_u32 handle_out, u32 desired_access,
                      ppc_ptr_t<X_OBJECT_ATTRIBUTES> object_attributes,
-                     ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, u32 open_options) {
+                     ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, u32 share_access,
+                     u32 open_options) {
+  // The guest ABI passes ShareAccess in r7 and OpenOptions in r8 (Edge 887beea).
   return NtCreateFile_entry(handle_out, desired_access, object_attributes, io_status_block, nullptr,
-                            0, 0, static_cast<uint32_t>(rex::filesystem::FileDisposition::kOpen),
+                            0, share_access,
+                            static_cast<uint32_t>(rex::filesystem::FileDisposition::kOpen),
                             open_options);
 }
 
