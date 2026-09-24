@@ -28,11 +28,6 @@ class MappedMemory {
 
   static std::unique_ptr<MappedMemory> Open(const std::filesystem::path& path, Mode mode,
                                             size_t offset = 0, size_t length = 0);
-#if REX_PLATFORM_ANDROID
-  static std::unique_ptr<MappedMemory> OpenForAndroidContentUri(const std::string_view uri,
-                                                                Mode mode, size_t offset = 0,
-                                                                size_t length = 0);
-#endif  // REX_PLATFORM_ANDROID
 
   MappedMemory() : data_(nullptr), size_(0) {}
   MappedMemory(void* data, size_t size) : data_(data), size_(size) {}

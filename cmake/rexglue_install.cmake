@@ -137,23 +137,6 @@ if(REXGLUE_USE_D3D12)
     )
 endif()
 
-if(APPLE AND REXGLUE_USE_VULKAN)
-    install(FILES "$<TARGET_FILE:Vulkan::Loader>"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        CONFIGURATIONS Release
-        RENAME libvulkan.1.dylib
-    )
-    install(FILES "$<TARGET_FILE:MoltenVK::MoltenVK>"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        CONFIGURATIONS Release
-        RENAME libMoltenVK.dylib
-    )
-    install(FILES cmake/MoltenVK_icd.json
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/vulkan/icd.d
-        CONFIGURATIONS Release
-    )
-endif()
-
 # Generate and install package config files
 configure_package_config_file(
     cmake/rexglueConfig.cmake.in

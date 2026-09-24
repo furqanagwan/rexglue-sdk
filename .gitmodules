@@ -35,9 +35,6 @@
 [submodule "thirdparty/vulkan-loader"]
 	path = thirdparty/vulkan-loader
 	url = https://github.com/KhronosGroup/Vulkan-Loader.git
-[submodule "thirdparty/moltenvk"]
-	path = thirdparty/moltenvk
-	url = https://github.com/KhronosGroup/MoltenVK.git
 [submodule "thirdparty/vulkan-memory-allocator"]
 	path = thirdparty/vulkan-memory-allocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

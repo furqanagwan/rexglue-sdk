@@ -86,12 +86,6 @@ endif()
 set_target_properties(ppc_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>
 )
-if(UNIX AND NOT APPLE)
-    set_target_properties(ppc_tests PROPERTIES
-        INSTALL_RPATH "$ORIGIN"
-        BUILD_WITH_INSTALL_RPATH ON
-    )
-endif()
 
 target_compile_options(ppc_tests PRIVATE
     -UTRACY_ENABLE -UREXGLUE_ENABLE_PROFILING

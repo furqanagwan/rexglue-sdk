@@ -126,12 +126,5 @@ struct FileInfo {
 bool GetInfo(const std::filesystem::path& path, FileInfo* out_info);
 std::vector<FileInfo> ListFiles(const std::filesystem::path& path);
 
-#if REX_PLATFORM_ANDROID
-void AndroidInitialize();
-void AndroidShutdown();
-bool IsAndroidContentUri(const std::string_view source);
-int OpenAndroidContentFileDescriptor(const std::string_view uri, const char* mode);
-#endif  // REX_PLATFORM_ANDROID
-
 }  // namespace filesystem
 }  // namespace rex

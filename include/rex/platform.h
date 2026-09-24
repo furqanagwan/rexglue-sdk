@@ -24,22 +24,10 @@
 // https://sourceforge.net/p/predef/wiki/OperatingSystems/
 // Original link: https://predef.sourceforge.net/preos.html
 
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#endif
-
-#if defined(TARGET_OS_MAC) && TARGET_OS_MAC
-#define REX_PLATFORM_MAC 1
-#elif defined(WIN32) || defined(_WIN32)
+#if defined(WIN32) || defined(_WIN32)
 #define REX_PLATFORM_WIN32 1
-#elif defined(__ANDROID__)
-#define REX_PLATFORM_ANDROID 1
-#define REX_PLATFORM_LINUX 1
-#elif defined(__gnu_linux__)
-#define REX_PLATFORM_GNU_LINUX 1
-#define REX_PLATFORM_LINUX 1
 #else
-#error Unsupported target OS.
+#error ReXGlue supports Windows only (RG-GDK-024).
 #endif
 
 // Ensure all platform macros are always defined (0 when inactive)
