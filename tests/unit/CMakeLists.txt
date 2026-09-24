@@ -11,6 +11,7 @@ add_executable(unit_tests
     core/stream_test.cpp
     core/chrono_test.cpp
     graphics/texture_layout_test.cpp
+    graphics/zpd_report_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
     system/guest_path_test.cpp

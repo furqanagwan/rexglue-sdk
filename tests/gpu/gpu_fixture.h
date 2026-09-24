@@ -14,6 +14,7 @@
 #include <initializer_list>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <rex/graphics/xenos.h>
@@ -29,9 +30,13 @@ namespace rex::testing {
 // every result read back afterwards is ordered after all submitted work.
 class GpuFixture {
  public:
+  using CvarList = std::initializer_list<std::pair<const char*, const char*>>;
+
   // Returns nullptr and sets error when the plugin or the D3D12 device can't
-  // be created, so callers can skip rather than fail.
-  static std::unique_ptr<GpuFixture> Create(std::string* error);
+  // be created, so callers can skip rather than fail. cvars are applied after
+  // REXGLUE_GPU_FIXTURE_CVARS, so they can also set cvars the GPU plugin
+  // registers and that are only read when the GPU starts.
+  static std::unique_ptr<GpuFixture> Create(std::string* error, CvarList cvars = {});
   ~GpuFixture();
 
   memory::Memory* memory() const { return runtime_->memory(); }

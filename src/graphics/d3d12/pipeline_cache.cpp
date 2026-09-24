@@ -101,9 +101,7 @@ PipelineCache::PipelineCache(D3D12CommandProcessor& command_processor,
       render_target_cache_.msaa_2x_supported(), render_target_cache_.draw_resolution_scale_x(),
       render_target_cache_.draw_resolution_scale_y(), provider.GetGraphicsAnalysis() != nullptr);
 
-  if (edram_rov_used) {
-    depth_only_pixel_shader_ = std::move(shader_translator_->CreateDepthOnlyPixelShader());
-  }
+  depth_only_pixel_shader_ = std::move(shader_translator_->CreateDepthOnlyPixelShader());
 }
 
 PipelineCache::~PipelineCache() {
@@ -790,6 +788,27 @@ bool PipelineCache::IsCreatingPipelines() {
   }
   std::lock_guard<std::mutex> lock(creation_request_lock_);
   return !creation_queue_.empty() || creation_threads_busy_ != 0;
+}
+
+void PipelineCache::AwaitPipelineCompletion() {
+  if (creation_threads_.empty()) {
+    return;
+  }
+
+  bool await_creation_completion_event;
+  {
+    std::lock_guard<std::mutex> lock(creation_request_lock_);
+    await_creation_completion_event = !creation_queue_.empty() || creation_threads_busy_ != 0;
+    if (await_creation_completion_event) {
+      creation_completion_event_->Reset();
+      creation_completion_set_event_ = true;
+    }
+  }
+
+  if (await_creation_completion_event) {
+    creation_request_cond_.notify_one();
+    rex::thread::Wait(creation_completion_event_.get(), false);
+  }
 }
 
 D3D12Shader* PipelineCache::LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
@@ -2849,6 +2868,12 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
         state_desc.PS.pShaderBytecode = shaders::float24_truncate_ps;
         state_desc.PS.BytecodeLength = sizeof(shaders::float24_truncate_ps);
       }
+    } else if (!description.depth_write && !description.stencil_write_mask) {
+      // Bind an empty PS to force rasterization.
+      // D3D drops PS-less draws without depth/stencil writes, breaking
+      // occlusion queries (4541096E, 5553083B). From xenia-canary PR #1218.
+      state_desc.PS.pShaderBytecode = depth_only_pixel_shader_.data();
+      state_desc.PS.BytecodeLength = depth_only_pixel_shader_.size();
     }
   }
 

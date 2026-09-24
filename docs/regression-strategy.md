@@ -194,6 +194,16 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-010 ZPD occlusion queries (2026-09-24): `unit_tests [zpd]` and
+`gpu_tests [zpd]` pass on NVIDIA (0x10DE, driver 32.0.16.1714) at 1x and at
+3x2 draw resolution scale (`gpu.zpd_scaled_3x2`), and on WARP. Strict mode is
+the oracle: BEGIN/END, QueryBatch with empty intervals, depth-rejected samples,
+segments split across submissions, reused report memory with recycled host
+query slots, a PS-less draw without writes (0 samples without the empty-PS
+binding, on NVIDIA and WARP), 4x MSAA (host samples) and fast/fake modes. Not
+run: the ROV path (falls back to fake results; #64), AMD/Intel, VIZ (#65) and
+Crackdown 2 flares with the resolve readback modes (no title content).
+
 RG-GDK-004 heap ranges (2026-09-24, debug and release CTest): the AllocRange
 window cases in `unit_tests [memory]` pass; six of seven fail before the
 change (allocations ending above an unaligned or inclusive ceiling, a

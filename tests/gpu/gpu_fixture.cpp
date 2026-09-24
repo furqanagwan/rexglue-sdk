@@ -48,7 +48,7 @@ constexpr uint32_t kCpRbWptr = 0x01C5;
 
 }  // namespace
 
-std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error) {
+std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error, CvarList cvars) {
   // REXGLUE_GPU_FIXTURE_LOG names a log file to diagnose a failing fixture.
   static bool logging_initialized = [] {
     const char* log_file = std::getenv("REXGLUE_GPU_FIXTURE_LOG");
@@ -90,6 +90,12 @@ std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error) {
         *error = fmt::format("invalid REXGLUE_GPU_FIXTURE_CVARS entry '{}'", item);
         return nullptr;
       }
+    }
+  }
+  for (const auto& [name, value] : cvars) {
+    if (!cvar::SetFlagByName(name, value)) {
+      *error = fmt::format("invalid fixture cvar '{}={}'", name, value);
+      return nullptr;
     }
   }
   if (XFAILED(fixture->runtime_->Setup(std::move(config)))) {
