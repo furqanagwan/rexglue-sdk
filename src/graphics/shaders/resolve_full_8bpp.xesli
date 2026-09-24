@@ -40,8 +40,7 @@ entry_inputs_end_code_begin_compute_xe
       pass_uint_vector_buffer_xe(xe_resolve_edram)
       pass_next_after_uint_vector_buffer_xe
       resolve_info,
-      XeResolveColorCopySourcePixelAddressIntsYHalfPixelOffsetFilling(
-          resolve_info, pixel_index),
+      pixel_index,
       pixels_0123, pixels_4567);
   dont_flatten_xe
   if (pixel_index.x == 0u &&
