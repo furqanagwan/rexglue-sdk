@@ -46,7 +46,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1190](https://github.com/xenia-canary/xenia-canary/pull/1190) | merged | `3a44f20c7bc66db1da583e8a6f0ab740e31908e9` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-012 |
 | [xenia-canary/xenia-canary #1195](https://github.com/xenia-canary/xenia-canary/pull/1195) | closed unmerged | `ab349b475d4d82dd2a4330b2e2eb46332006afce` | B/H; candidate for later port | See scoped record below; never assume absence | RG-GDK-011 |
 | [xenia-canary/xenia-canary #1202](https://github.com/xenia-canary/xenia-canary/pull/1202) | closed unmerged | `1cc288bc71e625bd9272dafc2f1fb01259a62eb2` | B/H; useful research; rejected; regression risk | See scoped record below; never assume absence | RG-GDK-004 |
-| [xenia-canary/xenia-canary #1215](https://github.com/xenia-canary/xenia-canary/pull/1215) | merged | `87c24112706d95f15f83dfec58e93923bd7ffa07` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-004 |
+| [xenia-canary/xenia-canary #1215](https://github.com/xenia-canary/xenia-canary/pull/1215) | merged | `87c24112706d95f15f83dfec58e93923bd7ffa07` | B/H; adopted (adapted) in RG-GDK-004 | See scoped record below | RG-GDK-004 |
 | [xenia-canary/xenia-canary #1216](https://github.com/xenia-canary/xenia-canary/pull/1216) | merged | `5d4dc8a88abb2965f2933286571f5bfa0b87391d` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-017 |
 | [xenia-canary/xenia-canary #1218](https://github.com/xenia-canary/xenia-canary/pull/1218) | merged | `3d233a5b2e94b940825847b70c788951e364bb33` | C/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-010 |
 | [xenia-canary/xenia-canary #1222](https://github.com/xenia-canary/xenia-canary/pull/1222) | merged | `9da693480d0995326b81c3a14f8b1a4c226066eb` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-009 |
@@ -267,12 +267,10 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 ### xenia-canary/xenia-canary #1182 — [Memory] Fix large-alignment physical allocs through offset-translated heaps
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1182](https://github.com/xenia-canary/xenia-canary/pull/1182); created 2026-08-27T20:26:17Z; updated 2026-08-27T20:27:26Z; author `shempman828`.
-- Upstream status: **pending upstream**. PR head (not adopted) commit `fa6cdaae0f58e9161e5e41ea3683f837b3b112c7`.
-- Scope / reason / applicability: Separate guest/physical/host alignment claims; compare rejected #1202 and merged #1215 before porting.
-- Classification: relevant but pending upstream; B/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-004**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/base/testing/physical_heap_test.cc`; `src/xenia/memory.cc`; `src/xenia/memory.h`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Upstream status: **pending upstream** (still open 2026-09-24). PR head (not adopted) commit `fa6cdaae0f58e9161e5e41ea3683f837b3b112c7`.
+- Scope / reason / applicability: makes vE0000000 virtual addresses aligned (an `alignment_phase` for the parent search) instead of physical ones; title 4D5307F1 failed a 0x280000-byte 32 KB-aligned request in Canary.
+- Classification: relevant but pending upstream; B/H applicability. **Watch, not adopted (RG-GDK-004, 2026-09-24).** The 4D5307F1 request succeeds here with a 32 KB-aligned physical address, because there is no host alignment check to fail. Aligning the virtual address instead would move the physical address off the requested alignment, a global change with no title evidence here.
+- Tests: `Physical heap vE0000000 aligns the physical address` records the current semantics (physical address aligned, virtual address 0x1000 below it) and the 4D5307F1 request size.
 
 ### xenia-canary/xenia-canary #1225 — [Kernel] Take back the signature a dying object left in guest memory
 
@@ -366,23 +364,20 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 
 ### xenia-canary/xenia-canary #1215 — [Memory] Round the AllocRange ceiling to the page, not to the alignment
 
-- Source: [https://github.com/xenia-canary/xenia-canary/pull/1215](https://github.com/xenia-canary/xenia-canary/pull/1215); created 2026-09-06T01:19:39Z; updated 2026-09-07T18:30:42Z; author `peerloomllc`.
+- Source: [https://github.com/xenia-canary/xenia-canary/pull/1215](https://github.com/xenia-canary/xenia-canary/pull/1215); created 2026-09-06T01:19:39Z; updated 2026-09-07T18:30:42Z; author `peerloomllc`; ported from xenia-edge `1ad151d1`.
 - Upstream status: **merged upstream**. Merge commit `87c24112706d95f15f83dfec58e93923bd7ffa07`.
-- Scope / reason / applicability: AllocRange ceiling round-up exists locally; adapt page-bound correction and overflow fixtures.
-- Classification: candidate for later port; relevant and merged upstream; B/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-004**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/base/testing/physical_heap_test.cc`; `src/xenia/memory.cc`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Scope / reason / applicability: `BaseHeap::AllocRange` rounded `high_address` up to the alignment, so an allocation could end above the caller's ceiling, and a ceiling near `UINT32_MAX` wrapped to zero.
+- Classification: correctness; B/H applicability. **Adopted 2026-09-24 in RG-GDK-004 (adapted).**
+- Adaptation: the ceiling is no longer aligned. Canary rounds `high_page_number` up to the page because its free-block search treats it as exclusive (xenia-edge `4fcb8e449`); this repository still has the older search, which treats it as the last usable page, so the local port uses the last page ending at or below `high_address` instead. The upstream formula would allow one page above the ceiling here. For windows ending one byte below an alignment boundary, allocations whose size is a multiple of the alignment land where they did before (the Far Cry 3/4 and Watch Dogs layout concern in `4fcb8e449`).
+- Tests: `tests/unit/memory/heap_allocation_test.cpp` AllocRange window cases (unaligned ceiling, inclusive page ceiling, exact fit top-down/bottom-up, `UINT32_MAX` ceiling, windows too small, Canary's physical-heap case, vE0000000 4K/32K/64K). Six of the seven cases fail on the previous code; the exact-fit case passes on both.
+- Far Cry 3 or an equivalent physical-heap title was not run (no title content).
 
 ### xenia-canary/xenia-canary #1202 — [Memory] Check the host alignment PhysicalHeap can actually satisfy
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1202](https://github.com/xenia-canary/xenia-canary/pull/1202); created 2026-09-02T23:06:06Z; updated 2026-09-04T04:39:16Z; author `peerloomllc`.
 - Upstream status: **closed unmerged**. PR head (not adopted) commit `1cc288bc71e625bd9272dafc2f1fb01259a62eb2`.
 - Scope / reason / applicability: Closed unmerged: maintainer warns the alignment proposal changes poorly understood/unreachable checks, distinguishes AllocFixed, and names Far Cry 3 as a regression control. Keep separate from merged #1215 ceiling fix.
-- Classification: useful research; rejected; regression risk; B/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-004**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/memory.cc`.
-- Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- Classification: useful research; rejected; B/H applicability. **Not adopted (RG-GDK-004, 2026-09-24): not applicable.** `PhysicalHeap::Alloc`/`AllocRange` here have no host alignment check at all; the caller's alignment is applied to the physical address by the parent heap, which is the semantics #1202 argues for. Covered by `Physical heap vE0000000 aligns the physical address`.
 
 ### xenia-canary/xenia-canary #1243 — [GPU] Misc guest texture layout edge cases
 

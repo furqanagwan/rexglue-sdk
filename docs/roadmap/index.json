@@ -217,7 +217,7 @@
     "risk": "Range arithmetic or alignment changes may overlap allocations, escape the requested ceiling or corrupt aliased physical heaps.",
     "number": 4,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/4",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-005",

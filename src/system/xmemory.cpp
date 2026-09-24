@@ -1333,13 +1333,29 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   alignment = rex::round_up(alignment, page_size_);
   uint32_t page_count = get_page_count(size, page_size_, page_size_shift_);
   low_address = std::max(heap_base_, rex::align(low_address, alignment));
-  high_address = std::min(heap_base_ + (heap_size_ - 1), rex::align(high_address, alignment));
+  // high_address is the last byte the allocation may use. Don't round it up
+  // to the alignment (xenia-canary #1215): a ceiling that isn't a multiple of
+  // it would let the search place the allocation above it, and aligning a
+  // high_address near UINT32_MAX wraps to zero.
+  high_address = std::min(heap_base_ + (heap_size_ - 1), high_address);
   if (high_address < low_address) {
     REXSYS_ERROR("BaseHeap::Alloc invalid requested range");
     return false;
   }
+  // The search below treats high_page_number as the last usable page, so it
+  // is the last page that ends at or below high_address. For a window ending
+  // one byte below an alignment boundary, the common case, allocations whose
+  // size is a multiple of the alignment land where they did before.
+  uint32_t high_page_end = ((high_address - heap_base_) >> page_size_shift_) + 1;
+  if (((high_address - heap_base_) & (page_size_ - 1)) != page_size_ - 1) {
+    --high_page_end;
+  }
+  if (!high_page_end) {
+    REXSYS_ERROR("BaseHeap::Alloc requested range is smaller than a page");
+    return false;
+  }
   uint32_t low_page_number = (low_address - heap_base_) >> page_size_shift_;
-  uint32_t high_page_number = (high_address - heap_base_) >> page_size_shift_;
+  uint32_t high_page_number = high_page_end - 1;
   low_page_number = std::min(uint32_t(page_table_.size()) - 1, low_page_number);
   high_page_number = std::min(uint32_t(page_table_.size()) - 1, high_page_number);
   if (high_page_number < low_page_number) {

@@ -194,6 +194,14 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-004 heap ranges (2026-09-24, debug and release CTest): the AllocRange
+window cases in `unit_tests [memory]` pass; six of seven fail before the
+change (allocations ending above an unaligned or inclusive ceiling, a
+`UINT32_MAX` ceiling rejected, a too-small window reaching the search). The
+vE0000000 case records physical alignment for 4K/32K/64K requests and the
+4D5307F1 request size from xenia-canary #1182. No physical-heap title (Far
+Cry 3 or equivalent) was run.
+
 AMD and Intel are untested and non-blocking (ADR-007). The `[edram]` fixtures
 draw through guest shader translation; RG-GDK-010 to RG-GDK-012 add fixtures
 for the paths they change.
