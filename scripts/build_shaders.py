@@ -117,6 +117,9 @@ def main():
         if not os.path.exists(checked_in) or bytecode(out_path) != bytecode(checked_in):
           failed.append(identifier)
         continue
+      if os.path.exists(checked_in) and bytecode(out_path) == bytecode(checked_in):
+        # Keep the header as is, only the comments could differ.
+        continue
       subprocess.run([clang_format, '-i', '--style=file:' + os.path.join(ROOT, '.clang-format'),
                       out_path], check=True)
       shutil.copyfile(out_path, checked_in)

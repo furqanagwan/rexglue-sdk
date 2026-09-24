@@ -134,6 +134,16 @@ ctest --preset win-amd64-debug -L gpu -V
   texel must hold its cell's value at the oracle address. A uniform clear can't
   show texels read back from the wrong place. `gpu.resolve_readback_scaled_3x2`
   reruns all resolve fixtures at `draw_resolution_scale` 3x2.
+- **EDRAM sample layout (RG-GDK-009, `[edram]`):** guest draws through
+  hand-assembled microcode (one scissored constant-color draw per pixel, so
+  every pixel is distinct) followed by resolves of the same EDRAM through
+  another view: 1x re-aliased as 2x/4x per sample and 2x/4x re-aliased as 1x
+  must follow Canary #1163's canonical layout; a k_32_32_FLOAT target at 1x and
+  4x re-aliased as 32bpp must put each 64bpp half at `u = 2 * u_64bpp + half`;
+  a color target writing only the stencil byte over D24S8 at the same base
+  must keep a read-only depth test and the depth bits (Canary #1222); a 2x/4x
+  D24FS8 depth target restored after such an alias must keep its float32 host
+  depth, checked by redrawing with an equal depth test (Canary #1238).
 - **Device removal:** `gpu.device_removal_is_reported` removes the device with
   `ID3D12Device5::RemoveDevice` and requires the backend's fatal
   "Graphics device lost" report after the `DEVICE_REMOVED` reason is logged.
@@ -170,9 +180,23 @@ Scaled readback ([#58](https://github.com/furqanagwan/rexglue-sdk/issues/58),
 (ROV). Before the fix, 8bpp/16bpp readback lost half the texels at 2x and every
 format came back misplaced at non-power-of-two scales.
 
-AMD and Intel are untested and non-blocking (ADR-007). The fixtures do not yet
-cover guest shader translation through a draw; RG-GDK-008 to RG-GDK-012 add
-fixtures for the paths they change.
+RG-GDK-009 EDRAM layout fixtures (2026-09-24, release; debug and release
+CTest 1697/1697): all `[gpu]` fixtures pass on NVIDIA with host RT and ROV at
+native resolution, host RT at 3x2 and ROV at 2x2, and on WARP with host RT.
+Before the port the layout fixtures fail on NVIDIA with both paths (192 of
+192 2x samples and 224 of 256 4x samples off the canonical layout, 192 pixels
+in the 2x/4x-as-1x direction); without the #1222 change 640 of 640
+depth-failing pixels are written; without the #1238 change 486 of 512 2x
+pixels fail the equal depth test. The 4x half of #1238 changes nothing in this
+repository: its shaders address the store in 16-byte units, which drop the
+misplaced sample bit (Canary's byte-addressed shader didn't). On WARP, ROV
+draws never complete, so the `[edram]` fixtures run on WARP only with host
+render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
+are not run (no title content, no gamma draw fixture yet).
+
+AMD and Intel are untested and non-blocking (ADR-007). The `[edram]` fixtures
+draw through guest shader translation; RG-GDK-010 to RG-GDK-012 add fixtures
+for the paths they change.
 
 ### D3D12 vendor exceptions
 

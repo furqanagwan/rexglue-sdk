@@ -487,7 +487,7 @@
     "risk": "Mixed EDRAM sample conventions can corrupt color/depth aliases and regress AMD MSAA depth copies.",
     "number": 9,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/9",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-010",

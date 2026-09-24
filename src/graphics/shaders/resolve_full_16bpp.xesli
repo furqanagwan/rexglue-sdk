@@ -40,8 +40,7 @@ entry_inputs_end_code_begin_compute_xe
       pass_uint_vector_buffer_xe(xe_resolve_edram)
       pass_next_after_uint_vector_buffer_xe
       resolve_info,
-      XeResolveColorCopySourcePixelAddressIntsYHalfPixelOffsetFilling(
-          resolve_info, pixel_index),
+      pixel_index,
       pixel_0, pixel_1, pixel_2, pixel_3);
   uint2_xe packed = XePack16bpp4PixelsInUInt2(
       pixel_0, pixel_1, pixel_2, pixel_3, resolve_info.dest_format);

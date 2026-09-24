@@ -433,31 +433,31 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1238](https://github.com/xenia-canary/xenia-canary/pull/1238); created 2026-09-19T19:47:34Z; updated 2026-09-20T16:40:37Z; author `goldislead`.
 - Upstream status: **merged upstream**. Merge commit `0bd090dbe979bc64959efe519aa320db8e3eb467`.
-- Scope / reason / applicability: 2x/4x depth copy sample layout repairs AMD regression after canonical EDRAM; mandatory companion for #1163.
-- Classification: regression-related; relevant and merged upstream; B/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-009**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/gpu/shaders/host_depth_store_2xmsaa.cs.xesl`; `src/xenia/gpu/shaders/host_depth_store_4xmsaa.cs.xesl`.
-- Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- Scope / reason / applicability: 2x/4x depth copy sample layout repairs an AMD regression after canonical EDRAM; mandatory companion for #1163.
+- Classification: regression fix; B/H applicability. **Adopted 2026-09-24 in RG-GDK-009.**
+- Adaptation: `host_depth_store_2xmsaa.cs.xesl` and `host_depth_store_4xmsaa.cs.xesl` pass sample coordinates through the 1x path, in `XeEdramOffsetInts` units. The 4x change produces the same stores here: the shader addresses the buffer in 16-byte units, so the thread parity bit Canary's byte-addressed version added was already dropped.
+- Tests: `MSAA float24 depth keeps host precision through an alias` (2x fails in 486 of 512 pixels without the 2x change).
+- AMD not available locally; the AMD regression itself is not reproduced (non-blocking, ADR-007).
 
 ### xenia-canary/xenia-canary #1163 — [GPU] One canonical EDRAM layout
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1163](https://github.com/xenia-canary/xenia-canary/pull/1163); created 2026-08-20T03:08:53Z; updated 2026-08-26T17:05:59Z; author `goldislead`.
 - Upstream status: **merged upstream**. Merge commit `437a7280cf95310d518a2f68087aab61403956ac`.
-- Scope / reason / applicability: Canonical EDRAM refactor is not independently safe: include #1238 and #1222.
-- Classification: candidate for later port; relevant and merged upstream; C/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-009**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/gpu/d3d12/d3d12_render_target_cache.cc`; `src/xenia/gpu/dxbc_shader_translator.h`; `src/xenia/gpu/dxbc_shader_translator_om.cc`; `src/xenia/gpu/shaders/edram.xesli`; `src/xenia/gpu/shaders/resolve.xesli`; `src/xenia/gpu/shaders/resolve_fast_32bpp_1x2xmsaa.xesli`; `src/xenia/gpu/shaders/resolve_fast_32bpp_4xmsaa.xesli`; `src/xenia/gpu/shaders/resolve_fast_64bpp_1x2xmsaa.xesli`; `src/xenia/gpu/shaders/resolve_fast_64bpp_4xmsaa.xesli`; `src/xenia/gpu/shaders/resolve_full_128bpp.xesli`; `src/xenia/gpu/shaders/resolve_full_16bpp.xesli`; `src/xenia/gpu/shaders/resolve_full_32bpp.xesli`; `src/xenia/gpu/shaders/resolve_full_64bpp.xesli`; `src/xenia/gpu/shaders/resolve_full_8bpp.xesli`; `src/xenia/gpu/spirv_shader_translator.h`; `src/xenia/gpu/spirv_shader_translator_rb.cc`; `src/xenia/gpu/vulkan/vulkan_render_target_cache.cc`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Scope / reason / applicability: one canonical sample layout for 1x/2x/4x views of the same EDRAM (4x4 sample blocks, sample bit 0 horizontal, 2x sample 0 top); not independently safe, adopted together with #1238 and #1222.
+- Classification: correctness; C/H applicability. **Adopted 2026-09-24 in RG-GDK-009.**
+- Adaptation: shaders ported onto the vendored `0b2ffa314` sources (int-addressed EDRAM buffers instead of Canary's later byte addressing): `edram.xesli` remaps pixels and samples to canonical coordinates at guest pixel granularity; `resolve.xesli` and the full resolves load each sample by address; the fast resolves keep a vectorized path for 1x sources and load per pixel for MSAA, so they bind the EDRAM as a raw buffer (`draw_util::resolve_copy_shader_info`). The D3D12 transfer and dump shader generators and the ROV output (`dxbc_translator_om.cpp`) come from Canary's diff re-based on clang-formatted sources; Canary's per-target native scale (`source_scale_native`, `native_layout`, from `74db632ab`) doesn't exist here, so the layout scale is always the draw resolution scale. Adds `dxbc::Src::kXYXY`. Vulkan/SPIR-V parts not applicable (removed backend).
+- Tests: `[edram]` GPU fixtures (1x/2x/4x re-aliasing in both directions, 64bpp as 32bpp at 1x/4x); all `[gpu]` fixtures at native, 3x2 and 2x2 scale on host RT and ROV. See `docs/regression-strategy.md`.
+- Not covered: MSAA resolve averaging order (`k01` now averages horizontal samples), PWL gamma blend, titles 5841125E/4D5307F1.
 
 ### xenia-canary/xenia-canary #1222 — [GPU] EDRAM bits respected for color/depth aliases
 
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1222](https://github.com/xenia-canary/xenia-canary/pull/1222); created 2026-09-09T10:26:39Z; updated 2026-09-10T05:31:18Z; author `goldislead`.
 - Upstream status: **merged upstream**. Merge commit `9da693480d0995326b81c3a14f8b1a4c226066eb`.
-- Scope / reason / applicability: Preserve EDRAM bits under color/depth aliasing; title 4D530A26 and possibly other UE3.5 titles.
-- Classification: candidate for later port; relevant and merged upstream; B/H applicability. No adoption by this documentation change.
-- Adaptation and validation owner: **RG-GDK-009**, whose complete issue body specifies files, tests and acceptance gates.
-- Source files: `src/xenia/gpu/d3d12/d3d12_command_processor.cc`; `src/xenia/gpu/render_target_cache.cc`; `src/xenia/gpu/render_target_cache.h`; `src/xenia/gpu/vulkan/vulkan_command_processor.cc`.
-- Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- Scope / reason / applicability: keep depth/stencil enabled when an aliased color target writes only bits the tests don't use; title 4D530A26 (clouds and sprites through geometry), possibly other UE3.5 titles.
+- Classification: compatibility/correctness; B/H applicability. **Adopted 2026-09-24 in RG-GDK-009.**
+- Adaptation: `RenderTargetCache::ColorOverlapsDepthStencil`, per-range `depth_bits_target`, `IsHostDepthCurrent` and read-only aliased depth for host render targets behind the new `aliased_depth_read_only` cvar (default true, as upstream); D3D12 ROV check in `UpdateSystemConstantValues_Impl`. Canary's `scale_native` key field is not present here and is omitted.
+- Tests: `Color aliasing depth keeps a read-only depth test` (without the change 640 of 640 depth-failing pixels are written, host RT and ROV).
+- Title 4D530A26 is not available locally; no title result is claimed.
 
 ### xenia-canary/xenia-canary #1218 — [GPU] ZPD as a running sample counter; QueryBatch support
 

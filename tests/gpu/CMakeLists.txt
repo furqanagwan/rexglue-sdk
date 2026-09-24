@@ -7,6 +7,7 @@ add_executable(gpu_tests
     gpu_fixture.cpp
     pm4_fixture_test.cpp
     resolve_fixture_test.cpp
+    edram_layout_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE
