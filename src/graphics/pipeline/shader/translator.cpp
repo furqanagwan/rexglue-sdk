@@ -654,7 +654,6 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
 
   translation.errors_ = std::move(errors_);
   translation.translated_binary_ = CompleteTranslation();
-  translation.is_translated_ = true;
 
   bool is_valid = true;
   for (const auto& error : translation.errors_) {
@@ -663,12 +662,16 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
       break;
     }
   }
-  translation.is_valid_ = is_valid;
+  translation.is_valid_.store(is_valid, std::memory_order_relaxed);
 
   PostTranslation();
 
+  // Not published here: the backend still prepares the translation (binding
+  // layouts, disassembly) and calls PublishTranslated when it's done, so a
+  // thread that sees is_translated() never reads a half-prepared translation
+  // (has207/xenia-edge 462a1ac85, adapted).
   // In case is_valid_ is modified by PostTranslation, reload.
-  return translation.is_valid_;
+  return translation.is_valid();
 }
 
 void ShaderTranslator::EmitTranslationError(const char* message, bool is_fatal) {

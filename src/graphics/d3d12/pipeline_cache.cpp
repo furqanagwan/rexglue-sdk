@@ -1084,6 +1084,7 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
   // If this fails the shader will be marked as invalid and ignored later.
   if (!translator.TranslateAnalyzedShader(translation)) {
     REXGPU_ERROR("Shader {:016X} translation failed; marking as ignored", shader.ucode_data_hash());
+    translation.PublishTranslated();
     return false;
   }
 
@@ -1248,6 +1249,9 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
                                                     : "d3d12");
   }
 
+  // Last: other threads read the translation without the translation lock as
+  // soon as is_translated() is true.
+  translation.PublishTranslated();
   return translation.is_valid();
 }
 

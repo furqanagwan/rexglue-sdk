@@ -11,6 +11,7 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <set>
@@ -768,10 +769,19 @@ class Shader {
     uint64_t modification() const { return modification_; }
 
     // True if the shader was translated and prepared without error.
-    bool is_valid() const { return is_valid_; }
+    bool is_valid() const { return is_valid_.load(std::memory_order_acquire); }
 
-    // True if the shader has already been translated.
-    bool is_translated() const { return is_translated_; }
+    // True if the shader has already been translated and prepared. Pipeline
+    // caches check this without a lock before translating (double-checked
+    // against the translation lock), so it is acquire-paired with the release
+    // in PublishTranslated: once this reads true, the validity, the errors, the
+    // translated binary and the backend's preparation are all visible.
+    bool is_translated() const { return is_translated_.load(std::memory_order_acquire); }
+
+    // Publishes the translation to lock-free readers of is_translated. Called
+    // once by the backend after ShaderTranslator::TranslateAnalyzedShader and
+    // all of its own preparation, whether or not the translation is valid.
+    void PublishTranslated() { is_translated_.store(true, std::memory_order_release); }
 
     // Errors that occurred during translation.
     const std::vector<Error>& errors() const { return errors_; }
@@ -804,7 +814,7 @@ class Shader {
         : shader_(shader), modification_(modification) {}
 
     // If there was some failure during preparation on the implementation side.
-    void MakeInvalid() { is_valid_ = false; }
+    void MakeInvalid() { is_valid_.store(false, std::memory_order_release); }
 
    private:
     friend class Shader;
@@ -813,8 +823,8 @@ class Shader {
     Shader& shader_;
     uint64_t modification_;
 
-    bool is_valid_ = false;
-    bool is_translated_ = false;
+    std::atomic<bool> is_valid_{false};
+    std::atomic<bool> is_translated_{false};
     std::vector<Error> errors_;
     std::vector<uint8_t> translated_binary_;
     std::string host_disassembly_;

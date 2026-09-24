@@ -349,6 +349,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-011**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: Report; inspect linked commit/reproducer before implementation..
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- RG-GDK-011 review (2026-09-24): still open upstream with no merged fix in Canary or Edge for D3D12. The proposed clamp of each memexport stream to its committed allocation (issue comment) is not adopted: unmerged, and UFC Undisputed 3 isn't available to validate it. Locally a failed memexport `RequestRange` still drops the draw with an error rather than being widened or ignored. Near-full-heap memexport fixtures are RG-GDK-011 part 2.
 
 ### xenia-canary/xenia-canary #1127 — [GPU/DXBC] Fix signed round bias breaking memexport
 
@@ -522,6 +523,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-011**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/gpu/pm4_command_processor_implement.h`.
 - Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- RG-GDK-011 decision (2026-09-24): not adopted; the Edge RB_BLKSZ version (29fcaeac3) was ported instead, publishing at the guest-programmed block size rather than every 8 packets.
 
 ### xenia-canary/xenia-canary #1227 — [Kernel] Reconcile the guest dispatch header on native object lookup
 
@@ -903,8 +905,8 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 
 - Source: [has207/xenia-edge `462a1ac855d295a87f0c0fab232205eef9359d5c`](https://github.com/has207/xenia-edge/commit/462a1ac855d295a87f0c0fab232205eef9359d5c); 2026-09-18T09:26:08+09:00; Herman S..
 - Game/scope: Async compilation. Classification: General correctness; B/H.
-- Reason / required adaptation / tests: Review local worker/atomic publication order, stress first use and cache reuse.
-- ReXGlue issue: **RG-GDK-011**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: the local translator set `is_translated_` before `is_valid_` and before the D3D12 wrapper finished (binding layout UIDs, disassembly), while `ConfigurePipeline` and `PrepareRuntimeDescriptionForQueuedCreation` read `is_translated()` without the translation lock (double-checked locking) from the processor and creation threads. Adapted: both flags are atomics (acquire loads); the translator no longer publishes, and `PipelineCache::TranslateAnalyzedShader` calls the new `Translation::PublishTranslated()` (release) last on every exit, so a reader never sees a half-prepared translation. Edge's `TryClaimTranslation` background translation does not exist locally; translations stay serialized by `translation_request_lock_`. No deterministic test; covered by the async-compile stress fixture planned in RG-GDK-011 part 2.
+- ReXGlue issue: **RG-GDK-011**; status: **ported (adapted)** in RG-GDK-011 part 1.
 - Source files: `src/xenia/gpu/metal/metal_command_processor.cc`, `src/xenia/gpu/shader.h`, `src/xenia/gpu/shader_translator.cc`.
 - Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
 
@@ -912,8 +914,8 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 
 - Source: [has207/xenia-edge `fe84ec77e87739dd6d26589e35f4c5573e60d271`](https://github.com/has207/xenia-edge/commit/fe84ec77e87739dd6d26589e35f4c5573e60d271); 2026-09-11T00:08:24+09:00; Herman S..
 - Game/scope: Async D3D12. Classification: Regression fix; B/H.
-- Reason / required adaptation / tests: Lifetime fence test; placeholder rendering is an opt-in behavior decision.
-- ReXGlue issue: **RG-GDK-011**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: not applicable. There are no placeholder or interpreter PSOs locally: `IssueDraw` skips a draw while `GetD3D12PipelineByHandle` is null, and a pipeline's `state` only ever goes from null to the real PSO (release store after translation, acquire load at draw and at deferred-list replay), so a handle can never resolve to a different pipeline than the bindings were built for. Revisit if placeholder rendering is adopted.
+- ReXGlue issue: **RG-GDK-011**; status: investigated, not applicable (no placeholders).
 - Source files: `src/xenia/gpu/d3d12/d3d12_command_processor.cc`, `src/xenia/gpu/d3d12/pipeline_cache.cc`, `src/xenia/gpu/d3d12/pipeline_cache.h`.
 - Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
 
@@ -921,8 +923,8 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 
 - Source: [has207/xenia-edge `29fcaeac3244bed8475b5b8b549a861d743c9c32`](https://github.com/has207/xenia-edge/commit/29fcaeac3244bed8475b5b8b549a861d743c9c32); 2026-08-30T15:50:11+09:00; Herman S..
 - Game/scope: General PM4. Classification: General correctness candidate; B/H.
-- Reason / required adaptation / tests: Compare Canary #1195 cadence; test guest poll progress and wrap.
-- ReXGlue issue: **RG-GDK-011**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: local code matched Edge's pre-fix state (write-back once per burst, `read_ptr_update_freq_` in the wrong unit). Ported into `CommandProcessor::ExecutePrimaryBuffer` (local `RingBuffer` reader) and `EnableReadPointerWriteBack`: republish every RB_BLKSZ quadwords, release fence before the store, write-back target re-read each time. Preferred over Canary #1195's fixed 8-packet cadence (closed unmerged) because it follows the guest-programmed block size. Tests: `gpu_tests [ring]` — the write-back advances to within one stride of a WAIT_REG_MEM blocked on the guest (fails without the port), and five ring lengths of bursts wrap while the fixture waits on the write-back for room.
+- ReXGlue issue: **RG-GDK-011**; status: **ported** in RG-GDK-011 part 1.
 - Source files: `src/xenia/gpu/command_processor.cc`, `src/xenia/gpu/pm4_command_processor_implement.h`.
 - Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
 
