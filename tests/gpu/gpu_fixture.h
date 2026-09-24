@@ -47,8 +47,16 @@ class GpuFixture {
   void WriteDwords(uint32_t address, const std::vector<uint32_t>& dwords);
   uint32_t ReadDword(uint32_t address) const;
 
-  // Appends packet dwords to the ring and moves the write pointer.
-  void Submit(const std::vector<uint32_t>& dwords);
+  // Appends packet dwords to the ring and moves the write pointer. Without a
+  // read pointer write-back the ring must not wrap; with one, Submit waits on
+  // the write-back for free space and wraps, as D3D does, and returns false if
+  // the command processor stops making room.
+  bool Submit(const std::vector<uint32_t>& dwords);
+  // Arms the CP_RB_RPTR write-back at a guest physical address, with
+  // RB_BLKSZ (log2 quadwords between updates) as the guest passes it.
+  uint32_t EnableReadPointerWriteBack(uint32_t block_size_log2);
+  uint32_t ring_dwords() const { return kRingDwords; }
+  uint32_t write_index() const { return write_index_; }
   // Submits a fence write and waits for the command processor to reach it.
   bool Flush(std::chrono::milliseconds timeout = std::chrono::seconds(10));
 
@@ -78,6 +86,7 @@ class GpuFixture {
   uint32_t write_index_ = 0;
   uint32_t fence_address_ = 0;
   uint32_t fence_value_ = 0;
+  uint32_t read_pointer_writeback_ = 0;
 };
 
 }  // namespace rex::testing

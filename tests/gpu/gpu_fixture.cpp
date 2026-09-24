@@ -8,6 +8,7 @@
 
 #include "gpu_fixture.h"
 
+#include <algorithm>
 #include <crtdbg.h>
 #include <cstdlib>
 #include <string_view>
@@ -153,19 +154,60 @@ uint32_t GpuFixture::ReadDword(uint32_t address) const {
   return memory::load_and_swap<uint32_t>(memory()->TranslatePhysical(address));
 }
 
-void GpuFixture::Submit(const std::vector<uint32_t>& dwords) {
-  // The fixtures are small; wrapping the ring isn't supported.
-  assert_true(write_index_ + dwords.size() < kRingDwords);
-  WriteDwords(ring_ + write_index_ * 4, dwords);
-  write_index_ += uint32_t(dwords.size());
+bool GpuFixture::Submit(const std::vector<uint32_t>& dwords) {
+  if (!read_pointer_writeback_) {
+    // Without the write-back there's no way to know the ring has drained.
+    assert_true(write_index_ + dwords.size() < kRingDwords);
+    WriteDwords(ring_ + write_index_ * 4, dwords);
+    write_index_ += uint32_t(dwords.size());
+    runtime::MMIOHandler::global_handler()->CheckStore(kGpuRegisterBase + kCpRbWptr * 4,
+                                                       write_index_);
+    return true;
+  }
+  // The write pointer only ever moves past whole submissions, as D3D reserves
+  // contiguous ring space for its packets, so wait until all of it fits. One
+  // slot stays empty so a full ring isn't mistaken for an empty one.
+  assert_true(dwords.size() < kRingDwords);
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while (true) {
+    uint32_t read_index = ReadDword(read_pointer_writeback_);
+    uint32_t free_dwords = (read_index + kRingDwords - write_index_ - 1) % kRingDwords;
+    if (free_dwords >= dwords.size()) {
+      break;
+    }
+    if (std::chrono::steady_clock::now() > deadline) {
+      return false;
+    }
+    std::this_thread::yield();
+  }
+  size_t first = std::min<size_t>(dwords.size(), kRingDwords - write_index_);
+  WriteDwords(ring_ + write_index_ * 4,
+              std::vector<uint32_t>(dwords.begin(), dwords.begin() + first));
+  if (first < dwords.size()) {
+    WriteDwords(ring_, std::vector<uint32_t>(dwords.begin() + first, dwords.end()));
+  }
+  write_index_ = uint32_t((write_index_ + dwords.size()) % kRingDwords);
   runtime::MMIOHandler::global_handler()->CheckStore(kGpuRegisterBase + kCpRbWptr * 4,
                                                      write_index_);
+  return true;
+}
+
+uint32_t GpuFixture::EnableReadPointerWriteBack(uint32_t block_size_log2) {
+  if (!read_pointer_writeback_) {
+    read_pointer_writeback_ = AllocPhysical(0x1000);
+  }
+  // Before the command processor has published anything.
+  WriteDwords(read_pointer_writeback_, {write_index_});
+  runtime_->graphics_system()->EnableReadPointerWriteBack(read_pointer_writeback_, block_size_log2);
+  return read_pointer_writeback_;
 }
 
 bool GpuFixture::Flush(std::chrono::milliseconds timeout) {
   ++fence_value_;
-  Submit({xenos::MakePacketType3(xenos::PM4_EVENT_WRITE_SHD, 3), 0,
-          fence_address_ | uint32_t(xenos::Endian::k8in32), fence_value_});
+  if (!Submit({xenos::MakePacketType3(xenos::PM4_EVENT_WRITE_SHD, 3), 0,
+               fence_address_ | uint32_t(xenos::Endian::k8in32), fence_value_})) {
+    return false;
+  }
   auto deadline = std::chrono::steady_clock::now() + timeout;
   while (ReadDword(fence_address_) != fence_value_) {
     if (std::chrono::steady_clock::now() > deadline) {

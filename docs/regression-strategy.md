@@ -194,6 +194,15 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-011 part 1 (2026-09-24): `gpu_tests [ring]` passes on NVIDIA and
+WARP. The read pointer write-back reaches a WAIT_REG_MEM blocked on the guest
+to within one RB_BLKSZ stride (this case fails with mid-burst publication
+disabled), and bursts totalling five ring lengths wrap with the fixture
+waiting on the write-back for space. The shader translation publication order
+fix has no deterministic test yet. Not run: memexport near-full heap and
+failed stream ranges, async compile stress with teardown/device removal, UFC3
+(no title content), AMD/Intel.
+
 RG-GDK-010 ZPD occlusion queries (2026-09-24): `unit_tests [zpd]` and
 `gpu_tests [zpd]` pass on NVIDIA (0x10DE, driver 32.0.16.1714) at 1x and at
 3x2 draw resolution scale (`gpu.zpd_scaled_3x2`), and on WARP. Strict mode is
