@@ -22,15 +22,16 @@ void StoreBigEndian(uint8_t* bytes, uint32_t value) {
 
 class JumpTableModule final : public rex::runtime::Module {
  public:
-  JumpTableModule(bool table_in_rb, bool has_gap = false) : Module(nullptr) {
-    // lis r9,0; slwi r10,r3,2; addi r9,r9,0x2000; lwzx r8,rA,rB;
+  JumpTableModule(bool table_in_rb, bool has_gap = false, bool distinct_base = false)
+      : Module(nullptr) {
+    // lis r9/r11,0; slwi r10,r3,2; addi r9,r9/r11,0x2000; lwzx r8,rA,rB;
     // mtctr r8; bctr; blr; blr.
     const uint32_t ra = table_in_rb ? 10 : 9;
     const uint32_t rb = table_in_rb ? 9 : 10;
     const std::array<uint32_t, 8> instructions = {
-        (15u << 26) | (9u << 21),
+        (15u << 26) | ((distinct_base ? 11u : 9u) << 21),
         (21u << 26) | (3u << 21) | (10u << 16) | (2u << 11) | (29u << 1),
-        (14u << 26) | (9u << 21) | (9u << 16) | 0x2000u,
+        (14u << 26) | (9u << 21) | ((distinct_base ? 11u : 9u) << 16) | 0x2000u,
         (31u << 26) | (8u << 21) | (ra << 16) | (rb << 11) | (23u << 1),
         (31u << 26) | (8u << 21) | (9u << 16) | (467u << 1),
         0x4E800420u,
@@ -64,18 +65,20 @@ TEST_CASE("Absolute PPC jump table selects the scaled index in either load opera
           "[codegen][jump_table]") {
   for (bool table_in_rb : {false, true}) {
     for (bool has_gap : {false, true}) {
-      JumpTableModule module(table_in_rb, has_gap);
-      auto binary = rex::codegen::BinaryView::fromModule(module);
-      rex::codegen::DecodedBinary decoded(binary);
-      decoded.decode();
-      const auto* region = decoded.regionContaining(0x1000);
-      REQUIRE(region != nullptr);
-      auto table = rex::codegen::detectJumpTable(decoded, 0x1014, *region, 0x1000, 0x1020);
-      REQUIRE(table.has_value());
-      CHECK(table->indexRegister == 3);
-      const std::vector<uint32_t> expected = has_gap ? std::vector<uint32_t>{0x1018, 0, 0x101C}
-                                                     : std::vector<uint32_t>{0x1018, 0x101C};
-      CHECK(table->targets == expected);
+      for (bool distinct_base : {false, true}) {
+        JumpTableModule module(table_in_rb, has_gap, distinct_base);
+        auto binary = rex::codegen::BinaryView::fromModule(module);
+        rex::codegen::DecodedBinary decoded(binary);
+        decoded.decode();
+        const auto* region = decoded.regionContaining(0x1000);
+        REQUIRE(region != nullptr);
+        auto table = rex::codegen::detectJumpTable(decoded, 0x1014, *region, 0x1000, 0x1020);
+        REQUIRE(table.has_value());
+        CHECK(table->indexRegister == 3);
+        const std::vector<uint32_t> expected = has_gap ? std::vector<uint32_t>{0x1018, 0, 0x101C}
+                                                       : std::vector<uint32_t>{0x1018, 0x101C};
+        CHECK(table->targets == expected);
+      }
     }
   }
 }
