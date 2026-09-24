@@ -24,57 +24,26 @@ add_library(rexcore OBJECT
 )
 add_library(rex::core ALIAS rexcore)
 
-if(APPLE)
-    # Apple's libc++ still gates std::jthread/std::stop_token behind the
-    # experimental-library feature flag. Only timer_queue.cpp uses them, and
-    # neither type crosses a header boundary.
-    set_source_files_properties(timer_queue.cpp PROPERTIES
-        COMPILE_OPTIONS "-fexperimental-library")
-endif()
-
-# Platform-specific sources
-if(WIN32)
-    target_sources(rexcore PRIVATE
-        atomic_win.cpp
-        clock_win.cpp
-        dbg_win.cpp
-        dynlib_win.cpp
-        exception_handler_win.cpp
-        filesystem_win.cpp
-        fiber_win32.cpp
-        mapped_memory_win.cpp
-        math_msvc.cpp
-        memory_win.cpp
-        platform/console_win.cpp
-        platform/env_win.cpp
-        seh_win.cpp
-        socket_win.cpp
-        system_win.cpp
-        threading_win.cpp
-    )
-    target_compile_definitions(rexcore PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
-elseif(UNIX)
-    # Linux and macOS/Darwin share the POSIX sources; Darwin-specific behavior
-    # is selected inside them with #if defined(__APPLE__).
-    target_sources(rexcore PRIVATE
-        atomic_posix.cpp
-        clock_posix.cpp
-        dbg_posix.cpp
-        dynlib_posix.cpp
-        exception_handler_posix.cpp
-        filesystem_posix.cpp
-        fiber_posix.cpp
-        mapped_memory_posix.cpp
-        math_gcc.cpp
-        memory_posix.cpp
-        platform/console_posix.cpp
-        platform/env_posix.cpp
-        seh_posix.cpp
-        socket_posix.cpp
-        system_posix.cpp
-        threading_posix.cpp
-    )
-endif()
+# Windows platform sources
+target_sources(rexcore PRIVATE
+    atomic_win.cpp
+    clock_win.cpp
+    dbg_win.cpp
+    dynlib_win.cpp
+    exception_handler_win.cpp
+    filesystem_win.cpp
+    fiber_win32.cpp
+    mapped_memory_win.cpp
+    math_msvc.cpp
+    memory_win.cpp
+    platform/console_win.cpp
+    platform/env_win.cpp
+    seh_win.cpp
+    socket_win.cpp
+    system_win.cpp
+    threading_win.cpp
+)
+target_compile_definitions(rexcore PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 
 # Xenos data-format layer (stateless; headers under include/rex/graphics/).
 # The GPU emulation consuming it lives in the rexgpu-xenos plugin.
@@ -97,12 +66,6 @@ target_include_directories(rexcore PRIVATE
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/thirdparty/cli11/include
 )
-
-if(APPLE)
-    target_link_libraries(rexcore PRIVATE pthread)
-elseif(UNIX)
-    target_link_libraries(rexcore PRIVATE pthread rt dl)
-endif()
 
 target_link_libraries(rexcore
     PUBLIC

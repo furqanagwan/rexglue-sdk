@@ -416,13 +416,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     }
 
     if (with_swapchain) {
-#if REX_PLATFORM_WIN32
       queue_family.may_support_presentation =
           vulkan_instance->extensions().ext_KHR_win32_surface &&
           ifn.vkGetPhysicalDeviceWin32PresentationSupportKHR(physical_device, queue_family_index);
-#else
-      queue_family.may_support_presentation = true;
-#endif
       if (queue_family.may_support_presentation) {
         queue_family.queues.resize(std::max(size_t(1), queue_family.queues.size()));
         has_presentation_queue_family = true;

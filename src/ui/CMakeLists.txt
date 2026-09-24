@@ -34,7 +34,6 @@ set(REXUI_OVERLAY_SOURCES
 # Vulkan UI backend
 set(REXUI_VULKAN_SOURCES
     vulkan/linked_type_descriptor_set_allocator.cpp
-    vulkan/vulkan_moltenvk.cpp
     vulkan/single_layout_descriptor_set_pool.cpp
     vulkan/spirv_tools_context.cpp
     vulkan/ui_samplers.cpp
@@ -63,20 +62,10 @@ if(REXGLUE_USE_D3D12)
     )
 endif()
 
-# Platform-specific sources (windowing itself is SDL3, platform-independent)
-if(WIN32)
-    set(REXUI_PLATFORM_SOURCES
-        surface_win.cpp
-    )
-elseif(APPLE)
-    set(REXUI_PLATFORM_SOURCES
-        surface_mac.cpp
-    )
-else()
-    set(REXUI_PLATFORM_SOURCES
-        surface_gnulinux.cpp
-    )
-endif()
+# Platform sources (windowing itself is SDL3)
+set(REXUI_PLATFORM_SOURCES
+    surface_win.cpp
+)
 
 # Combine sources
 set(REXUI_SOURCES
@@ -145,29 +134,8 @@ if(REXGLUE_USE_VULKAN)
     )
 endif()
 
-# Platform-specific dependencies
-if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(X11_XCB REQUIRED x11-xcb)
-    # Required, not optional: vulkan/api.h pulls in <wayland-client.h> on every
-    # Linux build.
-    pkg_check_modules(WAYLAND REQUIRED wayland-client)
-
-    target_include_directories(rexui PUBLIC
-        ${X11_XCB_INCLUDE_DIRS}
-        ${WAYLAND_INCLUDE_DIRS}
-    )
-    target_link_libraries(rexui PUBLIC
-        ${X11_XCB_LIBRARIES}
-        ${WAYLAND_LIBRARIES}
-    )
-elseif(APPLE)
-    target_link_libraries(rexui PRIVATE "-framework CoreFoundation")
-endif()
-
-if(WIN32)
-    target_link_libraries(rexui PUBLIC dxgi dxguid)
-endif()
+# Platform dependencies
+target_link_libraries(rexui PUBLIC dxgi dxguid)
 
 # D3D12 backend dependencies
 if(REXGLUE_USE_D3D12)

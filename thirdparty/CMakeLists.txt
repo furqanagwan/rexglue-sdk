@@ -6,17 +6,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 #=============================================================================
 # Architecture detection
 #=============================================================================
-if(APPLE AND CMAKE_OSX_ARCHITECTURES)
-    # On Apple, CMAKE_OSX_ARCHITECTURES is the target arch; CMAKE_SYSTEM_PROCESSOR
-    # reflects the host (e.g. arm64 on Apple Silicon even when cross-building x86_64).
-    if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        set(IS_ARM64 TRUE)
-        set(IS_X86_64 FALSE)
-    else()
-        set(IS_ARM64 FALSE)
-        set(IS_X86_64 TRUE)
-    endif()
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
     set(IS_ARM64 FALSE)
     set(IS_X86_64 TRUE)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|ARM64|arm64)$")
@@ -49,9 +39,6 @@ if(REXGLUE_USE_VULKAN)
         vulkan-headers vulkan-memory-allocator
         spirv-headers spirv-tools glslang
     )
-    if(APPLE)
-        list(APPEND REQUIRED_SUBMODULES vulkan-loader moltenvk)
-    endif()
 endif()
 
 
@@ -202,22 +189,6 @@ if(REXGLUE_USE_VULKAN)
     set(VMA_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
     add_subdirectory(vulkan-memory-allocator)
 
-    if(APPLE)
-        # Build the loader and MoltenVK revisions shipped by the pinned SDK.
-        # They remain runtime-loaded; no Vulkan implementation is linked into
-        # rexglue itself.
-        set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(BUILD_WERROR OFF CACHE BOOL "" FORCE)
-        set(LOADER_CODEGEN OFF CACHE BOOL "" FORCE)
-        string(REGEX REPLACE "\\.[0-9]+$" "" VulkanHeaders_VERSION
-            "${REXGLUE_VULKAN_SDK_VERSION}")
-        add_subdirectory(vulkan-loader EXCLUDE_FROM_ALL)
-        set_target_properties(vulkan PROPERTIES EXCLUDE_FROM_ALL FALSE)
-
-        set(MVK_BUILD_SHADER_CONVERTER_TOOL OFF CACHE BOOL "" FORCE)
-        set(MVK_EXCLUDE_SPIRV_TOOLS ON CACHE BOOL "" FORCE)
-        add_subdirectory(moltenvk)
-    endif()
 endif()
 
 #=============================================================================
@@ -254,20 +225,9 @@ set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
 # Video provides the windowing/event layer; presenters create their own
 # D3D12/Vulkan surfaces from native handles, so SDL_RENDER stays off.
 set(SDL_VIDEO ON CACHE BOOL "" FORCE)
-if(APPLE)
-    # macOS uses SDL for windowing + Metal/Vulkan surface creation.
-    set(SDL_METAL ON CACHE BOOL "" FORCE)
-    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
-else()
-    set(SDL_METAL OFF CACHE BOOL "" FORCE)
-    # Linux picks X11 or Wayland at runtime, so the surface has to come from
-    # whichever driver SDL chose. Windows presenters go straight from the HWND.
-    if(UNIX)
-        set(SDL_VULKAN ON CACHE BOOL "" FORCE)
-    else()
-        set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
-    endif()
-endif()
+set(SDL_METAL OFF CACHE BOOL "" FORCE)
+# Windows presenters create surfaces straight from the HWND.
+set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
 set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
@@ -280,7 +240,7 @@ set(SDL_DIALOG ON CACHE BOOL "" FORCE)
 set(SDL_TRAY OFF CACHE BOOL "" FORCE)
 set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 
-# Disable graphics APIs (unused without video) — only on non-Apple
+# Disable graphics APIs (unused without video)
 set(SDL_OPENGL OFF CACHE BOOL "" FORCE)
 set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 
@@ -288,19 +248,6 @@ set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 set(SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
 set(SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
 set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
-
-# Linux video and audio backends. Both video drivers are always built so the
-# one in use stays a runtime choice.
-if(UNIX AND NOT APPLE)
-    set(SDL_X11               ON  CACHE BOOL "" FORCE)
-    set(SDL_WAYLAND           ON  CACHE BOOL "" FORCE)
-    set(SDL_ALSA              ON  CACHE BOOL "" FORCE)
-    set(SDL_ALSA_SHARED       ON  CACHE BOOL "" FORCE)
-    set(SDL_PULSEAUDIO        ON  CACHE BOOL "" FORCE)
-    set(SDL_PULSEAUDIO_SHARED ON  CACHE BOOL "" FORCE)
-    set(SDL_PIPEWIRE          ON  CACHE BOOL "" FORCE)
-    set(SDL_PIPEWIRE_SHARED   ON  CACHE BOOL "" FORCE)
-endif()
 
 add_subdirectory(sdl3)
 
