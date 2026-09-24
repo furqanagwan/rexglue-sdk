@@ -431,7 +431,7 @@
     "risk": "New row/tile/mip formulas can overlap guest subresources or misplace resolve destinations across formats and scales.",
     "number": 8,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/8",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-009",
