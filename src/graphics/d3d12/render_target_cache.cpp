@@ -2643,8 +2643,9 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
     dxbc::Src canonical_u(dxbc::Src::R(0, dxbc::Src::kXXXX));
     dxbc::Src canonical_v(dxbc::Src::R(0, dxbc::Src::kYYYY));
     bool canonical_scaled;
-    CanonicalizeSample(a, key.dest_msaa_samples, dest_sample, msaa_2x_supported_, draw_resolution_scale_x,
-                       draw_resolution_scale_y, canonical_u, canonical_v, canonical_scaled);
+    CanonicalizeSample(a, key.dest_msaa_samples, dest_sample, msaa_2x_supported_,
+                       draw_resolution_scale_x, draw_resolution_scale_y, canonical_u, canonical_v,
+                       canonical_scaled);
     if (dest_is_64bpp && !source_is_64bpp) {
       // The low 32bpp half of the 64bpp destination sample is obtained from the
       // source pixel at u = 2 * u_64bpp, and the high half comes from the
@@ -2661,8 +2662,8 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
     dxbc::Src source_pixel_x(canonical_u);
     dxbc::Src source_pixel_y(canonical_v);
     DecanonicalizeSample(a, key.source_msaa_samples, canonical_u, canonical_v, canonical_scaled,
-                         msaa_2x_supported_, draw_resolution_scale_x, draw_resolution_scale_y, source_pixel_x,
-                         source_pixel_y, source_sample);
+                         msaa_2x_supported_, draw_resolution_scale_x, draw_resolution_scale_y,
+                         source_pixel_x, source_pixel_y, source_sample);
     // Each of the compositions routes u (and along with that the X result)
     // through r1.x. The Y result lands in r1.y, except when there is a single
     // sampled unscaled transfer between bit depths. In that case, v goes into
@@ -3312,14 +3313,14 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
                 dxbc::Src host_depth_v(dxbc::Src::R(0, dxbc::Src::kYYYY));
                 bool host_depth_scaled;
                 CanonicalizeSample(a, key.dest_msaa_samples, dest_sample, msaa_2x_supported_,
-                                   draw_resolution_scale_x, draw_resolution_scale_y, host_depth_u, host_depth_v,
-                                   host_depth_scaled);
+                                   draw_resolution_scale_x, draw_resolution_scale_y, host_depth_u,
+                                   host_depth_v, host_depth_scaled);
                 dxbc::Src host_depth_x(host_depth_u);
                 dxbc::Src host_depth_y(host_depth_v);
                 DecanonicalizeSample(a, key.host_depth_source_msaa_samples, host_depth_u,
                                      host_depth_v, host_depth_scaled, msaa_2x_supported_,
-                                     draw_resolution_scale_x, draw_resolution_scale_y, host_depth_x, host_depth_y,
-                                     host_depth_source_sample);
+                                     draw_resolution_scale_x, draw_resolution_scale_y, host_depth_x,
+                                     host_depth_y, host_depth_source_sample);
                 // With varying sample counts, the remapped coordinates will
                 // always be stored in r1.xy here. The remapping helpers keep
                 // the value of r1.w as the guest depth value, while r1.z, the
