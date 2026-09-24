@@ -80,9 +80,9 @@ minimum GPU list. Choose concrete available models when executing RG-GDK-006.
 | Vendor/sample | Evidence requiring attention | Required tests | Status |
 | --- | --- | --- | --- |
 | AMD, at least two supported driver/architecture combinations | Canary #1238 explicitly follows an AMD regression; local historical AMD ROV/shader condition | Host-RT/ROV, 2x/4x depth copy, resolves, memexport, device removal | Not run; no AMD detected locally |
-| NVIDIA, modern and older compatible device | Edge #204 report was closed for tracker scope; Canary #1093 RTX 4070 Ti SUPER memexport report | Async pipeline lifetime, stock/created fighter geometry, stencil, readback, hybrid-adapter selection | RTX 5080 Laptop detected, driver 32.0.16.1714; not run |
+| NVIDIA, modern and older compatible device | Edge #204 report was closed for tracker scope; Canary #1093 RTX 4070 Ti SUPER memexport report | Async pipeline lifetime, stock/created fighter geometry, stencil, readback, hybrid-adapter selection | RTX 5080 Laptop detected, driver 32.0.16.1714, FL 12_2, SM 6.8 (`gpu_tests`); fixtures not run |
 | Intel Arc and non-Arc separately | Canary #608 non-Arc native stencil failure; local Intel fallback rules | Stencil export toggle/fallback, host-RT/ROV if supported, clears, bandwidth and unified memory | Intel Graphics detected, driver 32.0.101.6129; model class/caps not established; not run |
-| WARP | Deterministic API validation and CI smoke only | Resource/state/descriptor checks where supported | Not run; cannot certify a vendor |
+| WARP | Deterministic API validation and CI smoke only | Resource/state/descriptor checks where supported | Capability metadata smoke passes (`gpu_tests`, FL 12_1, SM 6.8, driver 10.0.26100.9502); cannot certify a vendor |
 
 Run each selected GPU on ordinary Windows development deployment and intended
 GDK title deployment. Record OS/driver/GDK versions rather than assuming newest
@@ -90,6 +90,46 @@ means correct. Run correctness at native scale first, then 2x resolution and
 1x/2x/4x MSAA where guest fixtures support them. Test cold/warm caches and
 foreground/minimize/resize/device removal. No optional feature should become an
 implicit prerequisite without an explicit support policy change.
+
+### Capability record (RG-GDK-006)
+
+Every GPU run records the provider's startup log lines, which name the adapter
+index, vendor/device/subsystem/revision IDs, user-mode driver version, dedicated
+memory, software flag, max feature level, highest shader model, debug-layer and
+DRED state, the optional D3D12 features, and the render-target path the cache
+actually selected with its reason (`render_target_path_d3d12`, vendor default or
+ROV fallback) plus whether pixel-shader stencil reference output is used. A
+result without those lines is not reproducible and does not count.
+
+Debug-layer runs (`--d3d12_debug`) are correctness runs only. Performance runs
+leave the debug layer off; use `--d3d12_dred` there to keep DRED breadcrumbs and
+page-fault capture for device-removal diagnosis. DRED is still forced on with
+the debug layer.
+
+`gpu_tests` (CTest label `gpu`) creates real devices and checks this metadata:
+
+```powershell
+ctest --preset win-amd64-debug -L gpu -V
+```
+
+The WARP cases run on any Windows host, including CI. The hardware case uses the
+default adapter selection and skips when only a software adapter exists. Select
+another adapter with `--d3d12_adapter=<index>` in a title run. These tests prove
+device creation and capability reporting only, not rendering correctness; the
+PM4/shader/readback fixture host is the remaining RG-GDK-006 work.
+
+### D3D12 vendor exceptions
+
+Vendor-name branches in the D3D12 backend. None is driver-scoped yet; each needs
+a fixture that shows the failure on the named driver before it is kept, narrowed
+by driver version or retired.
+
+| Location | Vendor | Behaviour | Origin and driver evidence | Override | Retirement test |
+| --- | --- | --- | --- | --- | --- |
+| `D3D12RenderTargetCache::Initialize` (`render_target_cache.cpp`) | Intel | Default render-target path is ROV instead of host render targets | "always" stencil comparison broken on UHD Graphics 630, driver 27.20.0100.9316 (April 2021) | `render_target_path_d3d12=rtv` | D3D9-style clear fixture with "always" stencil on current Intel Arc and non-Arc drivers |
+| `D3D12RenderTargetCache::Initialize` (disabled `#else`) | AMD | Would force host render targets | AMD shader compiler crashes with the ROV output merger (March 2021) | n/a (dead code) | ROV draw fixture on current AMD drivers; delete the branch if it passes |
+| `D3D12RenderTargetCache::Initialize` (`use_stencil_reference_output_`) | Intel | Pixel-shader stencil reference output off unless opted in | Canary #608: native stencil output fails on non-Arc Intel (Iris Xe) | `native_stencil_value_output_d3d12_intel=true` | Stencil export fixture, Arc and non-Arc separately |
+| `DxbcShaderTranslator::UseSwitchForControlFlow` (`dxbc_translator.cpp`) | Intel | DXBC control flow uses `if` chains instead of `switch` | Crash on Intel HD Graphics 4000 (no driver recorded) | `dxbc_switch` (only disables further) | Shader control-flow fixture with `switch` on current Intel drivers |
 
 ## Comparison and release gates
 
