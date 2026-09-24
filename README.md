@@ -32,8 +32,10 @@ Latest SDK builds and releases are published on [GitHub Releases](https://github
 ## Quickstart
 
 For the Windows D3D12 compatibility baseline and the first Quantum of Solace
-run, see [baseline capture](docs/baseline-capture.md). The title currently fails
-on initial boot; no game or GPU compatibility claim is made.
+run, see [baseline capture](docs/baseline-capture.md). That document records an
+early failing run; current title progress is tracked in the 007 repository.
+For the April 2026 GDK PC capability map and issue ownership, see the
+[GDK capability audit](docs/gdk-2604-capability-audit.md).
 Only NVIDIA GPU testing is available locally; AMD and Intel coverage is
 non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md).
 
