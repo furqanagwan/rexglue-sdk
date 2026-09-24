@@ -382,7 +382,7 @@
     "risk": "Shader replacement can change NaN/Inf/rounding, interlock ordering, cache identities and support on older adapters.",
     "number": 7,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/7",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-008",

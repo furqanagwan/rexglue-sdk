@@ -12,7 +12,7 @@ D3D12 is the only final host renderer; preserve Xenos/PM4/EDRAM above it.
 
 ## Consequences and rejected alternatives
 
-Current Windows D3D12/DXBC is the initial baseline. Vulkan is not a supported final fallback. SPIR-V as compiler IR is a separate open decision; no Vulkan runtime is implied. Removal follows validated parity.
+Current Windows D3D12/DXBC is the initial baseline. Vulkan is not a supported final fallback. SPIR-V as compiler IR is decided in [ADR-008](ADR-008-shader-ir-dxbc-vs-dxil.md); no Vulkan runtime is implied. Removal follows validated parity.
 
 A broad upstream transplant or deletion-first migration is rejected because source and issue history show title, vendor, lifetime and timing regressions.
 
