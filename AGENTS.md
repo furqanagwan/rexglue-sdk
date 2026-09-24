@@ -51,6 +51,10 @@ cmake --install out/build/win-amd64 --config Release
 
 PPC tests require bundled `tools/binutils/powerpc-none-elf-{as,ld,nm}.exe` and
 their runtime DLLs. Confirm CTest discovers actual tests; zero tests is not a pass.
+Precompiled DXBC shaders are built from `src/graphics/shaders` sources with
+`python scripts/build_shaders.py [name ...]` (FXC from the Windows SDK); never
+hand-edit `bytecode/` headers, and keep `--check` (CTest
+`shaders.bytecode_reproducible`) passing.
 No GDK-specific preset exists yet; do not invent one. Follow the assigned
 toolchain issue before documenting a GDK build as supported. For planning/docs
 changes run `python scripts/validate_roadmap.py` and `git diff --check`.
