@@ -119,6 +119,30 @@ configuration. The skips are coverage gaps, not passes. These results establish
 a build/test starting point, not a game, GPU or GDK compatibility baseline.
 Raw logs are retained privately under `../007/Quantum of Solace/baseline/`.
 
+## RG-FIX-001 jump-table regression, 2026-09-23
+
+The first boot failure was traced to `sub_821C1B90`: `lwzx r8,r10,r9` uses
+scaled `r10` as the index and `r9` as the table base, but code generation
+selected `r9` as the switch index. The absolute table also has a zero entry at
+slot 20 followed by valid entries through slot 38. The focused scanner fix
+recognizes the alternate indexed-load operand and preserves bounded internal
+zero gaps. A synthetic test covers both operand orders with and without a gap.
+The regenerated private title now switches on guest `r3`, includes slot 26,
+and no longer hits the prior `0xC000001D` trap.
+
+Debug and Release SDK builds succeeded. Each full CTest run discovered 1,672
+cases (214 unit, 1,458 PPC): 1,668 passed and the same four BitStream cases
+were skipped. Two repeated title runs on the NVIDIA GeForce RTX 5080 Laptop
+GPU (DXGI vendor `0x10DE`, device `0x2C19`) selected the D3D12 Xenos plugin
+and both exited `0xC0000409`. Their title logs report the same next failure:
+`[FATAL] Call to invalid or unregistered function at guest address 0x8211E798`.
+Private run manifests are `rgfix-nvidia-boot-1/run.json` and
+`rgfix-nvidia-boot-2/run.json`; title logs are `quantumofsolace_011.log` and
+`quantumofsolace_012.log` under the private project build logs. The unchanged
+XEX, executable and metadata hashes are recorded in those manifests. This is
+still a failing boot; rendering, gameplay, saves and GDK deployment remain
+unvalidated. The invalid guest call requires a separate investigation.
+
 | Private artifact in `sdk-20260923` | SHA-256 |
 | --- | --- |
 | `rg001-build-debug.log` | `0c9c4cf15fc56c0897403fdcbbae7cf5b323d00ef1dc41371442814b7dabc313` |

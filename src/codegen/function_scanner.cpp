@@ -1395,6 +1395,8 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
   JumpTableType tableType = JumpTableType::kAbsolute;
   uint8_t indexReg = 0xFF;       // Current reg being traced (0xFF = stop tracing)
   uint8_t finalIndexReg = 0xFF;  // Last valid indexReg for scanForBounds/output
+  uint8_t alternateIndexReg = 0xFF;  // The other lwzx operand if RB is a static table base.
+  uint8_t loadRaReg = 0xFF;
   int shiftAmount = 0;
 
   // Backward scan from bctr
@@ -1427,8 +1429,10 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
     if (foundMtctr && !foundLoad) {
       // lwzx rD, rA, rB - indexed word load (ABSOLUTE table)
       if (insn->opcode == Opcode::lwzx && insn->X.RT == ctrSourceReg) {
-        // Table address is in rA, index scaled in rB
+        // Tentatively treat RA as the table base and RB as the index;
+        // the operands may be reversed.
         tableType = JumpTableType::kAbsolute;
+        loadRaReg = insn->X.RA;
         indexReg = insn->X.RB;
         finalIndexReg = indexReg;
         foundLoad = true;
@@ -1507,6 +1511,17 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
     // DON'T trace back through extrwi/other rlwinm variants - those transform the value
     // NOTE: SH must be > 0 for a real shift; SH=0 is just a move/no-op (clrlwi r,r,0)
     // IMPORTANT: Stop tracing if another instruction writes to indexReg (breaks the chain)
+    // PPC indexed loads are commutative in RA/RB. If an address-building
+    // instruction overwrites the tentative RB index, the scaled index may be
+    // in RA instead. Only accept a proper slwi of that alternate operand.
+    if (foundLoad && alternateIndexReg != 0xFF && insn->opcode == Opcode::rlwinm &&
+        insn->M.RA == alternateIndexReg && insn->M.SH > 0 && insn->M.MB == 0 &&
+        insn->M.ME == 31 - insn->M.SH) {
+      finalIndexReg = insn->M.RS;
+      alternateIndexReg = 0xFF;
+      REXCODEGEN_TRACE("detectJumpTable: bctr=0x{:08X} resolved scaled index in RA as r{}",
+                       bctrAddr, finalIndexReg);
+    }
     if (foundLoad && indexReg != 0xFF) {
       // Check if this instruction writes to indexReg
       bool writesToIndexReg = false;
@@ -1562,6 +1577,10 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
           }
         } else {
           // Another instruction writes to indexReg, stop tracing
+          if (tableType == JumpTableType::kAbsolute &&
+              (insn->opcode == Opcode::addi || insn->opcode == Opcode::lis)) {
+            alternateIndexReg = loadRaReg;
+          }
           REXCODEGEN_TRACE(
               "detectJumpTable: bctr=0x{:08X} indexReg r{} overwritten at 0x{:08X}, stop tracing",
               bctrAddr, indexReg, scanAddr);
@@ -1732,6 +1751,30 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
         target = baseAddr + *val;
         break;
       }
+    }
+
+    if (tableType == JumpTableType::kAbsolute && target == 0) {
+      // A zero can be an internal gap rather than the end of an absolute
+      // table. Keep its case only if a nearby entry resolves to executable
+      // code; otherwise stop before reading unrelated data after the table.
+      bool hasLaterTarget = false;
+      constexpr uint32_t kGapLookahead = 8;
+      for (uint32_t gap = 1; gap <= kGapLookahead && i + gap < entryCount; ++gap) {
+        auto later = decoded.read<uint32_t>(tableAddr + (i + gap) * 4);
+        if (!later)
+          break;
+        if (*later >= funcStart && !(*later & 3) && containingRegion.contains(*later)) {
+          auto laterInsn = decoded.read<uint32_t>(*later);
+          if (laterInsn && *laterInsn != 0 && *laterInsn != 0xFFFFFFFF) {
+            hasLaterTarget = true;
+            break;
+          }
+        }
+      }
+      if (!hasLaterTarget)
+        break;
+      jt.targets.push_back(0);
+      continue;
     }
 
     // PPC instructions must be 4-byte aligned
