@@ -1,0 +1,1437 @@
+[
+  {
+    "id": "RG-GDK-001",
+    "title": "Establish a reproducible Windows D3D12 compatibility baseline",
+    "labels": [
+      "testing",
+      "build",
+      "documentation",
+      "agent-ready"
+    ],
+    "depends_on": [],
+    "objective": "Create the baseline capture/run workflow and record real current results before subsystem replacement.",
+    "background": "At c94f5ebdcb3c9d1a460ca48e04f9758448f8d518 there are unit/PPC tests but no verified game/vendor baseline. Plain shell misses CRT libraries; VS developer shell configure reaches uninitialized cli11. GPU trace capture was removed in 71782a3.",
+    "files": [
+      "CMakePresets.json",
+      "tests/CMakeLists.txt",
+      "tests/unit/CMakeLists.txt",
+      "tests/ppc/CMakeLists.txt",
+      "cmake/ppc_test_pipeline.cmake",
+      "scripts",
+      "docs/regression-strategy.md"
+    ],
+    "tasks": [
+      "Initialize pinned submodules and record compiler/Windows SDK/GDK/build metadata; do not update pins to bypass errors.",
+      "Add a run-record schema and capture helper with pass/fail/blocked/not-run, artifact hashes and explicit missing-material handling.",
+      "Run Debug/Release unit and PPC tests with nonzero CTest discovery; record counts and failures.",
+      "Select available legally supplied title projects and reproducible scenes; record working/partial/failing status and missing API/audio/input evidence.",
+      "Capture current D3D12 screenshots/logs and available hardware results; publish a gap list for unavailable vendor/title runs."
+    ],
+    "tests": [
+      "Validate the helper against missing executable, failed run and missing private game material: none may produce pass.",
+      "Repeat a synthetic fixture and available title scene twice with identical config; compare recorded IDs/hashes and explain nondeterminism.",
+      "Run CTest in Debug and Release; preserve initial failures as baseline defects, not silently ignored successes."
+    ],
+    "criteria": [
+      "A versioned baseline manifest includes every required field and points to immutable artifacts.",
+      "A fresh developer shell can follow documented commands through build and test, or exact external blockers are recorded and this issue stays open.",
+      "Each representative workload is assigned a fixture/title owner and explicit current result; no unsupported compatibility claims."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/issues/278",
+      "https://github.com/xenia-canary/xenia-canary/issues/773",
+      "https://github.com/xenia-canary/xenia-canary/pull/1218",
+      "https://github.com/rexglue/rexglue-sdk/commit/71782a3"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Ready for baseline tooling implementation now: architecture is fixed, no prerequisites, files and negative tests are defined. Lack of private material blocks a run, not writing the recorder. Baseline capture is not a GPU support certification.",
+    "blocks": [
+      "RG-GDK-002",
+      "RG-GDK-003",
+      "RG-GDK-004",
+      "RG-GDK-005",
+      "RG-GDK-006",
+      "RG-GDK-013",
+      "RG-GDK-014",
+      "RG-GDK-015",
+      "RG-GDK-018",
+      "RG-GDK-020",
+      "RG-GDK-021",
+      "RG-GDK-026"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-001.md",
+    "risk": "The recorder could falsely classify skipped/failed runs as passing or overwrite the last-good artifact set.",
+    "number": 1,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/1",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-002",
+    "title": "Pin and prove the April 2026 GDK PC toolchain",
+    "labels": [
+      "gdk",
+      "windows",
+      "build",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Prove an exact April 2026 PC GDK/Windows SDK/Clang toolchain without altering PPC generation.",
+    "background": "Current CMake enforces Clang >=18/C++23. Installed 260404 and VS Community do not prove a Microsoft-supported toolchain pairing; public announcement names VS 2026 Professional/Enterprise.",
+    "files": [
+      "CMakeLists.txt",
+      "CMakePresets.json",
+      "cmake/rexglueConfig.cmake.in",
+      ".github/workflows/_build-platform.yaml"
+    ],
+    "tasks": [
+      "Record exact 2604 update, redistributables, Windows SDK and supported VS edition.",
+      "Build a minimal application linking the installed SDK/runtime with the chosen compiler; verify exception/CRT/plugin ABI.",
+      "Add a GDK preset and documented setup only after the probe passes; keep standard Windows developer builds reproducible."
+    ],
+    "tests": [
+      "Clean Debug/Release configure/build/install and external consumer compile.",
+      "Negative missing/wrong GDK selection must fail with actionable diagnostics.",
+      "Run PPC/ABI tests under the pinned toolchain."
+    ],
+    "criteria": [
+      "Tool versions and redistributable provenance are pinned without copying SDK payloads.",
+      "Clean-machine consumer build and tests pass using documented commands."
+    ],
+    "evidence": [
+      "https://learn.microsoft.com/en-us/gaming/gdk/docs/gdk-dev/whatsnew/release-notes?view=gdk-2604",
+      "https://developer.microsoft.com/en-us/games/articles/2026/04/april-2026-microsoft-gdk-update/"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-019",
+      "RG-GDK-020",
+      "RG-GDK-021",
+      "RG-GDK-022"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-002.md",
+    "risk": "Compiler/CRT/plugin ABI mismatch may break guest callbacks, generated C++ or installed consumers even when SDK compilation succeeds.",
+    "number": 2,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/2",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-003",
+    "title": "Correct NtOpenFile ShareAccess and OpenOptions argument mapping",
+    "labels": [
+      "xboxkrnl",
+      "compatibility",
+      "testing",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Restore the six-argument guest import ABI and forward ShareAccess to NtCreateFile.",
+    "background": "Local NtOpenFile_entry at xboxkrnl_io.cpp:179 has five arguments. Edge 887beea69 inserts ShareAccess and reads OpenOptions from argument six; commit reports Dead Rising disc-error fix.",
+    "files": [
+      "src/kernel/xboxkrnl/xboxkrnl_io.cpp",
+      "tests/unit/ppc/import_function_test.cpp",
+      "tests/unit/CMakeLists.txt"
+    ],
+    "tasks": [
+      "Adapt the typed signature to include ShareAccess before OpenOptions and forward both.",
+      "Add a guest-register import fixture with deliberately distinct r7/r8 values.",
+      "Preserve path, status and async/nonbuffered flags; retain source attribution."
+    ],
+    "tests": [
+      "Use different ShareAccess/OpenOptions bit patterns to prove neither is shifted or ignored.",
+      "Exercise success, missing path and invalid handle/status propagation; verify existing import_function tests.",
+      "Run Dead Rising load sequence if a compiled lawful fixture exists; otherwise keep title result not-run."
+    ],
+    "criteria": [
+      "Register-level regression fails on baseline and passes after fix.",
+      "No changes to unrelated imports or dispatcher/JIT architecture."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/commit/887beea6979fc1ee8580deb755d771c61e0039ad"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-017"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-003.md",
+    "risk": "Changing argument positions can alter sharing/open flags and break previously tolerated IO; preserve guest error/overlapped behavior.",
+    "number": 3,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/3",
+    "state": "closed"
+  },
+  {
+    "id": "RG-GDK-004",
+    "title": "Fix heap range ceilings and audit physical alignment semantics",
+    "labels": [
+      "compatibility",
+      "testing",
+      "upstream-sync",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Keep allocations inside guest-requested windows and define physical versus host alignment.",
+    "background": "Local BaseHeap::AllocRange rounds high_address up. Canary #1215 corrects this; Rejected (closed unmerged) #1202 and pending #1182 address different alignment rules and cannot be combined by title alone. Review warns against changing AllocFixed like other allocation methods and identifies Far Cry 3 as a regression control.",
+    "files": [
+      "src/system/xmemory.cpp",
+      "include/rex/system/xmemory.h",
+      "tests/unit/memory/heap_allocation_test.cpp"
+    ],
+    "tasks": [
+      "Port #1215 ceiling logic with local page arithmetic/overflow review.",
+      "Evaluate #1202 and #1182 against local host_address_offset and MmGetPhysicalAddress; document adopted/rejected semantics.",
+      "Avoid importing XPS #1180 or changing all heap mapping rules in the same patch."
+    ],
+    "tests": [
+      "Exact-fit range, unaligned ceiling, UINT32_MAX edge, top-down/bottom-up and exhaustion tests.",
+      "Physical aliases E0000000 and other page-size heaps with 4K/32K/64K alignment; verify both physical and translated host addresses.",
+      "Existing allocation/free/protect regressions and GPU memexport pressure control.",
+      "Include Far Cry 3 or an equivalent physical-heap workload as a control if any alignment behavior changes; do not treat a test mirroring implementation as an independent oracle."
+    ],
+    "criteria": [
+      "Every returned allocation lies fully inside the requested window without overflow.",
+      "Pending alignment proposal is explicitly accepted with evidence or remains a watch; no untested global alignment relaxation."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1215",
+      "https://github.com/xenia-canary/xenia-canary/pull/1202",
+      "https://github.com/xenia-canary/xenia-canary/pull/1182",
+      "https://github.com/xenia-canary/xenia-canary/pull/1180"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-011",
+      "RG-GDK-016"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-004.md",
+    "risk": "Range arithmetic or alignment changes may overlap allocations, escape the requested ceiling or corrupt aliased physical heaps.",
+    "number": 4,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/4",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-005",
+    "title": "Repair signed DXBC memexport rounding",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "regression",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-006"
+    ],
+    "objective": "Fix both rounding-bias temporary destinations and validate exported guest bytes.",
+    "background": "Canary #1127 writes bias to round_bias_temp. Both faulty local sequences remain at dxbc_translator_memexport.cpp:188 and :401.",
+    "files": [
+      "src/graphics/pipeline/shader/dxbc_translator_memexport.cpp",
+      "tests/unit/CMakeLists.txt"
+    ],
+    "tasks": [
+      "Adapt the two destination corrections without shader architecture changes.",
+      "Create signed normalized/packed export fixtures with positive, negative, half-step and saturation values.",
+      "Record original author/SHA and reported title cases."
+    ],
+    "tests": [
+      "Shader disassembly shows bias temp initialized before use.",
+      "GPU readback matches independently calculated packed bytes; include both affected branches.",
+      "Control unsigned/float export paths and CPU-visible memexport synchronization."
+    ],
+    "criteria": [
+      "Baseline reproduces the wrong signed result; candidate produces expected bytes.",
+      "Affected GPU matrix passes without unrelated DXBC output changes."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1127"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [],
+    "body_file": "docs/roadmap/RG-GDK-005.md",
+    "risk": "Signed packed exports could change rounding/saturation or write wrong guest bytes, corrupting GPU-skinned geometry.",
+    "number": 5,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/5",
+    "state": "closed"
+  },
+  {
+    "id": "RG-GDK-006",
+    "title": "Build D3D12 capability diagnostics and the three-vendor fixture harness",
+    "labels": [
+      "gpu",
+      "directx",
+      "d3d12",
+      "amd",
+      "nvidia",
+      "intel",
+      "testing",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Make GPU behavior reproducible with capability logs, synthetic fixtures and failure captures.",
+    "background": "Provider already queries ROV/sample/stencil features. Historical vendor defaults remain and Intel #608 warns native stencil is not uniformly usable.",
+    "files": [
+      "src/ui/d3d12/d3d12_provider.cpp",
+      "src/graphics/d3d12/render_target_cache.cpp",
+      "tests/unit/CMakeLists.txt",
+      "docs/regression-strategy.md"
+    ],
+    "tasks": [
+      "Log adapter/driver/feature/shader/format capabilities and actual selected path.",
+      "Add minimal standalone PM4/shader/readback fixture host respecting GPU plugin ABI.",
+      "Add PIX markers and DRED failure capture; separate debug-layer correctness from perf runs.",
+      "Inventory vendor exceptions with driver scope and retirement tests."
+    ],
+    "tests": [
+      "Unsupported capability selects tested fallback or clear error.",
+      "Exercise device removal/resize/cache reuse and deterministic buffer readback.",
+      "Run available AMD/NVIDIA/Intel matrix, with unavailable cases explicitly blocked."
+    ],
+    "criteria": [
+      "A fixture result can be independently reproduced from recorded metadata.",
+      "No adapter is claimed supported from vendor name or FL11_0 device creation alone."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/issues/608",
+      "https://github.com/has207/xenia-edge/issues/204",
+      "https://github.com/xenia-canary/xenia-canary/issues/1093",
+      "https://learn.microsoft.com/en-us/windows/win32/direct3d12/hardware-feature-levels"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-005",
+      "RG-GDK-007",
+      "RG-GDK-008",
+      "RG-GDK-009",
+      "RG-GDK-010",
+      "RG-GDK-011",
+      "RG-GDK-012"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-006.md",
+    "risk": "Capability defaults or diagnostics could select an unsupported path, perturb performance measurements or hide device-loss causes.",
+    "number": 6,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/6",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-007",
+    "title": "Decide the D3D12 shader architecture using a DXBC versus DXIL experiment",
+    "labels": [
+      "architecture",
+      "gpu",
+      "d3d12",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-006"
+    ],
+    "objective": "Decide whether to retain DXBC long term or adopt a proven DXIL translation pipeline.",
+    "background": "Edge c00e7aead removed DXBC in favor of SPIR-V→DXIL; ReXGlue still emits DXBC. Vulkan removal cannot dictate shader IR removal before this decision.",
+    "files": [
+      "src/graphics/pipeline/shader",
+      "src/graphics/d3d12/pipeline_cache.cpp",
+      "src/graphics/d3d12/render_target_cache.cpp",
+      "thirdparty/CMakeLists.txt"
+    ],
+    "tasks": [
+      "Pin Edge compiler and dependency revisions, licensing and deployment implications.",
+      "Prototype alternatives in an isolated branch without switching stable defaults.",
+      "Compare float semantics, depth exports, memexport, ROV, transfer shaders and shader cache ABI.",
+      "Write an ADR selecting the path and identifying retained/removed shader tools; keep DXBC initial ports until parity."
+    ],
+    "tests": [
+      "Golden shader corpus with NaN/Inf/signed-zero/rcp/rsq and packed exports.",
+      "RT transfer/float24 test from Edge #198; cold/warm cache and async compile.",
+      "Correctness and paired frame-time comparison on all vendors."
+    ],
+    "criteria": [
+      "ADR contains measured results, rejected options, capability floor and staged rollback.",
+      "No Vulkan runtime dependency is introduced by choosing an IR."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/commit/c00e7aead",
+      "https://github.com/has207/xenia-edge/commit/6e9cb7e3f",
+      "https://github.com/has207/xenia-edge/issues/198",
+      "https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/DXIL.rst"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-009",
+      "RG-GDK-010",
+      "RG-GDK-011",
+      "RG-GDK-012",
+      "RG-GDK-023"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-007.md",
+    "risk": "Shader replacement can change NaN/Inf/rounding, interlock ordering, cache identities and support on older adapters.",
+    "number": 7,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/7",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-008",
+    "title": "Port texture layout and sub-32bpp resolve address corrections",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "compatibility",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-006"
+    ],
+    "objective": "Correct guest texture and resolve addresses while retaining current renderer architecture.",
+    "background": "Canary #1243 changes array/volume mips, linear 96bpp pitch and 3D bounds. #1240 handles 8/16bpp macro phases. Local texture utility retains old formulas.",
+    "files": [
+      "src/graphics/pipeline/texture/util.cpp",
+      "include/rex/graphics/pipeline/texture/util.h",
+      "src/graphics/util/draw.cpp"
+    ],
+    "tasks": [
+      "Port independently testable layout corrections with full source provenance.",
+      "Use checked range calculations and preserve array/volume distinctions.",
+      "Keep texture-cache lifetime changes separate."
+    ],
+    "tests": [
+      "Enumerate mip dimensions, packed mips, odd Z tile groups, 96bpp rows and array slices with CPU oracle.",
+      "8/16bpp resolve base phases, x=480 stripe and 4KB crossings.",
+      "GPU upload/resolve/readback at native and scaled resolution with 1x/2x/4x MSAA."
+    ],
+    "criteria": [
+      "All expected ranges/bytes match independent fixtures and existing layout cases.",
+      "Golden Axe Beast Rider/title 534307D5 cases recorded if locally available; no inferred title passes."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1243",
+      "https://github.com/xenia-canary/xenia-canary/pull/1240"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-009"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-008.md",
+    "risk": "New row/tile/mip formulas can overlap guest subresources or misplace resolve destinations across formats and scales.",
+    "number": 8,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/8",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-009",
+    "title": "Migrate canonical EDRAM with alias and MSAA follow-up fixes",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "amd",
+      "regression",
+      "migration",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-006",
+      "RG-GDK-007",
+      "RG-GDK-008"
+    ],
+    "objective": "Unify EDRAM layout and preserve color/depth/sample alias semantics as a tested migration.",
+    "background": "Canary #1163 introduced a canonical model; #1238 explicitly repairs an AMD regression. #1222 preserves bits under color/depth aliases.",
+    "files": [
+      "src/graphics/pipeline/render_target/cache.cpp",
+      "src/graphics/d3d12/render_target_cache.cpp",
+      "src/graphics/d3d12/command_processor.cpp",
+      "src/graphics/shaders"
+    ],
+    "tasks": [
+      "Map all layout consumers and generated transfer/dump/resolve shader artifacts.",
+      "Port #1163 with #1238/#1222 behavior and the chosen shader architecture.",
+      "Preserve existing PWL gamma/UNorm16 import and rollback path."
+    ],
+    "tests": [
+      "Exact color/depth alias bits, 32/64bpp ownership transfers, clears and PWL gamma blend.",
+      "2x/4x host depth copy sample indices, scaled resolution and ROV/RTV parity.",
+      "Title 4D5307F1 AMD and 4D530A26 occluded sprites; unrelated workloads."
+    ],
+    "criteria": [
+      "No mixed old/new EDRAM address convention remains.",
+      "All vendor matrix cases pass including regression follow-ups; generated shaders reproducible."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1163",
+      "https://github.com/xenia-canary/xenia-canary/pull/1238",
+      "https://github.com/xenia-canary/xenia-canary/pull/1222"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-010",
+      "RG-GDK-011",
+      "RG-GDK-023"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-009.md",
+    "risk": "Mixed EDRAM sample conventions can corrupt color/depth aliases and regress AMD MSAA depth copies.",
+    "number": 9,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/9",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-010",
+    "title": "Implement ZPD counters and track VIZ predication separately",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "compatibility",
+      "research",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-006",
+      "RG-GDK-007",
+      "RG-GDK-009"
+    ],
+    "objective": "Replace fake occlusion results with validated query semantics, without treating pending VIZ code as settled.",
+    "background": "Local EVENT_WRITE_ZPD emits fixed samples and VIZ returns visible. Canary #1218 supersedes earlier ZPD work; #1111 remains WIP and has ROV lifecycle questions.",
+    "files": [
+      "src/graphics/command_processor.cpp",
+      "include/rex/graphics/command_processor.h",
+      "src/graphics/d3d12/command_processor.cpp",
+      "src/graphics/d3d12/pipeline_cache.cpp"
+    ],
+    "tasks": [
+      "Implement report ABI, running counter differences, fences, FIFO retirement and reuse for ZPD.",
+      "Use strict correctness path as oracle; document fast/readback interactions.",
+      "Keep VIZ a separate sub-change gated on resolved #1111 semantics; exclude memexport/copy where required.",
+      "Do not revive obsolete saturation tuning from Edge #143."
+    ],
+    "tests": [
+      "BEGIN/END, wrap, zero draws, recycled IDs, split submissions, MSAA/resolution changes and guest memory reuse.",
+      "Crackdown 2 flare control with full/fast resolve and query modes.",
+      "VIZ occluded/visible surveys and predicate lifecycle only after research gate."
+    ],
+    "criteria": [
+      "ZPD no longer relies on unconditional fake counts for validated path.",
+      "No guest hangs waiting for reports; VIZ adoption either proven or explicitly deferred/open."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1218",
+      "https://github.com/xenia-canary/xenia-canary/pull/1111",
+      "https://github.com/xenia-canary/xenia-canary/pull/1058",
+      "https://github.com/has207/xenia-edge/pull/127",
+      "https://github.com/has207/xenia-edge/pull/143",
+      "https://github.com/has207/xenia-edge/pull/145"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-023"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-010.md",
+    "risk": "Query reuse or retirement errors can leave guest reports unresolved, produce false visibility or force severe GPU stalls.",
+    "number": 10,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/10",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-011",
+    "title": "Audit GPU synchronization, async pipelines and memexport readback",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "regression",
+      "compatibility",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-004",
+      "RG-GDK-006",
+      "RG-GDK-007",
+      "RG-GDK-009"
+    ],
+    "objective": "Preserve GPU/CPU visibility and pipeline lifetime under load and memory pressure.",
+    "background": "UFC3 #1093 differentiates stock/created fighters and backend behavior. Edge has publication-order and placeholder lifetime fixes; PM4 ring cadence alternatives need comparison.",
+    "files": [
+      "src/graphics/shared_memory.cpp",
+      "src/graphics/d3d12/shared_memory.cpp",
+      "src/graphics/d3d12/command_processor.cpp",
+      "src/graphics/d3d12/pipeline_cache.cpp",
+      "src/graphics/command_processor.cpp"
+    ],
+    "tasks": [
+      "Trace barriers/fences/descriptors and guest memory ownership end to end.",
+      "Review Edge shader validity publication and placeholder pinning against local async implementation.",
+      "Assess RB_BLKSZ pointer publication versus rejected fixed-packet proposal.",
+      "Never globally allow invalid upload ranges to hide guest memory faults."
+    ],
+    "tests": [
+      "Near-full heap, failed stream ranges, GPU write then CPU read then GPU reuse.",
+      "Concurrent first-use/cache-hit shader compilation with teardown/device removal.",
+      "Ring wrap and polling progress under large bursts."
+    ],
+    "criteria": [
+      "No use-after-free, stale shader validity or unresolved ownership hazard in stress runs.",
+      "UFC3 and async pipeline cases recorded per vendor, with actual unavailable fixtures blocked."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/issues/1093",
+      "https://github.com/xenia-canary/xenia-canary/pull/1195",
+      "https://github.com/has207/xenia-edge/commit/29fcaeac3",
+      "https://github.com/has207/xenia-edge/commit/462a1ac85",
+      "https://github.com/has207/xenia-edge/commit/fe84ec77e"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-023"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-011.md",
+    "risk": "Missing barriers/publication fences or premature pipeline reclamation can cause stale memexport data, corruption and device removal.",
+    "number": 11,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/11",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-012",
+    "title": "Validate scalar math and depth workarounds before adopting defaults",
+    "labels": [
+      "gpu",
+      "d3d12",
+      "game-specific",
+      "research",
+      "regression",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-006",
+      "RG-GDK-007"
+    ],
+    "objective": "Separate numerical corrections from title-motivated depth workarounds.",
+    "background": "Canary #1190 replaces AC6 ground hack with approximation behavior; pending #1077 needs correctness research. Edge #160 fixes some decals but #278 reports Lost Odyssey regression.",
+    "files": [
+      "src/graphics/pipeline/shader/dxbc_translator_alu.cpp",
+      "src/graphics/pipeline/shader/dxbc_translator_fetch.cpp",
+      "src/graphics/util/draw.cpp",
+      "src/graphics/d3d12/render_target_cache.cpp"
+    ],
+    "tasks": [
+      "Compare scalar approximation rounding and local existing behavior.",
+      "Characterize Inf/NaN depth, depth clipping and shader bias for each path.",
+      "Keep game-motivated offsets opt-in pending profile decision; document FH2 control case."
+    ],
+    "tests": [
+      "Numerical vectors for rcp/rsq/log/exp with boundary/exception values.",
+      "Lost Odyssey RX 6600 reproduction and Gears/SCDA benefits plus FH2 negative control.",
+      "No fixed-function plus shader double-bias."
+    ],
+    "criteria": [
+      "General math fixes have an independent semantic oracle.",
+      "No experimental depth clamp/bias becomes a universal default without evidence."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1190",
+      "https://github.com/xenia-canary/xenia-canary/pull/1031",
+      "https://github.com/xenia-canary/xenia-canary/pull/1077",
+      "https://github.com/has207/xenia-edge/pull/160",
+      "https://github.com/has207/xenia-edge/issues/278"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-013",
+      "RG-GDK-023"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-012.md",
+    "risk": "A math/depth change helping AC6 or Gears can regress Lost Odyssey, Forza Horizon 2 and unrelated shaders.",
+    "number": 12,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/12",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-013",
+    "title": "Design a narrow title compatibility profile mechanism",
+    "labels": [
+      "architecture",
+      "game-specific",
+      "compatibility",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-012"
+    ],
+    "objective": "Decide whether an explicit title/module profile system is necessary and specify it before implementation.",
+    "background": "Canary/Edge use title configs and hash-filtered patches. PR #844 shows global config contamination risk; runtime PPC patches do not modify generated C++.",
+    "files": [
+      "src/codegen/manifest.cpp",
+      "include/rex/codegen/manifest.h",
+      "src/system/runtime.cpp",
+      "src/core/cvar.cpp",
+      "docs/adr/ADR-005-game-specific-compatibility-policy.md"
+    ],
+    "tasks": [
+      "Inventory actual needed overrides from local reproductions; reject unnecessary database complexity.",
+      "Specify title ID/module hash/version, provenance, scope, disable switch, conflict rules and effective logging.",
+      "Separate pre-codegen guest patches from runtime behavior profiles.",
+      "Produce schema/decision and negative test plan; do not implement runtime feature in this issue."
+    ],
+    "tests": [
+      "Design examples cover unknown key/hash, conflict, title transition and global-config persistence.",
+      "Demonstrate how each proposed rule can be disabled and removed."
+    ],
+    "criteria": [
+      "Reviewed design says whether a database is needed and why.",
+      "Each proposed behavior is traceable/testable and cannot silently change unrelated titles."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/844",
+      "https://github.com/has207/xenia-edge/pull/275",
+      "https://github.com/has207/xenia-edge/pull/160"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-016"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-013.md",
+    "risk": "A profile can match the wrong executable version, leak into global defaults or patch guest bytes without regenerating native code.",
+    "number": 13,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/13",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-014",
+    "title": "Modernize guest object headers and kernel lifetime contracts",
+    "labels": [
+      "xboxkrnl",
+      "compatibility",
+      "regression",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Align guest dispatcher objects with host state while preserving static runtime ownership.",
+    "background": "Canary #1227 synchronizes headers; #1225 signature lifetime remains disputed. Local object_table tests exist and should anchor adaptation.",
+    "files": [
+      "src/system/xobject.cpp",
+      "src/system/xevent.cpp",
+      "src/system/xsemaphore.cpp",
+      "src/system/xthread.cpp",
+      "tests/unit/kernel/object_table_test.cpp"
+    ],
+    "tasks": [
+      "Map header bytes, handles, native pointer signatures and reference ownership.",
+      "Adapt confirmed header synchronization behavior; isolate pending signature proposal until root cause verified.",
+      "Intersect missing export aggregate with actual compiled-title needs; no success-only stubs."
+    ],
+    "tests": [
+      "Handle reuse, object destruction/recreation at same guest address, manual/auto events and semaphore counts.",
+      "Concurrent wait/signal/reset/pulse, invalid handles and teardown.",
+      "Guitar Hero 5 DLC signature reproducer or synthetic equivalent."
+    ],
+    "criteria": [
+      "Guest and host states agree under repeatable concurrency tests.",
+      "Pending ownership semantics are resolved or remain blocked; no JIT teardown imported."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1227",
+      "https://github.com/xenia-canary/xenia-canary/pull/1225",
+      "https://github.com/xenia-canary/xenia-canary/issues/754"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-015",
+      "RG-GDK-017",
+      "RG-GDK-018"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-014.md",
+    "risk": "Incorrect header synchronization/handle reuse can close live files, lose wakeups or free objects still in use.",
+    "number": 14,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/14",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-015",
+    "title": "Specify static-runtime timing, waits, teardown and exception behavior",
+    "labels": [
+      "xboxkrnl",
+      "windows",
+      "regression",
+      "research",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-014"
+    ],
+    "objective": "Define safe timing and lifecycle changes without importing Edge guest scheduling.",
+    "background": "Edge #234/#233 show scheduler regressions; #251 changes Sleep(0) with no x64 validation. Canary #1025 teardown and #872 timer behavior are relevant but architecture differs.",
+    "files": [
+      "src/system/xthread.cpp",
+      "src/system/function_dispatcher.cpp",
+      "include/rex/system/xexception.h",
+      "src/core/threading_win.cpp",
+      "src/core/exception_handler_win.cpp"
+    ],
+    "tasks": [
+      "Document callback, APC, wait and generated-function lifetime/unwind contracts.",
+      "Measure timer resolution and zero-time waits without adding global sleeps.",
+      "Evaluate teardown fixes against registered modules; reject JIT stackpoint/safepoint machinery.",
+      "Keep #251 watch gated on x64/local evidence."
+    ],
+    "tests": [
+      "Wait timeouts, alertable APC delivery, cancel/terminate, nested callbacks and unwind cleanup.",
+      "Repeated module transition/shutdown under contention with watchdog.",
+      "NFS Shift/Riddick scene loads if compiled fixtures available."
+    ],
+    "criteria": [
+      "No indefinite wait or callback into unloaded generated code in stress fixtures.",
+      "Timer flags have measured effect matching documented contract; no scheduler transplant."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/issues/234",
+      "https://github.com/has207/xenia-edge/issues/233",
+      "https://github.com/has207/xenia-edge/pull/251",
+      "https://github.com/xenia-canary/xenia-canary/pull/1025",
+      "https://github.com/xenia-canary/xenia-canary/issues/872",
+      "https://github.com/has207/xenia-edge/issues/268"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-016",
+      "RG-GDK-017",
+      "RG-GDK-018"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-015.md",
+    "risk": "Wait/teardown/exception changes can hang compiled guest threads or invoke callbacks into unloaded modules.",
+    "number": 15,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/15",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-016",
+    "title": "Investigate storage completion timing without per-title allocation caps",
+    "labels": [
+      "compatibility",
+      "game-specific",
+      "research",
+      "xboxkrnl",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-004",
+      "RG-GDK-013",
+      "RG-GDK-015"
+    ],
+    "objective": "Reproduce timing-sensitive IO and design a bounded guest storage model if needed.",
+    "background": "Edge #275 allocation cap was rejected; 5e9eae601 models per-device timing using its scheduler and e987fd7f5 refines sequential seeks.",
+    "files": [
+      "src/system/xfile.cpp",
+      "src/filesystem/device.cpp",
+      "src/kernel/xboxkrnl/xboxkrnl_io.cpp"
+    ],
+    "tasks": [
+      "Reproduce UEFA allocation pressure with recorded read/completion timeline.",
+      "Separate host IO acceleration from guest completion timing.",
+      "Design per-device model compatible with static threads/async callbacks; no arbitrary global delay or title allocation cap.",
+      "Assess DirectStorage only after semantics are stable."
+    ],
+    "tests": [
+      "Sequential/random/synchronous/asynchronous reads; cancellation and lock-held caller behavior.",
+      "Measure physical allocation peak and title progress with/without model, plus unrelated title control."
+    ],
+    "criteria": [
+      "Root-cause evidence justifies model or explicitly rejects it.",
+      "Any later implementation has bounded delays, deterministic fixtures and rollback; DirectStorage remains optional."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/pull/275",
+      "https://github.com/has207/xenia-edge/commit/5e9eae601b16757e49eeb83ab0f4d2945809f401",
+      "https://github.com/has207/xenia-edge/commit/e987fd7f5",
+      "https://github.com/microsoft/DirectStorage"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [],
+    "body_file": "docs/roadmap/RG-GDK-016.md",
+    "risk": "Artificial IO delays can deadlock lock-held callers, reorder completion, stall unrelated titles or worsen memory pressure.",
+    "number": 16,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/16",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-017",
+    "title": "Implement content persistence and audit XAM profiles, notifications and XEX transitions",
+    "labels": [
+      "xam",
+      "compatibility",
+      "regression",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-003",
+      "RG-GDK-014",
+      "RG-GDK-015"
+    ],
+    "objective": "Preserve guest content/profile state and correct missing flush/lookup behavior.",
+    "background": "Local XamContentFlush only returns success. Canary #1216, pending #1226/#1109, profile reports and closed-unmerged #1135 expose distinct contracts.",
+    "files": [
+      "src/kernel/xam/xam_content.cpp",
+      "src/system/xam/content_manager.cpp",
+      "src/system/xam/user_profile.cpp",
+      "src/kernel/xam/xam_notify.cpp",
+      "src/system/xex_module.cpp",
+      "src/filesystem/devices/stfs_container_device.cpp"
+    ],
+    "tasks": [
+      "Implement real flush for local package model, propagate errors and overlapped completion.",
+      "Validate STFS extents and mixed-case path behavior with synthetic malformed containers.",
+      "Audit concurrent profiles and crash persistence for multiple users.",
+      "Specify notification masks/order and compiled module relaunch; no automatic GDK identity substitution."
+    ],
+    "tests": [
+      "Flush failure/success, restart and injected crash using disposable save copies.",
+      "Truncated/malformed package rejected without OOB reads; directory-backed payload and case collision tests.",
+      "Two users, concurrent update/logout, listener filter/initial state and unknown precompiled module error."
+    ],
+    "criteria": [
+      "Success reflects completed persistence contract; failures return correct guest status.",
+      "No lost control save or title override leaking across launches.",
+      "XMP initial state proposal adopted only with evidence, otherwise left as watch."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1216",
+      "https://github.com/xenia-canary/xenia-canary/pull/1226",
+      "https://github.com/xenia-canary/xenia-canary/pull/1109",
+      "https://github.com/xenia-canary/xenia-canary/pull/981",
+      "https://github.com/xenia-canary/xenia-canary/issues/5",
+      "https://github.com/xenia-canary/xenia-canary/issues/1220",
+      "https://github.com/xenia-canary/xenia-canary/pull/1135"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-022"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-017.md",
+    "risk": "Flush/profile/content changes can lose saves, expose malformed package OOB reads or deliver notifications in the wrong order.",
+    "number": 17,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/17",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-018",
+    "title": "Audit XMA packet/loop correctness and audio callback lifetime",
+    "labels": [
+      "audio",
+      "compatibility",
+      "regression",
+      "upstream-sync",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-014",
+      "RG-GDK-015"
+    ],
+    "objective": "Adapt proven later XMA fixes without losing existing ReXGlue decoder behavior.",
+    "background": "ReXGlue already imported new Canary context in a0271ec/30e1c8a. Edge adds loop boundary and split-header fixes; rejected #236 and regressions #164/#120 demonstrate risk.",
+    "files": [
+      "src/audio/xma_context.cpp",
+      "include/rex/audio/xma/context.h",
+      "src/audio/xma_decoder.cpp",
+      "src/audio/audio_system.cpp",
+      ".gitmodules"
+    ],
+    "tasks": [
+      "Diff local decode/consume/StoreContextMerged against selected commits and FFmpeg revision.",
+      "Add packet/loop accounting fixes with author/SHA provenance.",
+      "Audit callback unregister and driver destruction lifetime; local locks differ from Canary #1214.",
+      "Do not emit silence merely to conceal decode errors or adopt scalar-only #748 as universal fix."
+    ],
+    "tests": [
+      "Split headers, frameless packets, loop_start one bit early/exact, output ring wrap and multistream channels.",
+      "PCM sample/continuity tests and repeated register/process/unregister during teardown.",
+      "Koei, Tekken Tag 2, LEGO LOTR, SCDA and 007 Legends workload results or explicit fixture gaps."
+    ],
+    "criteria": [
+      "Decoder errors stay observable, progress is correct and no callback uses released guest/driver memory.",
+      "Known upstream regression scenes are checked before declaring parity; FFmpeg pin documented."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/commit/5dd1cdbbf548745a15714c158b15aad128530440",
+      "https://github.com/has207/xenia-edge/commit/adf56b76c",
+      "https://github.com/has207/xenia-edge/pull/236",
+      "https://github.com/has207/xenia-edge/issues/164",
+      "https://github.com/has207/xenia-edge/issues/120",
+      "https://github.com/has207/xenia-edge/issues/113",
+      "https://github.com/xenia-canary/xenia-canary/issues/1214",
+      "https://github.com/xenia-canary/xenia-canary/issues/1036",
+      "https://github.com/xenia-canary/xenia-canary/pull/748"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-019"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-018.md",
+    "risk": "Packet/loop fixes or callback lifetime changes can mute streams, desynchronize cutscenes or deadlock multi-client teardown.",
+    "number": 18,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/18",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-019",
+    "title": "Add and validate a native XAudio2 PCM output driver",
+    "labels": [
+      "audio",
+      "windows",
+      "gdk",
+      "migration",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-002",
+      "RG-GDK-018"
+    ],
+    "objective": "Replace the Windows SDL audio sink only after XAudio2 output parity is demonstrated.",
+    "background": "Current CMake always builds SDL output plus FFmpeg XMA. Host output replacement must not remove guest XMA state or callbacks.",
+    "files": [
+      "src/audio/CMakeLists.txt",
+      "src/audio/audio_system.cpp",
+      "src/audio/sdl",
+      "include/rex/audio"
+    ],
+    "tasks": [
+      "Implement XAudio2 driver behind existing interface with explicit queue and callback lifetime.",
+      "Preserve PCM endian/channel/rate conversion and guest pacing.",
+      "Handle no device, device replacement and shutdown; switch default only after baseline parity."
+    ],
+    "tests": [
+      "Stereo/5.1 channel impulse mapping, clipping/rounding and queue underrun/latency.",
+      "Disable/remove/reconnect audio device while title continues; repeated teardown.",
+      "Windows and GDK deployment redistributable smoke."
+    ],
+    "criteria": [
+      "Baseline PCM/channel and lifecycle gates pass; no title freeze when device is absent.",
+      "SDL audio dependency removed only after all Windows audio consumers migrated."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/issues/600",
+      "https://github.com/xenia-canary/xenia-canary/issues/739",
+      "https://learn.microsoft.com/en-us/windows/win32/xaudio2/xaudio2-introduction"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-022",
+      "RG-GDK-024"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-019.md",
+    "risk": "Output replacement can swap channels, introduce underruns/drift or freeze a title when audio hardware disappears.",
+    "number": 19,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/19",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-020",
+    "title": "Implement GameInput while preserving guest device assignment",
+    "labels": [
+      "input",
+      "windows",
+      "gdk",
+      "compatibility",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-002"
+    ],
+    "objective": "Add a native GameInput adapter with stable Xbox 360-facing semantics.",
+    "background": "Local drivers include SDL/XInput/mouse-keyboard and device assignment tests. Canary #1230 illustrates subtype and whammy-neutral hazards.",
+    "files": [
+      "src/input/CMakeLists.txt",
+      "src/input/input_system.cpp",
+      "src/input/device_assignment.cpp",
+      "src/input/state_merge.cpp",
+      "tests/unit/input/input_assignment_test.cpp"
+    ],
+    "tasks": [
+      "Pin GameInput package/runtime deployment and implement existing driver interface.",
+      "Preserve slots, packet numbers, rumble, deadzones, subtype and focus.",
+      "Test XInput comparison path and mouse-keyboard merge before default switch."
+    ],
+    "tests": [
+      "Four devices, disconnect/reconnect same/different device, slot persistence and no phantom input.",
+      "Guitar neutral/whammy/subtype, rumble stop on removal and focus loss.",
+      "Windows/GDK package with missing runtime diagnostic."
+    ],
+    "criteria": [
+      "Existing assignment tests plus new host integration matrix pass.",
+      "No dependency removal until all replaced input behavior has parity."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/pull/1230",
+      "https://learn.microsoft.com/en-us/xbox/gdk/docs/features/common/input/overviews/input-overview?view=gdk-2604"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-022",
+      "RG-GDK-024"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-020.md",
+    "risk": "Device reassignment/subtype conversion can disconnect players, hold whammy input or leave rumble active after removal.",
+    "number": 20,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/20",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-021",
+    "title": "Provide native Windows windowing and complete SDL consumer audit",
+    "labels": [
+      "windows",
+      "migration",
+      "build",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001",
+      "RG-GDK-002"
+    ],
+    "objective": "Replace Windows SDL UI consumers where useful and make remaining dependencies explicit.",
+    "background": "SDL owns window/event/dialog paths as well as audio/input. Windows-only cannot be implemented by removing SDL first.",
+    "files": [
+      "src/ui/CMakeLists.txt",
+      "src/ui/window_sdl.cpp",
+      "src/ui/windowed_app_main_sdl.cpp",
+      "src/ui/surface_win.cpp",
+      "src/ui/d3d12/d3d12_presenter.cpp",
+      "thirdparty/CMakeLists.txt"
+    ],
+    "tasks": [
+      "Map every SDL consumer and define native Win32 message/window ownership.",
+      "Implement window/focus/resize/DPI/fullscreen/dialog lifecycle preserving D3D12 HWND presenter.",
+      "Retain any justified dependency until its native replacement is validated."
+    ],
+    "tests": [
+      "Resize/minimize/restore/DPI, multi-monitor move and clean close during GPU work.",
+      "Keyboard/text/dialog input and title thread/UI handoff without deadlock.",
+      "Installed external title app finds runtime/plugin DLLs."
+    ],
+    "criteria": [
+      "UI behavior and D3D12 presentation match baseline; all remaining SDL uses have named owners."
+    ],
+    "evidence": [
+      "https://github.com/rexglue/rexglue-sdk/blob/c94f5ebdcb3c9d1a460ca48e04f9758448f8d518/src/ui/CMakeLists.txt"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-022",
+      "RG-GDK-024"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-021.md",
+    "risk": "Native message-pump/window ownership changes can deadlock GPU shutdown or break focus, DPI and text input.",
+    "number": 21,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/21",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-022",
+    "title": "Integrate Gaming Runtime and per-title PC packaging",
+    "labels": [
+      "gdk",
+      "windows",
+      "build",
+      "migration",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-002",
+      "RG-GDK-017",
+      "RG-GDK-019",
+      "RG-GDK-020",
+      "RG-GDK-021"
+    ],
+    "objective": "Provide a documented application-owned Gaming Runtime and MicrosoftGame.config deployment flow.",
+    "background": "SDK has no established GDK integration. Guest XAM profiles are not host service identities. Packaging requires real title-project identity.",
+    "files": [
+      "src/rexglue/commands/init_command.cpp",
+      "resources",
+      "cmake/rexglue_install.cmake",
+      "cmake/rexglueConfig.cmake.in"
+    ],
+    "tasks": [
+      "Add title template initialize/uninitialize and error reporting for missing/mismatched runtime.",
+      "Generate PC MicrosoftGame.config from supplied identity, with no invented service IDs.",
+      "Document package/build/install/launch/uninstall using pinned supported tools.",
+      "Keep MSIXVC2/ARM64 previews outside initial stable gate."
+    ],
+    "tests": [
+      "Minimal static title app packaged and unpackaged launch; missing DLL/config/mismatched identity errors.",
+      "Shutdown ordering with audio/input/GPU callbacks; saved-data persistence across reinstall policy.",
+      "Clean machine/package dependency verification."
+    ],
+    "criteria": [
+      "Exact pinned GDK deployment commands and successful smoke artifacts are published.",
+      "Guest compatibility state stays separate from optional host account/cloud services."
+    ],
+    "evidence": [
+      "https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/system/xgameruntimeinit/xgameruntimeinit_members?view=gdk-2604",
+      "https://learn.microsoft.com/en-us/gaming/gdk/docs/features/common/game-config/microsoftgameconfig-overview"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-023",
+      "RG-GDK-025"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-022.md",
+    "risk": "Runtime identity/lifecycle/packaging mistakes can prevent launch or break shutdown and saved-data access under GDK deployment.",
+    "number": 22,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/22",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-023",
+    "title": "Remove Vulkan backend and obsolete graphics dependencies after parity",
+    "labels": [
+      "cleanup",
+      "gpu",
+      "d3d12",
+      "migration",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-007",
+      "RG-GDK-009",
+      "RG-GDK-010",
+      "RG-GDK-011",
+      "RG-GDK-012",
+      "RG-GDK-022"
+    ],
+    "objective": "Finish the D3D12-only host architecture after all replacement gates pass.",
+    "background": "Vulkan is currently optional/off on Windows, present in graphics/UI/build/install trees. SPIR-V may be compiler IR depending on RG-GDK-007; distinguish it from Vulkan runtime.",
+    "files": [
+      "CMakeLists.txt",
+      "src/graphics/CMakeLists.txt",
+      "src/ui/CMakeLists.txt",
+      "src/graphics/vulkan",
+      "src/ui/vulkan",
+      "include/rex/graphics/vulkan",
+      "include/rex/ui/vulkan",
+      "thirdparty/CMakeLists.txt",
+      ".gitmodules",
+      "cmake/rexglue_vulkan_stack.cmake",
+      "cmake/rexglue_install.cmake"
+    ],
+    "tasks": [
+      "Audit dependency/link/deploy graph against chosen shader architecture.",
+      "Remove Vulkan backend selection/source/public exports and unused Vulkan-only libraries/assets.",
+      "Update generated consumer templates, docs, install exports and CI; simplify only verified-dead abstractions."
+    ],
+    "tests": [
+      "Clean build/install/external consumer without Vulkan SDK/loader.",
+      "Audit import tables and package contents for Vulkan loader/backend dependencies.",
+      "Full GPU regression/vendor suite before and after removal."
+    ],
+    "criteria": [
+      "D3D12 is the only selectable/rendering backend.",
+      "No live Vulkan dependency remains; any retained SPIR-V tool has documented shader-only consumer."
+    ],
+    "evidence": [
+      "https://github.com/has207/xenia-edge/commit/c00e7aead",
+      "https://github.com/rexglue/rexglue-sdk/blob/c94f5ebdcb3c9d1a460ca48e04f9758448f8d518/thirdparty/CMakeLists.txt"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-024",
+      "RG-GDK-025"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-023.md",
+    "risk": "Premature graphics dependency removal can break transfer shader generation, consumer installation or a previously working D3D12 path.",
+    "number": 23,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/23",
+    "state": "closed"
+  },
+  {
+    "id": "RG-GDK-024",
+    "title": "Retire Linux and macOS build, platform and distribution paths",
+    "labels": [
+      "cleanup",
+      "windows",
+      "migration",
+      "build",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-019",
+      "RG-GDK-020",
+      "RG-GDK-021",
+      "RG-GDK-023"
+    ],
+    "objective": "Make Windows the only supported host after native replacement parity.",
+    "background": "Root CMake/presets/workflows include Linux/macOS and shared POSIX files; SDL and guest abstractions cannot be deleted indiscriminately.",
+    "files": [
+      "CMakeLists.txt",
+      "CMakePresets.json",
+      "src/core/CMakeLists.txt",
+      "src/ui/CMakeLists.txt",
+      ".github/workflows/_build-platform.yaml",
+      ".github/workflows/nightly.yaml",
+      "cmake/rexglue_install.cmake",
+      "resources"
+    ],
+    "tasks": [
+      "Remove Linux presets/workflows/platform sources and packaging once Windows equivalents pass.",
+      "Remove Apple Objective-C/Metal-surface/MoltenVK/presets/workflows and install assets.",
+      "Audit shared POSIX/SDL code consumers and exported headers; preserve guest abstractions.",
+      "Add explicit unsupported-host configure diagnostic and update generated title templates."
+    ],
+    "tests": [
+      "Fresh Windows SDK build/install and external title project compile from generated template.",
+      "No Linux/macOS CI/distribution artifacts remain; unsupported host rejected clearly.",
+      "Full baseline regression after cleanup, including paths/Unicode/exceptions/window/audio/input."
+    ],
+    "criteria": [
+      "Windows-only host policy reflected in source selection, templates, packaging and docs.",
+      "No compatibility behavior removed merely because an abstraction was cross-platform."
+    ],
+    "evidence": [
+      "https://github.com/rexglue/rexglue-sdk/blob/c94f5ebdcb3c9d1a460ca48e04f9758448f8d518/CMakePresets.json"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [
+      "RG-GDK-025"
+    ],
+    "body_file": "docs/roadmap/RG-GDK-024.md",
+    "risk": "Deleting shared host abstractions can break Windows Unicode paths, exception handling, audio, input or generated title projects.",
+    "number": 24,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/24",
+    "state": "closed"
+  },
+  {
+    "id": "RG-GDK-025",
+    "title": "Complete release documentation and enforce migration acceptance gates",
+    "labels": [
+      "documentation",
+      "testing",
+      "architecture",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-022",
+      "RG-GDK-023",
+      "RG-GDK-024"
+    ],
+    "objective": "Publish accurate build/deployment/support docs and a release evidence manifest.",
+    "background": "The planning README distinguishes destination from current implementation. It must be revised as milestones actually pass.",
+    "files": [
+      "README.md",
+      "AGENTS.md",
+      "CONTRIBUTING.md",
+      "docs",
+      ".github/workflows"
+    ],
+    "tasks": [
+      "Update requirements/build/run/GDK/troubleshooting/support tables from executed commands.",
+      "Publish vendor/compatibility results with exact versions and limitations.",
+      "Verify clean agent handoff using README, AGENTS and assigned issue only.",
+      "Ensure all architecture ADRs and provenance/regression indices reflect shipped code."
+    ],
+    "tests": [
+      "Fresh checkout developer follows documented setup and builds/tests/runs sample.",
+      "Roadmap/dependency/link validation and no untested support claims.",
+      "Release reviewer checks all major migration regression evidence and rollback notes."
+    ],
+    "criteria": [
+      "Every supported configuration has linked actual evidence.",
+      "No unresolved required gate is hidden by issue closure or release wording."
+    ],
+    "evidence": [
+      "https://github.com/furqanagwan/rexglue-sdk"
+    ],
+    "vendor": "AMD, NVIDIA and Intel: run the affected fixture on real hardware, record model/driver/capabilities and RTV/ROV path. Separate Intel Arc/non-Arc. Unavailable hardware stays blocked; WARP is supplementary. Compare ordinary Windows and intended GDK deployment when available.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [],
+    "body_file": "docs/roadmap/RG-GDK-025.md",
+    "risk": "Stale commands or unsupported claims can produce unreproducible releases and incorrect agent handoffs.",
+    "number": 25,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/25",
+    "state": "open"
+  },
+  {
+    "id": "RG-GDK-026",
+    "title": "Maintain Canary and Edge upstream watches and regression provenance",
+    "labels": [
+      "upstream-sync",
+      "research",
+      "regression",
+      "blocked"
+    ],
+    "depends_on": [
+      "RG-GDK-001"
+    ],
+    "objective": "Establish a repeatable monthly and pre-port review process without automatic code merging.",
+    "background": "Current snapshot indexes all open items; selected pending/rejected work must be rechecked. Edge/Canary regularly backport each other, so SHA-only uniqueness is insufficient.",
+    "files": [
+      "docs/upstream-tracking.md",
+      "docs/upstream-review.md",
+      "docs/upstream-snapshot.json",
+      "docs/roadmap.md"
+    ],
+    "tasks": [
+      "Assign maintainer and record next review date; fetch refs and compare patch equivalence.",
+      "Review new/updated commits, PRs, issues and relevant closed items for target subsystems and vendors.",
+      "Update existing mapped issue rather than duplicate every upstream report.",
+      "Record provenance, rejected ideas, unblock events and regression-test obligations; never auto-merge."
+    ],
+    "tests": [
+      "Trial review detects a pending→merged, rejected and regression-follow-up example.",
+      "Verify every accepted port has source SHA, scope, adaptation and tests; unknown stays unknown."
+    ],
+    "criteria": [
+      "Owner/cadence/query procedure and first completed review snapshot are documented.",
+      "Watch entries only unblock on settled semantics plus local repro/test evidence; upstream merge alone is insufficient."
+    ],
+    "evidence": [
+      "https://github.com/xenia-canary/xenia-canary/issues/773",
+      "https://github.com/has207/xenia-edge/issues/234",
+      "https://github.com/xenia-canary/xenia-canary/pull/1111",
+      "https://github.com/xenia-canary/xenia-canary/pull/1225",
+      "https://github.com/xenia-canary/xenia-canary/pull/1077",
+      "https://github.com/has207/xenia-edge/pull/251"
+    ],
+    "vendor": "Not applicable to pure CPU logic; do not claim GPU compatibility.",
+    "gate": "Implementation may start after dependencies and the specific research gates below are complete.",
+    "blocks": [],
+    "body_file": "docs/roadmap/RG-GDK-026.md",
+    "risk": "Stale status or duplicate/cherry-picked evidence can promote rejected code or miss a regression follow-up.",
+    "number": 26,
+    "url": "https://github.com/furqanagwan/rexglue-sdk/issues/26",
+    "state": "open"
+  }
+]
