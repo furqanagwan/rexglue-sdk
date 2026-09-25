@@ -1,10 +1,20 @@
 # Baseline capture workflow
 
-## Current checkpoint (2026-09-24)
+## Current checkpoint (2026-09-25)
 
-The baseline recorder, assessment and negative tests are in place. Windows x64
-Debug and Release SDK builds pass; the latest full CTest runs discovered 1,675
-tests per configuration, with four existing explicit BitStream skips. The
+The baseline recorder, assessment and negative tests are in place. At `main`
+`4322f8f` Windows x64 Debug and Release SDK builds pass; each full CTest run
+discovered 1,725 tests (233 unit, 1,458 PPC, 33 GPU fixture, 1 shader bytecode
+reproducibility), all runnable cases passed, and the four existing BitStream
+skips remain. The GPU fixtures ran on NVIDIA (0x10DE, driver 32.0.16.1714) and
+the new ones also on WARP; AMD and Intel runs remain blocked on hardware.
+Since the previous checkpoint, merged runtime changes that could move title
+behavior are RG-GDK-004 (AllocRange ceilings, #63), RG-GDK-010 (real ZPD
+occlusion counts replacing the fixed fake 1000 by default, `occlusion_query`
+cvar, #66) and RG-GDK-011 (mid-burst ring read pointer publication and shader
+translation publication order, #67/#68). The private title has **not** been
+rerun on this revision, so its partial-rendering observation below predates
+them. The
 private Quantum of Solace title reaches changing early 3D views on the NVIDIA
 D3D12 path. This is a **partial rendering observation**, not a gameplay, input,
 audio, save/load, visual-accuracy or GDK deployment pass. The interactive route
