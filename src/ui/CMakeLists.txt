@@ -14,6 +14,7 @@ set(REXUI_CORE_SOURCES
     renderdoc_api.cpp
     sdl_virtual_key.cpp
     window.cpp
+    window_factory.cpp
     window_sdl.cpp
     windowed_app.cpp
     windowed_app_context.cpp
@@ -45,9 +46,12 @@ if(REXGLUE_USE_D3D12)
     )
 endif()
 
-# Platform sources (windowing itself is SDL3)
+# Platform sources. SDL3 is the default window and loop; the native Win32
+# window is selected with ui_backend = "win32" (RG-GDK-021).
 set(REXUI_PLATFORM_SOURCES
     surface_win.cpp
+    window_win.cpp
+    windowed_app_context_win.cpp
 )
 
 # Combine sources
@@ -83,6 +87,8 @@ target_link_libraries(rexui PUBLIC
     SDL3::SDL3
 )
 target_link_libraries(rexui PRIVATE utf8cpp)
+# Native Win32 window: DWM corner preference, IME association, drag and drop.
+target_link_libraries(rexui PRIVATE dwmapi imm32 shell32)
 
 if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
     target_include_directories(rexui PRIVATE

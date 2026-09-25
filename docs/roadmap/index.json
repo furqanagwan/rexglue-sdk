@@ -1155,7 +1155,7 @@
     "risk": "Native message-pump/window ownership changes can deadlock GPU shutdown or break focus, DPI and text input.",
     "number": 21,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/21",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-022",

@@ -194,6 +194,15 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-021 native Win32 window (2026-09-25): opt-in `ui_backend = "win32"`
+(SDL stays default). `unit_tests [ui][win32]` covers creation, DPI-scaled size,
+resize, minimize and restore, fullscreen round trip, close veto versus
+programmatic close, key and gated character input, and cross-thread UI
+calls. `gpu_tests [gpu][win32]` presents D3D12 frames through the Win32 window
+on WARP and NVIDIA across resize, minimize and restore, and closes with the
+presenter attached. SDL consumers and owners are in `docs/windowing.md`. Not
+run: titles, multi-monitor DPI moves, and AMD or Intel presentation.
+
 RG-GDK-020 GameInput (2026-09-25): opt-in `input_backend = "gameinput"`
 (GDK builds; SDL stays default). `unit_tests [input][gameinput]` covers the
 guest-facing matrix through `GamepadDevices`: four pads, unplug, same or

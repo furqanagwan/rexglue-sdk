@@ -79,6 +79,8 @@ All from the development machine with the toolchain pinned above, on 2026-09-25:
 * Negative checks: an empty `REXGLUE_GDK_ROOT`, `C:/not-an-installed-gdk` and `REXGLUE_GDK_EDITION=251000` each stopped configuration with the messages listed above. A consumer given `-DREXGLUE_GDK_ROOT=C:/nope` stopped with the same missing-file message from the installed `rexglue_gdk.cmake`.
 * The standard `win-amd64` preset still configures with `GDK: OFF`, and its Debug and Release suites pass (1728 tests each).
 
+Later finding, 2026-09-25 (during RG-GDK-021 validation): in one of about 15 `ctest --preset win-amd64-gdk-debug` runs, `XGameRuntimeInitialize` in the unpackaged `[gdk]` test did not return within CTest's 60 s timeout. Every other call on this machine returned success in about 0.05–0.1 s, including 5 of 5 immediate reruns. This is an intermittent Gaming Runtime or Gaming Services stall outside SDK code. RG-GDK-022 must initialize the Gaming Runtime without blocking the UI thread indefinitely (off-thread, with a timeout and a diagnostic).
+
 ## Limitations (RG-GDK-002 closed with these recorded)
 
 * Visual Studio edition: only VS 2026 Community was used. Microsoft's announcement names Professional/Enterprise as supported. This is a support statement, not a technical difference: the editions ship the same MSVC libraries, Windows SDK and linker, and the build does not use VS itself (CMake, Ninja and LLVM Clang). Treat Community as working but not Microsoft-supported.
