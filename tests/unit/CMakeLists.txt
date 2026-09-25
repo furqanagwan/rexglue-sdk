@@ -19,6 +19,8 @@ add_executable(unit_tests
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
     input/input_assignment_test.cpp
+    input/keystroke_synthesizer_test.cpp
+    input/gamepad_devices_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
@@ -26,7 +28,7 @@ add_executable(unit_tests
 )
 
 if(REXGLUE_USE_GDK)
-    target_sources(unit_tests PRIVATE gdk/gdk_runtime_test.cpp)
+    target_sources(unit_tests PRIVATE gdk/gdk_runtime_test.cpp gdk/gameinput_test.cpp)
 endif()
 
 target_sources(unit_tests PRIVATE

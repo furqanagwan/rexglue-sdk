@@ -23,7 +23,7 @@ Microsoft's [April 2026 GDK announcement](https://developer.microsoft.com/en-us/
 ## What the GDK build changes
 
 * `REXGLUE_USE_GDK=ON` (the `win-amd64-gdk` preset) validates `REXGLUE_GDK_ROOT`, reads `_GRDK_EDITION` and requires it to equal `REXGLUE_GDK_EDITION` (`260404`). It then defines the imported target `rex::gdk`: GDK include directory, `xgameruntime.lib` and `REXGLUE_GDK_EDITION=<edition>`. `REXGLUE_GDK_ROOT` defaults to `$ENV{GameDKCoreLatest}`.
-* `rex::runtime` links `rex::gdk` publicly. The SDK does not call any GDK API yet; GameInput, XAudio2, windowing and Gaming Runtime lifecycle work belongs to RG-GDK-019/020/021/022.
+* `rex::runtime` links `rex::gdk` publicly. The opt-in GameInput driver ([GameInput](gameinput.md), RG-GDK-020) is the first GDK API the SDK uses; XAudio2, windowing and Gaming Runtime lifecycle work belongs to RG-GDK-019/021/022.
 * Outputs go to `out/win-amd64-gdk/<Config>` so a GDK build never overwrites the standard build.
 * The installed package config (`rexglueConfig.cmake`) re-resolves `rex::gdk` on the consumer's machine with the same edition check (`cmake/rexglue_gdk.cmake` is installed next to it). The SDK does not export a GDK path; a consumer may pass `-DREXGLUE_GDK_ROOT=...`.
 * The GDK headers (`XGameRuntime.h`, via `XTaskQueue.h`) require `<windows.h>` to be included first; the public SDK headers do not include it, so code mixing the two includes it explicitly (see the unit test and consumer).

@@ -1104,7 +1104,7 @@
     "risk": "Device reassignment/subtype conversion can disconnect players, hold whammy input or leave rumble active after removal.",
     "number": 20,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/20",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-021",

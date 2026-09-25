@@ -194,6 +194,16 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-020 GameInput (2026-09-25): opt-in `input_backend = "gameinput"`
+(GDK builds; SDL stays default). `unit_tests [input][gameinput]` covers the
+guest-facing matrix through `GamepadDevices`: four pads, unplug, same or
+different pad reconnecting, no phantom input, packet numbers, unfocused pad,
+rumble hold, focus stop and resume, no rumble after reconnect, and keystroke
+release. `[keystroke]` covers the synthesizer now shared with SDL, and
+`[gdk][gameinput]` the mapping and setup against the installed runtime (one
+pad enumerated and read). Not run: a four-pad hardware matrix, hot-plug,
+hardware rumble, guitars (Canary #1230 open) and a machine without GameInput.
+
 RG-GDK-002 GDK toolchain (2026-09-25): the opt-in `win-amd64-gdk` preset
 (edition 260404, VS 2026 Community 18.10.1, Clang 22.1.8, Windows SDK
 10.0.26100.0) passes 1731/1731 in Release and all unit/PPC/`[gdk]` tests in

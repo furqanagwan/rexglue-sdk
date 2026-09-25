@@ -22,10 +22,14 @@
 #include <rex/input/sdl/sdl_input_driver.h>
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
+#if REX_HAS_GAMEINPUT
+#include "gameinput/gameinput_input_driver.h"
+#endif
 #include <rex/logging.h>
 
-REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
-    .allowed({"sdl", "xinput"});
+REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input",
+                      "Input backend: sdl, xinput, gameinput (GDK builds; falls back to sdl)")
+    .allowed({"sdl", "xinput", "gameinput"});
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
 namespace rex::input {
@@ -343,7 +347,23 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     }
 #endif
 
-    if (REXCVAR_GET(input_backend) == "sdl") {
+    bool use_sdl = REXCVAR_GET(input_backend) == "sdl";
+    if (REXCVAR_GET(input_backend) == "gameinput") {
+#if REX_HAS_GAMEINPUT
+      auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
+      if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(gameinput_driver));
+      } else {
+        REXLOG_WARN("input_backend=gameinput: GameInput unavailable, using SDL instead");
+        use_sdl = true;
+      }
+#else
+      REXLOG_WARN("input_backend=gameinput needs a GDK build (REXGLUE_USE_GDK); using SDL");
+      use_sdl = true;
+#endif
+    }
+
+    if (use_sdl) {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
