@@ -1,6 +1,6 @@
 # April 2026 PC GDK toolchain probe
 
-This isolated executable tests whether a selected x64 Windows compiler can compile C++23 against an **exact installed GDK edition** and link its `xgameruntime.lib`. It does not make the SDK or a game a GDK title. Build it before adding a GDK preset to the SDK ([RG-GDK-002](https://github.com/furqanagwan/rexglue-sdk/issues/2)).
+This isolated executable tests whether a selected x64 Windows compiler can compile C++23 against an **exact installed GDK edition** and link its `xgameruntime.lib`. It does not make the SDK or a game a GDK title. The SDK's own opt-in GDK build, which followed this probe, is documented in [docs/gdk-toolchain.md](../../docs/gdk-toolchain.md) ([RG-GDK-002](https://github.com/furqanagwan/rexglue-sdk/issues/2)).
 
 From an x64 Visual Studio developer shell with CMake, Ninja and Clang available:
 

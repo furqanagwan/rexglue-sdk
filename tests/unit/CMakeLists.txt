@@ -25,6 +25,10 @@ add_executable(unit_tests
     codegen/jump_table_test.cpp
 )
 
+if(REXGLUE_USE_GDK)
+    target_sources(unit_tests PRIVATE gdk/gdk_runtime_test.cpp)
+endif()
+
 target_sources(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/rexglue/ui/ui.cpp
     ${PROJECT_SOURCE_DIR}/src/rexglue/ui/progress.cpp

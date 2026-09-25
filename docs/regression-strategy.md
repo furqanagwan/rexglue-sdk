@@ -194,6 +194,18 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-002 GDK toolchain (2026-09-25): the opt-in `win-amd64-gdk` preset
+(edition 260404, VS 2026 Community 18.10.1, Clang 22.1.8, Windows SDK
+10.0.26100.0) passes 1731/1731 in Release and all unit/PPC/`[gdk]` tests in
+Debug; GPU fixtures pass serially (one contention failure under `-j 8`). The
+installed package builds and runs the external consumer in
+`tests/gdk_consumer` (Gaming Runtime init 0x00000000, exception through
+rexruntime, plugin ABI handshake and shared cvar registry). Missing, invalid and
+wrong-edition GDK selections fail configure with actionable messages. The
+standard `win-amd64` preset is unchanged. Not established: Microsoft-supported
+VS edition (Professional/Enterprise), a clean machine, packaged-title operation
+and ARM64. Details: `docs/gdk-toolchain.md`.
+
 RG-GDK-012 scalar math and depth (2026-09-25): `gpu_tests [alu]` is the
 semantic oracle for the scalar approximations: EXP, LOG, LOGC, RCP, RCPC, RCPF,
 RSQ, RSQC, RSQF and SQRT on 27 inputs (signed zeros, infinities, NaN,
