@@ -116,7 +116,7 @@
     "risk": "Compiler/CRT/plugin ABI mismatch may break guest callbacks, generated C++ or installed consumers even when SDK compilation succeeds.",
     "number": 2,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/2",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-003",
