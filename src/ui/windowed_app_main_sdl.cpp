@@ -1,6 +1,7 @@
 /**
  * @file        ui/windowed_app_main_sdl.cpp
- * @brief       Entry point for windowed applications (SDL3 windowing)
+ * @brief       Entry point for windowed applications (SDL3 or native Win32
+ *              windowing, chosen by the ui_backend cvar)
  *
  * @copyright   Copyright (c) 2026 Tom Clay <tomc@tctechstuff.com>
  *              All rights reserved.
@@ -20,6 +21,7 @@
 #include <rex/logging.h>
 #include <rex/platform.h>
 #include <rex/ui/windowed_app.h>
+#include <rex/ui/flags.h>
 #include <rex/ui/windowed_app_context_sdl.h>
 
 #if REX_PLATFORM_WIN32
@@ -32,49 +34,67 @@
 #include <windows.h>
 #include <objbase.h>
 #include <shellapi.h>
+
+#include <rex/ui/windowed_app_context_win.h>
 #endif
 
 namespace {
+
+// Runs the app on an initialized context. Shared by both window backends.
+template <typename AppContext>
+int RunApp(AppContext& app_context, const std::vector<std::string>& remaining) {
+  std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
+
+  // Match remaining positional args to the app's expected options.
+  const auto& option_names = app->GetPositionalOptions();
+  std::map<std::string, std::string> parsed;
+  size_t count = std::min(remaining.size(), option_names.size());
+  for (size_t i = 0; i < count; ++i) {
+    parsed[option_names[i]] = remaining[i];
+  }
+  app->SetParsedArguments(std::move(parsed));
+
+  int result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
+  app->InvokeOnDestroy();
+  return result;
+}
 
 int RunWindowedApp(int argc, char** argv) {
   auto remaining = rex::cvar::Init(argc, argv);
   rex::cvar::ApplyEnvironment();
   rex::InitLoggingEarly();
 
-  int result;
-  {
-    rex::ui::SDLWindowedAppContext app_context;
-    if (!app_context.Initialize()) {
-      return EXIT_FAILURE;
-    }
-
 #if REX_PLATFORM_WIN32
-    // Apartment-threaded COM for shell dialogs.
-    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
-      return EXIT_FAILURE;
-    }
+  // Apartment-threaded COM for shell dialogs.
+  if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
+    return EXIT_FAILURE;
+  }
 #endif
 
-    std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
-
-    // Match remaining positional args to the app's expected options.
-    const auto& option_names = app->GetPositionalOptions();
-    std::map<std::string, std::string> parsed;
-    size_t count = std::min(remaining.size(), option_names.size());
-    for (size_t i = 0; i < count; ++i) {
-      parsed[option_names[i]] = remaining[i];
+  int result = EXIT_FAILURE;
+#if REX_PLATFORM_WIN32
+  if (REXCVAR_GET(ui_backend) == "win32") {
+    {
+      rex::ui::Win32WindowedAppContext app_context(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
+      if (app_context.Initialize()) {
+        result = RunApp(app_context, remaining);
+      } else {
+        REXLOG_ERROR("Failed to initialize the Win32 windowed app context");
+      }
     }
-    app->SetParsedArguments(std::move(parsed));
-
-    result = app->OnInitialize() ? app_context.RunMainMessageLoop() : EXIT_FAILURE;
-
-    app->InvokeOnDestroy();
+    CoUninitialize();
+    return result;
   }
-
+#endif
+  {
+    rex::ui::SDLWindowedAppContext app_context;
+    if (app_context.Initialize()) {
+      result = RunApp(app_context, remaining);
+    }
+  }
 #if REX_PLATFORM_WIN32
   CoUninitialize();
 #endif
-
   return result;
 }
 

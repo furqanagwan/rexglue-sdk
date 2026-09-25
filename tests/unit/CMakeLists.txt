@@ -21,6 +21,7 @@ add_executable(unit_tests
     input/input_assignment_test.cpp
     input/keystroke_synthesizer_test.cpp
     input/gamepad_devices_test.cpp
+    ui/win32_window_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp

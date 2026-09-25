@@ -960,6 +960,15 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 - Source files: `src/xenia/apu/audio_system.cc`, `src/xenia/apu/audio_system.h`.
 - Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
 
+### Native Win32 window (last version before Qt)
+
+- Source: [has207/xenia-edge `213dcc2675806bf1e61291dd6ed0bb897c8d2fff`](https://github.com/has207/xenia-edge/commit/213dcc2675806bf1e61291dd6ed0bb897c8d2fff) ("[UI] Convert to Qt"; the Win32 files were deleted by the next commit, `92f5b712d`); 2025-10-04; Herman S..
+- Game/scope: all titles (host windowing). Classification: platform replacement; A/B.
+- Reason / required adaptation / tests: The Win32 window and app context this SDK's `Window` API came from. Ported as `src/ui/window_win.cpp` and `windowed_app_context_win.cpp`, selected with `ui_backend = "win32"` (default stays SDL). Adapted: no native menus (the SDL window has none), the listeners' close veto, minimize and restore events, raw-input relative mouse with cursor clipping, warp to center, `WM_CHAR` and IME gated on text input, the `monitor` cvar with the primary display first, horizontal wheel, and process DPI awareness set in code. Tests: `unit_tests [ui][win32]`, `gpu_tests [gpu][win32]`. See `docs/windowing.md`.
+- ReXGlue issue: **RG-GDK-021**; status: ported (opt-in) 2026-09-25. PR: not identified.
+- Source files: `src/xenia/ui/window_win.cc`, `src/xenia/ui/window_win.h`, `src/xenia/ui/windowed_app_context_win.cc`, `src/xenia/ui/windowed_app_context_win.h`.
+- Known regressions: none known upstream (the files were retired for Qt, not for defects). Not established locally on titles, multiple DPIs, or AMD and Intel.
+
 ## Review process
 
 Monthly, and before each subsystem port or release: fetch upstream refs into the controlled reference checkout; record date, SHA, merge-base and patch-equivalence comparison. Read new/updated issues and PRs, including closed-unmerged work and regressions. Search subsystem terms plus AMD/NVIDIA/Intel and title IDs. Re-check older open watches. Record explicit classification, affected titles, JIT dependencies, tests and whether a ReXGlue issue is justified. Update existing issues rather than duplicate.

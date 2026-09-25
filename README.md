@@ -126,6 +126,8 @@ pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
 GDK builds can read pads through GameInput with `input_backend = "gameinput"`
 (opt-in; SDL stays the default): see [GameInput driver](docs/gameinput.md).
+Any build can use the native Win32 window instead of SDL with
+`ui_backend = "win32"` (opt-in): see [Windowing](docs/windowing.md).
 There is **no validated packaging command** yet: RG-GDK-022 adds application-owned
 Gaming Runtime lifecycle and per-title `MicrosoftGame.config` packaging.
 Do not put restricted SDK headers/docs or real service credentials in this repo.
