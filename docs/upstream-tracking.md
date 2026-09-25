@@ -25,7 +25,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #844](https://github.com/xenia-canary/xenia-canary/pull/844) | open PR | `16c13ed6ca60c20e4611e804216f78f5261c99ba` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-013 |
 | [xenia-canary/xenia-canary #981](https://github.com/xenia-canary/xenia-canary/pull/981) | open PR | `555e9a4a456d2a6d80a8811486208f82095fcfe9` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-017 |
 | [xenia-canary/xenia-canary #1025](https://github.com/xenia-canary/xenia-canary/pull/1025) | open PR | `abcf2ff1bea480cb6c4cdcafd2c09350826e01d3` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-015 |
-| [xenia-canary/xenia-canary #1077](https://github.com/xenia-canary/xenia-canary/pull/1077) | open PR | `dcd2fff24243b4d2d67c2d08a10d235f04f0de80` | G/H; experimental; game-specific | See scoped record below; never assume absence | RG-GDK-012 |
+| [xenia-canary/xenia-canary #1077](https://github.com/xenia-canary/xenia-canary/pull/1077) | open PR | `dcd2fff24243b4d2d67c2d08a10d235f04f0de80` | G/H; experimental; not adopted | See scoped record below | RG-GDK-012 |
 | [xenia-canary/xenia-canary #1109](https://github.com/xenia-canary/xenia-canary/pull/1109) | open PR | `95f9f68817c9828ba3a28c144916d45d34d44bd1` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-017 |
 | [xenia-canary/xenia-canary #1111](https://github.com/xenia-canary/xenia-canary/pull/1111) | open PR | `78e06cafaa6429e5464786baa9e1edf252bbe582` | C/H; relevant but pending upstream; experimental; not adopted | See scoped record below; deferred to #65 | RG-GDK-010 |
 | [xenia-canary/xenia-canary #1182](https://github.com/xenia-canary/xenia-canary/pull/1182) | open PR | `fa6cdaae0f58e9161e5e41ea3683f837b3b112c7` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-004 |
@@ -43,7 +43,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1147](https://github.com/xenia-canary/xenia-canary/pull/1147) | merged | `7cd47947b07de30b649fb4224418a659890eab73` | B/H; useful research; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-011 |
 | [xenia-canary/xenia-canary #1163](https://github.com/xenia-canary/xenia-canary/pull/1163) | merged | `437a7280cf95310d518a2f68087aab61403956ac` | C/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-009 |
 | [xenia-canary/xenia-canary #1180](https://github.com/xenia-canary/xenia-canary/pull/1180) | merged | `22708301ba76d10aae6f7d7caac8b1cac9e4a8e6` | C/H; useful research; redesign | See scoped record below; never assume absence | RG-GDK-004 |
-| [xenia-canary/xenia-canary #1190](https://github.com/xenia-canary/xenia-canary/pull/1190) | merged | `3a44f20c7bc66db1da583e8a6f0ab740e31908e9` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-012 |
+| [xenia-canary/xenia-canary #1190](https://github.com/xenia-canary/xenia-canary/pull/1190) | merged | `3a44f20c7bc66db1da583e8a6f0ab740e31908e9` | B/H; adopted opt-in (off by default) in RG-GDK-012 | See scoped record below | RG-GDK-012 |
 | [xenia-canary/xenia-canary #1195](https://github.com/xenia-canary/xenia-canary/pull/1195) | closed unmerged | `ab349b475d4d82dd2a4330b2e2eb46332006afce` | B/H; candidate for later port | See scoped record below; never assume absence | RG-GDK-011 |
 | [xenia-canary/xenia-canary #1202](https://github.com/xenia-canary/xenia-canary/pull/1202) | closed unmerged | `1cc288bc71e625bd9272dafc2f1fb01259a62eb2` | B/H; useful research; rejected; regression risk | See scoped record below; never assume absence | RG-GDK-004 |
 | [xenia-canary/xenia-canary #1215](https://github.com/xenia-canary/xenia-canary/pull/1215) | merged | `87c24112706d95f15f83dfec58e93923bd7ffa07` | B/H; adopted (adapted) in RG-GDK-004 | See scoped record below | RG-GDK-004 |
@@ -69,7 +69,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [has207/xenia-edge #141](https://github.com/has207/xenia-edge/issues/141) | closed | `not identified` | B/H; regression-related | See scoped record below; never assume absence | RG-GDK-018 |
 | [has207/xenia-edge #143](https://github.com/has207/xenia-edge/pull/143) | merged | `c9a6327ad136f82920df547afc9e552424b863ac` | G/H; useful research; obsolete workaround; not adopted | See scoped record below | RG-GDK-010 |
 | [has207/xenia-edge #145](https://github.com/has207/xenia-edge/pull/145) | closed unmerged | `5d31dea2343fcd60973e17bb89fe0851cca2e1fc` | G/H; experimental; rejected | See scoped record below; never assume absence | RG-GDK-010 |
-| [has207/xenia-edge #160](https://github.com/has207/xenia-edge/pull/160) | merged | `aa749b4be4f49ba9818eca1028ac77fb69f9d7b8` | G/H; candidate for later port; game-specific | See scoped record below; never assume absence | RG-GDK-012 |
+| [has207/xenia-edge #160](https://github.com/has207/xenia-edge/pull/160) | merged | `aa749b4be4f49ba9818eca1028ac77fb69f9d7b8` | G/H; not ported (RTV shader offset absent locally) | See scoped record below | RG-GDK-012 |
 | [has207/xenia-edge #164](https://github.com/has207/xenia-edge/issues/164) | closed | `not identified` | B/H; regression-related | See scoped record below; never assume absence | RG-GDK-018 |
 | [has207/xenia-edge #194](https://github.com/has207/xenia-edge/pull/194) | closed unmerged | `9376b083bf8937a1bbc6fbff31cecc4c773a2c30` | B/H; useful research; rejected | See scoped record below; never assume absence | RG-GDK-010 |
 | [has207/xenia-edge #198](https://github.com/has207/xenia-edge/issues/198) | closed | `not identified` | C/H; useful research | See scoped record below; never assume absence | RG-GDK-007 |
@@ -93,6 +93,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-012**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: Report; inspect linked commit/reproducer before implementation..
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- RG-GDK-012 review (2026-09-25): open; the implicated shader offset is not in this repository.
 
 ### has207/xenia-edge #234 — Guest Scheduler regressions
 
@@ -183,6 +184,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-012**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/gpu/d3d12/d3d12_command_processor.cc`; `src/xenia/gpu/d3d12/d3d12_command_processor.h`; `src/xenia/gpu/d3d12/pipeline_cache.cc`; `src/xenia/gpu/d3d12/pipeline_cache.h`; `src/xenia/gpu/draw_util.cc`; `src/xenia/gpu/draw_util.h`; `src/xenia/gpu/dxbc_shader_translator.cc`; `src/xenia/gpu/dxbc_shader_translator.h`; `src/xenia/gpu/dxbc_shader_translator_om.cc`; `src/xenia/gpu/spirv_shader_translator.cc`; `src/xenia/gpu/spirv_shader_translator.h`; `src/xenia/gpu/spirv_shader_translator_rb.cc`; `src/xenia/gpu/vulkan/vulkan_command_processor.cc`; `src/xenia/gpu/vulkan/vulkan_command_processor.h`; `src/xenia/gpu/vulkan/vulkan_pipeline_cache.cc`; `src/xenia/gpu/vulkan/vulkan_pipeline_cache.h`; `src/xenia/ui/imgui_debug_dialog.cc`; `src/xenia/ui/imgui_debug_dialog.h`.
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- RG-GDK-012 review (2026-09-25): not ported. Locally the RTV path applies polygon offset only as fixed-function `DepthBias` and the ROV path only in the shader (`edram_poly_offset_*`), selected by `edram_rov_used`, so there is no fixed-function plus shader double bias. The RTV shader offset from this PR is absent and stays out while has207/xenia-edge #278 (Lost Odyssey regression) is open.
 
 ### has207/xenia-edge #198 — depth_float24_convert_in_pixel_shader not working in d3d12
 
@@ -261,6 +263,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-012**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/gpu/dxbc_shader_translator_fetch.cc`.
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
+- RG-GDK-012 review (2026-09-25): still open upstream; not adopted. No depth clamp for Inf is added.
 
 ### xenia-canary/xenia-canary #1182 — [Memory] Fix large-alignment physical allocs through offset-translated heaps
 
@@ -493,6 +496,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-012**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/gpu/dxbc_shader_translator.h`; `src/xenia/gpu/dxbc_shader_translator_alu.cc`; `src/xenia/gpu/dxbc_shader_translator_fetch.cc`; `src/xenia/gpu/gpu_flags.cc`; `src/xenia/gpu/gpu_flags.h`; `src/xenia/gpu/shader_interpreter.cc`; `src/xenia/gpu/shader_interpreter.h`; `src/xenia/gpu/spirv_shader_translator.h`; `src/xenia/gpu/spirv_shader_translator_alu.cc`; `src/xenia/gpu/spirv_shader_translator_fetch.cc`.
 - Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- RG-GDK-012 decision (2026-09-25): **adopted opt-in**, `gpu_scalar_approximation_rounding` (default off, restart). The commit itself says the console precision and halfway behavior are unconfirmed, and #12 forbids game-motivated math defaults without an independent oracle. Ported for DXBC (`ReduceFloatPrecision`, DIV/SQRT reciprocal instead of RCP/RSQ when enabled) and the CPU shader interpreter (`include/rex/graphics/pipeline/shader/float_precision.h`); the local translator never had `ac6_ground_fix`, so nothing is removed. SPIR-V parts are not applicable. Tests: `unit_tests [float_precision]` (rounding, halfway, carry, signed zero, Inf/NaN, FLT_MAX not rounded to infinity) and `gpu_tests [alu]`, which runs EXP/LOG/LOGC/RCP/RCPC/RCPF/RSQ/RSQC/RSQF/SQRT on 27 inputs through translated vertex shaders (memexport readback) with the option off and on, checking the documented special cases bit-exactly and finite results against double precision within 2^-20; passes on NVIDIA and WARP both ways. 4E4D07D1 (AC6) is not available, so the title benefit is not reproduced.
 
 ### xenia-canary/xenia-canary #1031 — [GPU] Remove ac6_ground_fix - nudge rcp up slightly instead
 

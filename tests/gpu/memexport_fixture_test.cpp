@@ -31,46 +31,14 @@ namespace xenos = rex::graphics::xenos;
 using rex::testing::GpuFixture;
 using namespace rex::testing::guest_draw;  // NOLINT
 
-// Control flow instructions, packed two per three dwords.
-struct Cf {
-  uint32_t dword_0, dword_1;  // dword_1 has 16 bits.
-};
-Cf Exec(uint32_t address, uint32_t count, uint32_t fetch_sequence, bool end) {
-  return {address | (count << 12) | (fetch_sequence << 16), end ? 0x2000u : 0x1000u};
-}
-Cf Alloc(rex::graphics::ucode::AllocType type) {
-  return {0, 0xC000u | (uint32_t(type) << 9)};
-}
-void PackCf(std::vector<uint32_t>& ucode, Cf a, Cf b) {
-  ucode.insert(ucode.end(), {a.dword_0, (a.dword_1 & 0xFFFF) | (b.dword_0 << 16),
-                             (b.dword_0 >> 16) | (b.dword_1 << 16)});
-}
-
-// ALU vector operation exporting all four components to export register
-// `dest` (32 is eA, 33 is eM0, 62 is the position), with the scalar operation
-// retaining the previous value. `sel` bits select temporary registers (1) or
-// float constants (0) for sources 1..3.
-std::vector<uint32_t> AluExport(uint32_t dest, uint32_t opcode, uint32_t src1, uint32_t src2,
-                                uint32_t src3, uint32_t src1_swizzle, bool src1_temp,
-                                bool src2_temp, bool src3_temp) {
-  return {0xC80F8000u | dest, src1_swizzle << 16,
-          src3 | (src2 << 8) | (src1 << 16) | (opcode << 24) | (uint32_t(src3_temp) << 29) |
-              (uint32_t(src2_temp) << 30) | (uint32_t(src1_temp) << 31)};
-}
-
-constexpr uint32_t kAluMax = 2;
-constexpr uint32_t kAluMad = 11;
-// Component-relative swizzle replicating X.
-constexpr uint32_t kSwizzleXXXX = 0 | (3 << 2) | (2 << 4) | (1 << 6);
-
 // vfetch r1 from vf0 by the vertex index in r0.x; oPos = r1; then
 //   mad eA, r0.xxxx, c1, c2   (c1 = 0, 1, 0, 0 - the index into eA.y)
 //   max eM0, c3, c3           (the exported value)
 // so every vertex exports c3 to stream c2 at its own index.
 std::vector<uint32_t> MemexportVertexShader() {
   std::vector<uint32_t> ucode;
-  PackCf(ucode, Exec(3, 1, 1, false), Alloc(rex::graphics::ucode::AllocType::kVsPosition));
-  PackCf(ucode, Exec(4, 1, 0, false), Alloc(rex::graphics::ucode::AllocType::kMemory));
+  PackCf(ucode, Exec(3, 1, 1, false), Alloc(ucode::AllocType::kVsPosition));
+  PackCf(ucode, Exec(4, 1, 0, false), Alloc(ucode::AllocType::kMemory));
   PackCf(ucode, Exec(5, 2, 0, true), Cf{0, 0});
   // 3: vfetch r1.xyzw, r0.x, vf0 (as in the shared vertex shader).
   ucode.insert(ucode.end(), {0x00081000, 0x00260688, 0x00000004});
