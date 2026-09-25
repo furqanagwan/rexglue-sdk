@@ -45,6 +45,16 @@
       "inherits": "windows-base"
     },
     {
+      "name": "win-amd64-gdk",
+      "displayName": "Windows AMD64 (April 2026 GDK)",
+      "description": "Opt-in x64 build against the installed April 2026 PC GDK (260404); see docs/gdk-toolchain.md",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "REXGLUE_USE_GDK": "ON",
+        "REXGLUE_GDK_EDITION": "260404"
+      }
+    },
+    {
       "name": "win-arm64",
       "displayName": "Windows ARM64",
       "description": "Multi-config build for Windows ARM64 using Clang",
@@ -66,6 +76,16 @@
       "name": "win-amd64-relwithdebinfo",
       "configurePreset": "win-amd64",
       "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "win-amd64-gdk-debug",
+      "configurePreset": "win-amd64-gdk",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win-amd64-gdk-release",
+      "configurePreset": "win-amd64-gdk",
+      "configuration": "Release"
     },
     {
       "name": "win-arm64-debug",
@@ -98,6 +118,16 @@
       "name": "win-amd64-relwithdebinfo",
       "configurePreset": "win-amd64",
       "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "win-amd64-gdk-debug",
+      "configurePreset": "win-amd64-gdk",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win-amd64-gdk-release",
+      "configurePreset": "win-amd64-gdk",
+      "configuration": "Release"
     },
     {
       "name": "win-arm64-debug",

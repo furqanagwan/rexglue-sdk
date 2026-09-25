@@ -22,6 +22,11 @@ option(REXGLUE_ENABLE_SANITIZERS "Enable UndefinedBehaviorSanitizer" OFF)
 option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (experimental)" OFF)
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
 option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter registry and overlay" ON)
+# Opt-in PC GDK build (RG-GDK-002). Off by default so standard Windows builds
+# need no GDK. The edition is pinned; see docs/gdk-toolchain.md.
+option(REXGLUE_USE_GDK "Build against an installed Microsoft GDK (PC) edition" OFF)
+set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Required GDK edition (_GRDK_EDITION)")
+set(REXGLUE_GDK_ROOT "$ENV{GameDKCoreLatest}" CACHE PATH "Installed GDK edition directory")
 # Propagate profiling defines globally (compiled out in Release)
 if(REXGLUE_ENABLE_TRACY)
     add_compile_definitions($<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PROFILING>)
@@ -142,10 +147,15 @@ configure_file(
     @ONLY
 )
 
-# Output directories (multi-config appends /<Config>/ automatically)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
+# Output directories (multi-config appends /<Config>/ automatically). A GDK
+# build gets its own so it never overwrites the standard build's binaries.
+set(REXGLUE_OUTPUT_DIR "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
+if(REXGLUE_USE_GDK)
+    string(APPEND REXGLUE_OUTPUT_DIR "-gdk")
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 
 # Sanitizer support for debugging memory corruption and undefined behavior
 if(REXGLUE_ENABLE_SANITIZERS)
@@ -153,6 +163,11 @@ if(REXGLUE_ENABLE_SANITIZERS)
     # Note: ASan doesn't work well with the custom mmap at 0x100000000, so we only use UBSan
     add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=undefined)
+endif()
+
+if(REXGLUE_USE_GDK)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_gdk.cmake)
+    rexglue_find_gdk(ROOT "${REXGLUE_GDK_ROOT}" EDITION "${REXGLUE_GDK_EDITION}")
 endif()
 
 if(REXGLUE_BUILD_TESTS)
@@ -203,6 +218,11 @@ message(STATUS "  Graphics: D3D12")
 message(STATUS "  FidelityFX: ${REXGLUE_ENABLE_FIDELITYFX}")
 message(STATUS "  Tracy: ${REXGLUE_ENABLE_TRACY}")
 message(STATUS "  Perf Counters: ${REXGLUE_ENABLE_PERF_COUNTERS}")
+if(REXGLUE_USE_GDK)
+    message(STATUS "  GDK: ${REXGLUE_GDK_EDITION_FOUND} (${REXGLUE_GDK_ROOT_RESOLVED})")
+else()
+    message(STATUS "  GDK: OFF")
+endif()
 message(STATUS "===========================================")
 
 # SDK install/export rules (skipped when consumed as a subdirectory)

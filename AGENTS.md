@@ -55,8 +55,9 @@ Precompiled DXBC shaders are built from `src/graphics/shaders` sources with
 `python scripts/build_shaders.py [name ...]` (FXC from the Windows SDK); never
 hand-edit `bytecode/` headers, and keep `--check` (CTest
 `shaders.bytecode_reproducible`) passing.
-No GDK-specific preset exists yet; do not invent one. Follow the assigned
-toolchain issue before documenting a GDK build as supported. For planning/docs
+The opt-in `win-amd64-gdk` preset (`REXGLUE_USE_GDK`, pinned edition 260404)
+is documented in `docs/gdk-toolchain.md`; it is proven on VS Community only, so
+do not describe it as a Microsoft-supported pairing. Keep `win-amd64` GDK-free. For planning/docs
 changes run `python scripts/validate_roadmap.py` and `git diff --check`.
 
 ## Conventions and Git workflow

@@ -111,6 +111,12 @@ if(WIN32)
     target_compile_definitions(rexruntime PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
+if(REXGLUE_USE_GDK)
+    # Imported, not exported: the package config resolves rex::gdk on the
+    # consumer's machine (cmake/rexglue_gdk.cmake).
+    target_link_libraries(rexruntime PUBLIC rex::gdk)
+endif()
+
 if(REXGLUE_USE_D3D12)
     target_link_libraries(rexruntime PUBLIC dxc-headers)
     target_compile_definitions(rexruntime PUBLIC REX_HAS_D3D12=1)

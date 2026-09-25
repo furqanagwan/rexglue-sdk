@@ -119,8 +119,12 @@ names VS 2026 Professional/Enterprise support; the
 distinguish PC GDK from console extensions. Do not infer toolchain support from
 an installed directory alone.
 
-There is currently **no GDK-specific ReXGlue preset or validated packaging
-command**. RG-GDK-002 proves the toolchain; RG-GDK-022 adds application-owned
+The opt-in `win-amd64-gdk` preset builds and tests the SDK against the
+installed `260404` edition and installs a package whose consumers resolve the
+GDK on their own machine; see [GDK toolchain](docs/gdk-toolchain.md) for the
+pinned versions, commands, results and what is not yet established (supported
+VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
+There is **no validated packaging command** yet: RG-GDK-022 adds application-owned
 Gaming Runtime lifecycle and per-title `MicrosoftGame.config` packaging.
 Do not put restricted SDK headers/docs or real service credentials in this repo.
 DXC, DirectStorage, XAudio2 and GameInput are evaluated at the host boundary;
