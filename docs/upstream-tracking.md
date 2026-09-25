@@ -668,6 +668,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Adaptation and validation owner: **RG-GDK-020**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/hid/input.h`; `src/xenia/hid/sdl/sdl_input_driver.cc`; `src/xenia/hid/sdl/sdl_input_driver.h`.
 - Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
+- RG-GDK-020 review (2026-09-25): still open, head `ef97e8a70f4f` unchanged; not adopted. The GameInput driver reports every gamepad as subtype 1 because GameInput exposes no XInput subtype; no whammy routing is added. Guitar validation is blocked on hardware. See `docs/gameinput.md`.
 
 ### xenia-canary/xenia-canary #1109 — [XAM] Resolve directory-backed package payloads
 

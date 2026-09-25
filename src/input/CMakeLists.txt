@@ -5,6 +5,8 @@ add_library(rexinput OBJECT
     input_system.cpp
     device_assignment.cpp
     state_merge.cpp
+    keystroke_synthesizer.cpp
+    gameinput/gamepad_devices.cpp
     mnk/mnk_input_driver.cpp
     nop/nop_input_driver.cpp
 )
@@ -36,3 +38,11 @@ else()
 endif()
 
 target_link_libraries(rexinput PUBLIC rexcore rexui SDL3::SDL3)
+
+# The GameInput driver needs the GDK headers (RG-GDK-020). GameInput.dll is
+# loaded at runtime, so nothing is linked.
+if(REXGLUE_USE_GDK)
+    target_sources(rexinput PRIVATE gameinput/gameinput_input_driver.cpp)
+    target_link_libraries(rexinput PRIVATE rex::gdk)
+    target_compile_definitions(rexinput PRIVATE REX_HAS_GAMEINPUT=1)
+endif()
