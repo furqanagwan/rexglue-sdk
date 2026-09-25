@@ -83,7 +83,8 @@ No AMD/NVIDIA/Intel compatibility certification has been completed here.
 PPC instruction tests use bundled `tools/binutils/powerpc-none-elf-as.exe`,
 `powerpc-none-elf-ld.exe`, `powerpc-none-elf-nm.exe` and their runtime DLLs.
 The FFmpeg submodule is part of XMA decoding; do not replace it with an arbitrary
-system FFmpeg build. Vulkan SDK is not required for the documented D3D12-only
+system FFmpeg build; the pin and its differences from Edge's are recorded in
+[XMA audit](docs/xma-audit.md). Vulkan SDK is not required for the documented D3D12-only
 Windows configuration.
 
 ## Build and install the current SDK

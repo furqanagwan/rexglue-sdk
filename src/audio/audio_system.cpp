@@ -134,26 +134,13 @@ void AudioSystem::WorkerThreadMain() {
     if (result.first == rex::thread::WaitResult::kSuccess) {
       auto index = result.second;
 
-      auto global_lock = global_critical_region_.Acquire();
-      uint32_t client_callback = clients_[index].callback;
-      uint32_t client_callback_arg = clients_[index].wrapped_callback_arg;
-      global_lock.unlock();
-
-      if (client_callback) {
-        if (diag_pump_count < 10) {
-          REXAPU_DEBUG("AudioWorker: dispatching callback {:08X} with arg {:08X} for client {}",
-                       client_callback, client_callback_arg, index);
-        }
-        SCOPE_profile_cpu_i("apu", "rex::audio::AudioSystem->client_callback");
-        uint64_t args[] = {client_callback_arg};
-        function_dispatcher_->Execute(worker_thread_->thread_state(), client_callback, args,
-                                      rex::countof(args));
+      if (DispatchClientCallback(index)) {
         if (diag_pump_count < 10) {
           REXAPU_DEBUG("AudioWorker: callback returned for client {}", index);
         }
         diag_pump_count++;
       } else {
-        REXAPU_DEBUG("AudioWorker: semaphore signaled for client {} but callback is 0", index);
+        REXAPU_DEBUG("AudioWorker: semaphore signaled for client {} but it has no callback", index);
       }
 
       pumped = true;
@@ -171,6 +158,37 @@ void AudioSystem::WorkerThreadMain() {
   worker_running_ = false;
 
   // TODO(benvanik): call module API to kill?
+}
+
+bool AudioSystem::DispatchClientCallback(size_t index) {
+  // Adapted from xenia-edge 8aa50e0e0 (per-client callback mutex): the slot is
+  // read under the callback mutex, so once UnregisterClient has cleared it and
+  // waited here, no callback can still be using its driver or argument.
+  std::lock_guard<std::mutex> callback_lock(client_callback_mutexes_[index]);
+
+  uint32_t client_callback = 0;
+  uint32_t client_callback_arg = 0;
+  {
+    auto global_lock = global_critical_region_.Acquire();
+    if (clients_[index].in_use) {
+      client_callback = clients_[index].callback;
+      client_callback_arg = clients_[index].wrapped_callback_arg;
+    }
+  }
+  if (!client_callback) {
+    return false;
+  }
+
+  SCOPE_profile_cpu_i("apu", "rex::audio::AudioSystem->client_callback");
+  client_callback_threads_[index] = std::this_thread::get_id();
+  ExecuteClientCallback(client_callback, client_callback_arg);
+  client_callback_threads_[index] = std::thread::id();
+  return true;
+}
+
+void AudioSystem::ExecuteClientCallback(uint32_t callback, uint32_t callback_arg) {
+  uint64_t args[] = {callback_arg};
+  function_dispatcher_->Execute(worker_thread_->thread_state(), callback, args, rex::countof(args));
 }
 
 int AudioSystem::FindFreeClient() {
@@ -271,19 +289,55 @@ void AudioSystem::SubmitFrame(size_t index, uint32_t samples_ptr) {
   }
 
   auto global_lock = global_critical_region_.Acquire();
-  assert_true(index < kMaximumClientCount);
-  assert_true(clients_[index].driver != NULL);
+  if (index >= kMaximumClientCount || !clients_[index].in_use || !clients_[index].driver) {
+    // A callback finishing after its client was unregistered still submits;
+    // there is no driver left to take the frame.
+    REXAPU_DEBUG("AudioSystem::SubmitFrame: client {} is not registered, frame dropped", index);
+    return;
+  }
   (clients_[index].driver)->SubmitFrame(samples_ptr);
 }
 
 void AudioSystem::UnregisterClient(size_t index) {
   SCOPE_profile_cpu_f("apu");
 
-  auto global_lock = global_critical_region_.Acquire();
-  assert_true(index < kMaximumClientCount);
-  DestroyDriver(clients_[index].driver);
-  memory()->SystemHeapFree(clients_[index].wrapped_callback_arg);
-  clients_[index] = {nullptr, 0, 0, 0, false};
+  if (index >= kMaximumClientCount) {
+    REXAPU_WARN("AudioSystem::UnregisterClient: invalid client {}", index);
+    return;
+  }
+
+  // Clear the slot under the global lock, then wait for an in-flight callback
+  // without it: the callback takes the global lock in SubmitFrame, so waiting
+  // while holding it deadlocks (xenia-canary#1214, xenia-edge 8aa50e0e0).
+  // The slot stays in_use until teardown finishes, so RegisterClient cannot
+  // hand it out while the old driver can still release its semaphore.
+  AudioDriver* driver;
+  uint32_t wrapped_callback_arg;
+  {
+    auto global_lock = global_critical_region_.Acquire();
+    if (!clients_[index].in_use || !clients_[index].driver) {
+      REXAPU_WARN("AudioSystem::UnregisterClient: client {} is not registered", index);
+      return;
+    }
+    driver = clients_[index].driver;
+    wrapped_callback_arg = clients_[index].wrapped_callback_arg;
+    clients_[index] = {nullptr, 0, 0, 0, true};
+  }
+
+  const bool from_own_callback = client_callback_threads_[index] == std::this_thread::get_id();
+  if (!from_own_callback) {
+    std::lock_guard<std::mutex> callback_lock(client_callback_mutexes_[index]);
+  }
+
+  DestroyDriver(driver);
+  if (from_own_callback) {
+    // The guest callback still running on this thread holds the argument
+    // pointer; leak the 4-byte cell rather than free it under it.
+    REXAPU_DEBUG("AudioSystem::UnregisterClient: client {} unregistered from its own callback",
+                 index);
+  } else {
+    memory()->SystemHeapFree(wrapped_callback_arg);
+  }
 
   // Drain the semaphore of its count.
   auto client_semaphore = client_semaphores_[index].get();
@@ -292,6 +346,9 @@ void AudioSystem::UnregisterClient(size_t index) {
     wait_result = rex::thread::Wait(client_semaphore, false, std::chrono::milliseconds(0));
   } while (wait_result == rex::thread::WaitResult::kSuccess);
   assert_true(wait_result == rex::thread::WaitResult::kTimeout);
+
+  auto global_lock = global_critical_region_.Acquire();
+  clients_[index].in_use = false;
 }
 
 bool AudioSystem::Save(stream::ByteStream* stream) {

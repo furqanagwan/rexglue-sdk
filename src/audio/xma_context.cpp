@@ -117,6 +117,10 @@ bool XmaContext::Work() {
     }
     Consume(&output_rb, &data);
     data.output_buffer_write_offset = output_rb.write_offset() / kOutputBytesPerBlock;
+    // xenia-canary 7e98ae6de (fixes a 565507E4 boot hardlock).
+    if (output_rb.empty()) {
+      data.output_buffer_valid = 0;
+    }
     StoreContextMerged(data, initial_data, context_ptr);
     return true;
   }
@@ -133,17 +137,50 @@ bool XmaContext::Work() {
   }
 
   while (remaining_subframe_blocks_in_output_buffer_ >= minimum_subframe_decode_count) {
+    const uint32_t pre_decode_offset = data.input_buffer_read_offset;
+    const uint8_t pre_decode_current_buffer = data.current_buffer;
+    const uint8_t pre_remaining_subframes = current_frame_remaining_subframes_;
+    const bool pre_carry_valid = carry_valid_;
+
     Decode(&data);
     Consume(&output_rb, &data);
 
-    if (!data.IsAnyInputBufferValid() || data.error_status == 4) {
+    // Don't abandon a partially consumed frame: Consume() hands over at most
+    // subframe_decode_count blocks per pass, so the pass that exhausts the
+    // input usually strands the rest. is_enabled_ is already clear and only
+    // XMAEnableContext sets it again, so a title polling for that remainder
+    // would never kick (xenia-edge 052365bc0).
+    if ((!data.IsAnyInputBufferValid() || data.error_status == 4) &&
+        current_frame_remaining_subframes_ == 0) {
+      break;
+    }
+
+    // A pass that neither moved the input nor produced a frame cannot make
+    // progress on a later pass either; stop rather than spin under the lock.
+    // Only checked when nothing was pending, since a drain-only pass leaves the
+    // offset unchanged by design (xenia-edge ade7e610b). Priming the carry is
+    // progress: a one-frame loop decodes at an unchanged offset.
+    if (pre_remaining_subframes == 0 && current_frame_remaining_subframes_ == 0 &&
+        carry_valid_ == pre_carry_valid && data.input_buffer_read_offset == pre_decode_offset &&
+        data.current_buffer == pre_decode_current_buffer) {
+      REXAPU_DEBUG("XmaContext {}: decode made no progress at offset {}", id(), pre_decode_offset);
       break;
     }
   }
 
-  data.output_buffer_write_offset = output_rb.write_offset() / kOutputBytesPerBlock;
+  if (initial_data.IsAnyInputBufferValid()) {
+    data.output_buffer_write_offset = output_rb.write_offset() / kOutputBytesPerBlock;
+  } else if (data.output_buffer_write_offset != data.output_buffer_read_offset) {
+    // Starved of input: NFS Carbon and Most Wanted use write == read as their
+    // stall detector (xenia-canary 09dbe2cd3).
+    data.output_buffer_write_offset = data.output_buffer_read_offset;
+    data.output_buffer_valid = 0;
+  }
 
-  if (output_rb.empty()) {
+  // Invalidate only a full buffer: read == write also means nothing was
+  // written, which is not a reason to hand it back (xenia-canary 09dbe2cd3,
+  // 505697f98).
+  if (remaining_subframe_blocks_in_output_buffer_ == 0 && output_rb.empty()) {
     data.output_buffer_valid = 0;
   }
 
@@ -307,16 +344,25 @@ const uint8_t* XmaContext::GetNextPacket(XMA_CONTEXT_DATA* data, uint32_t next_p
   return memory()->TranslatePhysical(next_buffer_address);
 }
 
-uint32_t XmaContext::GetNextPacketReadOffset(uint8_t* buffer, uint32_t next_packet_index,
+uint32_t XmaContext::GetNextPacketReadOffset(const uint8_t* buffer, uint32_t next_packet_index,
                                              uint32_t current_input_packet_count) {
   while (next_packet_index < current_input_packet_count) {
-    uint8_t* next_packet = buffer + (next_packet_index * kBytesPerPacket);
+    const uint8_t* next_packet = buffer + (next_packet_index * kBytesPerPacket);
     const uint32_t packet_frame_offset = xma::GetPacketFrameOffset(next_packet);
 
     if (packet_frame_offset <= kMaxFrameSizeinBits) {
       return (next_packet_index * kBitsPerPacket) + packet_frame_offset;
     }
-    next_packet_index++;
+
+    // No frame starts in this packet: it only continues a frame split across
+    // the boundary. In a buffer interleaving several sub-streams the next
+    // sequential packet belongs to another stream, so follow this packet's own
+    // skip count to stay on this one (xenia-edge 9d8210b32).
+    const uint8_t next_skip = xma::GetPacketSkipCount(next_packet);
+    if (next_skip == 0xFF) {
+      break;
+    }
+    next_packet_index += next_skip + 1;
   }
 
   return kBitsPerPacketHeader;
@@ -345,20 +391,46 @@ memory::RingBuffer XmaContext::PrepareOutputRingBuffer(XMA_CONTEXT_DATA* data) {
   return output_rb;
 }
 
-kPacketInfo XmaContext::GetPacketInfo(uint8_t* packet, uint32_t frame_offset) {
+kPacketInfo XmaContext::GetPacketInfo(const uint8_t* packet, uint32_t frame_offset) {
   kPacketInfo packet_info = {};
+  packet_info.current_frame_offset_ = frame_offset;
 
   const uint32_t first_frame_offset = xma::GetPacketFrameOffset(packet);
-  BitStream stream(packet, kBitsPerPacket);
+  // BitStream only reads; it takes a mutable pointer for its writers.
+  BitStream stream(const_cast<uint8_t*>(packet), kBitsPerPacket);
   stream.SetOffset(first_frame_offset);
+
+  // Report the first frame starting at or after frame_offset, so a loop_start
+  // that is not on a frame boundary can be resolved (xenia-edge 5dd1cdbbf).
+  bool resolved = false;
+  auto consider_frame = [&](uint32_t offset, uint32_t size) {
+    if (!resolved && offset >= frame_offset) {
+      resolved = true;
+      packet_info.current_frame_offset_ = offset;
+    }
+    if (offset != frame_offset) {
+      return;
+    }
+    packet_info.current_frame_ = packet_info.frame_count_;
+    packet_info.current_frame_size_ = size;
+  };
 
   if (frame_offset < first_frame_offset) {
     packet_info.current_frame_ = 0;
     packet_info.current_frame_size_ = first_frame_offset - frame_offset;
+    resolved = true;
   }
 
   while (true) {
     if (stream.BitsRemaining() < kBitsPerFrameHeader) {
+      // This frame's 15-bit header runs into the next packet, so its size is
+      // not readable yet. Count it anyway, or the caller takes the previous
+      // frame for the packet's last and skips straight past this one. Size 0
+      // sends it to the split-header path (xenia-edge adf56b76c).
+      if (stream.BitsRemaining() > 0) {
+        consider_frame(static_cast<uint32_t>(stream.offset_bits()), 0);
+        packet_info.frame_count_++;
+      }
       break;
     }
 
@@ -367,10 +439,7 @@ kPacketInfo XmaContext::GetPacketInfo(uint8_t* packet, uint32_t frame_offset) {
       break;
     }
 
-    if (stream.offset_bits() == frame_offset) {
-      packet_info.current_frame_ = packet_info.frame_count_;
-      packet_info.current_frame_size_ = static_cast<uint32_t>(frame_size);
-    }
+    consider_frame(static_cast<uint32_t>(stream.offset_bits()), static_cast<uint32_t>(frame_size));
 
     packet_info.frame_count_++;
 
@@ -598,6 +667,18 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   }
 
   kPacketInfo packet_info = GetPacketInfo(packet, relative_offset);
+
+  // Games can write loop_start one bit short of the frame boundary. Left
+  // unaligned, no frame matches, the split-header path reads a size out of
+  // frame payload and FFmpeg rejects the packet (xenia-edge 5dd1cdbbf).
+  if (loop_start_skip_pending_ && packet_info.current_frame_offset_ != relative_offset) {
+    REXAPU_DEBUG("XmaContext {}: loop_start {} is not a frame boundary in packet {}, using {}",
+                 id(), relative_offset, packet_index, packet_info.current_frame_offset_);
+    relative_offset = packet_info.current_frame_offset_;
+    data->input_buffer_read_offset = (packet_index * kBitsPerPacket) + relative_offset;
+    packet_info = GetPacketInfo(packet, relative_offset);
+  }
+
   const uint32_t packet_to_skip = skip_count + 1;
   const uint32_t next_packet_index = packet_index + packet_to_skip;
 
@@ -705,8 +786,14 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     pending_start_skip_ = decoded_start_skip;
   } else {
     // A dropped frame breaks the carry's adjacency; re-prime rather than splice
-    // two blocks that are not neighbors.
+    // two blocks that are not neighbors. The frame is not replaced with
+    // silence: the failure stays visible in the output and in the count.
     carry_valid_ = false;
+    const uint32_t failures = ++decode_failure_count_;
+    if ((failures & (failures - 1)) == 0) {
+      REXAPU_WARN("XmaContext {}: frame at offset {} produced no audio ({} so far)", id(),
+                  static_cast<uint32_t>(data->input_buffer_read_offset), failures);
+    }
   }
 
   // Compute where to go next.

@@ -164,6 +164,8 @@ struct kPacketInfo {
   uint8_t frame_count_ = 0;
   uint8_t current_frame_ = 0;
   uint32_t current_frame_size_ = 0;
+  // First frame starting at or after the requested offset.
+  uint32_t current_frame_offset_ = 0;
 
   bool isLastFrameInPacket() const {
     return frame_count_ == 0 || current_frame_ == frame_count_ - 1;
@@ -219,11 +221,23 @@ class XmaContext {
   uint32_t guest_ptr() { return guest_ptr_; }
   bool is_allocated() { return is_allocated_.load(std::memory_order_acquire); }
   bool is_enabled() { return is_enabled_.load(std::memory_order_acquire); }
+  // Frames FFmpeg rejected or returned no audio for since Setup.
+  uint32_t decode_failure_count() const {
+    return decode_failure_count_.load(std::memory_order_relaxed);
+  }
 
   void set_is_allocated(bool is_allocated) {
     is_allocated_.store(is_allocated, std::memory_order_release);
   }
   void set_is_enabled(bool is_enabled) { is_enabled_.store(is_enabled, std::memory_order_release); }
+
+  // Walks the frames of one 2048-byte packet and describes the one at
+  // frame_offset (bits from the packet start).
+  static kPacketInfo GetPacketInfo(const uint8_t* packet, uint32_t frame_offset);
+  // Bit offset in buffer of the next frame start of this sub-stream at or after
+  // packet next_packet_index, or kBitsPerPacketHeader when the buffer has none.
+  static uint32_t GetNextPacketReadOffset(const uint8_t* buffer, uint32_t next_packet_index,
+                                          uint32_t current_input_packet_count);
 
   void SignalWorkDone() {
     if (work_completion_event_) {
@@ -242,12 +256,9 @@ class XmaContext {
   static int16_t GetPacketNumber(size_t size, size_t bit_offset);
   static uint32_t GetCurrentInputBufferSize(XMA_CONTEXT_DATA* data);
 
-  kPacketInfo GetPacketInfo(uint8_t* packet, uint32_t frame_offset);
   uint32_t GetAmountOfBitsToRead(uint32_t remaining_stream_bits, uint32_t frame_size);
   const uint8_t* GetNextPacket(XMA_CONTEXT_DATA* data, uint32_t next_packet_index,
                                uint32_t current_input_packet_count);
-  uint32_t GetNextPacketReadOffset(uint8_t* buffer, uint32_t next_packet_index,
-                                   uint32_t current_input_packet_count);
   uint8_t* GetCurrentInputBuffer(XMA_CONTEXT_DATA* data);
 
   void Decode(XMA_CONTEXT_DATA* data);
@@ -274,6 +285,7 @@ class XmaContext {
   std::mutex lock_;
   std::atomic<bool> is_allocated_ = false;
   std::atomic<bool> is_enabled_ = false;
+  std::atomic<uint32_t> decode_failure_count_ = 0;
 
   // ffmpeg structures
   AVPacket* av_packet_ = nullptr;

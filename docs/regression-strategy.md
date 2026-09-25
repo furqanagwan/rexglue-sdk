@@ -194,6 +194,20 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-018 XMA and audio callback lifetime (2026-09-25): Edge packet/loop
+fixes (`adf56b76c`, `5dd1cdbbf`, `9d8210b32`, `052365bc0`, `ade7e610b`), Canary
+output invalidation (`7e98ae6de`, `09dbe2cd3`, `505697f98`) and the per-client
+callback lifetime (`8aa50e0e0` with `b0a1ea5f8`, Canary #1214) ported.
+`unit_tests [audio][xma]` decodes synthesized silent XMA streams through the real
+FFmpeg decoder: split headers (XMA1 and XMA2), frameless skip chains, loop_start
+one bit early and exact, single-frame and failing loops, ring wrap, stereo,
+consume-only drain, starved input, and counted (not silenced) decode failures.
+`[audio][lifetime]` covers unregister during an in-flight callback, re-entrant
+submit, self-unregister and 300 register/dispatch/unregister cycles. Each fix
+fails its test when disabled. Not run: Koei, Tekken Tag 2, LEGO LOTR, SCDA and
+007 Legends (no recompiled fixtures here); FFmpeg pin unchanged. See
+`docs/xma-audit.md`.
+
 RG-GDK-021 native Win32 window (2026-09-25): opt-in `ui_backend = "win32"`
 (SDL stays default). `unit_tests [ui][win32]` covers creation, DPI-scaled size,
 resize, minimize and restore, fullscreen round trip, close veto versus

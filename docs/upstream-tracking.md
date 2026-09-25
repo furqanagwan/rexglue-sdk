@@ -793,8 +793,8 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 
 - Source: [https://github.com/has207/xenia-edge/issues/164](https://github.com/has207/xenia-edge/issues/164); created 2026-05-14T08:29:01Z; updated 2026-05-16T13:06:33Z; author `shinra-electric`.
 - Upstream status: **closed report**. Commit not identified for this report.
-- Scope / reason / applicability: Dark Souls audio/menu hangs: 3341c7a good, 8aa50e0 bad; reporter later confirms recovery. Review actual follow-up before adapting lifetime fix.
-- Classification: regression-related; B/H applicability. No adoption by this documentation change.
+- Scope / reason / applicability: Dark Souls audio/menu hangs: 3341c7a good, 8aa50e0 bad; reporter later confirms recovery. The follow-up is Edge `b0a1ea5f8` ("Default-init ClientSlot instead of memset over std::mutex", 2026-05-16): 8aa50e0 put a `std::mutex` in the struct the constructor `memset`s. The RG-GDK-018 port keeps its mutexes out of that struct.
+- Classification: regression-related; B/H applicability. Cause reviewed and avoided in the RG-GDK-018 adaptation.
 - Adaptation and validation owner: **RG-GDK-018**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: Report; inspect linked commit/reproducer before implementation..
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
@@ -874,19 +874,55 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 
 - Source: [has207/xenia-edge `5dd1cdbbf548745a15714c158b15aad128530440`](https://github.com/has207/xenia-edge/commit/5dd1cdbbf548745a15714c158b15aad128530440); 2026-09-12T15:47:46+09:00; Herman S..
 - Game/scope: Tekken Tag 2. Classification: General correctness; B/H.
-- Reason / required adaptation / tests: Local XMA has different context class; test loop_start one bit early, exact starts and split packet headers.
-- ReXGlue issue: **RG-GDK-018**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: `GetPacketInfo` reports the first frame at or after the requested offset and `Decode` adopts it on a loop restart. Ported as is into `src/audio/xma_context.cpp` (same algorithm; `GetPacketInfo` made static for tests). Tests: `unit_tests "XMA packet walk resolves an offset to the next frame boundary"` and `"XMA loop_start one bit before a frame loops like an exact loop_start"`; both fail with the change disabled. See `docs/xma-audit.md`.
+- ReXGlue issue: **RG-GDK-018**; status: ported 2026-09-25. PR: not identified.
 - Source files: `src/xenia/apu/xma_context_new.cc`, `src/xenia/apu/xma_context_new.h`.
-- Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
+- Known regressions: none known upstream. Not run on Tekken Tag 2 locally (no fixture).
 
 ### XMA header across packet boundary
 
 - Source: [has207/xenia-edge `adf56b76c434fd97876fd79ffcde65b7ff90c8e6`](https://github.com/has207/xenia-edge/commit/adf56b76c434fd97876fd79ffcde65b7ff90c8e6); 2026-09-06T16:30:48+09:00; Herman S..
 - Game/scope: Split frame streams. Classification: General correctness; B/H.
-- Reason / required adaptation / tests: Preserve consume accounting and ring progress; malformed and multistream fixtures.
-- ReXGlue issue: **RG-GDK-018**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: A frame whose 15-bit header crosses the packet end is counted with size 0, so it takes the split-header path instead of being skipped; previously only XMA2 packet headers covered this. Ported as is. Tests: `unit_tests "XMA packet walk counts a frame whose header crosses the packet end"` and `"XMA split frame headers decode every frame for XMA1 and XMA2 packets"`; both fail with the change disabled.
+- ReXGlue issue: **RG-GDK-018**; status: ported 2026-09-25. PR: not identified.
 - Source files: `src/xenia/apu/xma_context_new.cc`.
-- Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
+- Known regressions: none known upstream. Not run on the musou titles locally (no fixture).
+
+### XMA sub-stream skip chain past frameless packets
+
+- Source: [has207/xenia-edge `9d8210b32`](https://github.com/has207/xenia-edge/commit/9d8210b32); 2026-08-24; Herman S..
+- Game/scope: LEGO Star Wars 3, LOTR, Batman 2 opening cutscenes. Classification: General correctness; B.
+- Reason / required adaptation / tests: `GetNextPacketReadOffset` follows a frameless packet's own skip count, so interleaved sub-streams do not merge. Ported as is. Test: `unit_tests "XMA next-packet search follows the sub-stream skip chain"`; fails with the change disabled.
+- ReXGlue issue: **RG-GDK-018**; status: ported 2026-09-25. PR: not identified.
+- Source files: `src/xenia/apu/xma_context_new.cc`.
+- Known regressions: none known upstream. Not run on LEGO titles locally (no fixture).
+
+### XMA work loop drains the current frame
+
+- Source: [has207/xenia-edge `052365bc0`](https://github.com/has207/xenia-edge/commit/052365bc0); 2026-08-25; Herman S..
+- Game/scope: NBA Live 06 menu sfx deadlock. Classification: General correctness; B.
+- Reason / required adaptation / tests: `Work()` keeps consuming until the current frame is out even after the input runs out, since nothing else would deliver the remainder. Ported as is. Test: `unit_tests "XMA work drains the current frame after the input runs out"`; seven XMA tests fail with the change disabled.
+- ReXGlue issue: **RG-GDK-018**; status: ported 2026-09-25. PR: not identified.
+- Source files: `src/xenia/apu/xma_context_new.cc`.
+- Known regressions: none known upstream.
+
+### XMA work loop no-progress guard
+
+- Source: [has207/xenia-edge `ade7e610b`](https://github.com/has207/xenia-edge/commit/ade7e610b) (duplicate `836307862`); 2026-04-06; Herman S..
+- Game/scope: Halo 4, Tomb Raider. Classification: General correctness; B.
+- Reason / required adaptation / tests: `Work()` stops when a pass neither moved the input nor produced a frame, instead of spinning with the context lock held. Adapted: a buffer swap and priming the local start-padding carry also count as progress, because ReXGlue's realignment makes a one-frame loop decode at an unchanged offset. Tests: `unit_tests "XMA work returns when a looping frame keeps failing"` (hangs with the change disabled) and `"XMA single-frame loop keeps producing audio"`.
+- ReXGlue issue: **RG-GDK-018**; status: ported (adapted) 2026-09-25. PR: not identified.
+- Source files: `src/xenia/apu/xma_context_new.cc`.
+- Known regressions: Edge's earlier stall check false-positived on multi-pass consume and broke Tomb Raider looping; `ade7e610b` is that fix, and the port includes it (only passes with nothing pending are checked).
+
+### XMA output buffer invalidation
+
+- Source: xenia-canary `7e98ae6de` (Gliniak, 2026-05-25), `09dbe2cd3` (oreyg, 2026-05-21), `505697f98` (oreyg, 2026-05-25), as merged into has207/xenia-edge.
+- Game/scope: 565507E4 boot hardlock; NFS Carbon and Most Wanted stall detection. Classification: Compatibility; B.
+- Reason / required adaptation / tests: The local context predates these refinements of the imported AC6 context. Ported as is: invalidate only a full ring, reset write to read when a kick starts with no valid input, and invalidate an empty ring after a consume-only pass. Tests: `unit_tests "XMA output stays valid when a kick releases nothing"`, `"XMA kick starved of input resets write to read"`, `"XMA consume-only kick drains the frame left by a full buffer"`; the first two fail with the old rule.
+- ReXGlue issue: **RG-GDK-018**; status: ported 2026-09-25. PR: not identified.
+- Source files: `src/xenia/apu/xma_context_new.cc`.
+- Known regressions: none known upstream (no reverts through Edge `5dd1cdbbf`). Not run on the named titles locally.
 
 ### Retire DXBC for SPIR-V→DXIL transfers
 
@@ -955,10 +991,10 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 
 - Source: [has207/xenia-edge `8aa50e0e07ed659b26ea06e72c4bc21a07ad9bbb`](https://github.com/has207/xenia-edge/commit/8aa50e0e07ed659b26ea06e72c4bc21a07ad9bbb); 2026-05-13T16:14:22+09:00; Herman S..
 - Game/scope: Title teardown. Classification: Regression-prone correctness; B/H.
-- Reason / required adaptation / tests: Canary #1214 and Edge #164 must be reviewed together; local locks differ.
-- ReXGlue issue: **RG-GDK-018**; status: investigated, not ported. PR: not identified; issue references appear in the linked roadmap body.
+- Reason / required adaptation / tests: Reviewed with Canary #1214 (lock-order inversion) and Edge #164, whose cause was the new `std::mutex` sitting in a `memset` struct, fixed by Edge `b0a1ea5f8`. Adapted into `src/audio/audio_system.cpp`: the per-client callback mutexes live outside the `memset` `clients_` array; `UnregisterClient` clears the slot under the global lock, waits for an in-flight callback without it, then destroys the driver and frees the callback argument (Edge leaks the argument; after the wait nothing can hold it). The slot stays reserved until teardown ends so `RegisterClient` cannot reuse it early. Unregistering from inside the client's own callback skips the wait. Late `SubmitFrame` and double or out-of-range unregisters are dropped instead of dereferencing a null driver. Tests: `unit_tests [audio][lifetime]`; the wait test fails with the wait removed.
+- ReXGlue issue: **RG-GDK-018**; status: ported (adapted) 2026-09-25. PR: not identified.
 - Source files: `src/xenia/apu/audio_system.cc`, `src/xenia/apu/audio_system.h`.
-- Known regressions: not established locally; preserve upstream follow-ups and run the mapped regression gate.
+- Known regressions: Edge #164 (the `memset` over `std::mutex`, avoided here). A guest that unregisters while holding a guest lock its own callback needs would now wait on that callback; not seen upstream, recorded in `docs/xma-audit.md`.
 
 ### Native Win32 window (last version before Qt)
 
