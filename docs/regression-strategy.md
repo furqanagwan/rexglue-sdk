@@ -194,6 +194,25 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-011 part 2 (2026-09-25): `gpu_tests [memexport]` and
+`[async-pipeline]` pass on NVIDIA (0x10DE, driver 32.0.16.1714) and WARP.
+Ownership traced end to end for memexport: `RequestRange` before the draw
+(ranges past the 512 MB end fail and drop only that draw), `RangeWrittenByGpu`
+after it (pages valid and write-watched on the vA/vC/vE guest views), full
+readback into guest memory, and a guest-view CPU write invalidating the pages
+so the next draw re-uploads them (a hand-assembled `eA`/`eM0` vertex shader
+exports, the CPU reads it back, overwrites it through the guest view and the
+next draw fetches it as vertices). Writes through the physical host view
+bypass the watches by design; the fixture's `WriteDwordsAsGuest` models guest
+writes. A stream whose index count runs 1 MB past its 4 KB allocation (the
+5451087D shape) keeps the head written and the command processor running; the
+xenia-canary #1093 clamp is not adopted. The async stress translates unseen
+pixel shaders on creation threads while PS-less draws translate the shared
+vertex shader on the processor thread, then tears down with creation queued;
+it is stress coverage, not a deterministic reproduction of the publication
+race. Not run: UFC3 (no title content), AMD/Intel, device removal during
+creation.
+
 RG-GDK-011 part 1 (2026-09-24): `gpu_tests [ring]` passes on NVIDIA and
 WARP. The read pointer write-back reaches a WAIT_REG_MEM blocked on the guest
 to within one RB_BLKSZ stride (this case fails with mid-burst publication

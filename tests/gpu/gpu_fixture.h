@@ -44,7 +44,12 @@ class GpuFixture {
 
   // Guest physical memory, returned as a physical address as the GPU sees it.
   uint32_t AllocPhysical(uint32_t size, uint32_t alignment = 0x1000);
+  // Writes through the host view of physical memory, which has no access
+  // watches: the GPU emulation's own view, not what a guest CPU write does.
   void WriteDwords(uint32_t address, const std::vector<uint32_t>& dwords);
+  // Writes as the guest CPU would, through the guest virtual view the memory
+  // was allocated in, so write watches on GPU-owned pages fire.
+  void WriteDwordsAsGuest(uint32_t address, const std::vector<uint32_t>& dwords);
   uint32_t ReadDword(uint32_t address) const;
 
   // Appends packet dwords to the ring and moves the write pointer. Without a
@@ -87,6 +92,8 @@ class GpuFixture {
   uint32_t fence_address_ = 0;
   uint32_t fence_value_ = 0;
   uint32_t read_pointer_writeback_ = 0;
+  // Guest virtual minus physical address for AllocPhysical allocations.
+  uint32_t physical_to_virtual_ = 0;
 };
 
 }  // namespace rex::testing
