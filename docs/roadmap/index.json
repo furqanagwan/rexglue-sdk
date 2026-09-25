@@ -998,7 +998,7 @@
     "risk": "Packet/loop fixes or callback lifetime changes can mute streams, desynchronize cutscenes or deadlock multi-client teardown.",
     "number": 18,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/18",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-019",

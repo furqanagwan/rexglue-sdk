@@ -18,6 +18,8 @@ add_executable(unit_tests
     system/guest_path_test.cpp
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
+    audio/xma_context_test.cpp
+    audio/audio_client_lifetime_test.cpp
     input/input_assignment_test.cpp
     input/keystroke_synthesizer_test.cpp
     input/gamepad_devices_test.cpp
