@@ -11,6 +11,7 @@ add_executable(gpu_tests
     zpd_fixture_test.cpp
     ring_fixture_test.cpp
     memexport_fixture_test.cpp
+    alu_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE

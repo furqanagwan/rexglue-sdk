@@ -659,7 +659,7 @@
     "risk": "A math/depth change helping AC6 or Gears can regress Lost Odyssey, Forza Horizon 2 and unrelated shaders.",
     "number": 12,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/12",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-013",

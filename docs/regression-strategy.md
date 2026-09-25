@@ -194,6 +194,20 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-012 scalar math and depth (2026-09-25): `gpu_tests [alu]` is the
+semantic oracle for the scalar approximations: EXP, LOG, LOGC, RCP, RCPC, RCPF,
+RSQ, RSQC, RSQF and SQRT on 27 inputs (signed zeros, infinities, NaN,
+negatives, finite values across the exponent range) through translated vertex
+shaders, checked bit-exactly against the documented special cases and within
+2^-20 of double precision otherwise. It passes on NVIDIA and WARP with
+`gpu_scalar_approximation_rounding` off (default) and on. The 21-bit rounding
+from xenia-canary #1190 stays opt-in because its precision and midpoint are
+unconfirmed on hardware. Depth bias is fixed-function on RTV and in-shader on
+ROV, never both; no Inf depth clamp (#1077) or RTV shader offset (Edge #160,
+regression #278) is adopted. Not run: AC6 4E4D07D1, Lost Odyssey on RX 6600,
+Gears/SCDA benefits and the Forza Horizon 2 control (no title content), AMD and
+Intel.
+
 RG-GDK-011 part 2 (2026-09-25): `gpu_tests [memexport]` and
 `[async-pipeline]` pass on NVIDIA (0x10DE, driver 32.0.16.1714) and WARP.
 Ownership traced end to end for memexport: `RequestRange` before the draw

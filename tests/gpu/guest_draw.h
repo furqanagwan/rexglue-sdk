@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <rex/graphics/format/ucode.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/xenos.h>
 
@@ -23,6 +24,7 @@ namespace rex::testing::guest_draw {
 using namespace rex::graphics;  // NOLINT: XE_GPU_REG_* register indices.
 namespace reg = rex::graphics::reg;
 namespace xenos = rex::graphics::xenos;
+namespace ucode = rex::graphics::ucode;
 
 inline uint32_t PackXY(uint32_t x, uint32_t y) {
   return x | (y << 16);
@@ -164,5 +166,39 @@ inline void DrawRect(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1,
                 float((color >> 8) & 0xFF) / 255.0f, float((color >> 16) & 0xFF) / 255.0f,
                 float(color >> 24) / 255.0f);
 }
+
+// Microcode encoders for hand-assembled shaders.
+
+// Control flow instructions, packed two per three dwords.
+struct Cf {
+  uint32_t dword_0, dword_1;  // dword_1 has 16 bits.
+};
+inline Cf Exec(uint32_t address, uint32_t count, uint32_t fetch_sequence, bool end) {
+  return {address | (count << 12) | (fetch_sequence << 16), end ? 0x2000u : 0x1000u};
+}
+inline Cf Alloc(ucode::AllocType type) {
+  return {0, 0xC000u | (uint32_t(type) << 9)};
+}
+inline void PackCf(std::vector<uint32_t>& out, Cf a, Cf b) {
+  out.insert(out.end(), {a.dword_0, (a.dword_1 & 0xFFFF) | (b.dword_0 << 16),
+                         (b.dword_0 >> 16) | (b.dword_1 << 16)});
+}
+
+// ALU vector operation exporting all four components to export register
+// `dest` (32 is eA, 33 is eM0, 62 is the position), with the scalar operation
+// retaining the previous value. `sel` bits select temporary registers (1) or
+// float constants (0) for sources 1..3.
+inline std::vector<uint32_t> AluExport(uint32_t dest, uint32_t opcode, uint32_t src1, uint32_t src2,
+                                       uint32_t src3, uint32_t src1_swizzle, bool src1_temp,
+                                       bool src2_temp, bool src3_temp) {
+  return {0xC80F8000u | dest, src1_swizzle << 16,
+          src3 | (src2 << 8) | (src1 << 16) | (opcode << 24) | (uint32_t(src3_temp) << 29) |
+              (uint32_t(src2_temp) << 30) | (uint32_t(src1_temp) << 31)};
+}
+
+constexpr uint32_t kAluMax = 2;
+constexpr uint32_t kAluMad = 11;
+// Component-relative swizzle replicating X.
+constexpr uint32_t kSwizzleXXXX = 0 | (3 << 2) | (2 << 4) | (1 << 6);
 
 }  // namespace rex::testing::guest_draw

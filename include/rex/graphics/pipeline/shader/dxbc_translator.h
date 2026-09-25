@@ -880,6 +880,15 @@ class DxbcShaderTranslator : public ShaderTranslator {
   void ProcessVectorAluOperation(const ParsedAluInstruction& instr,
                                  uint8_t memexport_eM_potentially_written_before,
                                  uint32_t& result_swizzle, bool& predicate_written);
+  // Reduces finite host approximations to a chosen mantissa width
+  // (xenia-canary #1190, opt-in through gpu_scalar_approximation_rounding).
+  // The console's exact precision and rounding still aren't known.
+  void ReduceFloatPrecision(const dxbc::Dest& dest, const dxbc::Src& value, uint32_t mantissa_bits);
+  // Reciprocal and reciprocal square root, as DIV (and SQRT) when the
+  // rounding is enabled so the host's own approximate RCP/RSQ isn't rounded
+  // twice, otherwise the host approximations.
+  void EmitScalarReciprocal(const dxbc::Dest& dest, const dxbc::Src& dest_src,
+                            const dxbc::Src& operand, bool square_root);
   void ProcessScalarAluOperation(const ParsedAluInstruction& instr,
                                  uint8_t memexport_eM_potentially_written_before,
                                  bool& predicate_written);

@@ -31,6 +31,7 @@ REXCVAR_DECLARE(bool, readback_memexport);
 REXCVAR_DECLARE(bool, readback_memexport_fast);
 REXCVAR_DECLARE(bool, occlusion_query_enable);
 REXCVAR_DECLARE(std::string, occlusion_query);
+REXCVAR_DECLARE(bool, gpu_scalar_approximation_rounding);
 REXCVAR_DECLARE(int32_t, query_occlusion_fake_sample_count);
 
 // GPU Depth / Render Target Behavior
