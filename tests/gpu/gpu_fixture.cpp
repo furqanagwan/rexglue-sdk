@@ -139,12 +139,20 @@ uint32_t GpuFixture::AllocPhysical(uint32_t size, uint32_t alignment) {
   // Physical heaps may map at an offset (0xE0000000 is +4 KB), so masking the
   // virtual address is not enough; the GPU only ever sees physical addresses.
   uint32_t physical = memory()->GetPhysicalAddress(address);
+  physical_to_virtual_ = address - physical;
   std::memset(memory()->TranslatePhysical(physical), 0, size);
   return physical;
 }
 
 void GpuFixture::WriteDwords(uint32_t address, const std::vector<uint32_t>& dwords) {
   auto* dest = memory()->TranslatePhysical<uint8_t*>(address);
+  for (size_t i = 0; i < dwords.size(); ++i) {
+    memory::store_and_swap<uint32_t>(dest + i * 4, dwords[i]);
+  }
+}
+
+void GpuFixture::WriteDwordsAsGuest(uint32_t address, const std::vector<uint32_t>& dwords) {
+  auto* dest = memory()->TranslateVirtual<uint8_t*>(address + physical_to_virtual_);
   for (size_t i = 0; i < dwords.size(); ++i) {
     memory::store_and_swap<uint32_t>(dest + i * 4, dwords[i]);
   }

@@ -603,7 +603,7 @@
     "risk": "Missing barriers/publication fences or premature pipeline reclamation can cause stale memexport data, corruption and device removal.",
     "number": 11,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/11",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-012",

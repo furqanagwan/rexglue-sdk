@@ -10,6 +10,7 @@ add_executable(gpu_tests
     edram_layout_fixture_test.cpp
     zpd_fixture_test.cpp
     ring_fixture_test.cpp
+    memexport_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE
