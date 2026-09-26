@@ -194,6 +194,16 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-017 part 1, content flush (2026-09-26): `XamContentFlush` flushes the
+root's open files and restores a missing header, `NtFlushBuffersFile` flushes,
+and content headers are written through a flushed temporary and a rename.
+`kernel_tests [content]` (new executable on an image-less Runtime) covers
+flush success under either root casing, an unknown root, a failing file flush,
+header restore, torn-header replacement, and a child process killed after
+flushing whose save is listed and read back after restart. The failing-flush
+case fails with error propagation disabled. Not run: power loss, titles.
+Parts 2-4 are open; see `docs/content-persistence.md`.
+
 RG-GDK-019 XAudio2 output (2026-09-26): opt-in `audio_backend = "xaudio2"`
 (SDL stays default). `unit_tests [audio][conversion]` checks per-channel impulse
 placement for 5.1 and the stereo fold, weights, gain and clamping.

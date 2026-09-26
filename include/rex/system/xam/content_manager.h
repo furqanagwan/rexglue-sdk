@@ -12,6 +12,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -118,7 +119,7 @@ static_assert_size(XCONTENT_AGGREGATE_DATA, 0x148);
 
 class ContentPackage {
  public:
-  ContentPackage(KernelState* kernel_state, const std::string_view root_name,
+  ContentPackage(KernelState* kernel_state, const std::string_view root_name, uint64_t xuid,
                  const XCONTENT_AGGREGATE_DATA& data, const std::filesystem::path& package_path);
   ~ContentPackage();
 
@@ -130,11 +131,15 @@ class ContentPackage {
 
   uint32_t GetPackageLicense() const { return license_; }
 
+  // The user the package was opened for.
+  uint64_t xuid() const { return xuid_; }
+
  private:
   KernelState* kernel_state_;
   std::string root_name_;
   std::string device_path_;
   std::filesystem::path package_path_;
+  uint64_t xuid_ = 0;
   XCONTENT_AGGREGATE_DATA content_data_;
   uint32_t license_ = 0;
 };
@@ -157,6 +162,9 @@ class ContentManager {
   X_RESULT OpenContent(const std::string_view root_name, uint64_t xuid,
                        const XCONTENT_AGGREGATE_DATA& data, uint32_t& content_license);
   X_RESULT CloseContent(const std::string_view root_name);
+  // XamContentFlush: makes the open root's written files durable and ensures
+  // its header exists. X_ERROR_FILE_NOT_FOUND if the root is not open.
+  X_RESULT FlushContent(const std::string_view root_name);
   X_RESULT GetContentThumbnail(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
                                std::vector<uint8_t>* buffer);
   X_RESULT SetContentThumbnail(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
@@ -183,6 +191,9 @@ class ContentManager {
   X_RESULT InstallContent(const std::filesystem::path& package_path);
 
  private:
+  // Replaces `path` with `bytes` through a flushed temporary and a rename.
+  static X_RESULT WriteFileDurably(const std::filesystem::path& path,
+                                   std::span<const uint8_t> bytes);
   std::filesystem::path ResolvePackageRoot(uint64_t xuid, XContentType content_type,
                                            uint32_t title_id = -1);
   std::filesystem::path ResolvePackagePath(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data);

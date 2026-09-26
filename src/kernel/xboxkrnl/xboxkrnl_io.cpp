@@ -608,7 +608,13 @@ u32 NtQueryDirectoryFile_entry(u32 file_handle, u32 event_handle, u32 apc_routin
 }
 
 u32 NtFlushBuffersFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block_ptr) {
-  auto result = X_STATUS_SUCCESS;
+  X_STATUS result;
+  auto file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(file_handle);
+  if (!file) {
+    result = X_STATUS_INVALID_HANDLE;
+  } else {
+    result = file->file()->Flush();
+  }
 
   if (io_status_block_ptr) {
     io_status_block_ptr->status = result;
