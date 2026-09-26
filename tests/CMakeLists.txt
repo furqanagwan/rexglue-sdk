@@ -4,6 +4,11 @@
 # Unit tests for core components
 add_subdirectory(unit)
 
+# Kernel/XAM service tests on an image-less Runtime
+if(WIN32)
+  add_subdirectory(kernel)
+endif()
+
 # D3D12 capability/fixture tests (Windows D3D12 only)
 add_subdirectory(gpu)
 

@@ -57,6 +57,10 @@ class File {
     return X_STATUS_NOT_IMPLEMENTED;
   }
 
+  // Makes completed writes durable on the host. Read-only and virtual files
+  // have nothing to flush.
+  virtual X_STATUS Flush() { return X_STATUS_SUCCESS; }
+
   // rex::filesystem::FileAccess
   uint32_t file_access() const { return file_access_; }
   const Entry* entry() const { return entry_; }
