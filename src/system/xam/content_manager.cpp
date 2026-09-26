@@ -222,37 +222,9 @@ X_RESULT ContentManager::WriteContentHeaderFile(uint64_t xuid, XCONTENT_AGGREGAT
     std::memcpy(bytes.data() + sizeof(XCONTENT_AGGREGATE_DATA), &license_mask,
                 sizeof(license_mask));
   }
-  return WriteFileDurably(header_path, bytes);
-}
-
-X_RESULT ContentManager::WriteFileDurably(const std::filesystem::path& path,
-                                          std::span<const uint8_t> bytes) {
-  // Write a sibling, flush it and rename it over the target, so a crash leaves
-  // either the old header or the new one, never a truncated one.
-  auto temp_path = path;
-  temp_path += ".tmp";
-  if (!rex::filesystem::CreateEmptyFile(temp_path)) {
-    return X_ERROR_ACCESS_DENIED;
-  }
-  {
-    auto handle = rex::filesystem::FileHandle::OpenExisting(
-        temp_path, rex::filesystem::FileAccess::kFileWriteData);
-    size_t written = 0;
-    if (!handle || !handle->Write(0, bytes.data(), bytes.size(), &written) ||
-        written != bytes.size() || !handle->Flush()) {
-      handle.reset();
-      std::error_code ec;
-      std::filesystem::remove(temp_path, ec);
-      return X_ERROR_WRITE_FAULT;
-    }
-  }
-  std::error_code ec;
-  std::filesystem::rename(temp_path, path, ec);
-  if (ec) {
-    std::filesystem::remove(temp_path, ec);
-    return X_ERROR_ACCESS_DENIED;
-  }
-  return X_ERROR_SUCCESS;
+  // Written whole or not at all, so a crash never leaves a torn header.
+  return rex::filesystem::WriteFileDurably(header_path, bytes) ? X_ERROR_SUCCESS
+                                                               : X_ERROR_WRITE_FAULT;
 }
 
 X_RESULT ContentManager::FlushContent(const std::string_view root_name) {
@@ -389,6 +361,15 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
 }
 
 X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
+  // Closing content commits it on the console. Make the writes durable before
+  // the handles go, so a save closed without XamContentFlush still survives a
+  // system crash (xenia-canary #1220). The package is closed either way; a
+  // failed flush is reported.
+  const X_RESULT flush_result = FlushContent(root_name);
+  if (flush_result == X_ERROR_FILE_NOT_FOUND) {
+    return X_ERROR_FILE_NOT_FOUND;
+  }
+
   ContentPackage* package = nullptr;
   {
     auto global_lock = global_critical_region_.Acquire();
@@ -400,7 +381,7 @@ X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
     package = DetachPackage(it);
   }
   delete package;
-  return X_ERROR_SUCCESS;
+  return flush_result;
 }
 
 X_RESULT ContentManager::GetContentThumbnail(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,

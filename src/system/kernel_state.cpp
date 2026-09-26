@@ -225,7 +225,10 @@ KernelState* KernelState::shared() {
 }
 
 uint32_t KernelState::title_id() const {
-  assert_not_null(executable_module_);
+  // No title loaded yet (or a tool/test runtime without an image).
+  if (!executable_module_) {
+    return 0;
+  }
 
   xex2_opt_execution_info* exec_info = 0;
   executable_module_->GetOptHeader(XEX_HEADER_EXECUTION_INFO, &exec_info);
