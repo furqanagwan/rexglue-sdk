@@ -20,6 +20,7 @@ add_executable(unit_tests
     system/function_dispatcher_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
+    audio/conversion_test.cpp
     input/input_assignment_test.cpp
     input/keystroke_synthesizer_test.cpp
     input/gamepad_devices_test.cpp
@@ -29,6 +30,10 @@ add_executable(unit_tests
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp
 )
+
+if(WIN32)
+    target_sources(unit_tests PRIVATE audio/xaudio2_driver_test.cpp)
+endif()
 
 if(REXGLUE_USE_GDK)
     target_sources(unit_tests PRIVATE gdk/gdk_runtime_test.cpp gdk/gameinput_test.cpp)

@@ -996,6 +996,15 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 - Source files: `src/xenia/apu/audio_system.cc`, `src/xenia/apu/audio_system.h`.
 - Known regressions: Edge #164 (the `memset` over `std::mutex`, avoided here). A guest that unregisters while holding a guest lock its own callback needs would now wait on that callback; not seen upstream, recorded in `docs/xma-audit.md`.
 
+### XAudio2 audio driver
+
+- Source: has207/xenia-edge `src/xenia/apu/xaudio2` at `5dd1cdbbf` (last driver changes `71dcd5004` volume controls, 2026-05-21; `9371e73d9` "Fix audio crashes during shutdown", 2026-02-09); Herman S. and upstream Xenia authors.
+- Game/scope: all titles (host audio output); Canary #600 (freeze with no usable audio device, open). Classification: platform replacement plus correctness; A/B.
+- Reason / required adaptation / tests: Structure kept (COM MTA owner thread, one source-voice buffer per guest frame, `OnBufferEnd` releases the client semaphore, stop the engine before destroying voices). Adapted: Windows SDK `xaudio2.h` and inbox XAudio2 2.9 instead of hand-declared 2.7/2.8 interfaces; default device, channels and rate so the virtual audio client follows device changes; the SDL output's conversion, fold, mix, gain and mute; device loss through `OnCriticalError`, failed submits and a stall watchdog, with the dead voice's frames and any frame submitted without a device released on a frame-rate clock and the engine recreated. Not ported: volume cvar and UI (local mix API instead), `SetFrequencyRatio` from the guest time scalar (the SDL output has no equivalent). Selected with `audio_backend = "xaudio2"`; SDL stays default. Tests: `unit_tests [audio][xaudio2]`, `[audio][conversion]`. See `docs/audio-output.md`.
+- ReXGlue issue: **RG-GDK-019**; status: ported (opt-in) 2026-09-26. PR: not identified.
+- Source files: `src/xenia/apu/xaudio2/xaudio2_audio_driver.cc`, `xaudio2_audio_driver.h`, `xaudio2_audio_system.cc`, `xaudio2_api.h`.
+- Known regressions: Canary #600 (Xenia's drivers freeze with no device) is what the clock pacing addresses; not reproduced on hardware here. Canary #739 (low quality) concerns sample conversion, tracked with PR #748 in `docs/xma-audit.md`.
+
 ### Native Win32 window (last version before Qt)
 
 - Source: [has207/xenia-edge `213dcc2675806bf1e61291dd6ed0bb897c8d2fff`](https://github.com/has207/xenia-edge/commit/213dcc2675806bf1e61291dd6ed0bb897c8d2fff) ("[UI] Convert to Qt"; the Win32 files were deleted by the next commit, `92f5b712d`); 2025-10-04; Herman S..

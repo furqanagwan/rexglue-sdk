@@ -194,6 +194,18 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-019 XAudio2 output (2026-09-26): opt-in `audio_backend = "xaudio2"`
+(SDL stays default). `unit_tests [audio][conversion]` checks per-channel impulse
+placement for 5.1 and the stereo fold, weights, gain and clamping.
+`unit_tests [audio][xaudio2]` runs on the real XAudio2 and default endpoint
+(NVIDIA HDMI audio here): paced playback with one release per frame, clock
+pacing with no device, simulated critical error and silent-stall recovery,
+late device arrival, slot overflow, 25 teardown cycles, two clients, and the
+cvar-selected system serving a registered guest client. The loss and stall
+paths fail their tests when disabled. Not run: titles, a physical unplug and
+reconnect, 44.1 kHz-only endpoints, surround endpoints by ear. See
+`docs/audio-output.md`.
+
 RG-GDK-018 XMA and audio callback lifetime (2026-09-25): Edge packet/loop
 fixes (`adf56b76c`, `5dd1cdbbf`, `9d8210b32`, `052365bc0`, `ade7e610b`), Canary
 output invalidation (`7e98ae6de`, `09dbe2cd3`, `505697f98`) and the per-client

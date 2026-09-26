@@ -39,7 +39,7 @@ are missing from the output and the start-padding realignment re-primes
 | Edge `1fae8f43a` (decode on the kicking thread) | Already equivalent (local `29eaa8a`) |
 | Edge `c26d93763`, `7887efa69` (tick semaphore or submit silence for dead clients) | After the lifetime change an unregistered slot has no driver or callback, so there is nothing to keep alive; late frames are dropped |
 | Edge `GetPacketHandle` cross-buffer next-packet lookup (from `b575c6841`'s later Edge form) | Larger restructuring; local `Decode` already moves to the other buffer's first frame on a swap. Revisit with a two-buffer fixture if a title needs it |
-| Edge `6e5b8324f` (pace audio subsystem) | Output pacing belongs to the XAudio2 output work, RG-GDK-019 |
+| Canary `6e5b8324f` (oreyg, pace audio subsystem; merged into Edge) | Output pacing belongs to the XAudio2 output work, RG-GDK-019 |
 
 ## FFmpeg pin
 
