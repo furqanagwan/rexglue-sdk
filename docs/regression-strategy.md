@@ -194,6 +194,13 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-017 part 2, STFS bounds (2026-09-26): the STFS/SVOD reader refuses or
+partially reads damaged packages instead of dereferencing null hash lookups,
+indexing past its entry list, recursing through SVOD cycles or asserting.
+`unit_tests [stfs],[svod]` (13 synthetic packages, incl. Canary #1226's
+content_size mount check); 7 fail on the previous reader (Release build, to
+avoid its Debug asserts). Not run: real damaged packages or titles.
+
 RG-GDK-017 part 1, content flush (2026-09-26): `XamContentFlush` flushes the
 root's open files and restores a missing header, `NtFlushBuffersFile` flushes,
 and content headers are written through a flushed temporary and a rename.

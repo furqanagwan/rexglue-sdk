@@ -6,7 +6,7 @@ calls promise. RG-GDK-017 is delivered in parts; this page grows with them.
 | Part | Scope | Status |
 | --- | --- | --- |
 | 1 | `XamContentFlush`, `NtFlushBuffersFile`, durable content headers | Done |
-| 2 | STFS container bounds (Canary #1226), mixed-case paths | Open |
+| 2 | STFS container bounds (Canary #1226), mixed-case paths | Done |
 | 3 | Concurrent profiles, crash persistence for several users (Canary #981, #5, #1220) | Open |
 | 4 | Notification masks and order, compiled-module relaunch, XMP initial state (Canary #1135, closed unmerged) | Open |
 
@@ -46,6 +46,30 @@ directories. The return code for an unknown root is not verified against
 console behavior; Canary returns `STATUS_INVALID_PARAMETER` there without
 completing the overlapped.
 
+## STFS and SVOD packages (part 2)
+
+Installed content (`ContentManager::InstallContent`) and disc packages are read
+by `StfsContainerDevice`. Their headers, tables and chains come from the file,
+so a damaged or incomplete package is input to be rejected, not an invariant
+to assert:
+
+- A package whose metadata `content_size` describes more data than the file
+  holds is refused at mount and named (Canary #1226). Zero means unknown, and
+  such packages go through the checks below.
+- A block chain stops where the hash table for the next block is not in the
+  file. The file keeps the blocks found, and reads end at the last byte the file
+  really holds, instead of placing later blocks at the wrong offset.
+- A file-table chain that leaves the package, an entry whose parent index
+  points past the entries read so far or at a file, and an SVOD directory node
+  that repeats or nests more than 1024 deep all refuse the package. So does an
+  SVOD node in a data file that does not exist.
+- Names are clamped to the 40-byte name field.
+- A folder is scanned for a package without mapping files shorter than the
+  4-byte magic.
+
+Path lookup inside a package ignores case. When two entries differ only by
+case, the first in the file table is the one found.
+
 ## Tests
 
 `kernel_tests [content]` runs an image-less `Runtime` and gives each case its
@@ -59,6 +83,13 @@ own content root:
 - a child process creates a save, flushes it and is killed with
   `TerminateProcess`, and the parent lists it with its metadata and reads its
   data back through a new content manager.
+
+`unit_tests [stfs],[svod]` builds packages in memory: a read-only STFS with one
+hash table, a file-table block and data blocks, and a single-file SVOD. Each
+malformed case damages one field or cuts the file short. Run against the
+previous reader, 7 of the 13 fail. The other six pass on both readers: they pin
+behavior that was already right (valid reads, case-insensitive lookup,
+truncation handling).
 
 ## Limitations
 
