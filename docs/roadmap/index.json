@@ -1051,7 +1051,7 @@
     "risk": "Output replacement can swap channels, introduce underruns/drift or freeze a title when audio hardware disappears.",
     "number": 19,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/19",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-020",
