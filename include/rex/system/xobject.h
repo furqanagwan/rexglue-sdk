@@ -177,6 +177,11 @@ class XObject {
   void Release();
   X_STATUS Delete();
 
+  // Called by the object table, under its lock, when the guest has closed the
+  // object's last handle, before the table drops its own reference. Objects
+  // that the kernel also keeps a reference to release it here.
+  virtual void OnAllHandlesClosed() {}
+
   virtual bool Save(stream::ByteStream* stream) {
     (void)stream;
     return false;

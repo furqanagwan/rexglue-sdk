@@ -1,14 +1,15 @@
-# Content persistence (RG-GDK-017)
+# Content, profiles and notifications (RG-GDK-017)
 
-How guest saves and other XAM content reach the host disk, and what the flush
-calls promise. RG-GDK-017 is delivered in parts; this page grows with them.
+How guest saves and other XAM content reach the host disk and what the flush
+calls promise, how profile settings are shared, and what XAM notifications and
+title launches do. RG-GDK-017 was delivered in four parts.
 
 | Part | Scope | Status |
 | --- | --- | --- |
 | 1 | `XamContentFlush`, `NtFlushBuffersFile`, durable content headers | Done |
 | 2 | STFS container bounds (Canary #1226), mixed-case paths | Done |
 | 3 | Profile setting concurrency and durability, close commits content (Canary #981, #5, #1220) | Done |
-| 4 | Notification masks and order, compiled-module relaunch, XMP initial state (Canary #1135, closed unmerged) | Open |
+| 4 | Notification masks and order, compiled-module relaunch, XMP initial state (Canary #1135, closed unmerged) | Done (XMP left as watch) |
 
 ## Package model
 
@@ -68,6 +69,52 @@ ReXGlue has one signed-in profile (`KernelState::user_profile()`), so the
 two-user split-screen case in Canary #1220 and #981's per-user contexts have no
 local counterpart yet. Multi-user profiles are recorded as a gap, not claimed.
 
+## Notifications (part 4)
+
+A title creates a listener with `XamNotifyCreateListener(mask, max_version)`
+and polls it with `XNotifyGetNext`. A notification id packs
+`mask_index:6 | version:9 | local_id:16`.
+
+- **Filter.** A listener receives a notification only if bit `mask_index` is
+  set in its mask and the notification's version is at most its
+  `max_version`. A `max_version` above 10 is clamped to 10 with a warning; it
+  used to assert, which aborted Debug builds on a guest value.
+- **Order.** Notifications are queued per listener in broadcast order.
+  `XNotifyGetNext` with no id takes the oldest. With an id, it takes the oldest
+  of that id and leaves the rest in order. The listener's event is signaled
+  while its queue is non-empty.
+- **Startup set.** The first listener created with mask bit 0 (system
+  notifications) is sent, in order: `XN_SYS_UI` 1 then 0, `XN_SYS_SIGNINCHANGED`
+  1 twice, `XN_SYS_INPUTDEVICESCHANGED` 0 twice,
+  `XN_SYS_INPUTDEVICECONFIGCHANGED` 0 twice. Later listeners get none. This is
+  inherited behavior titles rely on; its console origin is not documented.
+- **Lifetime.** The kernel keeps every listener registered for broadcasts.
+  When the guest closes a listener's last handle, it is now unregistered and
+  released. Before, the kernel's reference kept a closed listener alive,
+  queuing every later broadcast (Edge and Canary share the leak).
+- **XMP initial state (Canary #1135).** It was closed unmerged, and no local
+  title shows the need, so it is left on watch. No XMP state is broadcast at
+  boot.
+
+## Title launches (part 4)
+
+A statically compiled binary contains one title module and cannot load
+another executable, so every `XamLoaderLaunchTitle` ends the running title.
+`rex::system::xam::ClassifyLaunch` resolves the request the way XAM does (an
+empty name is `game:\default.xex`, and a bare file name is relative to the
+running executable) and says which case it was:
+
+| Request | Log | Result |
+| --- | --- | --- |
+| No name (dashboard) | info | Title ends |
+| The running module again, any case | warning: relaunch not supported yet | Title ends |
+| Any other executable | error, naming the module that was not compiled | Title ends |
+
+The dashboard case used to `assert_always`. The other two ended the title
+without saying why. Relaunching the compiled module with launch data belongs
+to the title lifecycle work in RG-GDK-022. No console or Xbox identity
+(XUID, title ID) is ever substituted with a GDK identity automatically.
+
 ## STFS and SVOD packages (part 2)
 
 Installed content (`ContentManager::InstallContent`) and disc packages are read
@@ -114,6 +161,12 @@ close flushing (header restored, flush failure returned, package closed).
 Keeping the previous title's value, or closing without a flush, each fails its
 test.
 
+`kernel_tests [notify]` covers mask and version filtering (including exactly
+`max_version`), broadcast order with a matched dequeue, a closed listener no
+longer receiving (fails with the unregister removed), and the startup set going
+to the first system listener only. `kernel_tests [launch]` covers the three
+launch cases, case-insensitive self relaunch and bare-name resolution.
+
 `unit_tests [stfs],[svod]` builds packages in memory: a read-only STFS with one
 hash table, a file-table block and data blocks, and a single-file SVOD. Each
 malformed case damages one field or cuts the file short. Run against the
@@ -122,6 +175,12 @@ behavior that was already right (valid reads, case-insensitive lookup,
 truncation handling).
 
 ## Limitations
+
+- One signed-in profile. The two-user split-screen case in Canary #1220 and
+  #981's per-user contexts have no local counterpart until there is a
+  multi-user profile model.
+- Relaunching a title (with its launch data) is not supported: it ends the
+  title with a warning.
 
 - The crash test kills the process, not the machine. Writes in the OS cache
   survive that even without a flush, so the test proves the save and its

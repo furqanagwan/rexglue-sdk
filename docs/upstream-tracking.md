@@ -39,7 +39,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1058](https://github.com/xenia-canary/xenia-canary/pull/1058) | merged | `d55670e40b1016cc36cca5111c821b3e7c9a85b8` | B/H; regression-related; behaviour kept by the #1218 port | See scoped record below | RG-GDK-010 |
 | [xenia-canary/xenia-canary #1127](https://github.com/xenia-canary/xenia-canary/pull/1127) | merged | `da47dfaacfae1134b238af9083a7f3d413c6cbbe` | B/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-005 |
 | [xenia-canary/xenia-canary #1131](https://github.com/xenia-canary/xenia-canary/pull/1131) | merged | `0f2980de442341788c07b282d6fbd6dc689166de` | B/H; useful research; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-012 |
-| [xenia-canary/xenia-canary #1135](https://github.com/xenia-canary/xenia-canary/pull/1135) | closed unmerged | `421498c3b38257f98efb043f438b8e28ebf951c9` | G/H; useful research; game-specific | See scoped record below; never assume absence | RG-GDK-017 |
+| [xenia-canary/xenia-canary #1135](https://github.com/xenia-canary/xenia-canary/pull/1135) | closed unmerged | `421498c3b38257f98efb043f438b8e28ebf951c9` | G/H; game-specific; watch (no local evidence, RG-GDK-017 part 4) | See scoped record below; never assume absence | RG-GDK-017 |
 | [xenia-canary/xenia-canary #1147](https://github.com/xenia-canary/xenia-canary/pull/1147) | merged | `7cd47947b07de30b649fb4224418a659890eab73` | B/H; useful research; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-011 |
 | [xenia-canary/xenia-canary #1163](https://github.com/xenia-canary/xenia-canary/pull/1163) | merged | `437a7280cf95310d518a2f68087aab61403956ac` | C/H; candidate for later port; relevant and merged upstream | See scoped record below; never assume absence | RG-GDK-009 |
 | [xenia-canary/xenia-canary #1180](https://github.com/xenia-canary/xenia-canary/pull/1180) | merged | `22708301ba76d10aae6f7d7caac8b1cac9e4a8e6` | C/H; useful research; redesign | See scoped record below; never assume absence | RG-GDK-004 |
@@ -554,7 +554,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Source: [https://github.com/xenia-canary/xenia-canary/pull/1135](https://github.com/xenia-canary/xenia-canary/pull/1135); created 2026-08-04T18:31:43Z; updated 2026-08-25T22:50:53Z; author `jman9511`.
 - Upstream status: **closed unmerged**. PR head (not adopted) commit `421498c3b38257f98efb043f438b8e28ebf951c9`.
 - Scope / reason / applicability: Closed unmerged initial XMP notification proposal, Black Ops II; do not assume universal boot notification semantics.
-- Classification: useful research; game-specific; G/H applicability. No adoption by this documentation change.
+- Classification: useful research; game-specific; G/H. **Left as watch (RG-GDK-017 part 4, 2026-09-26):** the acceptance criterion adopts it only with evidence, and there is none locally (no title muting its soundtrack at boot has been run). The notification behavior ReXGlue does have is specified and tested in `docs/content-persistence.md`.
 - Adaptation and validation owner: **RG-GDK-017**, whose complete issue body specifies files, tests and acceptance gates.
 - Source files: `src/xenia/kernel/xam/xam_notify.cc`.
 - Regression evidence: Unknown/not established for ReXGlue. Run the issue-specific regression suite and relevant vendor cases.
