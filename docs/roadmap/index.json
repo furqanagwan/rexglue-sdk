@@ -937,7 +937,7 @@
     "risk": "Flush/profile/content changes can lose saves, expose malformed package OOB reads or deliver notifications in the wrong order.",
     "number": 17,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/17",
-    "state": "open"
+    "state": "closed"
   },
   {
     "id": "RG-GDK-018",

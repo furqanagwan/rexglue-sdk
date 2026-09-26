@@ -194,6 +194,14 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-017 part 4, notifications and launches (2026-09-26): closed notify
+listeners are unregistered (they were kept alive and fed forever), max_version is
+clamped instead of asserted, and `XamLoaderLaunchTitle` logs whether a title went
+to the dashboard, relaunched itself or asked for a module that was not compiled.
+`kernel_tests [notify],[launch]`; the closed-listener case fails with the
+unregister removed. XMP initial state (Canary #1135) left on watch. RG-GDK-017
+closed with the single-profile and relaunch limitations recorded.
+
 RG-GDK-017 part 3, close and profiles (2026-09-26): `XamContentClose` flushes
 before releasing; profile settings are shared and locked, so a reader keeps a
 setting another thread replaces (was a use-after-free); title-specific settings

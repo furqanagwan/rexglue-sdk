@@ -32,6 +32,10 @@ void XNotifyListener::Initialize(uint64_t mask, uint32_t max_version) {
   kernel_state_->RegisterNotifyListener(this);
 }
 
+void XNotifyListener::OnAllHandlesClosed() {
+  kernel_state_->UnregisterNotifyListener(this);
+}
+
 void XNotifyListener::EnqueueNotification(XNotificationID id, uint32_t data) {
   auto key = XNotificationKey(id);
   // Ignore if the notification doesn't match our mask.

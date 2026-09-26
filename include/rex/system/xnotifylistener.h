@@ -55,6 +55,10 @@ class XNotifyListener : public XObject {
   bool DequeueNotification(XNotificationID* out_id, uint32_t* out_data);
   bool DequeueNotification(XNotificationID id, uint32_t* out_data);
 
+  // The guest closed the listener: stop broadcasting to it, so the kernel's
+  // reference no longer keeps it (and its queue) alive.
+  void OnAllHandlesClosed() override;
+
   bool Save(stream::ByteStream* stream) override;
   static object_ref<XNotifyListener> Restore(KernelState* kernel_state, stream::ByteStream* stream);
 

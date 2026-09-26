@@ -24,9 +24,9 @@ using namespace rex::system;
 using namespace rex::system::xam;
 
 uint32_t xeXamNotifyCreateListener(uint64_t mask, uint32_t is_system, uint32_t max_version) {
-  assert_true(max_version < 11);
-
+  // A guest value; clamp it rather than assert on it.
   if (max_version > 10) {
+    REXKRNL_WARN("XamNotifyCreateListener: max_version {} clamped to 10", max_version);
     max_version = 10;
   }
 
