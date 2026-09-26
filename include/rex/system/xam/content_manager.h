@@ -191,9 +191,6 @@ class ContentManager {
   X_RESULT InstallContent(const std::filesystem::path& package_path);
 
  private:
-  // Replaces `path` with `bytes` through a flushed temporary and a rename.
-  static X_RESULT WriteFileDurably(const std::filesystem::path& path,
-                                   std::span<const uint8_t> bytes);
   std::filesystem::path ResolvePackageRoot(uint64_t xuid, XContentType content_type,
                                            uint32_t title_id = -1);
   std::filesystem::path ResolvePackagePath(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data);

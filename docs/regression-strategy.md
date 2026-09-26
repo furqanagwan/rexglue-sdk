@@ -194,6 +194,14 @@ draws never complete, so the `[edram]` fixtures run on WARP only with host
 render targets. Titles 4D5307F1 and 4D530A26 and a PWL gamma blend fixture
 are not run (no title content, no gamma draw fixture yet).
 
+RG-GDK-017 part 3, close and profiles (2026-09-26): `XamContentClose` flushes
+before releasing; profile settings are shared and locked, so a reader keeps a
+setting another thread replaces (was a use-after-free); title-specific settings
+save durably and no longer leak into a title without a saved copy.
+`kernel_tests [profile]` plus the close case in `[content]`; the leak and close
+cases fail when their fixes are disabled. Not run: two signed-in users (no
+multi-user profile model), a system crash, titles.
+
 RG-GDK-017 part 2, STFS bounds (2026-09-26): the STFS/SVOD reader refuses or
 partially reads damaged packages instead of dereferencing null hash lookups,
 indexing past its entry list, recursing through SVOD cycles or asserting.

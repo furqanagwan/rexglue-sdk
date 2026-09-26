@@ -4,6 +4,7 @@
 
 add_executable(kernel_tests
     content_test.cpp
+    profile_test.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE

@@ -93,82 +93,94 @@ UserProfile::UserProfile() {
   AddSetting(std::make_unique<BinarySetting>(0x63E83FFD));
 }
 
-void UserProfile::AddSetting(std::unique_ptr<Setting> setting) {
-  Setting* previous_setting = setting.get();
-  std::swap(settings_[setting->setting_id], previous_setting);
-
-  if (setting->is_set && setting->is_title_specific()) {
-    SaveSetting(setting.get());
-  }
-
-  if (previous_setting) {
-    // replace: swap out the old setting from the owning list
-    for (auto vec_it = setting_list_.begin(); vec_it != setting_list_.end(); ++vec_it) {
-      if (vec_it->get() == previous_setting) {
-        vec_it->swap(setting);
-        break;
-      }
+bool UserProfile::AddSetting(std::unique_ptr<Setting> setting) {
+  std::lock_guard<std::mutex> lock(settings_mutex_);
+  bool saved = true;
+  if (setting->is_title_specific()) {
+    // Written by a title, it is now that title's copy, saved or not. The
+    // defaults added before a kernel exists belong to no title.
+    if (kernel_state_) {
+      setting->loaded_title_id = kernel_state_->title_id();
+      setting->title_loaded = true;
     }
-  } else {
-    // new setting: add to the owning list
-    setting_list_.push_back(std::move(setting));
+    if (setting->is_set) {
+      saved = SaveSetting(setting.get());
+    }
   }
+  // A reader still holding the previous setting keeps it alive. Read the id
+  // first: the right side of the assignment is evaluated (and moved) first.
+  const uint32_t setting_id = setting->setting_id;
+  settings_[setting_id] = std::shared_ptr<Setting>(std::move(setting));
+  return saved;
 }
 
-UserProfile::Setting* UserProfile::GetSetting(uint32_t setting_id) {
+std::shared_ptr<UserProfile::Setting> UserProfile::GetSetting(uint32_t setting_id) {
+  std::lock_guard<std::mutex> lock(settings_mutex_);
   const auto& it = settings_.find(setting_id);
   if (it == settings_.end()) {
     return nullptr;
   }
-  UserProfile::Setting* setting = it->second;
-  if (setting->is_title_specific()) {
-    // If what we have loaded in memory isn't for the title that is running
-    // right now, then load it from disk.
-    if (kernel_state_->title_id() != setting->loaded_title_id) {
-      LoadSetting(setting);
-    }
+  std::shared_ptr<UserProfile::Setting> setting = it->second;
+  // If what we have loaded in memory isn't for the title that is running right
+  // now, load that title's copy from disk.
+  if (setting->is_title_specific() &&
+      (!setting->title_loaded || kernel_state_->title_id() != setting->loaded_title_id)) {
+    setting = LoadSetting(setting_id);
+    it->second = setting;
   }
   return setting;
 }
 
-void UserProfile::LoadSetting(UserProfile::Setting* setting) {
-  if (setting->is_title_specific()) {
-    auto content_dir = kernel_state_->content_manager()->ResolveGameUserContentPath();
-    auto setting_id = fmt::format("{:08X}", setting->setting_id);
-    auto file_path = content_dir / setting_id;
-    auto file = rex::filesystem::OpenFile(file_path, "rb");
-    if (file) {
-      fseek(file, 0, SEEK_END);
-      uint32_t input_file_size = static_cast<uint32_t>(ftell(file));
-      fseek(file, 0, SEEK_SET);
-
-      std::vector<uint8_t> serialized_data(input_file_size);
-      fread(serialized_data.data(), 1, serialized_data.size(), file);
-      fclose(file);
-      setting->Deserialize(serialized_data);
-      setting->loaded_title_id = kernel_state_->title_id();
-    }
-  } else {
-    // Unsupported for now.  Other settings aren't per-game and need to be
-    // stored some other way.
-    REXSYS_WARN("Attempting to load unsupported profile setting from disk");
+std::shared_ptr<UserProfile::Setting> UserProfile::LoadSetting(uint32_t setting_id) {
+  // Title-specific settings are binary. A fresh object each time: readers of
+  // the previous one are unaffected, and a title with no saved copy gets an
+  // unset setting instead of the previous title's value.
+  auto setting = std::make_shared<BinarySetting>(setting_id);
+  setting->loaded_title_id = kernel_state_->title_id();
+  setting->title_loaded = true;
+  auto content_dir = kernel_state_->content_manager()->ResolveGameUserContentPath();
+  auto file_path = content_dir / fmt::format("{:08X}", setting_id);
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(file_path, ec);
+  if (ec) {
+    return setting;
   }
+  auto file = rex::filesystem::OpenFile(file_path, "rb");
+  if (!file) {
+    return setting;
+  }
+  std::vector<uint8_t> serialized_data(size);
+  const size_t read = fread(serialized_data.data(), 1, serialized_data.size(), file);
+  fclose(file);
+  if (read != serialized_data.size()) {
+    REXSYS_ERROR("Could not read profile setting {:08X} from {}", setting_id,
+                 rex::path_to_utf8(file_path));
+    return setting;
+  }
+  setting->Deserialize(serialized_data);
+  return setting;
 }
 
-void UserProfile::SaveSetting(UserProfile::Setting* setting) {
+bool UserProfile::SaveSetting(UserProfile::Setting* setting) {
   if (setting->is_title_specific()) {
     auto serialized_setting = setting->Serialize();
     auto content_dir = kernel_state_->content_manager()->ResolveGameUserContentPath();
-    std::filesystem::create_directories(content_dir);
+    std::error_code ec;
+    std::filesystem::create_directories(content_dir, ec);
     auto setting_id = fmt::format("{:08X}", setting->setting_id);
     auto file_path = content_dir / setting_id;
-    auto file = rex::filesystem::OpenFile(file_path, "wb");
-    fwrite(serialized_setting.data(), 1, serialized_setting.size(), file);
-    fclose(file);
+    // Title-specific settings are save data too: written whole and flushed.
+    if (!rex::filesystem::WriteFileDurably(file_path, serialized_setting)) {
+      REXSYS_ERROR("Could not save profile setting {:08X} to {}", setting->setting_id,
+                   rex::path_to_utf8(file_path));
+      return false;
+    }
+    return true;
   } else {
     // Unsupported for now.  Other settings aren't per-game and need to be
     // stored some other way.
     REXSYS_WARN("Attempting to save unsupported profile setting to disk");
+    return true;
   }
 }
 

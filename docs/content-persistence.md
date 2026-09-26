@@ -7,7 +7,7 @@ calls promise. RG-GDK-017 is delivered in parts; this page grows with them.
 | --- | --- | --- |
 | 1 | `XamContentFlush`, `NtFlushBuffersFile`, durable content headers | Done |
 | 2 | STFS container bounds (Canary #1226), mixed-case paths | Done |
-| 3 | Concurrent profiles, crash persistence for several users (Canary #981, #5, #1220) | Open |
+| 3 | Profile setting concurrency and durability, close commits content (Canary #981, #5, #1220) | Done |
 | 4 | Notification masks and order, compiled-module relaunch, XMP initial state (Canary #1135, closed unmerged) | Open |
 
 ## Package model
@@ -46,6 +46,28 @@ directories. The return code for an unknown root is not verified against
 console behavior; Canary returns `STATUS_INVALID_PARAMETER` there without
 completing the overlapped.
 
+## Close and profile settings (part 3)
+
+- `XamContentClose` flushes the root, as `XamContentFlush` does, before it
+  releases the package: closing content commits it on the console. A save a
+  title closes without flushing therefore survives a system crash, not only a
+  process crash (Canary #1220 reports the loss after a PC crash). The package
+  is closed even if the flush fails, and the failure is returned.
+- Profile settings are shared objects behind a lock. A guest thread that read
+  a setting keeps it alive while another thread writes the same setting
+  (Canary #5, and #981, which locks Canary's `UserTracker`; ReXGlue has no
+  tracker). Before, the writer destroyed the object the reader was using.
+- Title-specific settings (`XPROFILE_TITLE_SPECIFIC1`-`3`) are saved through
+  the same flushed-temporary-and-rename write as content headers, and a failed
+  save is logged instead of writing to a null file. Loading a title with no
+  saved copy gives it an unset setting; before, the previous title's value
+  stayed.
+- `KernelState::title_id()` is 0 with no title loaded instead of asserting.
+
+ReXGlue has one signed-in profile (`KernelState::user_profile()`), so the
+two-user split-screen case in Canary #1220 and #981's per-user contexts have no
+local counterpart yet. Multi-user profiles are recorded as a gap, not claimed.
+
 ## STFS and SVOD packages (part 2)
 
 Installed content (`ContentManager::InstallContent`) and disc packages are read
@@ -83,6 +105,14 @@ own content root:
 - a child process creates a save, flushes it and is killed with
   `TerminateProcess`, and the parent lists it with its metadata and reads its
   data back through a new content manager.
+
+`kernel_tests [profile]` and the close case in `[content]` cover a held setting
+outliving its replacement (the setting records its own destruction), 2000
+writes against four reader threads, a title-specific setting saved whole and
+read back by a new profile, no leak into a title without a saved copy, and
+close flushing (header restored, flush failure returned, package closed).
+Keeping the previous title's value, or closing without a flush, each fails its
+test.
 
 `unit_tests [stfs],[svod]` builds packages in memory: a read-only STFS with one
 hash table, a file-table block and data blocks, and a single-file SVOD. Each

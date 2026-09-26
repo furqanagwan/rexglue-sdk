@@ -12,6 +12,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -111,8 +112,13 @@ class UserProfile {
     size_t size;
     bool is_set;
     uint32_t loaded_title_id;
+    // Whether loaded_title_id names the title this value belongs to; the
+    // defaults a profile starts with belong to none.
+    bool title_loaded = false;
     Setting(uint32_t setting_id, Type type, size_t size, bool is_set)
         : setting_id(setting_id), type(type), size(size), is_set(is_set), loaded_title_id(0) {}
+    // Settings are owned through the base; derived ones hold vectors.
+    virtual ~Setting() = default;
     virtual void Append(X_USER_PROFILE_SETTING_DATA* data, SettingByteStream* stream) {
       (void)stream;
       data->type = static_cast<uint8_t>(type);
@@ -223,18 +229,24 @@ class UserProfile {
 
   void set_kernel_state(KernelState* ks) { kernel_state_ = ks; }
 
-  void AddSetting(std::unique_ptr<Setting> setting);
-  Setting* GetSetting(uint32_t setting_id);
+  // Adds or replaces a setting; a title-specific one is also saved to disk.
+  // Returns false if that save failed (the setting is still replaced).
+  bool AddSetting(std::unique_ptr<Setting> setting);
+  // The setting, kept alive while the caller holds it even if another thread
+  // replaces it (xenia-canary #5, #981). Null if unknown.
+  std::shared_ptr<Setting> GetSetting(uint32_t setting_id);
 
  private:
   uint64_t xuid_;
   std::string name_;
-  std::vector<std::unique_ptr<Setting>> setting_list_;
-  std::unordered_map<uint32_t, Setting*> settings_;
+  // Guest threads read and write settings concurrently.
+  std::mutex settings_mutex_;
+  std::unordered_map<uint32_t, std::shared_ptr<Setting>> settings_;
   KernelState* kernel_state_ = nullptr;
 
-  void LoadSetting(UserProfile::Setting*);
-  void SaveSetting(UserProfile::Setting*);
+  // With settings_mutex_ held.
+  std::shared_ptr<Setting> LoadSetting(uint32_t setting_id);
+  bool SaveSetting(UserProfile::Setting*);
 };
 
 }  // namespace xam
