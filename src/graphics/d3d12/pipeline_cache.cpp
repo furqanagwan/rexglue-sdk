@@ -636,6 +636,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       COUNT_profile_set("gpu/pipeline_cache/pipelines", pipelines_.size());
       if (!creation_threads_.empty()) {
         // Submit the pipeline for creation to any available thread.
+        new_pipeline->creation_pending.store(true, std::memory_order_relaxed);
         {
           std::lock_guard<std::mutex> lock(creation_request_lock_);
           creation_queue_.push(new_pipeline);
@@ -780,6 +781,14 @@ void PipelineCache::EndSubmission() {
       rex::thread::Wait(creation_completion_event_.get(), false);
     }
   }
+}
+
+void PipelineCache::AwaitQueuedPipelines() {
+  if (creation_threads_.empty()) {
+    return;
+  }
+  CreateQueuedPipelinesOnProcessorThread();
+  AwaitPipelineCompletion();
 }
 
 bool PipelineCache::IsCreatingPipelines() {
@@ -1046,6 +1055,7 @@ bool PipelineCache::ConfigurePipeline(
     new_pipeline->pending_vertex_shader = vertex_shader;
     new_pipeline->pending_pixel_shader = pixel_shader;
     // Submit the pipeline for creation to any available thread.
+    new_pipeline->creation_pending.store(true, std::memory_order_relaxed);
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
       creation_queue_.push(new_pipeline);
@@ -3261,6 +3271,7 @@ void PipelineCache::CreationThread(size_t thread_index) {
       pipeline_to_create->state.store(CreateD3D12Pipeline(runtime_description),
                                       std::memory_order_release);
     }
+    pipeline_to_create->creation_pending.store(false, std::memory_order_release);
 
     // Pipeline created - the thread is not busy anymore, safe to set the
     // completion event if needed (at the next iteration, or in some other
@@ -3287,10 +3298,11 @@ void PipelineCache::CreateQueuedPipelinesOnProcessorThread() {
     PipelineRuntimeDescription runtime_description;
     if (!PrepareRuntimeDescriptionForQueuedCreation(pipeline_to_create, runtime_description)) {
       pipeline_to_create->state.store(nullptr, std::memory_order_release);
-      continue;
+    } else {
+      pipeline_to_create->state.store(CreateD3D12Pipeline(runtime_description),
+                                      std::memory_order_release);
     }
-    pipeline_to_create->state.store(CreateD3D12Pipeline(runtime_description),
-                                    std::memory_order_release);
+    pipeline_to_create->creation_pending.store(false, std::memory_order_release);
   }
 }
 
