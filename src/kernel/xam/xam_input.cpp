@@ -177,7 +177,8 @@ u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
 
   auto* is = input_system();
   auto result = is->GetKeystroke(user_index, flags, keystroke);
-  if (XSUCCEEDED(result)) {
+  // An X_RESULT: X_ERROR_EMPTY is positive, so XSUCCEEDED would accept it.
+  if (result == X_ERROR_SUCCESS) {
     *user_index_ptr = keystroke->user_index;
   }
   return result;
