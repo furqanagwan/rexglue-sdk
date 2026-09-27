@@ -9,6 +9,7 @@ add_executable(kernel_tests
     object_header_test.cpp
     timing_test.cpp
     termination_test.cpp
+    object_leak_test.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE
