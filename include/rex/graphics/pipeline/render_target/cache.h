@@ -184,6 +184,25 @@ class RenderTargetCache {
   // each.
   uint32_t GetLastUpdateBoundRenderTargets(uint32_t* depth_and_color_formats_out = nullptr) const;
 
+  // For async pipeline stand-ins (has207/xenia-edge de8e60601): skipping a
+  // draw while its pipeline compiles is only harmless for a pass redrawn every
+  // frame. Records the render target the last update draws into (the first
+  // bound color one, else depth) as drawn in `frame`, and returns whether it
+  // was also drawn within kDrawTargetRecurringFrames before. True with no
+  // render target, as nothing is kept then.
+  static constexpr uint64_t kDrawTargetRecurringFrames = 4;
+  bool TrackLastUpdateDrawTarget(uint64_t frame);
+  // Whether the last update's render target is at most
+  // kDrawTargetSmallPitchTiles wide (160 pixels without MSAA): generated data
+  // such as impostors or lookup tables, often kept past the frame even when
+  // redrawn every frame.
+  static constexpr uint32_t kDrawTargetSmallPitchTiles = 2;
+  bool IsLastUpdateDrawTargetSmall() const {
+    return !last_update_draw_target_.IsEmpty() &&
+           last_update_draw_target_.pitch_tiles_at_32bpp <= kDrawTargetSmallPitchTiles;
+  }
+  std::string GetLastUpdateDrawTargetName() const;
+
  protected:
   RenderTargetCache(const RegisterFile& register_file, const memory::Memory& memory,
                     uint32_t draw_resolution_scale_x, uint32_t draw_resolution_scale_y)
@@ -358,7 +377,7 @@ class RenderTargetCache {
       uint32_t x_pixels_div_8 : xenos::kResolveSizeBits - 1 - xenos::kResolveAlignmentPixelsLog2;
       uint32_t y_pixels_div_8 : xenos::kResolveSizeBits - 1 - xenos::kResolveAlignmentPixelsLog2;
       uint32_t width_pixels_div_8_minus_1 : xenos::kResolveSizeBits - 1 -
-                                            xenos::kResolveAlignmentPixelsLog2;
+          xenos::kResolveAlignmentPixelsLog2;
     };
     HostDepthStoreRectangleConstant() : constant(0) { static_assert_size(*this, sizeof(constant)); }
   };
@@ -692,6 +711,11 @@ class RenderTargetCache {
   // last_update_accumulated_render_targets_ - it's not beneficial or even
   // incorrect to keep the previously bound render targets.
   bool are_accumulated_render_targets_valid_ = false;
+  // The render target the last update draws into, and the last two frames
+  // each render target was drawn in (0 is never).
+  RenderTargetKey last_update_draw_target_;
+  std::unordered_map<RenderTargetKey, std::pair<uint64_t, uint64_t>, RenderTargetKey::Hasher>
+      draw_target_last_frames_;
   // After an update (for simplicity, even an unsuccessful update invalidates
   // this), contains needed ownership transfer sources for each of the current
   // render targets. They are reordered so for one source, all transfers are

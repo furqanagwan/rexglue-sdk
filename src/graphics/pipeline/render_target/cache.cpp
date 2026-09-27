@@ -425,11 +425,30 @@ void RenderTargetCache::BeginFrame() {
   ResetAccumulatedRenderTargets();
 }
 
+bool RenderTargetCache::TrackLastUpdateDrawTarget(uint64_t frame) {
+  if (last_update_draw_target_.IsEmpty()) {
+    return true;
+  }
+  std::pair<uint64_t, uint64_t>& frames = draw_target_last_frames_[last_update_draw_target_];
+  if (frames.first != frame) {
+    frames.second = frames.first;
+    frames.first = frame;
+  }
+  // A pass drawn every frame may still miss one, hence a window of frames.
+  return frames.second && frame - frames.second <= kDrawTargetRecurringFrames;
+}
+
+std::string RenderTargetCache::GetLastUpdateDrawTargetName() const {
+  return last_update_draw_target_.IsEmpty() ? std::string("no render target")
+                                            : last_update_draw_target_.GetDebugName();
+}
+
 bool RenderTargetCache::Update(bool is_rasterization_done,
                                reg::RB_DEPTHCONTROL normalized_depth_control,
                                uint32_t normalized_color_mask, const Shader& vertex_shader) {
   const RegisterFile& regs = register_file();
   bool interlock_barrier_only = GetPath() == Path::kPixelShaderInterlock;
+  last_update_draw_target_ = RenderTargetKey();
 
   auto rb_surface_info = regs.Get<reg::RB_SURFACE_INFO>();
   xenos::MsaaSamples msaa_samples = rb_surface_info.msaa_samples;
@@ -746,6 +765,12 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
                                         ? edram_bases_sorted[i + 1].first
                                         : (xenos::kEdramTileCount + edram_bases_sorted[0].first)) -
                                        rt_base);
+  }
+
+  uint32_t draw_target_index;
+  if (rex::bit_scan_forward(depth_and_color_rts_used_bits & ~uint32_t(1), &draw_target_index) ||
+      rex::bit_scan_forward(depth_and_color_rts_used_bits, &draw_target_index)) {
+    last_update_draw_target_ = rt_keys[draw_target_index];
   }
 
   if (keep_aliased_depth) {

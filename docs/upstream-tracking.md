@@ -1040,6 +1040,22 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 - ReXGlue issue: **RG-GDK-028**; status: implemented 2026-09-27.
 - Known regressions: none found upstream (Edge issues and PRs searched for "debug markers"). Edge's finer annotations remain a candidate; they need the same balancing before use.
 
+### has207/xenia-edge `de8e60601` — [GPU] Wait for the real pipeline where an async stand-in would persist
+
+- Source: [has207/xenia-edge `de8e60601c1f8182757e92b455d2299799573202`](https://github.com/has207/xenia-edge/commit/de8e60601c1f8182757e92b455d2299799573202), 2026-09-26, Herman S. Upstream reports it fixing NFS The Run's road bushes, cold-cache rendering in Soul Calibur V, road flashing in FM3 and vertical rain in Halo Reach.
+- Game/scope: all titles with `async_shader_compilation` (on by default). Classification: A (correctness).
+- Local evidence: a draw whose pipeline was still being created was skipped. That self-heals only for passes redrawn every frame; a one-off render to a texture lost its output for good (RG-GDK-028's PIX fixture read back 0 until async compilation was turned off).
+- Adaptation: ReXGlue has no placeholder pipeline, so only the wait is ported. The placeholder colour-mask half does not apply. `RenderTargetCache` records the render target each draw goes into and the last frames it was drawn in. For a target not drawn in the last 4 frames, a small one (at most 2 tiles wide) or a memexport draw, `IssueDraw` creates the queued pipelines on the processor thread and waits for the rest (`PipelineCache::AwaitQueuedPipelines`). Other draws are still skipped while compiling.
+- Tests: `gpu_tests [async-pipeline]` "A one-off draw under async compilation waits for its pipeline" (small and wide targets). Both read back 0 with the wait removed.
+- Known regressions: none reported upstream. Expected cost: a hitch on the first draw into a new render target while its pipeline compiles.
+
+### has207/xenia-edge 2026-09-25/26 commits reviewed and not ported
+
+- [`77f2cca80`](https://github.com/has207/xenia-edge/commit/77f2cca80) "Copy resolve output into guest RAM when the CPU accesses it" and [`935e03876`](https://github.com/has207/xenia-edge/commit/935e03876) "Copy resolve output without holding the global lock": a redesign of Edge's resolve read-watch machinery (about 2,000 lines, D3D12, Vulkan and memory), which ReXGlue does not have (it has the `readback_resolve` modes). **Watch**: a separate issue if adopted, after upstream settles (patched again the day after).
+- [`776dda2e3`](https://github.com/has207/xenia-edge/commit/776dda2e3) "Unmark a whole scaled resolve when the CPU writes into it" (Tekken Tag Tournament 2 at 2x): ReXGlue has the old per-page unmark, but the fix records extents only where Edge's resolve mirroring (from `77f2cca80`) places output. **Watch** with the redesign; affects resolution scaling only.
+- [`12e3b4223`](https://github.com/has207/xenia-edge/commit/12e3b4223) "Keep the audio pump off the global lock and make up late pumps": it changes Edge's deadline-paced audio pump, which ReXGlue's semaphore-driven worker does not use. The ReXGlue worker takes the global lock only briefly per callback. **Not ported** without local stutter evidence.
+- [`13e380a1d`](https://github.com/has207/xenia-edge/commit/13e380a1d) "Fix loading aliased bool values": Edge's legacy cvar aliases and per-game configs. **Not applicable** (a different cvar system; ADR-009 instead).
+
 ## Review process
 
 Monthly, and before each subsystem port or release: fetch upstream refs into the controlled reference checkout; record date, SHA, merge-base and patch-equivalence comparison. Read new/updated issues and PRs, including closed-unmerged work and regressions. Search subsystem terms plus AMD/NVIDIA/Intel and title IDs. Re-check older open watches. Record explicit classification, affected titles, JIT dependencies, tests and whether a ReXGlue issue is justified. Update existing issues rather than duplicate.

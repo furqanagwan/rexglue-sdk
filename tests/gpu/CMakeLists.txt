@@ -14,6 +14,7 @@ add_executable(gpu_tests
     alu_fixture_test.cpp
     win32_present_test.cpp
     pix_capture_fixture_test.cpp
+    async_draw_fixture_test.cpp
 )
 
 target_include_directories(gpu_tests PRIVATE

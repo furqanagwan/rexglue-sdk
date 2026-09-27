@@ -67,6 +67,9 @@ class PipelineCache {
   bool IsCreatingPipelines();
   // Blocks until the asynchronous pipeline creation queue is empty.
   void AwaitPipelineCompletion();
+  // Creates the queued pipelines on this thread too, then waits for the rest:
+  // for a draw that can't be skipped while its pipeline compiles.
+  void AwaitQueuedPipelines();
 
   D3D12Shader* LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
                           uint32_t dword_count);
@@ -97,6 +100,12 @@ class PipelineCache {
   // if failed to create the pipeline.
   ID3D12PipelineState* GetD3D12PipelineByHandle(void* handle) const {
     return reinterpret_cast<const Pipeline*>(handle)->state.load(std::memory_order_acquire);
+  }
+  // Whether the pipeline is queued for asynchronous creation and not created
+  // (or failed) yet.
+  bool IsPipelineCreationPending(void* handle) const {
+    return reinterpret_cast<const Pipeline*>(handle)->creation_pending.load(
+        std::memory_order_acquire);
   }
 
  private:
@@ -354,6 +363,8 @@ class PipelineCache {
     D3D12Shader::D3D12Translation* pending_vertex_shader = nullptr;
     D3D12Shader::D3D12Translation* pending_pixel_shader = nullptr;
     uint8_t priority = 0;
+    // Queued for asynchronous creation, not created or failed yet.
+    std::atomic<bool> creation_pending{false};
   };
   struct PipelineCreationPriorityComparator {
     bool operator()(const Pipeline* a, const Pipeline* b) const {

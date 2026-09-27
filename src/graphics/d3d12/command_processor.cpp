@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <cstdarg>
 #include <cstring>
 #include <sstream>
@@ -2408,9 +2409,31 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
           bound_depth_and_color_render_target_formats, &pipeline_handle, &root_signature)) {
     return false;
   }
-  if (REXCVAR_GET(async_shader_compilation) &&
-      pipeline_cache_->GetD3D12PipelineByHandle(pipeline_handle) == nullptr) {
-    return true;
+  if (REXCVAR_GET(async_shader_compilation)) {
+    // Skipping a draw while its pipeline compiles is only harmless for a pass
+    // redrawn every frame (has207/xenia-edge de8e60601). Wait for the real
+    // pipeline instead for a render target not drawn recently (a one-off
+    // render to a texture), a small one (generated data such as impostors or
+    // lookup tables) or memexport, whose output isn't redone.
+    bool draw_target_recurring = render_target_cache_->TrackLastUpdateDrawTarget(frame_current_);
+    if (pipeline_cache_->IsPipelineCreationPending(pipeline_handle)) {
+      bool draw_target_small = render_target_cache_->IsLastUpdateDrawTargetSmall();
+      if (!draw_target_recurring || draw_target_small || memexport_used) {
+        auto await_start = std::chrono::steady_clock::now();
+        pipeline_cache_->AwaitQueuedPipelines();
+        REXGPU_DEBUG("Awaited the pipeline for a draw into {} ({}): {:.2f} ms",
+                     render_target_cache_->GetLastUpdateDrawTargetName(),
+                     draw_target_small        ? "small render target"
+                     : !draw_target_recurring ? "not drawn recently"
+                                              : "memexport",
+                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                               await_start)
+                         .count());
+      }
+    }
+    if (pipeline_cache_->GetD3D12PipelineByHandle(pipeline_handle) == nullptr) {
+      return true;
+    }
   }
 
   // Update the textures - this may bind pipelines.
