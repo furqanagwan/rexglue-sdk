@@ -53,6 +53,9 @@ See [architecture plan](docs/architecture-plan.md) and [decisions](docs/adr/READ
   [Edge](https://github.com/has207/xenia-edge) are compatibility research sources.
 * [furqanagwan/xenia-edge](https://github.com/furqanagwan/xenia-edge) is a
   controlled reference/experiment fork, not a dependency required to run ReXGlue.
+* Title repositories, such as [furqanagwan/007](https://github.com/furqanagwan/007),
+  hold each game's configuration and investigation records, never game files.
+  New ones follow the [title repository standard](docs/title-repo-standard.md).
 
 For the Windows D3D12 compatibility baseline and the first Quantum of Solace
 runs, see [baseline capture](docs/baseline-capture.md). As of 2026-09-27 Quantum
