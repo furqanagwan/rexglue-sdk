@@ -261,7 +261,7 @@ X_RESULT ContentManager::FlushContent(const std::string_view root_name) {
       ResolvePackageHeaderPath(data.file_name(), used_xuid, data.title_id, data.content_type);
   if (!std::filesystem::exists(header_path)) {
     const X_RESULT header_result = WriteContentHeaderFile(xuid, data);
-    if (XFAILED(header_result)) {
+    if (header_result != X_ERROR_SUCCESS) {
       result = header_result;
     }
   }

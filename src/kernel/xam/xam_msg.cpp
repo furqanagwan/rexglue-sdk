@@ -119,7 +119,8 @@ u32 XamGetOverlappedResult_entry(ppc_ptr_t<XAM_OVERLAPPED> overlapped_ptr, mappe
       result = xboxkrnl::xeRtlNtStatusToDosError(result);
     }
   }
-  if (XSUCCEEDED(result) && length_ptr) {
+  // A Win32 error by now, not an NTSTATUS.
+  if (result == X_ERROR_SUCCESS && length_ptr) {
     *length_ptr = overlapped_ptr->length;
   }
   return result;
