@@ -1056,6 +1056,23 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 - [`12e3b4223`](https://github.com/has207/xenia-edge/commit/12e3b4223) "Keep the audio pump off the global lock and make up late pumps": it changes Edge's deadline-paced audio pump, which ReXGlue's semaphore-driven worker does not use. The ReXGlue worker takes the global lock only briefly per callback. **Not ported** without local stutter evidence.
 - [`13e380a1d`](https://github.com/has207/xenia-edge/commit/13e380a1d) "Fix loading aliased bool values": Edge's legacy cvar aliases and per-game configs. **Not applicable** (a different cvar system; ADR-009 instead).
 
+## Upstream ReXGlue since v0.10.0
+
+The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk) `v0.10.0` (`c94f5eb`). Upstream `main` has not moved since. Its `development` branch had 15 commits by 2026-09-27 (head `5cf287f`), reviewed here and ported in groups with the original authors kept.
+
+| Upstream commit | Area | Status here |
+| --- | --- | --- |
+| `6319e23` fix(codegen): pack vpkuwus/vpkuhus through vTemp when vD aliases a source (#449) | Codegen | **Ported.** The PPC tests with vD aliasing vA or vB fail on the old builder. The other element-wise vector builders were audited: each reads the element it writes, so aliasing is safe. |
+| `0c7b01a` fix(kernel): release leaked event, socket and completion port objects | Kernel | **Ported.** `kernel_tests [leak]` checks that 1,000 create/close cycles leave the process handle count flat (it grew by 1,000 before), and that a bad `NtRemoveIoCompletion` handle returns `X_STATUS_INVALID_HANDLE` (it crashed before). No other unreleased `new X...` sites remain. |
+| `01ac2a3` fix(filesystem): truncate overwrites in place and release the CRT file object | Filesystem, content | **Ported.** Merged with RG-GDK-017's durable content changes. Upstream's `unit_tests` VFS overwrite tests fail on the old code. Quantum of Solace writes its save and header on the GDK build. |
+| `ee20900` fix(xam): compare content results against X_ERROR_SUCCESS instead of testing them as NTSTATUS | XAM | **Ported, extended** to three more X_RESULT checks: `XamInputGetKeystroke` (X_ERROR_EMPTY counted as success), `XamGetOverlappedResult`, and RG-GDK-017's `FlushContent` header write. |
+| `78985dd`, `c695852`, `3cd7243`, `3f34ffc` feat(input): subtype, hotplug logging, vibration, deadzones, UI blocking, keyboard passthrough | Input (SDL) | **Pending.** To port GDK-first into the GameInput driver and the shared input layer, with SDL second. |
+| `289f518`, `1406e1b`, `923c1a5` feat(ui): window size order, fullscreen display mode, apply without restart | Window (SDL) | **Pending.** For the Win32 window first, with SDL second. |
+| `b971840` feat(logging): log path, directory budget and flush through LogConfig | Logging | Pending. |
+| `5cf287f` refactor(rexglue): do not force snake_case project names | CLI | Pending. |
+| `4c13508` deps: update SDL3 to 3.4.14 | Dependency | Pending (the SDL fallback). |
+| `e9d4425` deps: bump MoltenVK to 1.4.3 | Dependency | **Not applicable** (macOS/Vulkan; ADR-001, ADR-002). |
+
 ## Review process
 
 Monthly, and before each subsystem port or release: fetch upstream refs into the controlled reference checkout; record date, SHA, merge-base and patch-equivalence comparison. Read new/updated issues and PRs, including closed-unmerged work and regressions. Search subsystem terms plus AMD/NVIDIA/Intel and title IDs. Re-check older open watches. Record explicit classification, affected titles, JIT dependencies, tests and whether a ReXGlue issue is justified. Update existing issues rather than duplicate.
