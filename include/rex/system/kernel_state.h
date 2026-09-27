@@ -275,6 +275,9 @@ class KernelState {
   // This DOES NOT RETURN if called from a guest thread!
   void TerminateTitle();
   bool is_terminating_title() const { return terminating_title_.load(std::memory_order_acquire); }
+  // Signaled while TerminateTitle runs, so sleeps nothing else can end (a
+  // guest Sleep(INFINITE)) reach their termination point.
+  rex::thread::Event* termination_event() const { return termination_event_.get(); }
 
   void RegisterThread(XThread* thread);
   void UnregisterThread(XThread* thread);
@@ -390,6 +393,8 @@ class KernelState {
 
   std::atomic<bool> dispatch_thread_running_;
   std::atomic<bool> terminating_title_{false};
+  std::unique_ptr<rex::thread::Event> termination_event_ =
+      rex::thread::Event::CreateManualResetEvent(false);
   object_ref<XHostThread> dispatch_thread_;
   // Must be guarded by the global critical region.
   util::NativeList dpc_list_;

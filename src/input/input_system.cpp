@@ -22,10 +22,14 @@
 #include <rex/input/sdl/sdl_input_driver.h>
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
+#if REX_HAS_GAMEINPUT
+#include "gameinput/gameinput_input_driver.h"
+#endif
 #include <rex/logging.h>
 
-REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
-    .allowed({"sdl", "xinput"});
+REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input",
+                      "Input backend: sdl, xinput, gameinput (GDK builds; falls back to sdl)")
+    .allowed({"sdl", "xinput", "gameinput"});
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
 namespace rex::input {
@@ -48,6 +52,7 @@ X_STATUS InputSystem::Setup() {
 }
 
 void InputSystem::Shutdown() {
+  std::lock_guard lock(mutex_);
   // device_owners_ holds raw driver pointers.
   devices_.clear();
   device_owners_.clear();
@@ -55,10 +60,12 @@ void InputSystem::Shutdown() {
 }
 
 void InputSystem::AddDriver(std::unique_ptr<InputDriver> driver) {
+  std::lock_guard lock(mutex_);
   drivers_.push_back(std::move(driver));
 }
 
 void InputSystem::AttachWindow(rex::ui::Window* window) {
+  std::lock_guard lock(mutex_);
   window_ = window;
   for (auto& driver : drivers_) {
     driver->OnWindowAvailable(window);
@@ -66,12 +73,14 @@ void InputSystem::AttachWindow(rex::ui::Window* window) {
 }
 
 void InputSystem::SetActiveCallback(std::function<bool()> callback) {
+  std::lock_guard lock(mutex_);
   for (auto& driver : drivers_) {
     driver->set_is_active_callback(callback);
   }
 }
 
 void InputSystem::SetDeviceAssignment(std::unique_ptr<DeviceAssignment> assignment) {
+  std::lock_guard lock(mutex_);
   assignment_ = std::move(assignment);
   if (assignment_) {
     assignment_->OnDevicesChanged(devices_);
@@ -187,6 +196,7 @@ const DeviceInfo* InputSystem::DeviceInfoFor(DeviceId id) const {
 X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
                                       X_INPUT_CAPABILITIES* out_caps) {
   SCOPE_profile_cpu_f("hid");
+  std::lock_guard lock(mutex_);
   if (!out_caps || !assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -214,6 +224,7 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
 
 X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   SCOPE_profile_cpu_f("hid");
+  std::lock_guard lock(mutex_);
   if (!assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -253,6 +264,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
 
 X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration) {
   SCOPE_profile_cpu_f("hid");
+  std::lock_guard lock(mutex_);
   if (!assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -295,6 +307,7 @@ X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration
 X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
                                    X_INPUT_KEYSTROKE* out_keystroke) {
   SCOPE_profile_cpu_f("hid");
+  std::lock_guard lock(mutex_);
   if (!assignment_) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -334,7 +347,23 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     }
 #endif
 
-    if (REXCVAR_GET(input_backend) == "sdl") {
+    bool use_sdl = REXCVAR_GET(input_backend) == "sdl";
+    if (REXCVAR_GET(input_backend) == "gameinput") {
+#if REX_HAS_GAMEINPUT
+      auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
+      if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(gameinput_driver));
+      } else {
+        REXLOG_WARN("input_backend=gameinput: GameInput unavailable, using SDL instead");
+        use_sdl = true;
+      }
+#else
+      REXLOG_WARN("input_backend=gameinput needs a GDK build (REXGLUE_USE_GDK); using SDL");
+      use_sdl = true;
+#endif
+    }
+
+    if (use_sdl) {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));

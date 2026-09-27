@@ -14,13 +14,32 @@
 #include <cstring>
 
 #include <rex/assert.h>
+#include <rex/cvar.h>
+#include <rex/graphics/flags.h>
+#include <rex/graphics/pipeline/shader/float_precision.h>
 #include <rex/graphics/pipeline/shader/interpreter.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/xenos.h>
 #include <rex/math.h>
 #include <rex/types.h>
 
+REXCVAR_DEFINE_BOOL(gpu_scalar_approximation_rounding, false, "GPU/Shader",
+                    "Round EXP, LOG, LOGC, RCP*, RSQ* and SQRT results to 21 mantissa bits, "
+                    "halfway away from zero (xenia-canary #1190, for 4E4D07D1). The console's "
+                    "precision and rounding are unconfirmed, so this is off by default.")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 namespace rex::graphics {
+
+namespace {
+
+// Scalar approximation results, reduced when gpu_scalar_approximation_rounding
+// is enabled, as the translated shaders do.
+float ApproximationResult(float value) {
+  return REXCVAR_GET(gpu_scalar_approximation_rounding) ? ReduceFloatPrecision(value, 21) : value;
+}
+
+}  // namespace
 
 void ShaderInterpreter::Execute() {
   // For more consistency between invocations in case of a malformed shader.
@@ -690,19 +709,19 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       state_.previous_scalar = std::floor(scalar_operands[0]);
     } break;
     case ucode::AluScalarOpcode::kExp: {
-      state_.previous_scalar = std::exp2(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(std::exp2(scalar_operands[0]));
     } break;
     case ucode::AluScalarOpcode::kLogc: {
-      state_.previous_scalar = std::log2(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(std::log2(scalar_operands[0]));
       if (state_.previous_scalar == -INFINITY) {
         state_.previous_scalar = -FLT_MAX;
       }
     } break;
     case ucode::AluScalarOpcode::kLog: {
-      state_.previous_scalar = std::log2(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(std::log2(scalar_operands[0]));
     } break;
     case ucode::AluScalarOpcode::kRcpc: {
-      state_.previous_scalar = 1.0f / scalar_operands[0];
+      state_.previous_scalar = ApproximationResult(1.0f / scalar_operands[0]);
       if (state_.previous_scalar == -INFINITY) {
         state_.previous_scalar = -FLT_MAX;
       } else if (state_.previous_scalar == INFINITY) {
@@ -710,7 +729,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       }
     } break;
     case ucode::AluScalarOpcode::kRcpf: {
-      state_.previous_scalar = 1.0f / scalar_operands[0];
+      state_.previous_scalar = ApproximationResult(1.0f / scalar_operands[0]);
       if (state_.previous_scalar == -INFINITY) {
         state_.previous_scalar = -0.0f;
       } else if (state_.previous_scalar == INFINITY) {
@@ -718,10 +737,10 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       }
     } break;
     case ucode::AluScalarOpcode::kRcp: {
-      state_.previous_scalar = 1.0f / scalar_operands[0];
+      state_.previous_scalar = ApproximationResult(1.0f / scalar_operands[0]);
     } break;
     case ucode::AluScalarOpcode::kRsqc: {
-      state_.previous_scalar = 1.0f / std::sqrt(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(1.0f / std::sqrt(scalar_operands[0]));
       if (state_.previous_scalar == -INFINITY) {
         state_.previous_scalar = -FLT_MAX;
       } else if (state_.previous_scalar == INFINITY) {
@@ -729,7 +748,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       }
     } break;
     case ucode::AluScalarOpcode::kRsqf: {
-      state_.previous_scalar = 1.0f / std::sqrt(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(1.0f / std::sqrt(scalar_operands[0]));
       if (state_.previous_scalar == -INFINITY) {
         state_.previous_scalar = -0.0f;
       } else if (state_.previous_scalar == INFINITY) {
@@ -737,7 +756,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       }
     } break;
     case ucode::AluScalarOpcode::kRsq: {
-      state_.previous_scalar = 1.0f / std::sqrt(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(1.0f / std::sqrt(scalar_operands[0]));
     } break;
     case ucode::AluScalarOpcode::kMaxAs: {
       state_.address_register =
@@ -813,7 +832,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       state_.previous_scalar = float(scalar_operands[0] == 1.0f);
     } break;
     case ucode::AluScalarOpcode::kSqrt: {
-      state_.previous_scalar = std::sqrt(scalar_operands[0]);
+      state_.previous_scalar = ApproximationResult(std::sqrt(scalar_operands[0]));
     } break;
     case ucode::AluScalarOpcode::kSin: {
       state_.previous_scalar = std::sin(scalar_operands[0]);

@@ -207,6 +207,9 @@ X_STATUS ObjectTable::RemoveHandle(X_HANDLE handle) {
     if (!object->name().empty()) {
       RemoveNameMapping(object->name());
     }
+    if (object->handles().empty()) {
+      object->OnAllHandlesClosed();
+    }
     // Release now that the object has been removed from the table.
     object->Release();
   }

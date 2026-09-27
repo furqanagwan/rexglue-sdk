@@ -2,3 +2,4 @@
 # Install: python -m pip install -r scripts/requirements-dev.txt
 clang-format==20.1.8
 pytest==9.0.2
+jsonschema==4.25.1

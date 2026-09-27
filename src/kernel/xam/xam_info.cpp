@@ -17,6 +17,7 @@
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
+#include <rex/system/xam/title_launch.h>
 #include <rex/system/xenumerator.h>
 #include <rex/system/xthread.h>
 #include <rex/system/xtypes.h>
@@ -266,22 +267,29 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
   auto& loader_data = xam->loader_data();
   loader_data.launch_flags = flags;
 
-  // Translate the launch path to a full path.
-  if (raw_name_ptr) {
-    auto path = raw_name_ptr.value();
-    if (path.empty()) {
-      loader_data.launch_path = "game:\\default.xex";
-    } else {
-      if (rex::string::utf8_find_name_from_guest_path(path) == path) {
-        path = rex::string::utf8_join_guest_paths(
-            rex::string::utf8_find_base_guest_path(
-                REX_KERNEL_STATE()->GetExecutableModule()->path()),
-            path);
-      }
-      loader_data.launch_path = path;
-    }
-  } else {
-    assert_always("Game requested exit to dashboard via XamLoaderLaunchTitle");
+  // A statically compiled binary holds one title module and cannot load
+  // another executable, so every launch ends the running title; say which kind
+  // it was instead of ending silently (RG-GDK-017; see docs/content-persistence.md).
+  const auto running = REX_KERNEL_STATE()->GetExecutableModule()->path();
+  const auto request = rex::system::xam::ClassifyLaunch(
+      running, raw_name_ptr ? std::optional<std::string_view>(raw_name_ptr.value()) : std::nullopt);
+  loader_data.launch_path = request.path;
+  switch (request.kind) {
+    case rex::system::xam::LaunchKind::kDashboard:
+      REXKRNL_INFO("XamLoaderLaunchTitle: title exited to the dashboard");
+      break;
+    case rex::system::xam::LaunchKind::kRelaunchSelf:
+      REXKRNL_WARN(
+          "XamLoaderLaunchTitle: title asked to relaunch itself ({}, flags {:08X}); relaunching is "
+          "not supported yet, the title ends",
+          request.path, uint32_t(flags));
+      break;
+    case rex::system::xam::LaunchKind::kOtherModule:
+      REXKRNL_ERROR(
+          "XamLoaderLaunchTitle: title asked to launch {}, but this binary contains only {}; "
+          "that module was not compiled, the title ends",
+          request.path, running);
+      break;
   }
 
   // This function does not return.

@@ -22,6 +22,7 @@
 
 #include <rex/image_info.h>
 #include <rex/runtime.h>
+#include <rex/system/gaming_runtime.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
 #include <rex/ui/immediate_drawer.h>
@@ -149,6 +150,14 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   /// Called after logging is initialized. Add log sinks here.
   virtual void OnPostInitLogging() {}
 
+  /// Called once the host Gaming Runtime startup attempt is over (cvar
+  /// gaming_runtime; skipped when "off"). Returning false stops the launch.
+  /// The default follows the policy: "required" launches only when ready.
+  virtual bool OnGamingRuntimeInitialized(const system::GamingRuntimeResult& result,
+                                          system::GamingRuntimePolicy policy) {
+    return system::GamingRuntimeAllowsLaunch(policy, result);
+  }
+
   /// Called after Runtime::LoadXexImage() succeeds. The XEX is loaded and
   /// mapped into guest memory but the module has not launched.
   /// Use this for data patches and recomp-specific achievement registration.
@@ -247,6 +256,8 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
 
   // --- Accessors for subclass use ---
   Runtime* runtime() const { return runtime_.get(); }
+  /// The host Gaming Runtime, or null when cvar gaming_runtime is "off".
+  system::GamingRuntime* gaming_runtime() const { return gaming_runtime_.get(); }
   ui::Window* window() const { return window_.get(); }
   ui::ImGuiDrawer* imgui_drawer() const { return imgui_drawer_.get(); }
   ui::ImmediateDrawer* immediate_drawer() const { return immediate_drawer_.get(); }
@@ -263,6 +274,9 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
 
  private:
   std::function<void(PathConfig)> MakeResumeCallback();
+
+  // Runs the gaming_runtime startup policy; false stops the launch.
+  bool InitializeGamingRuntime();
 
   // Stand up the ImGui overlay stack (drawer, F3/Backtick/F4 binds, dialogs)
   // independently of how the presenter/drawer were obtained. `presenter` may be
@@ -294,6 +308,9 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   std::filesystem::path update_data_root_;
   std::filesystem::path cache_root_;
   std::filesystem::path metadata_root_;
+  // Declared before runtime_ so it outlives the guest runtime's audio, input
+  // and GPU services even when OnDestroy is skipped.
+  std::unique_ptr<system::GamingRuntime> gaming_runtime_;
   std::unique_ptr<Runtime> runtime_;
   std::unique_ptr<ui::Window> window_;
   std::thread module_thread_;

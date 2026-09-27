@@ -14,6 +14,7 @@ set(REXUI_CORE_SOURCES
     renderdoc_api.cpp
     sdl_virtual_key.cpp
     window.cpp
+    window_factory.cpp
     window_sdl.cpp
     windowed_app.cpp
     windowed_app_context.cpp
@@ -31,24 +32,6 @@ set(REXUI_OVERLAY_SOURCES
     overlay/settings_overlay.cpp
 )
 
-# Vulkan UI backend
-set(REXUI_VULKAN_SOURCES
-    vulkan/linked_type_descriptor_set_allocator.cpp
-    vulkan/vulkan_moltenvk.cpp
-    vulkan/single_layout_descriptor_set_pool.cpp
-    vulkan/spirv_tools_context.cpp
-    vulkan/ui_samplers.cpp
-    vulkan/vulkan_device.cpp
-    vulkan/vulkan_immediate_drawer.cpp
-    vulkan/vulkan_instance.cpp
-    vulkan/vulkan_mem_alloc.cpp
-    vulkan/vulkan_presenter.cpp
-    vulkan/vulkan_provider.cpp
-    vulkan/vulkan_submission_tracker.cpp
-    vulkan/vulkan_upload_buffer_pool.cpp
-    vulkan/vulkan_util.cpp
-)
-
 # D3D12 UI backend
 if(REXGLUE_USE_D3D12)
     set(REXUI_D3D12_SOURCES
@@ -63,20 +46,13 @@ if(REXGLUE_USE_D3D12)
     )
 endif()
 
-# Platform-specific sources (windowing itself is SDL3, platform-independent)
-if(WIN32)
-    set(REXUI_PLATFORM_SOURCES
-        surface_win.cpp
-    )
-elseif(APPLE)
-    set(REXUI_PLATFORM_SOURCES
-        surface_mac.cpp
-    )
-else()
-    set(REXUI_PLATFORM_SOURCES
-        surface_gnulinux.cpp
-    )
-endif()
+# Platform sources. SDL3 is the default window and loop; the native Win32
+# window is selected with ui_backend = "win32" (RG-GDK-021).
+set(REXUI_PLATFORM_SOURCES
+    surface_win.cpp
+    window_win.cpp
+    windowed_app_context_win.cpp
+)
 
 # Combine sources
 set(REXUI_SOURCES
@@ -84,10 +60,6 @@ set(REXUI_SOURCES
     ${REXUI_OVERLAY_SOURCES}
     ${REXUI_PLATFORM_SOURCES}
 )
-
-if(REXGLUE_USE_VULKAN)
-    list(APPEND REXUI_SOURCES ${REXUI_VULKAN_SOURCES})
-endif()
 
 if(REXGLUE_USE_D3D12)
     list(APPEND REXUI_SOURCES ${REXUI_D3D12_SOURCES})
@@ -103,7 +75,7 @@ target_include_directories(rexui PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_include_directories(rexui PRIVATE
-    ${PROJECT_BINARY_DIR}/include  # Generated macOS Vulkan path data
+    ${PROJECT_BINARY_DIR}/include
     ${REXGLUE_ROOT}/src  # For ui/shaders/bytecode includes
     ${REXGLUE_ROOT}/thirdparty/stb  # stb_image.h for icon decoding
 )
@@ -115,6 +87,8 @@ target_link_libraries(rexui PUBLIC
     SDL3::SDL3
 )
 target_link_libraries(rexui PRIVATE utf8cpp)
+# Native Win32 window: DWM corner preference, IME association, drag and drop.
+target_link_libraries(rexui PRIVATE dwmapi imm32 shell32)
 
 if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
     target_include_directories(rexui PRIVATE
@@ -125,10 +99,6 @@ if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sd
 endif()
 
 set(REXUI_HAS_FIDELITYFX_RUNTIME OFF)
-if(TARGET amd_fidelityfx_vk)
-    target_link_libraries(rexui PRIVATE amd_fidelityfx_vk)
-    set(REXUI_HAS_FIDELITYFX_RUNTIME ON)
-endif()
 if(TARGET amd_fidelityfx_dx12)
     target_link_libraries(rexui PRIVATE amd_fidelityfx_dx12)
     set(REXUI_HAS_FIDELITYFX_RUNTIME ON)
@@ -137,37 +107,8 @@ if(REXUI_HAS_FIDELITYFX_RUNTIME)
     target_compile_definitions(rexui PRIVATE REX_HAS_FIDELITYFX_RUNTIME=1)
 endif()
 
-if(REXGLUE_USE_VULKAN)
-    target_link_libraries(rexui PUBLIC
-        Vulkan::Headers
-        GPUOpen::VulkanMemoryAllocator
-        spirv-tools-headers
-    )
-endif()
-
-# Platform-specific dependencies
-if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(X11_XCB REQUIRED x11-xcb)
-    # Required, not optional: vulkan/api.h pulls in <wayland-client.h> on every
-    # Linux build.
-    pkg_check_modules(WAYLAND REQUIRED wayland-client)
-
-    target_include_directories(rexui PUBLIC
-        ${X11_XCB_INCLUDE_DIRS}
-        ${WAYLAND_INCLUDE_DIRS}
-    )
-    target_link_libraries(rexui PUBLIC
-        ${X11_XCB_LIBRARIES}
-        ${WAYLAND_LIBRARIES}
-    )
-elseif(APPLE)
-    target_link_libraries(rexui PRIVATE "-framework CoreFoundation")
-endif()
-
-if(WIN32)
-    target_link_libraries(rexui PUBLIC dxgi dxguid)
-endif()
+# Platform dependencies
+target_link_libraries(rexui PUBLIC dxgi dxguid)
 
 # D3D12 backend dependencies
 if(REXGLUE_USE_D3D12)

@@ -3,6 +3,7 @@
 
 add_library(rexaudio OBJECT
     
+    audio_backend.cpp
     audio_driver.cpp
     audio_system.cpp
     downmix.cpp
@@ -39,3 +40,12 @@ target_link_libraries(rexaudio
     PUBLIC rexcore SDL3::SDL3
     PRIVATE libavcodec libavutil
 )
+
+# XAudio2 2.9 output (inbox XAudio2_9.dll, Windows 10 and later)
+if(WIN32)
+    target_sources(rexaudio PRIVATE
+        xaudio2/xaudio2_audio_driver.cpp
+        xaudio2/xaudio2_audio_system.cpp
+    )
+    target_link_libraries(rexaudio PUBLIC xaudio2 ole32)
+endif()

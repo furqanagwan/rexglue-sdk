@@ -63,4 +63,12 @@ X_STATUS HostPathFile::SetLength(size_t length) {
   }
 }
 
+X_STATUS HostPathFile::Flush() {
+  if (!(file_access_ &
+        (FileAccess::kGenericWrite | FileAccess::kFileWriteData | FileAccess::kFileAppendData))) {
+    return X_STATUS_SUCCESS;  // nothing written through this handle
+  }
+  return file_handle_->Flush() ? X_STATUS_SUCCESS : X_STATUS_UNEXPECTED_IO_ERROR;
+}
+
 }  // namespace rex::filesystem

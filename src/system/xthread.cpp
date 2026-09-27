@@ -43,6 +43,8 @@ REXCVAR_DEFINE_BOOL(ignore_thread_priorities, true, "Kernel",
 REXCVAR_DEFINE_BOOL(ignore_thread_affinities, true, "Kernel",
                     "Ignores game-specified thread affinities");
 
+REXCVAR_DECLARE(bool, guest_precise_timers);
+
 namespace rex::system {
 
 const uint32_t XAPC::kSize;
@@ -931,43 +933,12 @@ X_STATUS XThread::Resume(uint32_t* out_suspend_count) {
   auto guest_thread = guest_object<X_KTHREAD>();
   uint32_t unused_host_suspend_count = 0;
 
-#if REX_PLATFORM_WIN32
   uint8_t previous_suspend_count =
       reinterpret_cast<std::atomic_uint8_t*>(&guest_thread->suspend_count)->fetch_sub(1);
   if (out_suspend_count) {
     *out_suspend_count = previous_suspend_count;
   }
   return thread_->Resume(&unused_host_suspend_count) ? X_STATUS_SUCCESS : X_STATUS_UNSUCCESSFUL;
-#elif REX_PLATFORM_LINUX || REX_PLATFORM_MAC
-  bool should_resume_host = false;
-  {
-    std::lock_guard<std::mutex> lock(suspend_mutex_);
-    uint8_t previous = guest_thread->suspend_count;
-    if (previous > 0) {
-      guest_thread->suspend_count--;
-    }
-    if (out_suspend_count) {
-      *out_suspend_count = previous;
-    }
-    should_resume_host = (guest_thread->suspend_count == 0);
-    suspend_cv_.notify_all();
-  }
-
-  // Self-suspended threads are resumed via guest suspend count transitions.
-  if (should_resume_host) {
-    thread_->Resume(&unused_host_suspend_count);
-  }
-  return X_STATUS_SUCCESS;
-#else
-  uint8_t previous_suspend_count = guest_thread->suspend_count;
-  if (guest_thread->suspend_count > 0) {
-    --guest_thread->suspend_count;
-  }
-  if (out_suspend_count) {
-    *out_suspend_count = previous_suspend_count;
-  }
-  return thread_->Resume(&unused_host_suspend_count) ? X_STATUS_SUCCESS : X_STATUS_UNSUCCESSFUL;
-#endif
 }
 
 X_STATUS XThread::Suspend(uint32_t* out_suspend_count) {
@@ -986,32 +957,20 @@ X_STATUS XThread::Suspend(uint32_t* out_suspend_count) {
   return thread_->Suspend(&unused_host_suspend_count) ? X_STATUS_SUCCESS : X_STATUS_UNSUCCESSFUL;
 }
 
-#if REX_PLATFORM_LINUX || REX_PLATFORM_MAC
-uint32_t XThread::SelfSuspend() {
-  auto guest_thread = guest_object<X_KTHREAD>();
-  std::unique_lock<std::mutex> lock(suspend_mutex_);
-  uint32_t previous = guest_thread->suspend_count;
-  guest_thread->suspend_count++;
-  suspend_cv_.wait(lock, [guest_thread]() { return guest_thread->suspend_count == 0; });
-  return previous;
-}
-#endif
-
 X_STATUS XThread::Delay(uint32_t processor_mode, uint32_t alertable, uint64_t interval) {
   int64_t timeout_ticks = interval;
-  uint32_t timeout_ms;
-  if (timeout_ticks > 0) {
-    // Absolute time, based on January 1, 1601.
-    // TODO(benvanik): convert time to relative time.
-    assert_always();
-    timeout_ms = 0;
-  } else if (timeout_ticks < 0) {
-    // Relative time.
-    timeout_ms = uint32_t(-timeout_ticks / 10000);  // Ticks -> MS
-  } else {
-    timeout_ms = 0;
+  if (timeout_ticks && REXCVAR_GET(guest_precise_timers)) {
+    auto duration = GuestTimeoutToHost(timeout_ticks);
+    if (duration.count() > 0) {
+      CheckTitleTermination();
+      auto result =
+          rex::thread::PreciseSleep(duration, alertable != 0, kernel_state_->termination_event());
+      CheckTitleTermination();
+      return result == rex::thread::SleepResult::kAlerted ? X_STATUS_USER_APC : X_STATUS_SUCCESS;
+    }
+    // An absolute time that already passed: a zero delay, below.
   }
-  timeout_ms = chrono::Clock::ScaleGuestDurationMillis(timeout_ms);
+  uint32_t timeout_ms = chrono::Clock::ScaleGuestDurationMillis(TimeoutTicksToMs(timeout_ticks));
   CheckTitleTermination();
   if (alertable) {
     auto result = rex::thread::AlertableSleep(std::chrono::milliseconds(timeout_ms));

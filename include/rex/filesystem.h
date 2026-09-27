@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,6 +47,12 @@ bool CreateParentFolder(const std::filesystem::path& path);
 
 // Creates an empty file at the given path, overwriting if it exists.
 bool CreateEmptyFile(const std::filesystem::path& path);
+
+// Replaces the file at `path` with `bytes` through a flushed sibling
+// `<path>.tmp` and a rename, so a crash leaves the old contents or the new,
+// never a torn file. Returns false if a step failed; the target is then
+// unchanged.
+bool WriteFileDurably(const std::filesystem::path& path, std::span<const uint8_t> bytes);
 
 // Opens the file at the given path with the specified mode.
 // This behaves like fopen and the returned handle can be used with stdio.
@@ -102,7 +109,8 @@ class FileHandle {
   virtual bool SetLength(size_t length) = 0;
 
   // Flushes any pending write buffers to the underlying filesystem.
-  virtual void Flush() = 0;
+  // Returns false if the host reports the flush failed.
+  virtual bool Flush() = 0;
 
  protected:
   explicit FileHandle(const std::filesystem::path& path) : path_(path) {}
@@ -125,13 +133,6 @@ struct FileInfo {
 };
 bool GetInfo(const std::filesystem::path& path, FileInfo* out_info);
 std::vector<FileInfo> ListFiles(const std::filesystem::path& path);
-
-#if REX_PLATFORM_ANDROID
-void AndroidInitialize();
-void AndroidShutdown();
-bool IsAndroidContentUri(const std::string_view source);
-int OpenAndroidContentFileDescriptor(const std::string_view uri, const char* mode);
-#endif  // REX_PLATFORM_ANDROID
 
 }  // namespace filesystem
 }  // namespace rex

@@ -20,13 +20,6 @@ set(REXGLUE_INSTALL_TARGETS
     libavcodec libavutil
 )
 
-if(REXGLUE_USE_VULKAN)
-    list(APPEND REXGLUE_INSTALL_TARGETS
-        SPIRV glslang MachineIndependent GenericCodeGen OSDependent OGLCompiler  # glslang
-        spirv-tools-headers
-    )
-endif()
-
 if(REXGLUE_USE_D3D12)
     list(APPEND REXGLUE_INSTALL_TARGETS dxc-headers)
 endif()
@@ -36,10 +29,6 @@ if(REXGLUE_ENABLE_TRACY)
 endif()
 
 set(REXGLUE_INSTALL_FIDELITYFX_TARGETS)
-if(TARGET amd_fidelityfx_vk)
-    list(APPEND REXGLUE_INSTALL_FIDELITYFX_TARGETS amd_fidelityfx_vk)
-endif()
-
 if(TARGET amd_fidelityfx_dx12)
     list(APPEND REXGLUE_INSTALL_FIDELITYFX_TARGETS amd_fidelityfx_dx12)
 endif()
@@ -112,15 +101,6 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Install SPIRV-Tools headers (only the public API, not opt/linker)
-if(REXGLUE_USE_VULKAN)
-    install(FILES
-        thirdparty/spirv-tools/include/spirv-tools/libspirv.h
-        thirdparty/spirv-tools/include/spirv-tools/libspirv.hpp
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/spirv-tools
-    )
-endif()
-
 # Install the entry point source and ReXApp for SDK consumers
 install(FILES
     src/ui/windowed_app_main_sdl.cpp
@@ -134,23 +114,6 @@ if(REXGLUE_USE_D3D12)
         thirdparty/dxc/include/DxbcConverter.h
         thirdparty/dxc/include/dxcapi.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dxc
-    )
-endif()
-
-if(APPLE AND REXGLUE_USE_VULKAN)
-    install(FILES "$<TARGET_FILE:Vulkan::Loader>"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        CONFIGURATIONS Release
-        RENAME libvulkan.1.dylib
-    )
-    install(FILES "$<TARGET_FILE:MoltenVK::MoltenVK>"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        CONFIGURATIONS Release
-        RENAME libMoltenVK.dylib
-    )
-    install(FILES cmake/MoltenVK_icd.json
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/vulkan/icd.d
-        CONFIGURATIONS Release
     )
 endif()
 
@@ -175,6 +138,7 @@ install(FILES
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/cmake/rexglue_helpers.cmake
+    ${CMAKE_SOURCE_DIR}/cmake/rexglue_gdk.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rexglue
 )
 

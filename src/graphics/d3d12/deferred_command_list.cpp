@@ -13,6 +13,7 @@
 #include <rex/dbg.h>
 #include <rex/graphics/d3d12/command_processor.h>
 #include <rex/graphics/d3d12/deferred_command_list.h>
+#include <rex/graphics/debug_markers.h>
 #include <rex/graphics/flags.h>
 #include <rex/math.h>
 
@@ -257,7 +258,10 @@ void DeferredCommandList::Execute(ID3D12GraphicsCommandList* command_list,
         auto& args = *reinterpret_cast<const DebugMarkerHeader*>(stream);
         const char* label_name = reinterpret_cast<const char*>(
             reinterpret_cast<const uint8_t*>(stream) + sizeof(DebugMarkerHeader));
-        command_list->BeginEvent(1, label_name, static_cast<UINT>(args.label_length + 1));
+        uint64_t blob[pix::kMaxEventWords];
+        UINT blob_size = pix::EncodeEvent(blob, pix::EventType::kBeginEvent, args.color,
+                                          command_list, {label_name, args.label_length});
+        command_list->BeginEvent(pix::kBlobV2Metadata, blob, blob_size);
       } break;
       case Command::kEndDebugMarker: {
         command_list->EndEvent();
@@ -266,7 +270,10 @@ void DeferredCommandList::Execute(ID3D12GraphicsCommandList* command_list,
         auto& args = *reinterpret_cast<const DebugMarkerHeader*>(stream);
         const char* label_name = reinterpret_cast<const char*>(
             reinterpret_cast<const uint8_t*>(stream) + sizeof(DebugMarkerHeader));
-        command_list->SetMarker(1, label_name, static_cast<UINT>(args.label_length + 1));
+        uint64_t blob[pix::kMaxEventWords];
+        UINT blob_size = pix::EncodeEvent(blob, pix::EventType::kSetMarker, args.color,
+                                          command_list, {label_name, args.label_length});
+        command_list->SetMarker(pix::kBlobV2Metadata, blob, blob_size);
       } break;
       default:
         assert_unhandled_case(header.command);

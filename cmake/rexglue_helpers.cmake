@@ -8,36 +8,6 @@
 #==========================================================
 include_guard(GLOBAL)
 
-function(_rexglue_stage_macos_vulkan_runtime target_name)
-    if(TARGET Vulkan::Loader AND TARGET MoltenVK::MoltenVK)
-        set(_rexglue_vulkan_loader Vulkan::Loader)
-        set(_rexglue_moltenvk MoltenVK::MoltenVK)
-        set(_rexglue_moltenvk_icd "${REXGLUE_ROOT}/cmake/MoltenVK_icd.json")
-    elseif(TARGET rex::vulkan-loader AND TARGET rex::moltenvk)
-        set(_rexglue_vulkan_loader rex::vulkan-loader)
-        set(_rexglue_moltenvk rex::moltenvk)
-        set(_rexglue_moltenvk_icd "${REXGLUE_MOLTENVK_ICD}")
-    else()
-        message(FATAL_ERROR "rexglue: pinned macOS Vulkan runtime targets are unavailable")
-    endif()
-
-    add_custom_command(TARGET ${target_name} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/share/vulkan/icd.d"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${_rexglue_vulkan_loader}>"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib/libvulkan.1.dylib"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${_rexglue_moltenvk}>"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/lib/libMoltenVK.dylib"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${_rexglue_moltenvk_icd}"
-            "$<TARGET_FILE_DIR:${target_name}>/vulkan/share/vulkan/icd.d/MoltenVK_icd.json"
-        VERBATIM
-    )
-endfunction()
-
 #==========================================================
 # rexglue_apply_target_settings(<target>) - Common flags
 #
@@ -45,16 +15,6 @@ endfunction()
 # runtime DLL staging is the host's job (see rexglue_configure_target).
 #==========================================================
 function(rexglue_apply_target_settings target_name)
-    if(UNIX AND NOT APPLE)
-        # Large executable support
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-            target_link_options(${target_name} PRIVATE -Wl,--no-relax)
-            target_compile_options(${target_name} PRIVATE -mcmodel=large)
-        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
-            target_compile_options(${target_name} PRIVATE -march=armv8-a)
-        endif()
-    endif()
-
     if(NOT MSVC)
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
             target_compile_options(${target_name} PRIVATE -msse4.1)
@@ -69,7 +29,6 @@ endfunction()
 #   - SDL3 entry point source (windowed_app_main_sdl.cpp)
 #   - ReXApp base class source (rex_app.cpp)
 #   - Build-config define for the version stamp
-#   - $ORIGIN RPATH on UNIX so the host finds librexruntime.so next to itself
 #   - Windows POST_BUILD copy of TARGET_RUNTIME_DLLS and the FidelityFX DLLs.
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
@@ -84,21 +43,6 @@ function(rexglue_configure_target target_name)
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")
 
-    if(UNIX AND NOT APPLE)
-        set_target_properties(${target_name} PROPERTIES
-            INSTALL_RPATH "$ORIGIN"
-            BUILD_WITH_INSTALL_RPATH ON
-        )
-    elseif(APPLE)
-        # macOS analogue of $ORIGIN: resolve @rpath dylibs (librexruntime,
-        # libTracyClient, ...) next to the executable. Pairs with the runtime
-        # dylib staging below so the app is self-contained.
-        set_target_properties(${target_name} PROPERTIES
-            INSTALL_RPATH "@executable_path"
-            BUILD_WITH_INSTALL_RPATH ON
-        )
-    endif()
-
     rexglue_apply_target_settings(${target_name})
 
     if(WIN32)
@@ -109,28 +53,12 @@ function(rexglue_configure_target target_name)
             COMMAND_EXPAND_LISTS
             VERBATIM
         )
-    elseif(APPLE)
-        # macOS: $<TARGET_RUNTIME_DLLS> does not resolve imported dylibs, so
-        # stage the shared runtime libraries explicitly next to the executable
-        # (paired with the @executable_path rpath above). Everything else the
-        # runtime links (fmt, spdlog, SDL3, ...) is static. Target names
-        # differ between an in-tree build and an installed SDK import.
-        foreach(_rexglue_runtime_lib rex::runtime rexruntime rex::TracyClient TracyClient)
-            if(TARGET ${_rexglue_runtime_lib})
-                add_custom_command(TARGET ${target_name} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        $<TARGET_FILE:${_rexglue_runtime_lib}>
-                        $<TARGET_FILE_DIR:${target_name}>
-                    VERBATIM
-                )
-            endif()
-        endforeach()
     endif()
 
     if(WIN32)
         # FidelityFX is linked PRIVATE by rexui (to avoid propagating DLL
         # requirements to tool-mode targets), so copy its DLLs explicitly.
-        foreach(_fx amd_fidelityfx_vk amd_fidelityfx_dx12)
+        foreach(_fx amd_fidelityfx_dx12)
             if(TARGET ${_fx})
                 add_custom_command(TARGET ${target_name} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -166,9 +94,6 @@ function(rexglue_configure_target target_name)
         unset(_plugin_target)
     endforeach()
 
-    if(APPLE AND REXGLUE_USE_VULKAN)
-        _rexglue_stage_macos_vulkan_runtime(${target_name})
-    endif()
 endfunction()
 
 #==========================================================
@@ -199,13 +124,6 @@ function(rexglue_configure_module_target target_name)
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
             ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
-    endif()
-
-    if(UNIX AND NOT APPLE)
-        set_target_properties(${target_name} PROPERTIES
-            INSTALL_RPATH "$ORIGIN"
-            BUILD_WITH_INSTALL_RPATH ON
         )
     endif()
 
@@ -289,4 +207,30 @@ function(rexglue_embed_metadata target_name)
     file(WRITE "${_rexglue_output}" "${_rexglue_content}")
     target_sources(${target_name} PRIVATE "${_rexglue_output}")
     message(STATUS "Embedded ${_rexglue_count} metadata asset(s) into ${target_name}")
+endfunction()
+
+#==========================================================
+# rexglue_add_game_config(<target> DIRECTORY <dir>)
+#
+# Stages the MicrosoftGame.config and ShellVisuals images that
+# `rexglue init gameconfig` wrote into <dir> next to the target's executable,
+# so the build output is a loose PC layout that `wdapp register` and
+# `makepkg genmap/pack /pc` accept (RG-GDK-022, docs/gdk-packaging.md).
+#==========================================================
+function(rexglue_add_game_config target_name)
+    cmake_parse_arguments(ARG "" "DIRECTORY" "" ${ARGN})
+    if(NOT ARG_DIRECTORY OR NOT EXISTS "${ARG_DIRECTORY}/MicrosoftGame.config")
+        message(FATAL_ERROR
+            "rexglue_add_game_config: no MicrosoftGame.config in '${ARG_DIRECTORY}'. "
+            "Generate one with 'rexglue init gameconfig'.")
+    endif()
+    file(GLOB _images CONFIGURE_DEPENDS "${ARG_DIRECTORY}/*.png")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ARG_DIRECTORY}/MicrosoftGame.config" ${_images}
+            $<TARGET_FILE_DIR:${target_name}>
+        VERBATIM
+    )
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${ARG_DIRECTORY}/MicrosoftGame.config")
 endfunction()

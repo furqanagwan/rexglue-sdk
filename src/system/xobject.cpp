@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <rex/chrono/clock.h>
+#include <rex/cvar.h>
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/string_utils.h>  // For TranslateAnsiStringAddress
@@ -26,6 +27,11 @@
 #include <rex/system/xsemaphore.h>
 #include <rex/system/xsymboliclink.h>
 #include <rex/system/xthread.h>
+
+REXCVAR_DEFINE_BOOL(guest_precise_timers, true, "Kernel",
+                    "Measure guest delays and timed waits with a high-resolution host timer "
+                    "(microseconds). Off: the Windows system timer (15.6 ms steps by default, "
+                    "sub-millisecond delays become yields)");
 
 namespace rex::system {
 
@@ -186,18 +192,29 @@ void XObject::SetAttributes(uint32_t obj_attributes_ptr) {
   }
 }
 
-uint32_t XObject::TimeoutTicksToMs(int64_t timeout_ticks) {
+int64_t XObject::GuestTicksUntil(int64_t timeout_ticks) {
   if (timeout_ticks > 0) {
-    // Absolute time, based on January 1, 1601.
-    // TODO(benvanik): convert time to relative time.
-    assert_always();
-    return 0;
-  } else if (timeout_ticks < 0) {
-    // Relative time.
-    return (uint32_t)(-timeout_ticks / 10000);  // Ticks -> MS
-  } else {
-    return 0;
+    // Absolute guest system time (100 ns units since 1601); one already
+    // passed is due now.
+    int64_t now = static_cast<int64_t>(chrono::Clock::QueryGuestSystemTime());
+    return std::max<int64_t>(timeout_ticks - now, 0);
   }
+  return -timeout_ticks;  // Relative, or 0.
+}
+
+uint32_t XObject::TimeoutTicksToMs(int64_t timeout_ticks) {
+  // Truncated to whole milliseconds, as the Win32 millisecond waits take it.
+  return static_cast<uint32_t>(
+      std::min<int64_t>(GuestTicksUntil(timeout_ticks) / 10000, UINT32_MAX));
+}
+
+std::chrono::microseconds XObject::GuestTimeoutToHost(int64_t timeout_ticks) {
+  // Rounded up: a timeout never ends before the guest asked.
+  double microseconds = double((GuestTicksUntil(timeout_ticks) + 9) / 10);
+  if (!REXCVAR_GET(clock_no_scaling)) {
+    microseconds *= chrono::Clock::guest_time_scalar();
+  }
+  return std::chrono::microseconds(int64_t(std::min(microseconds, 9.0e15)));
 }
 
 X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t alertable,
@@ -208,12 +225,20 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
     return X_STATUS_SUCCESS;
   }
 
-  auto timeout_ms = opt_timeout ? std::chrono::milliseconds(chrono::Clock::ScaleGuestDurationMillis(
-                                      TimeoutTicksToMs(*opt_timeout)))
-                                : std::chrono::milliseconds::max();
-
   XThread::CheckTitleTermination();
-  auto result = rex::thread::Wait(wait_handle, alertable ? true : false, timeout_ms);
+  rex::thread::WaitResult result;
+  if (opt_timeout && *opt_timeout && REXCVAR_GET(guest_precise_timers)) {
+    rex::thread::WaitHandle* handles[] = {wait_handle};
+    result = rex::thread::WaitAnyPrecise(handles, 1, alertable ? true : false,
+                                         GuestTimeoutToHost(int64_t(*opt_timeout)))
+                 .first;
+  } else {
+    auto timeout_ms =
+        opt_timeout ? std::chrono::milliseconds(
+                          chrono::Clock::ScaleGuestDurationMillis(TimeoutTicksToMs(*opt_timeout)))
+                    : std::chrono::milliseconds::max();
+    result = rex::thread::Wait(wait_handle, alertable ? true : false, timeout_ms);
+  }
   XThread::CheckTitleTermination();
   switch (result) {
     case rex::thread::WaitResult::kSuccess:
@@ -239,9 +264,14 @@ X_STATUS XObject::SignalAndWait(XObject* signal_object, XObject* wait_object, ui
                                       TimeoutTicksToMs(*opt_timeout)))
                                 : std::chrono::milliseconds::max();
 
+  signal_object->BeginSignal();
   auto result =
       rex::thread::SignalAndWait(signal_object->GetWaitHandle(), wait_object->GetWaitHandle(),
                                  alertable ? true : false, timeout_ms);
+  if (result == rex::thread::WaitResult::kFailed) {
+    // Nothing was signaled (a semaphore at its limit, a bad handle).
+    signal_object->CancelSignal();
+  }
   switch (result) {
     case rex::thread::WaitResult::kSuccess:
       wait_object->WaitCallback();
@@ -274,8 +304,14 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
 
   XThread::CheckTitleTermination();
   if (wait_type) {
+    // Wait-all has no room for a timer in the set, so only wait-any gets a
+    // precise timeout.
     auto result =
-        rex::thread::WaitAny(std::move(wait_handles), alertable ? true : false, timeout_ms);
+        opt_timeout && *opt_timeout && REXCVAR_GET(guest_precise_timers)
+            ? rex::thread::WaitAnyPrecise(wait_handles.data(), wait_handles.size(),
+                                          alertable ? true : false,
+                                          GuestTimeoutToHost(int64_t(*opt_timeout)))
+            : rex::thread::WaitAny(std::move(wait_handles), alertable ? true : false, timeout_ms);
     XThread::CheckTitleTermination();
     switch (result.first) {
       case rex::thread::WaitResult::kSuccess:
@@ -388,15 +424,24 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
     as_type = header->type;
   }
 
+  const uint32_t guest_address = kernel_state->memory()->HostToGuestVirtual(native_ptr);
   if (header->wait_list_flink == kXObjSignature) {
     // Already initialized.
     // TODO: assert if the type of the object != as_type
     uint32_t handle = header->wait_list_blink;
     auto object = kernel_state->object_table()->LookupObject<XObject>(handle);
-
-    // TODO(benvanik): assert nothing has been changed in the struct.
-    return object;
-  } else {
+    // An object that died leaves its signature behind, and the table hands
+    // its handle to the next object, so the handle must still name an object
+    // over this memory (Canary #1225, read side only; see
+    // docs/upstream-tracking.md). A stale signature is a first use.
+    if (object && (!object->guest_object() || object->guest_object() == guest_address)) {
+      object->SyncFromGuest();
+      return object;
+    }
+    REXSYS_DEBUG("GetNativeObject: stale handle {:08X} at {:08X}, recreating", handle,
+                 guest_address);
+  }
+  {
     // First use, create new.
     // https://www.nirsoft.net/kernel_struct/vista/KOBJECTS.html
     XObject* object = nullptr;
@@ -440,9 +485,10 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
         return NULL;
     }
 
-    // Stash pointer in struct.
+    // Record where the object lives and stash its handle there, so lookups
+    // can check it and header synchronization can reach the guest state.
     // FIXME: This assumes the object contains a dispatch header (some don't!)
-    StashHandle(header, object->handle());
+    object->SetNativePointer(guest_address, true);
 
     return object_ref<XObject>(object);
   }

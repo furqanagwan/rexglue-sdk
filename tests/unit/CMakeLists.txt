@@ -4,22 +4,45 @@ add_executable(unit_tests
     test_memory.cpp
     memory/heap_allocation_test.cpp
     kernel/object_table_test.cpp
+    kernel/xecrypt_md5_test.cpp
     core/cvar_test.cpp
     core/fiber_test.cpp
     core/filesystem_test.cpp
+    filesystem/stfs_container_test.cpp
     core/hash_test.cpp
     core/stream_test.cpp
     core/chrono_test.cpp
+    graphics/texture_layout_test.cpp
+    graphics/zpd_report_test.cpp
+    graphics/float_precision_test.cpp
+    graphics/debug_markers_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
     system/guest_path_test.cpp
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
+    system/gaming_runtime_test.cpp
+    audio/xma_context_test.cpp
+    audio/audio_client_lifetime_test.cpp
+    audio/conversion_test.cpp
     input/input_assignment_test.cpp
+    input/keystroke_synthesizer_test.cpp
+    input/gamepad_devices_test.cpp
+    ui/win32_window_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
+    codegen/jump_table_test.cpp
+    codegen/game_config_test.cpp
 )
+
+if(WIN32)
+    target_sources(unit_tests PRIVATE audio/xaudio2_driver_test.cpp)
+endif()
+
+if(REXGLUE_USE_GDK)
+    target_sources(unit_tests PRIVATE gdk/gdk_runtime_test.cpp gdk/gameinput_test.cpp)
+endif()
 
 target_sources(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/rexglue/ui/ui.cpp
@@ -29,6 +52,7 @@ target_sources(unit_tests PRIVATE
 target_include_directories(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/thirdparty/stb
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -60,12 +84,6 @@ target_compile_options(unit_tests PRIVATE
 set_target_properties(unit_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>
 )
-if(UNIX AND NOT APPLE)
-    set_target_properties(unit_tests PROPERTIES
-        INSTALL_RPATH "$ORIGIN"
-        BUILD_WITH_INSTALL_RPATH ON
-    )
-endif()
 
 # Discover tests
 include(Catch)

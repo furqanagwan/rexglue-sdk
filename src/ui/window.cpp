@@ -47,6 +47,13 @@ REXCVAR_DEFINE_STRING(video_driver, "", "UI/Window",
                       "SDL's default for the session")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+// RG-GDK-021: the native Win32 window is opt-in until it matches the SDL
+// window on hardware; input and audio keep their own backends either way.
+REXCVAR_DEFINE_STRING(ui_backend, "sdl", "UI/Window",
+                      "Window and message loop: sdl, or win32 for the native Win32 window")
+    .allowed({"sdl", "win32"})
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 REXCVAR_DEFINE_INT32(video_mode_width, 1280, "Display", "Guest video mode width in pixels")
     .range(640, 0x0FFF)
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);

@@ -27,6 +27,7 @@ set(CODEGEN_CORE_SOURCES
     phase_validate.cpp
     template_registry.cpp
     manifest.cpp
+    game_config.cpp
     project_recompiler.cpp
 )
 

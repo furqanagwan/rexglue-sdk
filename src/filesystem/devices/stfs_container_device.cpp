@@ -120,6 +120,26 @@ StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
   // If the STFS package is a single file, the header is self contained and
   // we don't need to map any extra files.
   // NOTE: data_file_count is 0 for STFS and 1 for SVOD
+  // The metadata records how much data the package holds; an incomplete copy
+  // or download is refused here, named, instead of failing later mid-read
+  // (xenia-canary #1226). Some packages leave the field at zero.
+  if (header_.metadata.volume_type == XContentVolumeType::kStfs &&
+      header_.metadata.data_file_count == 0) {
+    const uint64_t data_offset = rex::round_up(header_.header.header_size.get(), kBlockSize);
+    const uint64_t expected = header_.metadata.content_size;
+    if (expected &&
+        (files_total_size_ < data_offset || expected > files_total_size_ - data_offset)) {
+      REXFS_ERROR(
+          "STFS package {} holds {} bytes of data where its metadata describes {}; it is "
+          "incomplete and will not be mounted",
+          rex::path_to_utf8(host_path_),
+          files_total_size_ > data_offset ? files_total_size_ - data_offset : 0, expected);
+      fclose(header_file);
+      files_total_size_ = 0;
+      return Error::kErrorTooSmall;
+    }
+  }
+
   if (header_.metadata.data_file_count <= 1) {
     REXFS_INFO("STFS container is a single file.");
     files_.emplace(std::make_pair(0, header_file));
@@ -342,11 +362,21 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
   root_entry_ = std::unique_ptr<Entry>(root_entry);
 
   // Traverse all child entries
+  svod_visited_nodes_.clear();
   return ReadEntrySVOD(root_data.block, 0, root_entry);
 }
 
 StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, uint32_t ordinal,
-                                                              StfsContainerEntry* parent) {
+                                                              StfsContainerEntry* parent,
+                                                              uint32_t depth) {
+  // The tree comes from the package; a cycle or an absurd depth is damage.
+  constexpr uint32_t kMaxSvodDepth = 1024;
+  if (depth > kMaxSvodDepth ||
+      !svod_visited_nodes_.insert((uint64_t(block) << 32) | ordinal).second) {
+    REXFS_ERROR("SVOD directory node {}:{} repeats or nests too deeply", block, ordinal);
+    return Error::kErrorReadError;
+  }
+
   // For games with a large amount of files, the ordinal offset can overrun
   // the current block and potentially hit a hash block.
   size_t ordinal_offset = ordinal * 0x4;
@@ -359,6 +389,11 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
   entry_address += true_ordinal_offset;
 
   // Read directory entry
+  if (entry_file >= files_.size()) {
+    REXFS_ERROR("SVOD directory node {}:{} is in data file {}, but only {} exist", block, ordinal,
+                entry_file, files_.size());
+    return Error::kErrorReadError;
+  }
   auto& file = files_.at(entry_file);
   rex::filesystem::Seek(file, entry_address, SEEK_SET);
 
@@ -389,7 +424,7 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
   // Read the left node
   if (dir_entry.node_l) {
-    auto node_result = ReadEntrySVOD(block, dir_entry.node_l, parent);
+    auto node_result = ReadEntrySVOD(block, dir_entry.node_l, parent, depth + 1);
     if (node_result != Error::kSuccess) {
       return node_result;
     }
@@ -416,7 +451,7 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
     if (dir_entry.length) {
       // If length is greater than 0, traverse the directory's children
-      auto directory_result = ReadEntrySVOD(dir_entry.data_block, 0, entry.get());
+      auto directory_result = ReadEntrySVOD(dir_entry.data_block, 0, entry.get(), depth + 1);
       if (directory_result != Error::kSuccess) {
         return directory_result;
       }
@@ -467,7 +502,7 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
   // Read the right node.
   if (dir_entry.node_r) {
-    auto node_result = ReadEntrySVOD(block, dir_entry.node_r, parent);
+    auto node_result = ReadEntrySVOD(block, dir_entry.node_r, parent, depth + 1);
     if (node_result != Error::kSuccess) {
       return node_result;
     }
@@ -571,12 +606,19 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
       StfsContainerEntry* parent_entry = nullptr;
       if (dir_entry.directory_index == 0xFFFF) {
         parent_entry = root_entry;
-      } else {
+      } else if (dir_entry.directory_index < all_entries.size() &&
+                 (all_entries[dir_entry.directory_index]->attributes() & kFileAttributeDirectory)) {
         parent_entry = all_entries[dir_entry.directory_index];
+      } else {
+        // An index from the package itself; a damaged table must not read
+        // past the entries seen so far.
+        REXFS_ERROR("STFS entry {} names parent {}, which is not a directory entry ({} read)",
+                    all_entries.size(), dir_entry.directory_index.get(), all_entries.size());
+        return Error::kErrorReadError;
       }
 
       std::string name(reinterpret_cast<const char*>(dir_entry.name),
-                       dir_entry.flags.name_length & 0x3F);
+                       std::min<size_t>(dir_entry.flags.name_length, sizeof(dir_entry.name)));
       auto entry = StfsContainerEntry::Create(this, parent_entry, name, &files_);
 
       if (dir_entry.flags.directory) {
@@ -603,23 +645,30 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
       if (entry->attributes() & system::X_FILE_ATTRIBUTE_NORMAL) {
         uint32_t block_index = dir_entry.start_block_number();
         size_t remaining_size = dir_entry.length;
+        // Each step consumes a block of the entry's length, so even a looping
+        // chain ends.
         while (remaining_size && block_index != kEndOfChain) {
           size_t block_size = std::min(static_cast<size_t>(kBlockSize), remaining_size);
           size_t offset = BlockToOffsetSTFS(block_index);
           entry->block_list_.push_back({0, offset, block_size});
           remaining_size -= block_size;
           auto block_hash = GetBlockHash(block_index);
+          if (!block_hash) {
+            // The hash table this block needs is not in the file (a truncated
+            // package); keep what was found (xenia-canary #1226).
+            REXFS_ERROR("STFS block chain of {} leaves the package at block {}", name, block_index);
+            break;
+          }
           block_index = block_hash->level0_next_block();
         }
 
+        // Malformed packages are reported, not asserted: they are input.
         if (remaining_size) {
-          // Loop above must have exited prematurely, bad hash tables?
           REXFS_WARN(
               "STFS file {} only found {} bytes for file, expected {} ({} "
               "bytes missing)",
               name, dir_entry.length.get() - remaining_size, dir_entry.length.get(),
               remaining_size);
-          assert_always();
         }
 
         // Check that the number of blocks retrieved from hash entries matches
@@ -629,7 +678,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
               "STFS failed to read correct block-chain for entry {}, read {} "
               "blocks, expected {}",
               entry->name_, entry->block_list_.size(), dir_entry.allocated_data_blocks());
-          assert_always();
         }
       }
 
@@ -637,6 +685,10 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
     }
 
     auto block_hash = GetBlockHash(table_block_index);
+    if (!block_hash) {
+      REXFS_ERROR("STFS file table chain leaves the package at block {}", table_block_index);
+      return Error::kErrorReadError;
+    }
     table_block_index = block_hash->level0_next_block();
     if (table_block_index == kEndOfChain) {
       break;
@@ -646,7 +698,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
   if (n + 1 != descriptor.file_table_block_count) {
     REXFS_WARN("STFS read {} file table blocks, but STFS headers expected {}!", n + 1,
                descriptor.file_table_block_count);
-    assert_always();
   }
 
   return Error::kSuccess;
@@ -788,7 +839,15 @@ const StfsHashEntry* StfsContainerDevice::GetBlockHash(uint32_t block_index) {
 }
 
 XContentPackageType StfsContainerDevice::ReadMagic(const std::filesystem::path& path) {
+  // Files shorter than the magic, or unreadable, are simply not packages.
+  std::error_code ec;
+  if (std::filesystem::file_size(path, ec) < sizeof(uint32_t) || ec) {
+    return XContentPackageType(0);
+  }
   auto map = memory::MappedMemory::Open(path, memory::MappedMemory::Mode::kRead, 0, 4);
+  if (!map) {
+    return XContentPackageType(0);
+  }
   return XContentPackageType(memory::load_and_swap<uint32_t>(map->data()));
 }
 

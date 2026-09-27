@@ -1,22 +1,11 @@
 # Third-party vendored dependencies for ReXGlue
-include(${PROJECT_SOURCE_DIR}/cmake/rexglue_vulkan_stack.cmake)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 #=============================================================================
 # Architecture detection
 #=============================================================================
-if(APPLE AND CMAKE_OSX_ARCHITECTURES)
-    # On Apple, CMAKE_OSX_ARCHITECTURES is the target arch; CMAKE_SYSTEM_PROCESSOR
-    # reflects the host (e.g. arm64 on Apple Silicon even when cross-building x86_64).
-    if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        set(IS_ARM64 TRUE)
-        set(IS_X86_64 FALSE)
-    else()
-        set(IS_ARM64 FALSE)
-        set(IS_X86_64 TRUE)
-    endif()
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
     set(IS_ARM64 FALSE)
     set(IS_X86_64 TRUE)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|ARM64|arm64)$")
@@ -43,17 +32,6 @@ set(REQUIRED_SUBMODULES
     imgui
     sdl3
 )
-
-if(REXGLUE_USE_VULKAN)
-    list(APPEND REQUIRED_SUBMODULES
-        vulkan-headers vulkan-memory-allocator
-        spirv-headers spirv-tools glslang
-    )
-    if(APPLE)
-        list(APPEND REQUIRED_SUBMODULES vulkan-loader moltenvk)
-    endif()
-endif()
-
 
 if(REXGLUE_ENABLE_TRACY)
     list(APPEND REQUIRED_SUBMODULES tracy)
@@ -125,8 +103,9 @@ target_include_directories(aes128 PUBLIC
 target_compile_options(aes128 PRIVATE -w)
 
 # libmspack - LZX decompression (only lzxd.c needed for XEX decompression)
-# Uses cabextract version which has all needed headers in one place
-set(MSPACK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libmspack/cabextract/mspack")
+# Use canonical sources: cabextract/mspack contains symlinks, which Windows Git
+# may check out as plain text when core.symlinks is disabled.
+set(MSPACK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libmspack/libmspack/mspack")
 add_library(mspack STATIC
     ${MSPACK_DIR}/lzxd.c
 )
@@ -186,40 +165,6 @@ target_compile_options(spdlog PRIVATE -w)
 add_subdirectory(utfcpp)
 
 #=============================================================================
-# Vulkan dependencies (only when Vulkan backend is enabled)
-#=============================================================================
-if(REXGLUE_USE_VULKAN)
-    message(STATUS "Vulkan stack: SDK ${REXGLUE_VULKAN_SDK_VERSION}")
-
-    # Vulkan-Headers
-    set(VULKAN_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    set(VULKAN_HEADERS_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
-    set(VULKAN_HEADERS_ENABLE_MODULE OFF CACHE BOOL "" FORCE)
-    add_subdirectory(vulkan-headers)
-
-    # VulkanMemoryAllocator
-    set(VMA_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
-    add_subdirectory(vulkan-memory-allocator)
-
-    if(APPLE)
-        # Build the loader and MoltenVK revisions shipped by the pinned SDK.
-        # They remain runtime-loaded; no Vulkan implementation is linked into
-        # rexglue itself.
-        set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(BUILD_WERROR OFF CACHE BOOL "" FORCE)
-        set(LOADER_CODEGEN OFF CACHE BOOL "" FORCE)
-        string(REGEX REPLACE "\\.[0-9]+$" "" VulkanHeaders_VERSION
-            "${REXGLUE_VULKAN_SDK_VERSION}")
-        add_subdirectory(vulkan-loader EXCLUDE_FROM_ALL)
-        set_target_properties(vulkan PROPERTIES EXCLUDE_FROM_ALL FALSE)
-
-        set(MVK_BUILD_SHADER_CONVERTER_TOOL OFF CACHE BOOL "" FORCE)
-        set(MVK_EXCLUDE_SPIRV_TOOLS ON CACHE BOOL "" FORCE)
-        add_subdirectory(moltenvk)
-    endif()
-endif()
-
-#=============================================================================
 # FidelityFX (optional, fetched on demand)
 #=============================================================================
 include(${PROJECT_SOURCE_DIR}/cmake/rexglue_fidelityfx.cmake)
@@ -251,22 +196,11 @@ set(SDL_TEST OFF CACHE BOOL "" FORCE)
 set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
 
 # Video provides the windowing/event layer; presenters create their own
-# D3D12/Vulkan surfaces from native handles, so SDL_RENDER stays off.
+# D3D12 surfaces from native handles, so SDL_RENDER stays off.
 set(SDL_VIDEO ON CACHE BOOL "" FORCE)
-if(APPLE)
-    # macOS uses SDL for windowing + Metal/Vulkan surface creation.
-    set(SDL_METAL ON CACHE BOOL "" FORCE)
-    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
-else()
-    set(SDL_METAL OFF CACHE BOOL "" FORCE)
-    # Linux picks X11 or Wayland at runtime, so the surface has to come from
-    # whichever driver SDL chose. Windows presenters go straight from the HWND.
-    if(UNIX)
-        set(SDL_VULKAN ON CACHE BOOL "" FORCE)
-    else()
-        set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
-    endif()
-endif()
+set(SDL_METAL OFF CACHE BOOL "" FORCE)
+# Windows presenters create surfaces straight from the HWND.
+set(SDL_VULKAN OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
 set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
@@ -279,7 +213,7 @@ set(SDL_DIALOG ON CACHE BOOL "" FORCE)
 set(SDL_TRAY OFF CACHE BOOL "" FORCE)
 set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 
-# Disable graphics APIs (unused without video) — only on non-Apple
+# Disable graphics APIs (unused without video)
 set(SDL_OPENGL OFF CACHE BOOL "" FORCE)
 set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 
@@ -287,19 +221,6 @@ set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 set(SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
 set(SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
 set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
-
-# Linux video and audio backends. Both video drivers are always built so the
-# one in use stays a runtime choice.
-if(UNIX AND NOT APPLE)
-    set(SDL_X11               ON  CACHE BOOL "" FORCE)
-    set(SDL_WAYLAND           ON  CACHE BOOL "" FORCE)
-    set(SDL_ALSA              ON  CACHE BOOL "" FORCE)
-    set(SDL_ALSA_SHARED       ON  CACHE BOOL "" FORCE)
-    set(SDL_PULSEAUDIO        ON  CACHE BOOL "" FORCE)
-    set(SDL_PULSEAUDIO_SHARED ON  CACHE BOOL "" FORCE)
-    set(SDL_PIPEWIRE          ON  CACHE BOOL "" FORCE)
-    set(SDL_PIPEWIRE_SHARED   ON  CACHE BOOL "" FORCE)
-endif()
 
 add_subdirectory(sdl3)
 
@@ -311,39 +232,6 @@ if(REXGLUE_USE_D3D12)
     target_include_directories(dxc-headers INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dxc/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/dxc>)
-endif()
-
-#=============================================================================
-# SPIR-V toolchain (only when Vulkan backend is enabled)
-#=============================================================================
-if(REXGLUE_USE_VULKAN)
-    # SPIRV-Headers
-    set(SPIRV_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    set(SPIRV_HEADERS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-    add_subdirectory(spirv-headers)
-
-    add_library(spirv-tools-headers INTERFACE)
-    target_include_directories(spirv-tools-headers SYSTEM INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/spirv-tools/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-
-    # glslang/SPIRV - SPIR-V code generation for shader translation
-    set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
-    set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
-    set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
-    set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "" FORCE)
-    # Enable RTTI for spv::Builder inheritance in SpirvBuilder
-    set(ENABLE_RTTI ON CACHE BOOL "" FORCE)
-
-    # Set policy minimum for older glslang versions with outdated cmake_minimum_required
-    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
-    add_subdirectory(glslang)
-    # Create alias for older glslang versions that don't provide it
-    if(NOT TARGET glslang::SPIRV)
-        add_library(glslang::SPIRV ALIAS SPIRV)
-    endif()
 endif()
 
 #=============================================================================

@@ -506,8 +506,8 @@ TEST_CASE("cvar testing utilities", "[cvar]") {
 TEST_CASE("cvar TOML serialization", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
 
-  REXCVAR_SET(test_int32_flag, 999);
-  REXCVAR_SET(test_string_flag, "custom");
+  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "999"));
+  REQUIRE(rex::cvar::SetFlagByName("test_string_flag", "custom"));
 
   auto toml = rex::cvar::SerializeToTOML();
 
@@ -654,8 +654,8 @@ TEST_CASE("cvar SerializeToTOML with category filter", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
 
   // Modify flags in different categories
-  REXCVAR_SET(test_int32_flag, 123);           // Category: Test
-  REXCVAR_SET(test_category_flag, "changed");  // Category: TestCategory
+  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "123"));         // Category: Test
+  REQUIRE(rex::cvar::SetFlagByName("test_category_flag", "changed"));  // Category: TestCategory
 
   SECTION("Filter by category returns only that category") {
     auto test_toml = rex::cvar::SerializeToTOML("Test");
@@ -679,8 +679,8 @@ TEST_CASE("cvar SaveConfig", "[cvar]") {
   std::filesystem::remove(save_path);
 
   SECTION("SaveConfig writes modified flags to file") {
-    REXCVAR_SET(test_int32_flag, 777);
-    REXCVAR_SET(test_string_flag, "saved_value");
+    REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "777"));
+    REQUIRE(rex::cvar::SetFlagByName("test_string_flag", "saved_value"));
 
     rex::cvar::SaveConfig(save_path);
 
@@ -751,4 +751,78 @@ TEST_CASE("cvar InvokeCommand dispatches commands", "[cvar]") {
   SECTION("missing name returns false") {
     CHECK_FALSE(rex::cvar::InvokeCommand("does_not_exist", ""));
   }
+}
+
+// SaveConfig writes what the user chose: config-file and runtime values.
+// Values for one run (command line, environment) never become permanent,
+// the leak Canary #844 describes for per-game configs (ADR-009).
+TEST_CASE("cvar SaveConfig keeps one-run values out of the file", "[cvar][save]") {
+  rex::cvar::testing::ResetAllForTesting();
+  auto config_path = std::filesystem::temp_directory_path() / "test_save_sources.toml";
+
+  SECTION("A command-line value is not saved") {
+    REQUIRE(rex::cvar::SetFlagFromCommandLine("test_int32_flag", "7"));
+    CHECK(rex::cvar::SerializeToTOML().find("test_int32_flag") == std::string::npos);
+  }
+
+  SECTION("An environment value is not saved") {
+    SetTestEnv("REX_TEST_STRING_FLAG", "from_env");
+    rex::cvar::ApplyEnvironment();
+    SetTestEnv("REX_TEST_STRING_FLAG", "");
+    CHECK(REXCVAR_GET(test_string_flag) == "from_env");
+    CHECK(rex::cvar::SerializeToTOML().find("test_string_flag") == std::string::npos);
+  }
+
+  SECTION("A code-set value is not saved") {
+    REXCVAR_SET(test_bool_flag, true);
+    CHECK(rex::cvar::SerializeToTOML().find("test_bool_flag") == std::string::npos);
+  }
+
+  SECTION("The file's value survives a command-line override") {
+    {
+      std::ofstream file(config_path);
+      file << "test_int32_flag = 5\n";
+    }
+    REQUIRE(rex::cvar::SetFlagFromCommandLine("test_int32_flag", "9"));
+    rex::cvar::LoadConfig(config_path);
+    CHECK(REXCVAR_GET(test_int32_flag) == 9);
+    auto toml = rex::cvar::SerializeToTOML();
+    CHECK(toml.find("test_int32_flag = 5") != std::string::npos);
+    CHECK(toml.find("test_int32_flag = 9") == std::string::npos);
+  }
+
+  SECTION("A runtime change replaces the file's value") {
+    {
+      std::ofstream file(config_path);
+      file << "test_int32_flag = 5\n";
+    }
+    rex::cvar::LoadConfig(config_path);
+    REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "6"));
+    CHECK(rex::cvar::SerializeToTOML().find("test_int32_flag = 6") != std::string::npos);
+  }
+
+  SECTION("Keys for cvars that never registered stay in the file") {
+    {
+      std::ofstream file(config_path);
+      file << "plugin_not_loaded_level = 3\n";
+      file << "plugin_not_loaded_mode = \"fast\"\n";
+    }
+    rex::cvar::LoadConfig(config_path);
+    auto toml = rex::cvar::SerializeToTOML();
+    CHECK(toml.find("plugin_not_loaded_level = 3") != std::string::npos);
+    CHECK(toml.find("plugin_not_loaded_mode = \"fast\"") != std::string::npos);
+  }
+
+  SECTION("Saving and reloading round-trips the user's values only") {
+    REQUIRE(rex::cvar::SetFlagByName("test_string_flag", "chosen"));
+    REQUIRE(rex::cvar::SetFlagFromCommandLine("test_int32_flag", "8"));
+    rex::cvar::SaveConfig(config_path);
+    rex::cvar::testing::ResetAllForTesting();
+    rex::cvar::LoadConfig(config_path);
+    CHECK(REXCVAR_GET(test_string_flag) == "chosen");
+    CHECK(REXCVAR_GET(test_int32_flag) == 42);
+  }
+
+  std::filesystem::remove(config_path);
+  rex::cvar::testing::ResetAllForTesting();
 }

@@ -177,6 +177,11 @@ class XObject {
   void Release();
   X_STATUS Delete();
 
+  // Called by the object table, under its lock, when the guest has closed the
+  // object's last handle, before the table drops its own reference. Objects
+  // that the kernel also keeps a reference to release it here.
+  virtual void OnAllHandlesClosed() {}
+
   virtual bool Save(stream::ByteStream* stream) {
     (void)stream;
     return false;
@@ -209,6 +214,15 @@ class XObject {
 
   // Called on successful wait.
   virtual void WaitCallback() {}
+  // SignalAndWait signals through the host handle: BeginSignal records the
+  // signal before it, as Set/Release would, so a waiter it releases updates
+  // the state after; CancelSignal undoes it when the host signal failed.
+  virtual void BeginSignal() {}
+  virtual void CancelSignal() {}
+  // Called when the guest hands the kernel this object's dispatch header, the
+  // only point where a write the guest made to it directly (an inlined
+  // KeInitialize over a live object) can be picked up. Canary #1227.
+  virtual void SyncFromGuest() {}
   virtual rex::thread::WaitHandle* GetWaitHandle() { return nullptr; }
 
   // Creates the kernel object for guest code to use. Typically not needed.
@@ -226,7 +240,13 @@ class XObject {
     header->wait_list_blink = handle;
   }
 
+  // Guest timeouts are 100 ns ticks: negative is relative, positive an
+  // absolute guest system time, 0 is now.
+  static int64_t GuestTicksUntil(int64_t timeout_ticks);
   static uint32_t TimeoutTicksToMs(int64_t timeout_ticks);
+  // The host duration of a guest timeout, scaled by the guest clock and
+  // rounded up to microseconds.
+  static std::chrono::microseconds GuestTimeoutToHost(int64_t timeout_ticks);
 
   KernelState* kernel_state_;
 

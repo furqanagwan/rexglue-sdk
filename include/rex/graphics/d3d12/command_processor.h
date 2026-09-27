@@ -24,6 +24,7 @@
 
 #include <rex/assert.h>
 #include <rex/graphics/command_processor.h>
+#include <rex/graphics/debug_markers.h>
 #include <rex/graphics/d3d12/deferred_command_list.h>
 #include <rex/graphics/d3d12/graphics_system.h>
 #include <rex/graphics/d3d12/pipeline_cache.h>
@@ -31,6 +32,7 @@
 #include <rex/graphics/d3d12/render_target_cache.h>
 #include <rex/graphics/d3d12/shared_memory.h>
 #include <rex/graphics/d3d12/texture_cache.h>
+#include <rex/graphics/d3d12/zpd_query_pool.h>
 #include <rex/graphics/pipeline/shader/dxbc.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
 #include <rex/graphics/registers.h>
@@ -68,7 +70,7 @@ class D3D12CommandProcessor : public CommandProcessor {
   }
 
   uint64_t GetCurrentSubmission() const { return submission_current_; }
-  uint64_t GetCompletedSubmission() const { return submission_completed_; }
+  uint64_t GetCompletedSubmission() const override { return submission_completed_; }
 
   // Must be called when a subsystem does something like UpdateTileMappings so
   // it can be awaited in CheckSubmissionFence(submission_current_) if it was
@@ -201,8 +203,6 @@ class D3D12CommandProcessor : public CommandProcessor {
 
   void WriteRegister(uint32_t index, uint32_t value) override;
   void WriteRegistersFromMem(uint32_t start_index, uint32_t* base, uint32_t num_registers) override;
-  bool ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader, uint32_t packet,
-                                          uint32_t count) override;
 
   void OnGammaRamp256EntryTableValueWritten() override;
   void OnGammaRampPWLValueWritten() override;
@@ -332,10 +332,26 @@ class D3D12CommandProcessor : public CommandProcessor {
   void LogDeviceRemovalDiagnostics(ID3D12Device* device, HRESULT reason);
 
   void UpdateDebugMarkersEnabled();
-  void PushDebugMarker(const char* format, ...);
-  void PopDebugMarker();
-  void InsertDebugMarker(const char* format, ...);
+  // Opens a debug marker region for PIX and RenderDoc when markers are
+  // enabled; returns the token for PopDebugMarker. Colors are 0xAARRGGBB.
+  uint64_t PushDebugMarker(uint64_t color, const char* format, ...);
+  void PopDebugMarker(uint64_t token);
+  void InsertDebugMarker(uint64_t color, const char* format, ...);
   bool debug_markers_enabled() const { return debug_markers_enabled_; }
+  // A debug marker region until the end of the scope, or until the submission
+  // ends if that comes first.
+  class DebugMarkerScope {
+   public:
+    explicit DebugMarkerScope(D3D12CommandProcessor& command_processor, uint64_t token)
+        : command_processor_(command_processor), token_(token) {}
+    ~DebugMarkerScope() { command_processor_.PopDebugMarker(token_); }
+    DebugMarkerScope(const DebugMarkerScope&) = delete;
+    DebugMarkerScope& operator=(const DebugMarkerScope&) = delete;
+
+   private:
+    D3D12CommandProcessor& command_processor_;
+    uint64_t token_;
+  };
 
   // Need to await submission completion before calling.
   void ClearCommandAllocatorCache();
@@ -402,16 +418,16 @@ class D3D12CommandProcessor : public CommandProcessor {
     return (uint64_t(first_base_address_dwords) << 32) | uint64_t(total_size);
   }
 
-  bool InitializeOcclusionQueryResources();
-  void ShutdownOcclusionQueryResources();
-  bool BeginGuestOcclusionQuery(uint32_t sample_count_address);
-  bool EndGuestOcclusionQuery(uint32_t sample_count_address,
-                              xenos::xe_gpu_depth_sample_counts* sample_counts);
-  bool AcquireOcclusionQueryIndex(uint32_t& host_index_out);
-  void DisableHostOcclusionQueries();
-  uint64_t NormalizeOcclusionSamples(uint64_t samples) const;
-  void WriteGuestOcclusionResult(xenos::xe_gpu_depth_sample_counts* sample_counts,
-                                 uint64_t samples);
+  // ZPD occlusion queries (CommandProcessor backend hooks).
+  void PollCompletedSubmission() override;
+  void EnsureZPDQueryResources() override;
+  bool IsZPDQueryPoolReady() const override;
+  bool CanOpenZPDQuery() const override { return submission_open_; }
+  QueryOpenResult OpenZPDQuery(bool can_close_submission) override;
+  bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) override;
+  void PumpQueryResolves() override;
+  bool AwaitQueryResolve(ReportHandle report_handle, uint64_t wait_for_submission) override;
+  void RecordZPDResolveBatch();
   void InvalidateAllVertexBufferResidency();
   void InvalidateVertexBufferResidency(uint32_t vfetch_index);
   void InvalidateVertexBufferResidencyRange(uint32_t first_vfetch, uint32_t last_vfetch);
@@ -460,6 +476,13 @@ class D3D12CommandProcessor : public CommandProcessor {
   DeferredCommandList deferred_command_list_;
 
   bool debug_markers_enabled_ = false;
+  DebugMarkerRegions debug_marker_regions_;
+
+  // d3d12_capture_frame: begins or ends a programmatic capture (PIX) at the
+  // guest frame boundary it's called at.
+  void UpdateFrameCapture();
+  uint64_t guest_swaps_ = 0;
+  bool frame_capture_active_ = false;
 
   // Viewport info caching - avoids redundant GetHostViewportInfo recalculation
   // when viewport-affecting register state hasn't changed between draws.
@@ -601,7 +624,7 @@ class D3D12CommandProcessor : public CommandProcessor {
     uint32_t scale_x;
     uint32_t scale_y;
     uint32_t pixel_size_log2;
-    uint32_t tile_count;
+    uint32_t length_dwords;
     uint32_t half_pixel_offset;
   };
   enum class ResolveDownscaleRootParameter : UINT {
@@ -648,17 +671,20 @@ class D3D12CommandProcessor : public CommandProcessor {
   std::unordered_map<uint64_t, ReadbackBuffer> readback_buffers_;
   std::unordered_map<uint64_t, ReadbackBuffer> memexport_readback_buffers_;
 
-  static constexpr uint32_t kMaxOcclusionQueries = 8192;
-  Microsoft::WRL::ComPtr<ID3D12QueryHeap> occlusion_query_heap_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> occlusion_query_readback_;
-  uint64_t* occlusion_query_readback_mapping_ = nullptr;
-  uint32_t occlusion_query_cursor_ = 0;
-  bool occlusion_query_resources_available_ = false;
-  struct ActiveOcclusionQuery {
-    uint32_t sample_count_address = 0;
-    uint32_t host_index = UINT32_MAX;
-    bool valid = false;
-  } active_occlusion_query_;
+  std::unique_ptr<D3D12ZPDQueryPool> zpd_host_query_pool_;
+  // Host query segment currently recording in the open submission.
+  uint32_t zpd_active_query_index_ = UINT32_MAX;
+  uint32_t zpd_active_query_generation_ = 0;
+  // Closed segments whose ResolveQueryData is in, or will be in, the given
+  // submission. Retired in submission order once the fence passes.
+  struct PendingQueryResolve {
+    uint64_t submission = 0;
+    uint32_t query_index = UINT32_MAX;
+    uint32_t query_generation = 0;
+    uint32_t scale_area = 1;
+    ReportHandle report_handle = kInvalidReportHandle;
+  };
+  std::deque<PendingQueryResolve> zpd_resolves_in_flight_;
   struct VertexBufferState {
     uint32_t address = UINT32_MAX;
     uint32_t size = UINT32_MAX;

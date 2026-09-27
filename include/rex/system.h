@@ -19,11 +19,6 @@
 
 namespace rex {
 
-#if REX_PLATFORM_ANDROID
-bool InitializeAndroidSystemForApplicationContext();
-void ShutdownAndroidSystem();
-#endif
-
 // The URL must include the protocol.
 void LaunchWebBrowser(const std::string_view url);
 void LaunchFileExplorer(const std::filesystem::path& path);

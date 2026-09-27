@@ -225,7 +225,10 @@ KernelState* KernelState::shared() {
 }
 
 uint32_t KernelState::title_id() const {
-  assert_not_null(executable_module_);
+  // No title loaded yet (or a tool/test runtime without an image).
+  if (!executable_module_) {
+    return 0;
+  }
 
   xex2_opt_execution_info* exec_info = 0;
   executable_module_->GetOptHeader(XEX_HEADER_EXECUTION_INFO, &exec_info);
@@ -984,6 +987,7 @@ void KernelState::TerminateTitle() {
   // Guest threads poll this flag in the kernel wait primitives
   // (XThread::CheckTitleTermination) and self-exit.
   terminating_title_.store(true, std::memory_order_release);
+  termination_event_->Set();
 
   // Retained so a thread that wakes and exits below can't be freed mid-drain.
   std::vector<object_ref<XThread>> target_threads;
@@ -1024,6 +1028,7 @@ void KernelState::TerminateTitle() {
   // Drop refs before the self-terminate below (which does not return) so they
   // aren't leaked; reset the flag for relaunch.
   target_threads.clear();
+  termination_event_->Reset();
   terminating_title_.store(false, std::memory_order_release);
 
   // Self-terminate if called from a guest thread (e.g. XamLoaderTerminateTitle).

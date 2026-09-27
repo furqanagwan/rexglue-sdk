@@ -752,3 +752,140 @@ TEST_CASE("LookupHeapByType selects correct heap", "[memory][heap]") {
     // Should be vC0000000 heap
   }
 }
+
+// =============================================================================
+// AllocRange Window Tests (RG-GDK-004, xenia-canary #1215)
+// =============================================================================
+
+namespace {
+
+constexpr uint32_t kReserveCommit =
+    rex::memory::kMemoryAllocationReserve | rex::memory::kMemoryAllocationCommit;
+constexpr uint32_t kReadWrite = rex::memory::kMemoryProtectRead | rex::memory::kMemoryProtectWrite;
+
+// Allocates in [low, high] and checks the result lies fully inside it.
+uint32_t AllocInRange(rex::memory::BaseHeap* heap, uint32_t low, uint32_t high, uint32_t size,
+                      uint32_t alignment, bool top_down) {
+  uint32_t addr = 0;
+  REQUIRE(
+      heap->AllocRange(low, high, size, alignment, kReserveCommit, kReadWrite, top_down, &addr));
+  CHECK(addr >= low);
+  CHECK(uint64_t(addr) + size - 1 <= high);
+  return addr;
+}
+
+}  // namespace
+
+TEST_CASE("AllocRange keeps allocations below an unaligned ceiling", "[memory][heap]") {
+  auto* heap = MutableHeap(GetTestMemory().LookupHeap(0x3E000000));
+  REQUIRE(heap != nullptr);
+
+  // Rounding 0x3E0F8000 up to 64 KB would place the top-down allocation at
+  // 0x3E0F0000, ending above the ceiling.
+  uint32_t addr = AllocInRange(heap, 0x3E000000, 0x3E0F8000, 0x10000, 0x10000, true);
+  CHECK(addr == 0x3E0E0000);
+  heap->Release(addr, nullptr);
+
+  // A ceiling in the middle of a page excludes that page.
+  addr = AllocInRange(heap, 0x3E000000, 0x3E0F8800, 0x1000, 0x1000, true);
+  CHECK(addr == 0x3E0F7000);
+  heap->Release(addr, nullptr);
+}
+
+TEST_CASE("AllocRange uses the last page of an inclusive ceiling", "[memory][heap]") {
+  auto* heap = MutableHeap(GetTestMemory().LookupHeap(0x3E100000));
+  REQUIRE(heap != nullptr);
+
+  // Previously the aligned-up ceiling let this land at 0x3E110000.
+  uint32_t addr = AllocInRange(heap, 0x3E100000, 0x3E10FFFF, 0x1000, 0x1000, true);
+  CHECK(addr == 0x3E10F000);
+  heap->Release(addr, nullptr);
+
+  // Allocations that are a multiple of the alignment land where they did.
+  addr = AllocInRange(heap, 0x3E100000, 0x3E13FFFF, 0x10000, 0x10000, true);
+  CHECK(addr == 0x3E130000);
+  heap->Release(addr, nullptr);
+}
+
+TEST_CASE("AllocRange fits a window exactly the size of the request", "[memory][heap]") {
+  auto* heap = MutableHeap(GetTestMemory().LookupHeap(0x3E200000));
+  REQUIRE(heap != nullptr);
+
+  for (bool top_down : {true, false}) {
+    uint32_t addr = AllocInRange(heap, 0x3E200000, 0x3E20FFFF, 0x10000, 0x10000, top_down);
+    CHECK(addr == 0x3E200000);
+    heap->Release(addr, nullptr);
+  }
+}
+
+TEST_CASE("AllocRange accepts a UINT32_MAX ceiling", "[memory][heap]") {
+  auto* heap = MutableHeap(GetTestMemory().LookupHeap(0x3E300000));
+  REQUIRE(heap != nullptr);
+
+  // Aligning 0xFFFFFFFF up used to wrap to zero and reject the range.
+  uint32_t addr = AllocInRange(heap, 0x3E300000, 0xFFFFFFFF, 0x1000, 0x10000, false);
+  CHECK(addr == 0x3E300000);
+  heap->Release(addr, nullptr);
+}
+
+TEST_CASE("AllocRange fails when the window is too small", "[memory][heap]") {
+  auto* heap = MutableHeap(GetTestMemory().LookupHeap(0x3E400000));
+  REQUIRE(heap != nullptr);
+  uint32_t addr = 0;
+  // A full window isn't tested here: the search failing hits the debug
+  // "Heap exhausted!" assertion.
+
+  SECTION("Window one page smaller than the request") {
+    CHECK_FALSE(heap->AllocRange(0x3E400000, 0x3E40EFFF, 0x10000, 0x1000, kReserveCommit,
+                                 kReadWrite, true, &addr));
+  }
+
+  SECTION("Window inside a single page") {
+    CHECK_FALSE(heap->AllocRange(0x3E400000, 0x3E400800, 0x1000, 0x1000, kReserveCommit, kReadWrite,
+                                 true, &addr));
+  }
+}
+
+TEST_CASE("Physical AllocRange keeps allocations inside the requested range",
+          "[memory][physical]") {
+  auto& memory = GetTestMemory();
+  auto* heap = MutableHeap(memory.LookupHeap(0xB0000000));
+  REQUIRE(heap != nullptr);
+
+  // xenia-canary #1215's case: the parent heap (4 KB pages) gets the physical
+  // window 0x10000000-0x10FF8000, whose ceiling isn't 64 KB aligned.
+  uint32_t addr = AllocInRange(heap, 0xB0000000, 0xB0FF8000, 0x10000, 0x10000, true);
+  CHECK(memory.GetPhysicalAddress(addr) % 0x10000 == 0);
+  heap->Release(addr, nullptr);
+}
+
+TEST_CASE("Physical heap vE0000000 aligns the physical address", "[memory][physical]") {
+  // The caller's alignment is a physical one, which is what the guest reads
+  // back through MmGetPhysicalAddress. The vE0000000 heap sits 0x1000 below
+  // its physical addresses, so its virtual addresses are aligned only to the
+  // page. xenia-canary #1202 (rejected) and #1182 (open) aim to change this;
+  // see docs/upstream-tracking.md.
+  auto& memory = GetTestMemory();
+  auto* heap = MutableHeap(memory.LookupHeap(0xF2000000));
+  REQUIRE(heap != nullptr);
+
+  for (uint32_t alignment : {0x1000u, 0x8000u, 0x10000u}) {
+    for (bool top_down : {true, false}) {
+      INFO("alignment " << alignment << " top_down " << top_down);
+      uint32_t addr = AllocInRange(heap, 0xF2000000, 0xF2FFFFFF, 0x10000, alignment, top_down);
+      uint32_t physical = memory.GetPhysicalAddress(addr);
+      CHECK(physical == addr - 0xE0000000 + 0x1000);
+      CHECK(physical % alignment == 0);
+      // Both host views reach the same memory.
+      *memory.TranslateVirtual<uint8_t*>(addr) = 0x5A;
+      CHECK(*memory.TranslatePhysical<uint8_t*>(physical) == 0x5A);
+      heap->Release(addr, nullptr);
+    }
+  }
+
+  // 4D5307F1's request (xenia-canary #1182): 0x280000 bytes at 32 KB alignment.
+  uint32_t addr = 0;
+  REQUIRE(heap->Alloc(0x280000, 0x8000, kReserveCommit, kReadWrite, true, &addr));
+  CHECK(memory.GetPhysicalAddress(addr) % 0x8000 == 0);
+  heap->Release(addr, nullptr);
+}

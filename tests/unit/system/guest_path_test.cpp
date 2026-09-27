@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <rex/system/guest_path.h>
 
+using rex::system::NormalizeDosDevicesRelativePath;
 using rex::system::NormalizeGuestPath;
 
 TEST_CASE("Guest path normalization: strip device prefix", "[system][path]") {
@@ -30,4 +31,13 @@ TEST_CASE("Guest path normalization: backslash to forward slash", "[system][path
 
 TEST_CASE("Guest path normalization: case folding", "[system][path]") {
   CHECK(NormalizeGuestPath("BIN/SomeLib.DLL") == "bin/somelib.dll");
+}
+
+TEST_CASE("ObDosDevices relative directory names retain the directory", "[system][path]") {
+  CHECK(NormalizeDosDevicesRelativePath("scaleform\\") == "scaleform");
+  CHECK(NormalizeDosDevicesRelativePath("assets\\ui\\") == "assets\\ui");
+  CHECK(NormalizeDosDevicesRelativePath("assets/file.bin") == "assets/file.bin");
+  CHECK_FALSE(NormalizeDosDevicesRelativePath("D:\\scaleform\\"));
+  CHECK_FALSE(NormalizeDosDevicesRelativePath("\\Device\\Harddisk0\\Partition1"));
+  CHECK_FALSE(NormalizeDosDevicesRelativePath(""));
 }

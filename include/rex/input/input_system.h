@@ -11,6 +11,7 @@
  */
 
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <rex/input/device_assignment.h>
@@ -48,6 +49,10 @@ class InputSystem : public system::IInputSystem {
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags, X_INPUT_KEYSTROKE* out_keystroke);
 
  private:
+  // Guest threads may poll input concurrently. Hold this across refresh,
+  // assignment, and driver lookup so one poll cannot invalidate another.
+  std::mutex mutex_;
+
   /// Re-enumerates every driver and notifies the assignment when the set
   /// changed.
   void RefreshDevices();

@@ -1,15 +1,14 @@
 # ReXGlue SDK - Xbox 360 Recompilation Toolkit
 cmake_minimum_required(VERSION 3.25)
 
-if(APPLE)
-    set(REXGLUE_LANGUAGES C CXX OBJC OBJCXX)
-else()
-    set(REXGLUE_LANGUAGES C CXX)
+# Windows is the only supported host (RG-GDK-024).
+if(NOT CMAKE_HOST_WIN32)
+    message(FATAL_ERROR "ReXGlue supports Windows hosts only. Linux and macOS support was retired; see RG-GDK-024.")
 endif()
 
 project(ReXGlue
     VERSION 0.10.0
-    LANGUAGES ${REXGLUE_LANGUAGES}
+    LANGUAGES C CXX
     DESCRIPTION "Xbox 360 Recompilation SDK"
 )
 # Floor only: bump MAJOR.MINOR for API changes. Patch is derived from git tags
@@ -23,6 +22,11 @@ option(REXGLUE_ENABLE_SANITIZERS "Enable UndefinedBehaviorSanitizer" OFF)
 option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (experimental)" OFF)
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
 option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter registry and overlay" ON)
+# Opt-in PC GDK build (RG-GDK-002). Off by default so standard Windows builds
+# need no GDK. The edition is pinned; see docs/gdk-toolchain.md.
+option(REXGLUE_USE_GDK "Build against an installed Microsoft GDK (PC) edition" OFF)
+set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Required GDK edition (_GRDK_EDITION)")
+set(REXGLUE_GDK_ROOT "$ENV{GameDKCoreLatest}" CACHE PATH "Installed GDK edition directory")
 # Propagate profiling defines globally (compiled out in Release)
 if(REXGLUE_ENABLE_TRACY)
     add_compile_definitions($<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PROFILING>)
@@ -32,24 +36,11 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
 
 # Graphics backend selection
-# D3D12: Windows only, ON by default.
-# Vulkan: Cross-platform, ON by default on Linux, OFF by default on Windows.
-if(WIN32)
-    option(REXGLUE_USE_D3D12  "Enable D3D12 graphics backend" ON)
-    option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" OFF)
-else()
-    set(REXGLUE_USE_D3D12 OFF)
-    option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" ON)
-endif()
-
-if(NOT REXGLUE_USE_D3D12 AND NOT REXGLUE_USE_VULKAN)
-    message(FATAL_ERROR "At least one graphics backend must be enabled (REXGLUE_USE_D3D12 or REXGLUE_USE_VULKAN)")
-endif()
-
-if (REXGLUE_ENABLE_FIDELITYFX AND
-    NOT (REXGLUE_USE_VULKAN OR REXGLUE_USE_D3D12))
-    message(FATAL_ERROR
-        "REXGLUE_ENABLE_FIDELITYFX requires at least one graphics backend")
+# D3D12 is the only graphics backend (Vulkan was removed by RG-GDK-023).
+# REXGLUE_USE_D3D12 stays defined for existing build logic and consumers.
+set(REXGLUE_USE_D3D12 ON)
+if(DEFINED REXGLUE_USE_VULKAN AND REXGLUE_USE_VULKAN)
+    message(FATAL_ERROR "The Vulkan backend was removed (RG-GDK-023); D3D12 is the only backend.")
 endif()
 
 # Root of the SDK source tree
@@ -60,38 +51,12 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_helpers.cmake)
 
-if(UNIX AND NOT APPLE)
-    # Keep installed binaries self-contained by resolving shared libs relative
-    # to the install prefix (for example, bin -> ../lib).
-    set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
-    list(APPEND CMAKE_INSTALL_RPATH
-        "$ORIGIN"
-        "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
-    )
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
-elseif(APPLE)
-    # Use loader-relative install names on macOS so installed binaries remain
-    # self-contained within the install prefix.
-    list(APPEND CMAKE_INSTALL_RPATH
-        "@loader_path"
-        "@loader_path/../${CMAKE_INSTALL_LIBDIR}"
-    )
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
+# Enforce an LLVM Clang toolchain
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "ReXGlue requires the Clang compiler. Please set CMAKE_CXX_COMPILER to clang++")
 endif()
-
-# Enforce a Clang toolchain (LLVM Clang or Apple's Clang)
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
-    message(FATAL_ERROR "ReXGlue requires the Clang compiler (LLVM Clang or AppleClang). Please set CMAKE_CXX_COMPILER to clang++")
-endif()
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "18.0")
-        message(FATAL_ERROR "ReXGlue requires Clang 18 or newer (found ${CMAKE_CXX_COMPILER_VERSION})")
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0")
-        message(FATAL_ERROR "ReXGlue requires AppleClang 16 or newer / Xcode 16+ for C++23 support (found ${CMAKE_CXX_COMPILER_VERSION})")
-    endif()
+if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "18.0")
+    message(FATAL_ERROR "ReXGlue requires Clang 18 or newer (found ${CMAKE_CXX_COMPILER_VERSION})")
 endif()
 
 # Enforce x64 architecture
@@ -114,20 +79,6 @@ function(rex_config_postfix target)
         RELWITHDEBINFO_POSTFIX "${CMAKE_RELWITHDEBINFO_POSTFIX}")
 endfunction()
 
-if(NOT WIN32)
-    # Use appropriate code model based on architecture
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64" AND NOT APPLE)
-        # Large code model on Linux x86_64 for linking with very large recompiled executables (35MB+).
-        # macOS uses small: the ld64 linker on macOS 15+ rejects text relocations produced
-        # by -mcmodel=large, and macOS maps binaries in the low address space so ±2GB is sufficient.
-        add_compile_options(-mcmodel=large)
-    else()
-        add_compile_options(-mcmodel=small)
-    endif()
-    # Position-independent code for all targets
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-endif()
-
 # Global compile options
 add_compile_options(
     -fno-strict-aliasing
@@ -141,14 +92,6 @@ add_compile_options(
 
 # Platform detection (supports AMD64 and ARM64)
 set(REX_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
-if(APPLE AND CMAKE_OSX_ARCHITECTURES)
-    list(LENGTH CMAKE_OSX_ARCHITECTURES REX_OSX_ARCH_COUNT)
-    if(REX_OSX_ARCH_COUNT GREATER 1)
-        message(FATAL_ERROR "ReXGlue macOS presets expect a single CMAKE_OSX_ARCHITECTURES value")
-    endif()
-    list(GET CMAKE_OSX_ARCHITECTURES 0 REX_TARGET_PROCESSOR)
-endif()
-
 if(WIN32)
     if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
         set(REX_PLATFORM "win-amd64")
@@ -158,26 +101,8 @@ if(WIN32)
         message(FATAL_ERROR "Unsupported Windows architecture: ${REX_TARGET_PROCESSOR}")
     endif()
     add_compile_definitions(REX_PLATFORM_WINDOWS=1)
-elseif(UNIX AND NOT APPLE)
-    if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
-        set(REX_PLATFORM "linux-amd64")
-    elseif(REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-        set(REX_PLATFORM "linux-arm64")
-    else()
-        set(REX_PLATFORM "linux-${REX_TARGET_PROCESSOR}")
-    endif()
-    add_compile_definitions(REX_PLATFORM_LINUX=1)
-elseif(APPLE)
-    if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
-        set(REX_PLATFORM "mac-amd64")
-    elseif(REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-        set(REX_PLATFORM "mac-arm64")
-    else()
-        set(REX_PLATFORM "mac-${REX_TARGET_PROCESSOR}")
-    endif()
-    add_compile_definitions(REX_PLATFORM_MAC=1)
 else()
-    message(FATAL_ERROR "Unsupported platform. ReXGlue supports Windows, Linux, and macOS only.")
+    message(FATAL_ERROR "Unsupported platform. ReXGlue supports Windows only.")
 endif()
 
 # Build config as compile definition (multi-config generators don't know config at configure time)
@@ -222,10 +147,15 @@ configure_file(
     @ONLY
 )
 
-# Output directories (multi-config appends /<Config>/ automatically)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
+# Output directories (multi-config appends /<Config>/ automatically). A GDK
+# build gets its own so it never overwrites the standard build's binaries.
+set(REXGLUE_OUTPUT_DIR "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
+if(REXGLUE_USE_GDK)
+    string(APPEND REXGLUE_OUTPUT_DIR "-gdk")
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 
 # Sanitizer support for debugging memory corruption and undefined behavior
 if(REXGLUE_ENABLE_SANITIZERS)
@@ -233,6 +163,11 @@ if(REXGLUE_ENABLE_SANITIZERS)
     # Note: ASan doesn't work well with the custom mmap at 0x100000000, so we only use UBSan
     add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=undefined)
+endif()
+
+if(REXGLUE_USE_GDK)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_gdk.cmake)
+    rexglue_find_gdk(ROOT "${REXGLUE_GDK_ROOT}" EDITION "${REXGLUE_GDK_EDITION}")
 endif()
 
 if(REXGLUE_BUILD_TESTS)
@@ -279,10 +214,15 @@ message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSIO
 message(STATUS "  Configurations: ${CMAKE_CONFIGURATION_TYPES}")
 message(STATUS "  Output Dir: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 message(STATUS "  C++ Standard: C++${CMAKE_CXX_STANDARD}")
-message(STATUS "  Graphics: D3D12=${REXGLUE_USE_D3D12} Vulkan=${REXGLUE_USE_VULKAN}")
+message(STATUS "  Graphics: D3D12")
 message(STATUS "  FidelityFX: ${REXGLUE_ENABLE_FIDELITYFX}")
 message(STATUS "  Tracy: ${REXGLUE_ENABLE_TRACY}")
 message(STATUS "  Perf Counters: ${REXGLUE_ENABLE_PERF_COUNTERS}")
+if(REXGLUE_USE_GDK)
+    message(STATUS "  GDK: ${REXGLUE_GDK_EDITION_FOUND} (${REXGLUE_GDK_ROOT_RESOLVED})")
+else()
+    message(STATUS "  GDK: OFF")
+endif()
 message(STATUS "===========================================")
 
 # SDK install/export rules (skipped when consumed as a subdirectory)

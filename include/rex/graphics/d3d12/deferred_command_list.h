@@ -431,24 +431,15 @@ class DeferredCommandList {
         std::min(num_samples_per_pixel * num_pixels, UINT(16)) * sizeof(D3D12_SAMPLE_POSITION));
   }
 
-  void BeginDebugMarker(const char* label_name) {
-    size_t label_len = std::strlen(label_name);
-    uint8_t* args_ptr = reinterpret_cast<uint8_t*>(
-        WriteCommand(Command::kBeginDebugMarker, sizeof(DebugMarkerHeader) + label_len + 1));
-    auto& args = *reinterpret_cast<DebugMarkerHeader*>(args_ptr);
-    args.label_length = static_cast<uint32_t>(label_len);
-    std::memcpy(args_ptr + sizeof(DebugMarkerHeader), label_name, label_len + 1);
+  // Colors are 0xAARRGGBB (pix::Color).
+  void BeginDebugMarker(const char* label_name, uint64_t color) {
+    WriteDebugMarker(Command::kBeginDebugMarker, label_name, color);
   }
 
   void EndDebugMarker() { WriteCommand(Command::kEndDebugMarker, 0); }
 
-  void InsertDebugMarker(const char* label_name) {
-    size_t label_len = std::strlen(label_name);
-    uint8_t* args_ptr = reinterpret_cast<uint8_t*>(
-        WriteCommand(Command::kInsertDebugMarker, sizeof(DebugMarkerHeader) + label_len + 1));
-    auto& args = *reinterpret_cast<DebugMarkerHeader*>(args_ptr);
-    args.label_length = static_cast<uint32_t>(label_len);
-    std::memcpy(args_ptr + sizeof(DebugMarkerHeader), label_name, label_len + 1);
+  void InsertDebugMarker(const char* label_name, uint64_t color) {
+    WriteDebugMarker(Command::kInsertDebugMarker, label_name, color);
   }
 
  private:
@@ -634,9 +625,20 @@ class DeferredCommandList {
   };
 
   struct DebugMarkerHeader {
+    uint64_t color;
     uint32_t label_length;
     // Followed by null-terminated label string.
   };
+
+  void WriteDebugMarker(Command command, const char* label_name, uint64_t color) {
+    size_t label_len = std::strlen(label_name);
+    uint8_t* args_ptr = reinterpret_cast<uint8_t*>(
+        WriteCommand(command, sizeof(DebugMarkerHeader) + label_len + 1));
+    auto& args = *reinterpret_cast<DebugMarkerHeader*>(args_ptr);
+    args.color = color;
+    args.label_length = static_cast<uint32_t>(label_len);
+    std::memcpy(args_ptr + sizeof(DebugMarkerHeader), label_name, label_len + 1);
+  }
 
   void* WriteCommand(Command command, size_t arguments_size_bytes);
 

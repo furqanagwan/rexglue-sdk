@@ -15,6 +15,7 @@
 #include <algorithm>
 
 #include <rex/kernel/xboxkrnl/private.h>
+#include <rex/kernel/xboxkrnl/xecrypt_md5.h>
 #include <rex/logging.h>
 #include <rex/platform.h>
 #include <rex/hook.h>
@@ -137,6 +138,36 @@ void XeCryptShaFinal_entry(ppc_ptr_t<XECRYPT_SHA_STATE> sha_state, ppc_ptr_t<uin
 
   std::copy_n(digest, std::min<size_t>(rex::countof(digest), out_size), static_cast<uint8_t*>(out));
   std::copy_n(sha.getDigest(), rex::countof(sha_state->state), sha_state->state);
+}
+
+void XeCryptMd5Init_entry(ppc_ptr_t<XECRYPT_MD5_STATE> md5_state) {
+  md5::Init(md5_state);
+}
+
+void XeCryptMd5Update_entry(ppc_ptr_t<XECRYPT_MD5_STATE> md5_state, mapped_void input,
+                            u32 input_size) {
+  md5::Update(md5_state, static_cast<const uint8_t*>(input), input_size);
+}
+
+void XeCryptMd5Final_entry(ppc_ptr_t<XECRYPT_MD5_STATE> md5_state, ppc_ptr_t<uint8_t> out,
+                           u32 out_size) {
+  md5::Final(md5_state, out ? static_cast<uint8_t*>(out) : nullptr, out_size);
+}
+
+void XeCryptMd5_entry(mapped_void input_1, u32 input_1_size, mapped_void input_2, u32 input_2_size,
+                      mapped_void input_3, u32 input_3_size, mapped_void output, u32 output_size) {
+  XECRYPT_MD5_STATE state;
+  md5::Init(&state);
+  if (input_1 && input_1_size) {
+    md5::Update(&state, static_cast<const uint8_t*>(input_1), input_1_size);
+  }
+  if (input_2 && input_2_size) {
+    md5::Update(&state, static_cast<const uint8_t*>(input_2), input_2_size);
+  }
+  if (input_3 && input_3_size) {
+    md5::Update(&state, static_cast<const uint8_t*>(input_3), input_3_size);
+  }
+  md5::Final(&state, output ? static_cast<uint8_t*>(output) : nullptr, output_size);
 }
 
 void XeCryptSha_entry(mapped_void input_1, u32 input_1_size, mapped_void input_2, u32 input_2_size,
@@ -682,10 +713,6 @@ REX_EXPORT_STUB(__imp__XeCryptHmacShaInit);
 REX_EXPORT_STUB(__imp__XeCryptHmacShaUpdate);
 REX_EXPORT_STUB(__imp__XeCryptHmacShaFinal);
 REX_EXPORT_STUB(__imp__XeCryptHmacShaVerify);
-REX_EXPORT_STUB(__imp__XeCryptMd5Init);
-REX_EXPORT_STUB(__imp__XeCryptMd5Update);
-REX_EXPORT_STUB(__imp__XeCryptMd5Final);
-REX_EXPORT_STUB(__imp__XeCryptMd5);
 REX_EXPORT_STUB(__imp__XeCryptParveEcb);
 REX_EXPORT_STUB(__imp__XeCryptParveCbcMac);
 REX_EXPORT_STUB(__imp__XeCryptRotSumSha);
@@ -786,6 +813,10 @@ REX_EXPORT(__imp__XeCryptShaInit, rex::kernel::xboxkrnl::XeCryptShaInit_entry)
 REX_EXPORT(__imp__XeCryptShaUpdate, rex::kernel::xboxkrnl::XeCryptShaUpdate_entry)
 REX_EXPORT(__imp__XeCryptShaFinal, rex::kernel::xboxkrnl::XeCryptShaFinal_entry)
 REX_EXPORT(__imp__XeCryptSha, rex::kernel::xboxkrnl::XeCryptSha_entry)
+REX_EXPORT(__imp__XeCryptMd5Init, rex::kernel::xboxkrnl::XeCryptMd5Init_entry)
+REX_EXPORT(__imp__XeCryptMd5Update, rex::kernel::xboxkrnl::XeCryptMd5Update_entry)
+REX_EXPORT(__imp__XeCryptMd5Final, rex::kernel::xboxkrnl::XeCryptMd5Final_entry)
+REX_EXPORT(__imp__XeCryptMd5, rex::kernel::xboxkrnl::XeCryptMd5_entry)
 REX_EXPORT(__imp__XeCryptSha256Init, rex::kernel::xboxkrnl::XeCryptSha256Init_entry)
 REX_EXPORT(__imp__XeCryptSha256Update, rex::kernel::xboxkrnl::XeCryptSha256Update_entry)
 REX_EXPORT(__imp__XeCryptSha256Final, rex::kernel::xboxkrnl::XeCryptSha256Final_entry)

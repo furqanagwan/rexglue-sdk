@@ -534,7 +534,12 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
           REXCODEGEN_WARN("Unable to decode instruction {:X} at {:X}", *data, blockBase);
       } else {
         // Late jump table detection for bctr
-        if (insn.opcode->id == PPC_INST_BCTR && !activeJt) {
+        // Discovery already resolved this branch's table. A second scan may
+        // infer a different index register from the same PPC address setup;
+        // keep the graph's validated table as the source of truth.
+        if (insn.opcode->id == PPC_INST_BCTR && !activeJt &&
+            std::none_of(jumpTables().begin(), jumpTables().end(),
+                         [&](const JumpTable& jt) { return jt.bctrAddress == blockBase; })) {
           bool is_switch_pattern = false;
           constexpr uint32_t MTCTR_MASK = 0xFC1FFFFF;
           constexpr uint32_t MTCTR_OPCODE = 0x7C0003A6;

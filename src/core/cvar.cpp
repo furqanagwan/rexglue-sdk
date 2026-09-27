@@ -80,6 +80,15 @@ enum class ApplyResult { kApplied, kSkipped, kRejected };
 
 ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Source source);
 
+// Records the value SaveConfig writes for a registered flag.
+void SetPersistedValue(std::string_view name, std::string_view value) {
+  std::lock_guard lock(GetRegistryMutex());
+  auto it = GetRegistryIndex().find(std::string(name));
+  if (it != GetRegistryIndex().end()) {
+    GetRegistryStorage()[it->second].persisted_value = std::string(value);
+  }
+}
+
 bool Outranks(Source source, const FlagEntry& entry) {
   return source >= entry.source;
 }
@@ -127,6 +136,8 @@ void ApplyTomlTable(const toml::table& table, const std::string& prefix) {
           REXLOG_DEBUG("Config: {} = {}", full_key, value_str);
           break;
         case ApplyResult::kSkipped:
+          // Still the file's value: saving must keep it.
+          SetPersistedValue(full_key, value_str);
           REXLOG_DEBUG("Config: {} ignored, already set by a higher-priority source", full_key);
           break;
         case ApplyResult::kRejected:
@@ -243,6 +254,7 @@ std::optional<size_t> RegisterFlag(FlagEntry entry) {
     auto pending_it = pending.find(stored.name);
     if (pending_it != pending.end() && pending_it->second.config) {
       ApplyFromSource(stored, *pending_it->second.config, Source::kConfig);
+      stored.persisted_value = *pending_it->second.config;
     }
     auto env_value = rex::platform::env::get(FlagNameToEnvVar(stored.name));
     if (env_value.has_value()) {
@@ -321,6 +333,9 @@ ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Sou
     return ApplyResult::kRejected;
   }
   entry.source = source;
+  if (source == Source::kConfig || source == Source::kRuntime) {
+    entry.persisted_value = std::string(value);
+  }
 
   if (entry.lifecycle == Lifecycle::kRequiresRestart) {
     MarkPendingRestart(name);
@@ -511,6 +526,7 @@ void ResetAllToDefaults() {
   for (auto& entry : GetRegistryStorage()) {
     entry.setter(entry.default_value);
     entry.source = Source::kDefault;
+    entry.persisted_value.reset();
   }
 }
 
@@ -535,34 +551,53 @@ std::vector<std::string> ListModifiedFlags() {
   return result;
 }
 
-std::string SerializeToTOML() {
+namespace {
+
+std::string TomlLine(const std::string& name, const std::string& value, bool is_string) {
+  return is_string ? name + " = \"" + value + "\"\n" : name + " = " + value + "\n";
+}
+
+// Config-file and runtime values only. A value from the defaults, the
+// environment or the command line (or a title profile, ADR-009) belongs to
+// this run, and saving it would make it permanent (Canary #844).
+std::string SerializePersisted(std::optional<std::string_view> category) {
   std::lock_guard lock(GetRegistryMutex());
   std::string result;
   for (const auto& entry : GetRegistryStorage()) {
-    if (entry.getter() != entry.default_value) {
-      if (entry.type == FlagType::String) {
-        result += entry.name + " = \"" + entry.getter() + "\"\n";
-      } else {
-        result += entry.name + " = " + entry.getter() + "\n";
+    if ((!category || entry.category == *category) && entry.persisted_value &&
+        *entry.persisted_value != entry.default_value) {
+      result += TomlLine(entry.name, *entry.persisted_value, entry.type == FlagType::String);
+    }
+  }
+  if (!category) {
+    // Config keys for cvars that never registered this run (a plugin that
+    // wasn't loaded) stay in the file. Their type is unknown: booleans and
+    // numbers are written bare, anything else quoted.
+    std::vector<std::pair<std::string, std::string>> unregistered;
+    for (const auto& [name, values] : GetPendingValuesStorage()) {
+      if (values.config) {
+        unregistered.emplace_back(name, *values.config);
       }
+    }
+    std::sort(unregistered.begin(), unregistered.end());
+    for (const auto& [name, value] : unregistered) {
+      bool bare =
+          value == "true" || value == "false" ||
+          (!value.empty() && value.find_first_not_of("0123456789.-+eE") == std::string::npos);
+      result += TomlLine(name, value, !bare);
     }
   }
   return result;
 }
 
+}  // namespace
+
+std::string SerializeToTOML() {
+  return SerializePersisted(std::nullopt);
+}
+
 std::string SerializeToTOML(std::string_view category) {
-  std::lock_guard lock(GetRegistryMutex());
-  std::string result;
-  for (const auto& entry : GetRegistryStorage()) {
-    if (entry.category == category && entry.getter() != entry.default_value) {
-      if (entry.type == FlagType::String) {
-        result += entry.name + " = \"" + entry.getter() + "\"\n";
-      } else {
-        result += entry.name + " = " + entry.getter() + "\n";
-      }
-    }
-  }
-  return result;
+  return SerializePersisted(category);
 }
 
 void RegisterChangeCallback(std::string_view name, ChangeCallback callback) {

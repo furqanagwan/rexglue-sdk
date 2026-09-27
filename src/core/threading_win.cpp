@@ -108,6 +108,57 @@ SleepResult AlertableSleep(std::chrono::microseconds duration) {
   return SleepResult::kSuccess;
 }
 
+namespace {
+
+// The calling thread's high-resolution timer (Windows 10 1803+), created on
+// first use and closed when the thread exits. A synchronization timer:
+// setting it clears any earlier expiry.
+HANDLE ThreadTimer() {
+  struct Timer {
+    HANDLE handle = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                           TIMER_ALL_ACCESS);
+    ~Timer() {
+      if (handle) {
+        CloseHandle(handle);
+      }
+    }
+  };
+  thread_local Timer timer;
+  return timer.handle;
+}
+
+bool ArmThreadTimer(HANDLE timer, std::chrono::microseconds duration) {
+  LARGE_INTEGER due_time;
+  due_time.QuadPart = -int64_t(duration.count()) * 10;  // Relative, 100 ns units.
+  return SetWaitableTimer(timer, &due_time, 0, nullptr, nullptr, FALSE) != FALSE;
+}
+
+std::chrono::milliseconds CeilMilliseconds(std::chrono::microseconds duration) {
+  return std::chrono::ceil<std::chrono::milliseconds>(duration);
+}
+
+}  // namespace
+
+SleepResult PreciseSleep(std::chrono::microseconds duration, bool alertable,
+                         WaitHandle* interrupt) {
+  HANDLE timer = ThreadTimer();
+  if (!timer || !ArmThreadTimer(timer, duration)) {
+    if (alertable) {
+      return AlertableSleep(duration);
+    }
+    Sleep(duration);
+    return SleepResult::kSuccess;
+  }
+  HANDLE handles[] = {timer, interrupt ? interrupt->native_handle() : nullptr};
+  DWORD result = WaitForMultipleObjectsEx(interrupt ? 2 : 1, handles, FALSE, INFINITE,
+                                          alertable ? TRUE : FALSE);
+  if (result == WAIT_OBJECT_0) {
+    return SleepResult::kSuccess;
+  }
+  CancelWaitableTimer(timer);
+  return result == WAIT_OBJECT_0 + 1 ? SleepResult::kInterrupted : SleepResult::kAlerted;
+}
+
 TlsHandle AllocateTlsHandle() {
   return TlsAlloc();
 }
@@ -204,6 +255,38 @@ std::pair<WaitResult, size_t> WaitMultiple(WaitHandle* wait_handles[], size_t wa
   }
 }
 
+std::pair<WaitResult, size_t> WaitAnyPrecise(WaitHandle* wait_handles[], size_t wait_handle_count,
+                                             bool is_alertable, std::chrono::microseconds timeout) {
+  HANDLE timer = wait_handle_count < MAXIMUM_WAIT_OBJECTS ? ThreadTimer() : nullptr;
+  if (!timer || !ArmThreadTimer(timer, timeout)) {
+    return WaitMultiple(wait_handles, wait_handle_count, false, is_alertable,
+                        CeilMilliseconds(timeout));
+  }
+  // The timer goes last: when an object and the timer are both signaled, the
+  // lowest index wins, so the object is reported.
+  std::vector<HANDLE> handles(wait_handle_count + 1);
+  for (size_t i = 0; i < wait_handle_count; ++i) {
+    handles[i] = wait_handles[i]->native_handle();
+  }
+  handles[wait_handle_count] = timer;
+  DWORD result = WaitForMultipleObjectsEx(DWORD(handles.size()), handles.data(), FALSE, INFINITE,
+                                          is_alertable ? TRUE : FALSE);
+  CancelWaitableTimer(timer);
+  if (result == WAIT_OBJECT_0 + wait_handle_count) {
+    return {WaitResult::kTimeout, 0};
+  }
+  if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + wait_handle_count) {
+    return {WaitResult::kSuccess, result - WAIT_OBJECT_0};
+  }
+  if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + wait_handle_count) {
+    return {WaitResult::kAbandoned, result - WAIT_ABANDONED_0};
+  }
+  if (result == WAIT_IO_COMPLETION) {
+    return {WaitResult::kUserCallback, 0};
+  }
+  return {WaitResult::kFailed, 0};
+}
+
 class Win32Event : public Win32Handle<Event> {
  public:
   explicit Win32Event(HANDLE handle) : Win32Handle(handle) {}
@@ -211,6 +294,23 @@ class Win32Event : public Win32Handle<Event> {
   void Set() override { SetEvent(handle_); }
   void Reset() override { ResetEvent(handle_); }
   void Pulse() override { PulseEvent(handle_); }
+  bool IsSignaled() override {
+    // NtQueryEvent (EventBasicInformation) reads the state; a zero-timeout
+    // wait would consume an auto-reset event's signal.
+    struct EventBasicInformation {
+      LONG event_type;
+      LONG event_state;
+    };
+    using NtQueryEventFn = LONG(NTAPI*)(HANDLE, int, void*, ULONG, ULONG*);
+    static const auto nt_query_event = reinterpret_cast<NtQueryEventFn>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryEvent"));
+    EventBasicInformation info = {};
+    if (!nt_query_event || nt_query_event(handle_, 0, &info, sizeof(info), nullptr) < 0) {
+      assert_always();  // ntdll always exports it; the handle is our own event.
+      return false;
+    }
+    return info.event_state != 0;
+  }
 };
 
 std::unique_ptr<Event> Event::CreateManualResetEvent(bool initial_state) {

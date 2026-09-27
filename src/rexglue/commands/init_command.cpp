@@ -90,9 +90,9 @@ Result<void> InitProject(const InitOptions& opts, const CliContext& ctx) {
   (void)ctx;
 
   if (opts.project_name.empty())
-    return Err<void>(ErrorCategory::Config, "--project_name is required");
+    return Err<void>(ErrorCategory::Config, "--project-name is required");
   if (opts.xex_path.empty())
-    return Err<void>(ErrorCategory::Config, "--xex_path is required (path to entrypoint XEX)");
+    return Err<void>(ErrorCategory::Config, "--xex-path is required (path to entrypoint XEX)");
 
   std::string validation_error;
   if (!validate_app_name(opts.project_name, validation_error))
@@ -535,7 +535,77 @@ Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliCont
   return Ok();
 }
 
+Result<void> InitGameConfig(const InitGameConfigOptions& opts, const CliContext& ctx) {
+  (void)ctx;
+  auto xml = rex::codegen::RenderGameConfig(opts.identity);
+  if (!xml) {
+    return Err<void>(xml.error());
+  }
+
+  std::error_code ec;
+  const fs::path dir = ResolveDir(opts.output_dir.empty() ? "gdk" : opts.output_dir, ec);
+  if (ec) {
+    return Err<void>(ErrorCategory::IO, "Failed to resolve output directory: " + ec.message());
+  }
+  fs::create_directories(dir, ec);
+  if (ec) {
+    return Err<void>(ErrorCategory::IO,
+                     fmt::format("Failed to create {}: {}", dir.string(), ec.message()));
+  }
+
+  const fs::path config_path = dir / "MicrosoftGame.config";
+  if (fs::exists(config_path) && !opts.force) {
+    std::ifstream in(config_path, std::ios::binary);
+    const std::string existing((std::istreambuf_iterator<char>(in)), {});
+    if (existing != *xml) {
+      return Err<void>(ErrorCategory::IO,
+                       config_path.string() + " exists and differs. Use --force to replace it.");
+    }
+  }
+  {
+    std::ofstream out(config_path, std::ios::binary | std::ios::trunc);
+    out.write(xml->data(), static_cast<std::streamsize>(xml->size()));
+    if (!out.flush()) {
+      return Err<void>(ErrorCategory::IO, "Cannot write " + config_path.string());
+    }
+  }
+  REXLOG_INFO("Wrote {}", config_path.string());
+
+  // Placeholder art, never replacing images the title already has.
+  const uint32_t color =
+      static_cast<uint32_t>(std::stoul(opts.identity.background_color.substr(1), nullptr, 16));
+  for (const auto& image : rex::codegen::GameConfigImages()) {
+    const fs::path path = dir / image.file_name;
+    if (fs::exists(path)) {
+      continue;
+    }
+    const auto png = rex::codegen::SolidColorPng(image.width, image.height, color);
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
+    if (!out.flush()) {
+      return Err<void>(ErrorCategory::IO, "Cannot write " + path.string());
+    }
+    REXLOG_INFO("Wrote placeholder {} ({}x{})", path.string(), image.width, image.height);
+  }
+  return Ok();
+}
+
 namespace {
+
+struct InitGameConfigArgs {
+  std::string output_dir;
+  std::string name;
+  std::string publisher;
+  std::string version = "1.0.0.0";
+  std::string display_name;
+  std::string publisher_display_name;
+  std::string description;
+  std::string background_color = "#000000";
+  std::string executable;
+  std::string title_id;
+  std::string msa_app_id;
+  std::string store_id;
+};
 
 struct InitArgs {
   std::string project_name;
@@ -563,13 +633,13 @@ struct InitAchievementsArgs {
 void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   auto* init = parent.add_subcommand("init", "Initialize a new project")->fallthrough();
   auto args = std::make_shared<InitArgs>();
+  // Not CLI11-required: that would also demand them of the module,
+  // achievements and gameconfig subcommands. InitProject checks both.
   init->add_option("--project-name", args->project_name,
                    "Project name (becomes [project].name in the manifest)")
-      ->type_name("NAME")
-      ->required();
+      ->type_name("NAME");
   init->add_option("--xex-path", args->xex_path, "Path to entrypoint XEX (e.g. assets/Default.xex)")
-      ->type_name("PATH")
-      ->required();
+      ->type_name("PATH");
   init->add_option("--game-root", args->game_root, "Game asset root for DLL guest-path derivation")
       ->type_name("PATH");
   init->add_option("--project-root", args->project_root,
@@ -635,6 +705,72 @@ void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pendi
       opts.output_dir = achArgs->output_dir;
       opts.language = achArgs->language;
       return InitAchievements(opts, ctx);
+    };
+  });
+
+  auto* cfg = init->add_subcommand("gameconfig",
+                                   "Write a PC MicrosoftGame.config from the title's own identity")
+                  ->fallthrough();
+  auto cfgArgs = std::make_shared<InitGameConfigArgs>();
+  cfg->add_option("--output-dir", cfgArgs->output_dir,
+                  "Directory for MicrosoftGame.config and images (default: ./gdk)")
+      ->type_name("PATH");
+  cfg->add_option("--identity-name", cfgArgs->name,
+                  "Package identity name (Partner Center's for a Store build)")
+      ->type_name("NAME")
+      ->required();
+  cfg->add_option("--publisher", cfgArgs->publisher,
+                  "Publisher distinguished name, e.g. \"CN=Example\"")
+      ->type_name("DN")
+      ->required();
+  cfg->add_option("--package-version", cfgArgs->version, "Package version (default 1.0.0.0)")
+      ->type_name("A.B.C.D");
+  cfg->add_option("--display-name", cfgArgs->display_name, "Name shown in the shell")
+      ->type_name("TEXT")
+      ->required();
+  cfg->add_option("--publisher-display-name", cfgArgs->publisher_display_name,
+                  "Publisher name shown in the shell")
+      ->type_name("TEXT")
+      ->required();
+  cfg->add_option("--description", cfgArgs->description, "Shell description")->type_name("TEXT");
+  cfg->add_option("--background-color", cfgArgs->background_color,
+                  "Tile and placeholder image color (default #000000)")
+      ->type_name("#RRGGBB");
+  cfg->add_option("--executable", cfgArgs->executable,
+                  "Title executable relative to the package root, e.g. my_game.exe")
+      ->type_name("PATH")
+      ->required();
+  cfg->add_option("--title-id", cfgArgs->title_id,
+                  "Partner Center title ID (8 hex digits; needs --msa-app-id)")
+      ->type_name("HEX");
+  cfg->add_option("--msa-app-id", cfgArgs->msa_app_id, "Partner Center MSA app ID")
+      ->type_name("ID");
+  cfg->add_option("--store-id", cfgArgs->store_id, "Microsoft Store ID (12 characters)")
+      ->type_name("ID");
+  cfg->callback([cfgArgs, &ctx, &pending]() {
+    pending = [cfgArgs, &ctx]() -> Result<void> {
+      InitGameConfigOptions opts;
+      opts.output_dir = cfgArgs->output_dir;
+      opts.force = ctx.overwrite_existing;
+      auto& id = opts.identity;
+      id.name = cfgArgs->name;
+      id.publisher = cfgArgs->publisher;
+      id.version = cfgArgs->version;
+      id.display_name = cfgArgs->display_name;
+      id.publisher_display_name = cfgArgs->publisher_display_name;
+      id.description = cfgArgs->description;
+      id.background_color = cfgArgs->background_color;
+      id.executable = cfgArgs->executable;
+      if (!cfgArgs->title_id.empty()) {
+        id.title_id = cfgArgs->title_id;
+      }
+      if (!cfgArgs->msa_app_id.empty()) {
+        id.msa_app_id = cfgArgs->msa_app_id;
+      }
+      if (!cfgArgs->store_id.empty()) {
+        id.store_id = cfgArgs->store_id;
+      }
+      return InitGameConfig(opts, ctx);
     };
   });
 }

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <string>
 
+#include <rex/codegen/game_config.h>
 #include <rex/result.h>
 
 namespace CLI {
@@ -46,9 +47,18 @@ struct InitAchievementsOptions {
   uint32_t language = 1;
 };
 
+struct InitGameConfigOptions {
+  // Where MicrosoftGame.config and the images go; `gdk` under the project
+  // root, which generated/rexglue.cmake stages next to the title executable.
+  std::string output_dir;
+  rex::codegen::GameConfigIdentity identity;
+  bool force = false;
+};
+
 Result<void> InitProject(const InitOptions& opts, const CliContext& ctx);
 Result<void> InitModule(const InitModuleOptions& opts, const CliContext& ctx);
 Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliContext& ctx);
+Result<void> InitGameConfig(const InitGameConfigOptions& opts, const CliContext& ctx);
 
 void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pending);
 

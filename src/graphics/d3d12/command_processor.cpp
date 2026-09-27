@@ -47,6 +47,12 @@ REXCVAR_DEFINE_BOOL(d3d12_submit_on_primary_buffer_end, true, "GPU/D3D12",
                     "Submit command list when PM4 primary buffer ends")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
+REXCVAR_DEFINE_INT32(d3d12_capture_frame, 0, "GPU/D3D12",
+                     "Guest frame (swaps from 1) to take a programmatic GPU capture of when PIX "
+                     "launched the title; 0 disables")
+    .range(0, INT32_MAX)
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 namespace rex::graphics::d3d12 {
 
 // Generated with `xb buildshaders`.
@@ -60,6 +66,14 @@ namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/resolve_downscale_cs.h"
 }  // namespace shaders
 
+namespace {
+// PIX event colors by phase.
+constexpr uint64_t kSubmissionMarkerColor = pix::Color(0x40, 0x80, 0xFF);
+constexpr uint64_t kDrawMarkerColor = pix::Color(0x40, 0xC0, 0x40);
+constexpr uint64_t kResolveMarkerColor = pix::Color(0xFF, 0xA0, 0x20);
+constexpr uint64_t kSwapMarkerColor = pix::Color(0xC0, 0x40, 0xFF);
+}  // namespace
+
 D3D12CommandProcessor::D3D12CommandProcessor(D3D12GraphicsSystem* graphics_system,
                                              system::KernelState* kernel_state)
     : CommandProcessor(graphics_system, kernel_state), deferred_command_list_(*this) {
@@ -71,26 +85,27 @@ void D3D12CommandProcessor::UpdateDebugMarkersEnabled() {
   debug_markers_enabled_ = IsGpuDebugMarkersEnabled();
 }
 
-void D3D12CommandProcessor::PushDebugMarker(const char* format, ...) {
+uint64_t D3D12CommandProcessor::PushDebugMarker(uint64_t color, const char* format, ...) {
   if (!debug_markers_enabled_) {
-    return;
+    return 0;
   }
   char label[256];
   va_list args;
   va_start(args, format);
   vsnprintf(label, sizeof(label), format, args);
   va_end(args);
-  deferred_command_list_.BeginDebugMarker(label);
+  deferred_command_list_.BeginDebugMarker(label, color);
+  return debug_marker_regions_.Begin();
 }
 
-void D3D12CommandProcessor::PopDebugMarker() {
-  if (!debug_markers_enabled_) {
+void D3D12CommandProcessor::PopDebugMarker(uint64_t token) {
+  if (!debug_markers_enabled_ || !debug_marker_regions_.End(token)) {
     return;
   }
   deferred_command_list_.EndDebugMarker();
 }
 
-void D3D12CommandProcessor::InsertDebugMarker(const char* format, ...) {
+void D3D12CommandProcessor::InsertDebugMarker(uint64_t color, const char* format, ...) {
   if (!debug_markers_enabled_) {
     return;
   }
@@ -99,7 +114,7 @@ void D3D12CommandProcessor::InsertDebugMarker(const char* format, ...) {
   va_start(args, format);
   vsnprintf(label, sizeof(label), format, args);
   va_end(args);
-  deferred_command_list_.InsertDebugMarker(label);
+  deferred_command_list_.InsertDebugMarker(label, color);
 }
 
 void D3D12CommandProcessor::ClearCaches() {
@@ -150,71 +165,11 @@ void D3D12CommandProcessor::InitializeShaderStorage(const std::filesystem::path&
   pipeline_cache_->InitializeShaderStorage(cache_root, title_id, blocking);
 }
 
-bool D3D12CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* reader,
-                                                               uint32_t packet, uint32_t count) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_) {
-    return CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(reader, packet, count);
-  }
-
-  const uint32_t kQueryFinished = rex::byte_swap(0xFFFFFEED);
-  assert_true(count == 1);
-  uint32_t initiator = reader->ReadAndSwap<uint32_t>();
-  WriteRegister(XE_GPU_REG_VGT_EVENT_INITIATOR, initiator & 0x3F);
-
-  uint32_t sample_count_addr = register_file_->values[XE_GPU_REG_RB_SAMPLE_COUNT_ADDR];
-  auto* sample_counts =
-      memory_->TranslatePhysical<xenos::xe_gpu_depth_sample_counts*>(sample_count_addr);
-  if (!sample_counts) {
-    DisableHostOcclusionQueries();
-    return true;
-  }
-
-  auto write_fallback_result = [sample_counts, kQueryFinished]() -> bool {
-    auto fake_sample_count = REXCVAR_GET(query_occlusion_fake_sample_count);
-    if (fake_sample_count < 0) {
-      return true;
-    }
-    bool is_end_via_z_pass =
-        sample_counts->ZPass_A == kQueryFinished || sample_counts->ZPass_B == kQueryFinished;
-    bool is_end_via_z_fail =
-        sample_counts->ZFail_A == kQueryFinished || sample_counts->ZFail_B == kQueryFinished;
-    std::memset(sample_counts, 0, sizeof(xenos::xe_gpu_depth_sample_counts));
-    if (is_end_via_z_pass || is_end_via_z_fail) {
-      sample_counts->ZPass_A = fake_sample_count;
-      sample_counts->Total_A = fake_sample_count;
-    }
-    return true;
-  };
-
-  bool is_end_via_z_pass =
-      sample_counts->ZPass_A == kQueryFinished || sample_counts->ZPass_B == kQueryFinished;
-  bool is_end_via_z_fail =
-      sample_counts->ZFail_A == kQueryFinished || sample_counts->ZFail_B == kQueryFinished;
-  bool is_end = is_end_via_z_pass || is_end_via_z_fail;
-
-  if (!is_end) {
-    if (active_occlusion_query_.valid &&
-        active_occlusion_query_.sample_count_address != sample_count_addr) {
-      DisableHostOcclusionQueries();
-      return write_fallback_result();
-    }
-    if (!BeginGuestOcclusionQuery(sample_count_addr)) {
-      return write_fallback_result();
-    }
-    return true;
-  }
-
-  if (!active_occlusion_query_.valid ||
-      active_occlusion_query_.sample_count_address != sample_count_addr) {
-    DisableHostOcclusionQueries();
-    return write_fallback_result();
-  }
-
-  if (!EndGuestOcclusionQuery(sample_count_addr, sample_counts)) {
-    return write_fallback_result();
-  }
-
-  return true;
+void D3D12CommandProcessor::PollCompletedSubmission() {
+  // Strict ZPD just needs the completed submission updated and any ready query
+  // resolves drained here.
+  CheckSubmissionFence(0);
+  PumpQueryResolves();
 }
 
 bool D3D12CommandProcessor::PushTransitionBarrier(ID3D12Resource* resource,
@@ -1618,18 +1573,54 @@ bool D3D12CommandProcessor::SetupContext() {
                                             uint32_t(SystemBindlessView::kGammaRampPWLSRV)));
   }
 
-  occlusion_query_resources_available_ = InitializeOcclusionQueryResources();
+  // ZPD occlusion query pool. Its resources aren't created in the fake mode.
+  zpd_draw_resolution_scale_x_ = texture_cache_->draw_resolution_scale_x();
+  zpd_draw_resolution_scale_y_ = texture_cache_->draw_resolution_scale_y();
+  zpd_host_query_pool_ = std::make_unique<D3D12ZPDQueryPool>();
+  EnsureZPDQueryResources();
 
   // Just not to expose uninitialized memory.
   std::memset(&system_constants_, 0, sizeof(system_constants_));
 
+  if (REXCVAR_GET(d3d12_capture_frame) > 0 && !provider.GetGraphicsAnalysis()) {
+    REXGPU_WARN("d3d12_capture_frame needs a capture tool (launch the title from PIX)");
+  }
+  // Guest frame 1 starts now.
+  UpdateFrameCapture();
+
   return true;
+}
+
+void D3D12CommandProcessor::UpdateFrameCapture() {
+  int32_t capture_frame = REXCVAR_GET(d3d12_capture_frame);
+  IDXGraphicsAnalysis* analysis = GetD3D12Provider().GetGraphicsAnalysis();
+  if (capture_frame <= 0 || !analysis) {
+    return;
+  }
+  // Frame N is the work between swap N - 1 and the end of swap N.
+  if (!frame_capture_active_ && guest_swaps_ == uint64_t(capture_frame - 1)) {
+    REXGPU_INFO("Beginning a GPU capture of guest frame {}", capture_frame);
+    analysis->BeginCapture();
+    frame_capture_active_ = true;
+  } else if (frame_capture_active_ && guest_swaps_ >= uint64_t(capture_frame)) {
+    analysis->EndCapture();
+    frame_capture_active_ = false;
+    REXGPU_INFO("Ended the GPU capture of guest frame {}", capture_frame);
+  }
 }
 
 void D3D12CommandProcessor::ShutdownContext() {
   AwaitAllQueueOperationsCompletion();
+  if (frame_capture_active_) {
+    // The title stopped inside the captured frame: keep what was recorded.
+    GetD3D12Provider().GetGraphicsAnalysis()->EndCapture();
+    frame_capture_active_ = false;
+  }
   InvalidateAllVertexBufferResidency();
-  ShutdownOcclusionQueryResources();
+  zpd_resolves_in_flight_.clear();
+  zpd_active_query_index_ = UINT32_MAX;
+  zpd_active_query_generation_ = 0;
+  zpd_host_query_pool_.reset();
 
   ui::d3d12::util::ReleaseAndNull(readback_buffer_);
   readback_buffer_size_ = 0;
@@ -1894,6 +1885,16 @@ void D3D12CommandProcessor::OnGammaRampPWLValueWritten() {
 void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                                       uint32_t frontbuffer_height) {
   SCOPE_profile_cpu_f("gpu");
+  // Counts the swap for d3d12_capture_frame on every return path, after the
+  // frame's last submission.
+  struct SwapCounter {
+    D3D12CommandProcessor& command_processor;
+    ~SwapCounter() {
+      ++command_processor.guest_swaps_;
+      command_processor.UpdateFrameCapture();
+    }
+  } swap_counter{*this};
+  EndZPDFrame();
   vertex_buffers_in_sync_[0] = 0;
   vertex_buffers_in_sync_[1] = 0;
 
@@ -1910,6 +1911,8 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     REXGPU_ERROR("IssueSwap: BeginSubmission failed");
     return;
   }
+  DebugMarkerScope swap_marker(*this, PushDebugMarker(kSwapMarkerColor, "Swap %ux%u",
+                                                      frontbuffer_width, frontbuffer_height));
 
   // Obtain the actual swap source texture size (resolution-scaled if it's a
   // resolve destination, or not otherwise).
@@ -2257,6 +2260,10 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
 }
 
 void D3D12CommandProcessor::OnPrimaryBufferEnd() {
+  // Pump any completed resolves now since the guest is likely about to poll.
+  PumpQueryResolves();
+  PumpPendingRetire();
+
   if (REXCVAR_GET(d3d12_submit_on_primary_buffer_end) && submission_open_ &&
       CanEndSubmissionImmediately()) {
     EndSubmission(false);
@@ -2330,6 +2337,9 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   if (!BeginSubmission(true)) {
     return false;
   }
+  DebugMarkerScope draw_marker(
+      *this, PushDebugMarker(kDrawMarkerColor, "Draw: primitive type %u, %u indices",
+                             uint32_t(primitive_type), index_count));
 
   // Process primitives.
   PrimitiveProcessor::ProcessingResult primitive_processing_result;
@@ -2420,6 +2430,9 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   // Get dynamic rasterizer state.
   uint32_t draw_resolution_scale_x = texture_cache_->draw_resolution_scale_x();
   uint32_t draw_resolution_scale_y = texture_cache_->draw_resolution_scale_y();
+  // ZPD segments can't mix scales. The resolved sample count is divided by
+  // one scale area per segment.
+  UpdateZPDSegment(draw_resolution_scale_x * draw_resolution_scale_y);
 
   bool convert_z_to_float24 =
       host_render_targets_used && render_target_cache_->depth_float24_convert_in_pixel_shader();
@@ -2877,6 +2890,7 @@ bool D3D12CommandProcessor::IssueCopy() {
   if (!BeginSubmission(true)) {
     return false;
   }
+  DebugMarkerScope resolve_marker(*this, PushDebugMarker(kResolveMarkerColor, "Resolve"));
   ReadbackResolveMode readback_mode = GetReadbackResolveMode(REXCVAR_GET(d3d12_readback_resolve));
   if (readback_mode == ReadbackResolveMode::kDisabled) {
     uint32_t written_address, written_length;
@@ -2888,8 +2902,9 @@ bool D3D12CommandProcessor::IssueCopy() {
 
 bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   uint32_t written_address, written_length;
+  reg::RB_COPY_DEST_INFO copy_dest_info;
   if (!render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_, written_address,
-                                     written_length)) {
+                                     written_length, &copy_dest_info)) {
     return false;
   }
 
@@ -2902,6 +2917,8 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool is_scaled = texture_cache_->IsDrawResolutionScaled();
+  // Scaled readback covers whole scaled addressing groups only (see below).
+  uint32_t readback_length = written_length;
   uint64_t resolve_key = MakeReadbackResolveKey(written_address, written_length);
   ReadbackBuffer& rb = readback_buffers_[resolve_key];
   rb.last_used_frame = frame_current_;
@@ -2946,29 +2963,52 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
       return true;
     }
 
-    reg::RB_COPY_DEST_INFO copy_dest_info = register_file_->Get<reg::RB_COPY_DEST_INFO>();
-    const FormatInfo* format_info = FormatInfo::Get(uint32_t(copy_dest_info.copy_dest_format));
-    uint32_t bits_per_pixel = format_info->bits_per_pixel;
-    if (bits_per_pixel != 8 && bits_per_pixel != 16 && bits_per_pixel != 32 &&
-        bits_per_pixel != 64) {
+    // As in xenia-canary a635ac64f, the texel size comes from the normalized
+    // destination info the extent was calculated with, and the source window
+    // starts at the written extent's scaled address. The shader reads the
+    // scaled layout of this repository's resolve shaders (see
+    // resolve_downscale.cs.hlsl).
+    uint32_t pixel_size_log2 = draw_util::GetResolveDownscalePixelSizeLog2(copy_dest_info);
+    if (pixel_size_log2 > 3) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to a 128bpp destination - not "
+          "supported by the downscale shader");
       return true;
     }
+    // Keep the start aligned to whole scaled units (Canary's 128-byte groups
+    // are a multiple of them).
+    uint32_t group_bytes_log2 = pixel_size_log2 <= 2 ? 7 : 6;
+    if (written_address & ((UINT32_C(1) << group_bytes_log2) - 1)) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to 0x{:08X} - not aligned to the "
+          "scaled addressing group size",
+          written_address);
+      return true;
+    }
+    // Units map independently, so any whole number of groups can be read back
+    // (Canary truncates to whole 32x32 tiles instead).
+    readback_length = written_length & ~((UINT32_C(1) << group_bytes_log2) - 1);
+    if (!readback_length) {
+      return true;
+    }
+    uint32_t tile_size_1x = (32 * 32) << pixel_size_log2;
+    uint32_t tile_count = (readback_length + tile_size_1x - 1) / tile_size_1x;
 
-    uint32_t pixel_size_log2;
-    if (!rex::bit_scan_forward(bits_per_pixel >> 3, &pixel_size_log2)) {
+    uint32_t scale_area =
+        texture_cache_->draw_resolution_scale_x() * texture_cache_->draw_resolution_scale_y();
+    uint64_t scaled_address = uint64_t(written_address) * scale_area;
+    uint64_t scaled_length_64 = uint64_t(readback_length) * scale_area;
+    uint64_t range_start = texture_cache_->GetCurrentScaledResolveRangeStartScaled();
+    uint64_t range_length = texture_cache_->GetCurrentScaledResolveRangeLengthScaled();
+    if (!range_length || scaled_address < range_start ||
+        scaled_address + scaled_length_64 > range_start + range_length) {
+      REXGPU_DEBUG(
+          "Skipping readback of a resolution-scaled resolve to 0x{:08X} - outside the current "
+          "scaled resolve range",
+          written_address);
       return true;
     }
-    uint32_t tile_size_1x = 32 * 32 * (uint32_t(1) << pixel_size_log2);
-    uint32_t tile_count = written_length / tile_size_1x;
-    if (!tile_count) {
-      return true;
-    }
-
-    uint32_t scaled_length = uint32_t(texture_cache_->GetCurrentScaledResolveRangeLengthScaled());
-    uint64_t scaled_address = texture_cache_->GetCurrentScaledResolveRangeStartScaled();
-    if (!scaled_length) {
-      return true;
-    }
+    uint32_t scaled_length = uint32_t(scaled_length_64);
 
     uint32_t downscale_buffer_size = AlignReadbackBufferSize(written_length);
     if (downscale_buffer_size > resolve_downscale_buffer_size_) {
@@ -3021,10 +3061,11 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     ui::d3d12::util::CreateBufferRawSRV(device, downscale_descriptors[0].first,
                                         scaled_resolve_buffer, aligned_scaled_length,
                                         source_offset);
-    uint32_t aligned_written_length =
-        rex::align(written_length, uint32_t(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
+    uint32_t aligned_readback_length =
+        rex::align(readback_length, uint32_t(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT));
     ui::d3d12::util::CreateBufferRawUAV(device, downscale_descriptors[1].first,
-                                        resolve_downscale_buffer_.Get(), aligned_written_length, 0);
+                                        resolve_downscale_buffer_.Get(), aligned_readback_length,
+                                        0);
 
     PushUAVBarrier(scaled_resolve_buffer);
     texture_cache_->TransitionCurrentScaledResolveRange(
@@ -3037,7 +3078,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     constants.scale_x = texture_cache_->draw_resolution_scale_x();
     constants.scale_y = texture_cache_->draw_resolution_scale_y();
     constants.pixel_size_log2 = pixel_size_log2;
-    constants.tile_count = tile_count;
+    constants.length_dwords = readback_length >> 2;
     constants.half_pixel_offset = (REXCVAR_GET(readback_resolve_half_pixel_offset) &&
                                    (constants.scale_x > 1 || constants.scale_y > 1))
                                       ? 1u
@@ -3056,7 +3097,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
                           D3D12_RESOURCE_STATE_COPY_SOURCE);
     SubmitBarriers();
     deferred_command_list_.D3DCopyBufferRegion(rb.buffers[write_index], 0,
-                                               resolve_downscale_buffer_.Get(), 0, written_length);
+                                               resolve_downscale_buffer_.Get(), 0, readback_length);
     PushTransitionBarrier(resolve_downscale_buffer_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE,
                           D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     texture_cache_->TransitionCurrentScaledResolveRange(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -3080,7 +3121,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool is_cache_miss = false;
-  if (use_delayed_sync && (!rb.buffers[read_index] || written_length > rb.sizes[read_index] ||
+  if (use_delayed_sync && (!rb.buffers[read_index] || readback_length > rb.sizes[read_index] ||
                            !rb.mapped_data[read_index])) {
     is_cache_miss = true;
     read_index = write_index;
@@ -3090,11 +3131,11 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
   }
 
   bool should_copy = (readback_mode == ReadbackResolveMode::kSome) ? is_cache_miss : true;
-  if (should_copy && rb.buffers[read_index] && written_length <= rb.sizes[read_index] &&
+  if (should_copy && rb.buffers[read_index] && readback_length <= rb.sizes[read_index] &&
       rb.mapped_data[read_index]) {
     uint8_t* destination = memory_->TranslatePhysical(written_address);
     if (destination) {
-      std::memcpy(destination, static_cast<uint8_t*>(rb.mapped_data[read_index]), written_length);
+      std::memcpy(destination, static_cast<uint8_t*>(rb.mapped_data[read_index]), readback_length);
     }
   }
 
@@ -3192,6 +3233,10 @@ void D3D12CommandProcessor::CheckSubmissionFence(uint64_t await_submission) {
   primitive_processor_->CompletedSubmissionUpdated();
 
   texture_cache_->CompletedSubmissionUpdated(submission_completed_);
+
+  // Pull completed query resolves so ZPD reports can retire.
+  PumpQueryResolves();
+  PumpPendingRetire();
 }
 
 void D3D12CommandProcessor::LogDeviceRemovalDiagnostics(ID3D12Device* device, HRESULT reason) {
@@ -3302,6 +3347,11 @@ bool D3D12CommandProcessor::BeginSubmission(bool is_guest_command) {
     // end of the submission (when async pipeline creation requests are
     // fulfilled).
     deferred_command_list_.Reset();
+    // Regions recorded outside a submission were dropped with the list.
+    debug_marker_regions_.CloseAll();
+
+    // Resume the active query segment.
+    OpenQuerySegment(false);
 
     // Reset cached state of the command list.
     ff_viewport_update_needed_ = true;
@@ -3402,10 +3452,11 @@ bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
   if (submission_open_) {
     assert_false(scratch_buffer_used_);
 
-    if (active_occlusion_query_.valid && occlusion_query_heap_) {
-      deferred_command_list_.D3DEndQuery(occlusion_query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION,
-                                         active_occlusion_query_.host_index);
-      active_occlusion_query_ = {};
+    // We can't close the command list with an active query - D3D12 requirement.
+    // Close the active segment and emit ResolveQueryData before executing.
+    if (zpd_mode_ != ZPDMode::kFake) {
+      CloseQuerySegment();
+      RecordZPDResolveBatch();
     }
 
     pipeline_cache_->EndSubmission();
@@ -3425,10 +3476,28 @@ bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
         command_allocator_writable_first_->command_allocator;
     command_allocator->Reset();
     command_list_->Reset(command_allocator, nullptr);
+    // A draw or swap region may still be open: end it with its command list.
+    for (uint32_t i = debug_marker_regions_.CloseAll(); i; --i) {
+      deferred_command_list_.EndDebugMarker();
+    }
     deferred_command_list_.Execute(command_list_, command_list_1_);
     command_list_->Close();
     ID3D12CommandList* execute_command_lists[] = {command_list_};
+    // Queue events show each submission and its frame in PIX timing captures.
+    if (debug_markers_enabled_) {
+      char label[64];
+      snprintf(label, sizeof(label), "Frame %llu, submission %llu",
+               static_cast<unsigned long long>(frame_current_),
+               static_cast<unsigned long long>(submission_current_));
+      uint64_t blob[pix::kMaxEventWords];
+      UINT blob_size = pix::EncodeEvent(blob, pix::EventType::kBeginEvent, kSubmissionMarkerColor,
+                                        direct_queue, label);
+      direct_queue->BeginEvent(pix::kBlobV2Metadata, blob, blob_size);
+    }
     direct_queue->ExecuteCommandLists(1, execute_command_lists);
+    if (debug_markers_enabled_) {
+      direct_queue->EndEvent();
+    }
     command_allocator_writable_first_->last_usage_submission = submission_current_;
     if (command_allocator_submitted_last_) {
       command_allocator_submitted_last_->next = command_allocator_writable_first_;
@@ -3445,6 +3514,11 @@ bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
     direct_queue->Signal(submission_fence_, submission_current_++);
 
     submission_open_ = false;
+
+    // Pump ZPD query process. This drains any resolves that became readable
+    // from completed work and retires reports unblocked by those resolves.
+    PumpQueryResolves();
+    PumpPendingRetire();
 
     // Queue operations done directly (like UpdateTileMappings) will be awaited
     // alongside the last submission if needed.
@@ -3633,15 +3707,16 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
     }
   }
 
-  // Disable depth and stencil if it aliases a color render target (for
-  // instance, during the XBLA logo in 58410954, though depth writing is already
-  // disabled there).
+  // Disable depth and stencil only if an aliased color target writes bits used
+  // by either test. Otherwise its keep-masked store preserves them.
   bool depth_stencil_enabled =
       normalized_depth_control.stencil_enable || normalized_depth_control.z_enable;
   if (edram_rov_used && depth_stencil_enabled) {
     for (uint32_t i = 0; i < 4; ++i) {
       if (rb_depth_info.depth_base == color_infos[i].color_base &&
-          (rt_keep_masks[i][0] != UINT32_MAX || rt_keep_masks[i][1] != UINT32_MAX)) {
+          RenderTargetCache::ColorOverlapsDepthStencil(color_infos[i].color_format,
+                                                       rt_keep_masks[i][0], rt_keep_masks[i][1],
+                                                       normalized_depth_control)) {
         depth_stencil_enabled = false;
         break;
       }
@@ -4802,189 +4877,141 @@ ID3D12Resource* D3D12CommandProcessor::RequestReadbackBuffer(uint32_t size) {
   return readback_buffer_;
 }
 
-bool D3D12CommandProcessor::InitializeOcclusionQueryResources() {
-  active_occlusion_query_ = {};
-  occlusion_query_cursor_ = 0;
-  occlusion_query_resources_available_ = false;
-  occlusion_query_heap_.Reset();
-  occlusion_query_readback_.Reset();
-  occlusion_query_readback_mapping_ = nullptr;
-
-  ID3D12Device* device = GetD3D12Provider().GetDevice();
-  if (!device) {
-    return false;
-  }
-
-  D3D12_QUERY_HEAP_DESC heap_desc;
-  heap_desc.Type = D3D12_QUERY_HEAP_TYPE_OCCLUSION;
-  heap_desc.Count = kMaxOcclusionQueries;
-  heap_desc.NodeMask = 0;
-  if (FAILED(device->CreateQueryHeap(&heap_desc, IID_PPV_ARGS(&occlusion_query_heap_)))) {
-    REXGPU_WARN(
-        "D3D12CommandProcessor: Failed to create occlusion query heap, using fake sample counts");
-    return false;
-  }
-
-  D3D12_RESOURCE_DESC buffer_desc;
-  ui::d3d12::util::FillBufferResourceDesc(buffer_desc, sizeof(uint64_t) * kMaxOcclusionQueries,
-                                          D3D12_RESOURCE_FLAG_NONE);
-  if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesReadback,
-                                             GetD3D12Provider().GetHeapFlagCreateNotZeroed(),
-                                             &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-                                             IID_PPV_ARGS(&occlusion_query_readback_)))) {
-    REXGPU_WARN(
-        "D3D12CommandProcessor: Failed to allocate occlusion query readback buffer, using fake "
-        "sample counts");
-    occlusion_query_heap_.Reset();
-    return false;
-  }
-
-  D3D12_RANGE read_range = {0, sizeof(uint64_t) * kMaxOcclusionQueries};
-  void* mapping = nullptr;
-  if (FAILED(occlusion_query_readback_->Map(0, &read_range, &mapping))) {
-    REXGPU_WARN(
-        "D3D12CommandProcessor: Failed to map occlusion query readback buffer, using fake sample "
-        "counts");
-    occlusion_query_readback_.Reset();
-    occlusion_query_heap_.Reset();
-    return false;
-  }
-
-  occlusion_query_readback_mapping_ = reinterpret_cast<uint64_t*>(mapping);
-  occlusion_query_resources_available_ = true;
-  return true;
-}
-
-void D3D12CommandProcessor::ShutdownOcclusionQueryResources() {
-  DisableHostOcclusionQueries();
-
-  if (occlusion_query_readback_ && occlusion_query_readback_mapping_) {
-    occlusion_query_readback_->Unmap(0, nullptr);
-  }
-  occlusion_query_readback_mapping_ = nullptr;
-  occlusion_query_readback_.Reset();
-  occlusion_query_heap_.Reset();
-}
-
-bool D3D12CommandProcessor::AcquireOcclusionQueryIndex(uint32_t& host_index_out) {
-  if (occlusion_query_cursor_ >= kMaxOcclusionQueries) {
-    occlusion_query_cursor_ = 0;
-  }
-  host_index_out = occlusion_query_cursor_++;
-  return true;
-}
-
-void D3D12CommandProcessor::DisableHostOcclusionQueries() {
-  if (active_occlusion_query_.valid && occlusion_query_heap_) {
-    uint32_t host_index = active_occlusion_query_.host_index;
-    // Clear before EndSubmission to prevent the EndSubmission safety net from issuing a second
-    // EndQuery for the same index.
-    active_occlusion_query_ = {};
-    if (BeginSubmission(true)) {
-      deferred_command_list_.D3DEndQuery(occlusion_query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION,
-                                         host_index);
-      EndSubmission(false);
-    }
-  } else {
-    active_occlusion_query_ = {};
-  }
-  occlusion_query_cursor_ = 0;
-  occlusion_query_resources_available_ = false;
-}
-
-bool D3D12CommandProcessor::BeginGuestOcclusionQuery(uint32_t sample_count_address) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_) {
-    return false;
-  }
-  if (active_occlusion_query_.valid) {
-    REXGPU_WARN(
-        "D3D12CommandProcessor: Occlusion query begin issued while another query is active");
-    DisableHostOcclusionQueries();
-    return false;
-  }
-
-  uint32_t host_index = 0;
-  if (!AcquireOcclusionQueryIndex(host_index)) {
-    return false;
-  }
-  if (!BeginSubmission(true)) {
-    return false;
-  }
-
-  deferred_command_list_.D3DBeginQuery(occlusion_query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION,
-                                       host_index);
-  active_occlusion_query_.sample_count_address = sample_count_address;
-  active_occlusion_query_.host_index = host_index;
-  active_occlusion_query_.valid = true;
-  return true;
-}
-
-bool D3D12CommandProcessor::EndGuestOcclusionQuery(
-    uint32_t sample_count_address, xenos::xe_gpu_depth_sample_counts* sample_counts) {
-  if (!REXCVAR_GET(occlusion_query_enable) || !occlusion_query_resources_available_ ||
-      !active_occlusion_query_.valid || !occlusion_query_heap_ || !occlusion_query_readback_) {
-    return false;
-  }
-
-  uint32_t host_index = active_occlusion_query_.host_index;
-  active_occlusion_query_ = {};
-
-  if (!BeginSubmission(true)) {
-    return false;
-  }
-
-  deferred_command_list_.D3DEndQuery(occlusion_query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION,
-                                     host_index);
-  deferred_command_list_.D3DResolveQueryData(
-      occlusion_query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, host_index, 1,
-      occlusion_query_readback_.Get(), sizeof(uint64_t) * host_index);
-
-  if (!EndSubmission(false)) {
-    return false;
-  }
-
-  uint64_t query_submission = submission_current_ ? submission_current_ - 1 : 0;
-  CheckSubmissionFence(query_submission);
-  if (submission_completed_ < query_submission) {
-    return false;
-  }
-  if (!occlusion_query_readback_mapping_) {
-    return false;
-  }
-
-  uint64_t samples = occlusion_query_readback_mapping_[host_index];
-  samples = NormalizeOcclusionSamples(samples);
-  WriteGuestOcclusionResult(sample_counts, samples);
-  return true;
-}
-
-uint64_t D3D12CommandProcessor::NormalizeOcclusionSamples(uint64_t samples) const {
-  if (samples == 0 || !texture_cache_) {
-    return samples;
-  }
-  uint64_t scale_x = texture_cache_->draw_resolution_scale_x();
-  uint64_t scale_y = texture_cache_->draw_resolution_scale_y();
-  uint64_t scale = scale_x * scale_y;
-  if (scale <= 1) {
-    return samples;
-  }
-  return (samples + (scale >> 1)) / scale;
-}
-
-void D3D12CommandProcessor::WriteGuestOcclusionResult(
-    xenos::xe_gpu_depth_sample_counts* sample_counts, uint64_t samples) {
-  if (!sample_counts) {
+void D3D12CommandProcessor::EnsureZPDQueryResources() {
+  if (zpd_mode_ == ZPDMode::kFake || !zpd_host_query_pool_ || IsZPDQueryPoolReady()) {
     return;
   }
-  uint32_t clamped = samples > uint64_t(UINT32_MAX) ? UINT32_MAX : uint32_t(samples);
-  sample_counts->Total_A = clamped;
-  sample_counts->Total_B = 0;
-  sample_counts->ZPass_A = clamped;
-  sample_counts->ZPass_B = 0;
-  sample_counts->ZFail_A = 0;
-  sample_counts->ZFail_B = 0;
-  sample_counts->StencilFail_A = 0;
-  sample_counts->StencilFail_B = 0;
+  // Host queries count samples passing the host depth/stencil test. With ROV,
+  // depth and stencil are tested in the pixel shader, so the count would
+  // include every covered sample. Canary counts them in-shader instead, which
+  // isn't ported yet, so ROV stays on fake results.
+  if (render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock) {
+    return;
+  }
+  zpd_host_query_pool_->EnsureInitialized(GetD3D12Provider(), kZPDQueryPoolCapacity);
+}
+
+bool D3D12CommandProcessor::IsZPDQueryPoolReady() const {
+  return zpd_host_query_pool_ && zpd_host_query_pool_->initialized();
+}
+
+CommandProcessor::QueryOpenResult D3D12CommandProcessor::OpenZPDQuery(bool can_close_submission) {
+  bool is_pool_exhausted = !zpd_host_query_pool_->has_free_indices();
+  if (is_pool_exhausted) {
+    PumpQueryResolves();
+    is_pool_exhausted = !zpd_host_query_pool_->has_free_indices();
+  }
+
+  if (is_pool_exhausted) {
+    if (zpd_mode_ != ZPDMode::kStrict) {
+      return QueryOpenResult::kPoolExhausted;
+    }
+
+    // Strict mode can't guess, so wait for the oldest in-flight resolve to
+    // hand a slot back. If it's still in the open submission, close that when
+    // allowed and let the next draw retry.
+    uint64_t wait_for = 0;
+    if (!zpd_resolves_in_flight_.empty()) {
+      wait_for = zpd_resolves_in_flight_.front().submission;
+    }
+
+    if (wait_for > GetCompletedSubmission()) {
+      if (wait_for >= GetCurrentSubmission()) {
+        if (can_close_submission) {
+          if (!EndSubmission(false)) {
+            return QueryOpenResult::kFailed;
+          }
+        }
+        return QueryOpenResult::kDeferred;
+      }
+
+      CheckSubmissionFence(wait_for);
+      PumpQueryResolves();
+      is_pool_exhausted = !zpd_host_query_pool_->has_free_indices();
+    }
+  }
+
+  if (is_pool_exhausted) {
+    return QueryOpenResult::kDeferred;
+  }
+
+  if (!zpd_host_query_pool_->AcquireQueryIndex(zpd_active_query_index_,
+                                               zpd_active_query_generation_)) {
+    return QueryOpenResult::kFailed;
+  }
+  zpd_host_query_pool_->BeginQuery(deferred_command_list_, zpd_active_query_index_);
+  return QueryOpenResult::kOpened;
+}
+
+bool D3D12CommandProcessor::CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) {
+  zpd_host_query_pool_->EndQuery(deferred_command_list_, zpd_active_query_index_);
+  zpd_host_query_pool_->QueueQueryResolve(zpd_active_query_index_);
+
+  PendingQueryResolve resolve;
+  resolve.submission = GetCurrentSubmission();
+  resolve.query_index = zpd_active_query_index_;
+  resolve.query_generation = zpd_active_query_generation_;
+  resolve.scale_area = GetZPDScaleArea();
+  resolve.report_handle = report_handle;
+  zpd_resolves_in_flight_.push_back(resolve);
+
+  out_submission = resolve.submission;
+
+  zpd_active_query_index_ = UINT32_MAX;
+  zpd_active_query_generation_ = 0;
+  return true;
+}
+
+void D3D12CommandProcessor::PumpQueryResolves() {
+  if (!zpd_host_query_pool_ || zpd_resolves_in_flight_.empty()) {
+    return;
+  }
+
+  uint64_t completed = GetCompletedSubmission();
+  while (!zpd_resolves_in_flight_.empty() &&
+         zpd_resolves_in_flight_.front().submission <= completed) {
+    PendingQueryResolve resolve = zpd_resolves_in_flight_.front();
+    zpd_resolves_in_flight_.pop_front();
+
+    if (zpd_host_query_pool_->GenerationMatches(resolve.query_index, resolve.query_generation)) {
+      XenosZPDReport raw_counts = zpd_host_query_pool_->GetQueryReadbackValue(resolve.query_index);
+      zpd_host_query_pool_->ReleaseQueryIndex(resolve.query_index, resolve.query_generation);
+      OnZPDQueryResolved(resolve.report_handle, raw_counts, resolve.scale_area);
+    }
+  }
+}
+
+bool D3D12CommandProcessor::AwaitQueryResolve(ReportHandle report_handle,
+                                              uint64_t wait_for_submission) {
+  assert_not_zero(wait_for_submission);
+
+  // Resolve is still pending. Wait for async pipeline creation to finish.
+  if (wait_for_submission >= GetCurrentSubmission()) {
+    if (!submission_open_) {
+      return false;
+    }
+    if (!CanEndSubmissionImmediately()) {
+      pipeline_cache_->AwaitPipelineCompletion();
+    }
+    if (!CanEndSubmissionImmediately() || !EndSubmission(false)) {
+      return false;
+    }
+  }
+
+  if (wait_for_submission > GetCompletedSubmission()) {
+    CheckSubmissionFence(wait_for_submission);
+  }
+
+  PumpQueryResolves();
+
+  const ZPDReport* report = FindZPDReport(report_handle);
+  return !report || !report->pending_segments;
+}
+
+void D3D12CommandProcessor::RecordZPDResolveBatch() {
+  if (zpd_host_query_pool_) {
+    zpd_host_query_pool_->FlushResolveBatch(deferred_command_list_, submission_open_);
+  }
 }
 
 void D3D12CommandProcessor::WriteGammaRampSRV(bool is_pwl,

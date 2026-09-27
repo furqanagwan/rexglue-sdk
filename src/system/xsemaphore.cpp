@@ -23,8 +23,13 @@ bool XSemaphore::Initialize(int32_t initial_count, int32_t maximum_count) {
   assert_false(semaphore_);
 
   CreateNative(sizeof(X_KSEMAPHORE));
+  auto* semaphore = guest_object<X_KSEMAPHORE>();
+  semaphore->header.type = 0x05;  // SemaphoreObject
+  semaphore->header.signal_state = initial_count;
+  semaphore->limit = maximum_count;
 
   maximum_count_ = maximum_count;
+  host_count_ = initial_count;
   semaphore_ = rex::thread::Semaphore::Create(initial_count, maximum_count);
   return !!semaphore_;
 }
@@ -34,17 +39,84 @@ bool XSemaphore::InitializeNative(void* native_ptr, X_DISPATCH_HEADER* header) {
 
   auto semaphore = reinterpret_cast<X_KSEMAPHORE*>(native_ptr);
   maximum_count_ = semaphore->limit;
+  host_count_ = static_cast<int32_t>(semaphore->header.signal_state);
   semaphore_ = rex::thread::Semaphore::Create(semaphore->header.signal_state, semaphore->limit);
   return !!semaphore_;
 }
 
 bool XSemaphore::ReleaseSemaphore(int32_t release_count, int32_t* out_previous_count) {
   int32_t previous_count = 0;
-  bool success = semaphore_->Release(release_count, &previous_count);
+  bool success;
+  {
+    std::lock_guard<std::mutex> lock(count_lock_);
+    success = semaphore_->Release(release_count, &previous_count);
+    if (success) {
+      host_count_ += release_count;
+      WriteGuestCount();
+    }
+  }
   if (out_previous_count) {
     *out_previous_count = previous_count;
   }
   return success;
+}
+
+void XSemaphore::WriteGuestCount() {
+  if (guest_object()) {
+    guest_object<X_KSEMAPHORE>()->header.signal_state = static_cast<uint32_t>(host_count_);
+  }
+}
+
+void XSemaphore::WaitCallback() {
+  std::lock_guard<std::mutex> lock(count_lock_);
+  --host_count_;
+  WriteGuestCount();
+}
+
+void XSemaphore::BeginSignal() {
+  // SignalAndWait releases one count.
+  std::lock_guard<std::mutex> lock(count_lock_);
+  ++host_count_;
+  WriteGuestCount();
+}
+
+void XSemaphore::CancelSignal() {
+  std::lock_guard<std::mutex> lock(count_lock_);
+  --host_count_;
+  WriteGuestCount();
+}
+
+void XSemaphore::SyncFromGuest() {
+  if (!guest_object()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(count_lock_);
+  int32_t guest_count = static_cast<int32_t>(guest_object<X_KSEMAPHORE>()->header.signal_state);
+  if (guest_count == host_count_) {
+    return;
+  }
+  // The header holds what this kernel last wrote, so a different count came
+  // from the guest (an in-place KeInitializeSemaphore).
+  if (guest_count > host_count_) {
+    int32_t delta = guest_count - host_count_;
+    // Over the limit the host keeps its count, and the header is corrected
+    // to it below (Canary leaves the guest's value there).
+    if (semaphore_->Release(delta, nullptr)) {
+      host_count_ += delta;
+    }
+  } else {
+    // Take back the counts the guest dropped, never blocking for one a waiter
+    // has already claimed.
+    int32_t delta = host_count_ - guest_count;
+    int32_t drained = 0;
+    while (drained < delta &&
+           rex::thread::Wait(semaphore_.get(), false, std::chrono::milliseconds(0)) ==
+               rex::thread::WaitResult::kSuccess) {
+      ++drained;
+    }
+    host_count_ -= drained;
+  }
+  WriteGuestCount();
 }
 
 bool XSemaphore::Save(stream::ByteStream* stream) {
@@ -83,6 +155,7 @@ object_ref<XSemaphore> XSemaphore::Restore(KernelState* kernel_state, stream::By
   REXSYS_DEBUG("XSemaphore {:08X} (count {}/{})", sem->handle(), free_count, sem->maximum_count_);
 
   sem->semaphore_ = rex::thread::Semaphore::Create(free_count, sem->maximum_count_);
+  sem->host_count_ = static_cast<int32_t>(free_count);
   assert_not_null(sem->semaphore_);
 
   return object_ref<XSemaphore>(sem);

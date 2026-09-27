@@ -23,6 +23,11 @@
 REXCVAR_DEFINE_BOOL(d3d12_debug, false, "UI/D3D12", "Enable Direct3D 12 and DXGI debug layer")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
+REXCVAR_DEFINE_BOOL(d3d12_dred, false, "UI/D3D12",
+                    "Enable DRED breadcrumbs and page-fault capture for device removal "
+                    "diagnostics without the debug layer (always on with d3d12_debug)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 REXCVAR_DEFINE_BOOL(d3d12_break_on_error, false, "UI/D3D12",
                     "Break on Direct3D 12 validation errors");
 
@@ -227,21 +232,25 @@ bool D3D12Provider::Initialize() {
       REXLOG_WARN("Failed to enable the Direct3D 12 debug layer");
       debug = false;
     }
+  }
 
-    // Enable DRED (Device Removed Extended Data) for diagnosing GPU crashes.
-    {
-      Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred_settings;
-      if (SUCCEEDED(pfn_d3d12_get_debug_interface_(IID_PPV_ARGS(&dred_settings)))) {
-        dred_settings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-        dred_settings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-        REXLOG_INFO("DRED (Device Removed Extended Data) enabled");
-      } else {
-        REXLOG_WARN(
-            "Failed to enable DRED - device removal diagnostics will be "
-            "limited");
-      }
+  // Enable DRED (Device Removed Extended Data) for diagnosing GPU crashes. It
+  // doesn't need the debug layer, so it can be enabled on its own for runs that
+  // shouldn't pay the debug layer's cost.
+  dred_enabled_ = false;
+  if (debug || REXCVAR_GET(d3d12_dred)) {
+    Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred_settings;
+    if (SUCCEEDED(pfn_d3d12_get_debug_interface_(IID_PPV_ARGS(&dred_settings)))) {
+      dred_settings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+      dred_settings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+      dred_enabled_ = true;
+    } else {
+      REXLOG_WARN(
+          "Failed to enable DRED - device removal diagnostics will be "
+          "limited");
     }
   }
+
   // Create the DXGI factory.
   IDXGIFactory2* dxgi_factory;
   if (FAILED(pfn_create_dxgi_factory2_(debug ? DXGI_CREATE_FACTORY_DEBUG : 0,
@@ -253,9 +262,11 @@ bool D3D12Provider::Initialize() {
   // Choose the adapter.
   uint32_t adapter_index = 0;
   IDXGIAdapter1* adapter = nullptr;
+  bool adapter_is_software = false;
   while (dxgi_factory->EnumAdapters1(adapter_index, &adapter) == S_OK) {
     DXGI_ADAPTER_DESC1 adapter_desc;
     if (SUCCEEDED(adapter->GetDesc1(&adapter_desc))) {
+      adapter_is_software = (adapter_desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
       if (SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),
                                              nullptr))) {
         if (REXCVAR_GET(d3d12_adapter) >= 0) {
@@ -302,6 +313,22 @@ bool D3D12Provider::Initialize() {
                   adapter_desc.VendorId, adapter_desc.DeviceId);
     }
   }
+  // Record enough to reproduce a GPU result: the exact adapter and user-mode
+  // driver, not only the vendor.
+  LARGE_INTEGER umd_version;
+  std::string driver_version = "unknown";
+  if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd_version))) {
+    driver_version =
+        fmt::format("{}.{}.{}.{}", HIWORD(umd_version.HighPart), LOWORD(umd_version.HighPart),
+                    HIWORD(umd_version.LowPart), LOWORD(umd_version.LowPart));
+  }
+  REXGPU_INFO(
+      "DXGI adapter index {}: subsystem 0x{:08X}, revision 0x{:02X}, driver {}, dedicated "
+      "video memory {} MB, software: {}",
+      adapter_index, adapter_desc.SubSysId, adapter_desc.Revision, driver_version,
+      uint64_t(adapter_desc.DedicatedVideoMemory) >> 20, adapter_is_software ? "yes" : "no");
+  driver_version_ = driver_version;
+  adapter_is_software_ = adapter_is_software;
 
   // Create the Direct3D 12 device.
   ID3D12Device* device;
@@ -435,6 +462,30 @@ bool D3D12Provider::Initialize() {
           device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS8, &options8, sizeof(options8)))) {
     unaligned_block_textures_supported_ = bool(options8.UnalignedBlockTexturesSupported);
   }
+  D3D_FEATURE_LEVEL feature_levels_requested[] = {
+      D3D_FEATURE_LEVEL_12_2, D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
+      D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+  };
+  D3D12_FEATURE_DATA_FEATURE_LEVELS feature_levels = {};
+  feature_levels.NumFeatureLevels = UINT(rex::countof(feature_levels_requested));
+  feature_levels.pFeatureLevelsRequested = feature_levels_requested;
+  if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &feature_levels,
+                                         sizeof(feature_levels)))) {
+    feature_levels.MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0;
+  }
+  // The runtime rejects a shader model newer than it knows with E_INVALIDARG,
+  // so step down until the query succeeds.
+  D3D12_FEATURE_DATA_SHADER_MODEL shader_model = {D3D_SHADER_MODEL_5_1};
+  for (uint32_t candidate = uint32_t(D3D_HIGHEST_SHADER_MODEL);
+       candidate >= uint32_t(D3D_SHADER_MODEL_6_0); --candidate) {
+    D3D12_FEATURE_DATA_SHADER_MODEL query = {D3D_SHADER_MODEL(candidate)};
+    if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &query, sizeof(query)))) {
+      shader_model = query;
+      break;
+    }
+  }
+  max_feature_level_ = feature_levels.MaxSupportedFeatureLevel;
+  highest_shader_model_ = shader_model.HighestShaderModel;
   virtual_address_bits_per_resource_ = 0;
   D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT virtual_address_support;
   if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT,
@@ -445,6 +496,10 @@ bool D3D12Provider::Initialize() {
   }
   REXGPU_INFO(
       "Direct3D 12 device and OS features:\n"
+      "* Max feature level: {}_{}\n"
+      "* Highest shader model: {}.{}\n"
+      "* Debug layer: {}\n"
+      "* DRED: {}\n"
       "* Max GPU virtual address bits per resource: {}\n"
       "* Non-zeroed heap creation: {}\n"
       "* Pixel-shader-specified stencil reference: {}\n"
@@ -453,7 +508,11 @@ bool D3D12Provider::Initialize() {
       "* Resource binding: tier {}\n"
       "* Tiled resources: tier {}\n"
       "* Unaligned block-compressed textures: {}",
-      virtual_address_bits_per_resource_,
+      uint32_t(feature_levels.MaxSupportedFeatureLevel) >> 12,
+      (uint32_t(feature_levels.MaxSupportedFeatureLevel) >> 8) & 0xF,
+      uint32_t(shader_model.HighestShaderModel) >> 4,
+      uint32_t(shader_model.HighestShaderModel) & 0xF, debug ? "yes" : "no",
+      dred_enabled_ ? "yes" : "no", virtual_address_bits_per_resource_,
       (heap_flag_create_not_zeroed_ & D3D12_HEAP_FLAG_CREATE_NOT_ZEROED) ? "yes" : "no",
       ps_specified_stencil_reference_supported_ ? "yes" : "no",
       uint32_t(programmable_sample_positions_tier_),

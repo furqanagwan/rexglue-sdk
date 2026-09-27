@@ -19,6 +19,7 @@
 #include <rex/hook.h>
 #include <rex/types.h>
 #include <rex/system/info/file.h>
+#include <rex/system/guest_path.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/string_utils.h>
 #include <rex/system/xevent.h>
@@ -140,6 +141,13 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
     assert_true(root_file->type() == XObject::Type::File);
 
     root_entry = root_file->entry();
+  } else if (object_attrs->root_directory == 0xFFFFFFFD) {
+    if (auto relative_path = rex::system::NormalizeDosDevicesRelativePath(target_path)) {
+      // ObDosDevices names without a device prefix are relative to the running
+      // title's game directory. Explicit device paths use the normal VFS path.
+      root_entry = REX_KERNEL_FS()->ResolvePath("game:\\");
+      target_path = std::move(*relative_path);
+    }
   }
 
   // Attempt open (or create).
@@ -178,10 +186,12 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
 
 u32 NtOpenFile_entry(mapped_u32 handle_out, u32 desired_access,
                      ppc_ptr_t<X_OBJECT_ATTRIBUTES> object_attributes,
-                     ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, u32 open_options) {
-  return NtCreateFile_entry(handle_out, desired_access, object_attributes, io_status_block, nullptr,
-                            0, 0, static_cast<uint32_t>(rex::filesystem::FileDisposition::kOpen),
-                            open_options);
+                     ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, u32 share_access,
+                     u32 open_options) {
+  // The guest ABI passes ShareAccess in r7 and OpenOptions in r8 (Edge 887beea).
+  return NtCreateFile_entry(
+      handle_out, desired_access, object_attributes, io_status_block, nullptr, 0, share_access,
+      static_cast<uint32_t>(rex::filesystem::FileDisposition::kOpen), open_options);
 }
 
 u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_ptr,
@@ -598,7 +608,13 @@ u32 NtQueryDirectoryFile_entry(u32 file_handle, u32 event_handle, u32 apc_routin
 }
 
 u32 NtFlushBuffersFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block_ptr) {
-  auto result = X_STATUS_SUCCESS;
+  X_STATUS result;
+  auto file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(file_handle);
+  if (!file) {
+    result = X_STATUS_INVALID_HANDLE;
+  } else {
+    result = file->file()->Flush();
+  }
 
   if (io_status_block_ptr) {
     io_status_block_ptr->status = result;

@@ -173,6 +173,10 @@ struct FlagEntry {
   std::string default_value;
   bool is_debug_only = false;
   Source source = Source::kDefault;
+  // What SaveConfig writes for this flag: the config file's value (even when a
+  // higher source overrides it for this run), replaced by a runtime change.
+  // Environment and command-line values are for one run and never saved.
+  std::optional<std::string> persisted_value;
 };
 
 std::vector<FlagEntry>& GetRegistry();

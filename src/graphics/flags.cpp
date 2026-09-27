@@ -9,6 +9,8 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <windows.h>
+
 #include <rex/graphics/flags.h>
 #include <rex/logging.h>
 #include <rex/ui/renderdoc_api.h>
@@ -30,24 +32,32 @@ REXCVAR_DEFINE_BOOL(use_fuzzy_alpha_epsilon, false, "GPU",
                     "flickering on NVIDIA graphics cards");
 REXCVAR_DEFINE_BOOL(gpu_debug_markers, false, "GPU",
                     "Insert debug markers into GPU command streams for tools "
-                    "like PIX and RenderDoc. Automatically enabled when "
-                    "RenderDoc is detected.");
+                    "like PIX and RenderDoc. Automatically enabled when PIX "
+                    "or RenderDoc is attached at startup.");
 
 bool IsGpuDebugMarkersEnabled() {
-  static bool cached = false;
-  static bool result = false;
-  if (!cached) {
-    cached = true;
-    if (REXCVAR_GET(gpu_debug_markers)) {
-      result = true;
-      REXLOG_INFO("GPU debug markers enabled via CVar");
-    } else {
-      auto renderdoc_api = rex::ui::RenderDocAPI::CreateIfConnected();
-      if (renderdoc_api) {
-        result = true;
-        REXLOG_INFO("GPU debug markers auto-enabled (RenderDoc detected)");
-      }
-    }
+  if (REXCVAR_GET(gpu_debug_markers)) {
+    REXLOG_INFO("GPU debug markers enabled via CVar");
+    return true;
   }
-  return result;
+  // Attached tools don't come and go while the device exists, so they're
+  // detected once. PIX injects its capturer DLLs when it launches the title
+  // (GPU capture or timing capture).
+  static const char* const attached_tool = []() -> const char* {
+    if (GetModuleHandleW(L"WinPixGpuCapturer.dll")) {
+      return "PIX GPU capture";
+    }
+    if (GetModuleHandleW(L"WinPixTimingCapturer.dll")) {
+      return "PIX timing capture";
+    }
+    if (rex::ui::RenderDocAPI::CreateIfConnected()) {
+      return "RenderDoc";
+    }
+    return nullptr;
+  }();
+  if (attached_tool) {
+    REXLOG_INFO("GPU debug markers auto-enabled ({} detected)", attached_tool);
+    return true;
+  }
+  return false;
 }

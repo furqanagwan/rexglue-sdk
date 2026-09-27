@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -26,5 +27,9 @@ namespace rex::system {
  * lookups to find the registered module.
  */
 std::string NormalizeGuestPath(std::string_view path);
+
+/// Return an unqualified ObDosDevices name suitable for opening relative to
+/// the title directory. A trailing separator names the directory itself.
+std::optional<std::string> NormalizeDosDevicesRelativePath(std::string_view path);
 
 }  // namespace rex::system

@@ -13,10 +13,6 @@
 #include <cstring>
 #include <utility>
 
-#if REX_PLATFORM_MAC
-#include <sys/mman.h>
-#endif
-
 #include <fmt/format.h>
 
 #include <rex/assert.h>
@@ -148,16 +144,6 @@ bool Memory::Initialize() {
     return false;
   }
 
-#if REX_PLATFORM_MAC
-  // On macOS, reserve a contiguous host range first, then carve guest views
-  // into it with MAP_SHARED|MAP_FIXED so all views share the same backing fd.
-  if (MapViewsMac()) {
-    REXSYS_ERROR("Unable to find a continuous block in the 64bit address space.");
-    assert_always();
-    return false;
-  }
-  mapping_base_ = views_.all_views[0];
-#else
   // Attempt to create our views. This may fail at the first address
   // we pick, so try a few times.
   mapping_base_ = 0;
@@ -173,7 +159,6 @@ bool Memory::Initialize() {
     assert_always();
     return false;
   }
-#endif
   virtual_membase_ = mapping_base_;
   physical_membase_ = mapping_base_ + 0x100000000ull;
 
@@ -312,51 +297,6 @@ static const struct {
         0x0000000100000000ull,
     },
 };
-#if REX_PLATFORM_MAC
-int Memory::MapViewsMac() {
-  assert_true(rex::countof(map_info) == rex::countof(views_.all_views));
-
-  // macOS does not guarantee that a non-MAP_FIXED mmap will honor a requested
-  // address. Reserve a contiguous range first, then MAP_FIXED each view within
-  // it so the guest layout is stable across runs.
-  const size_t total_size =
-      static_cast<size_t>(map_info[rex::countof(map_info) - 1].virtual_address_end -
-                          map_info[0].virtual_address_start + 1);
-
-  void* reserved_base = mmap(nullptr, total_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (reserved_base == MAP_FAILED) {
-    REXSYS_ERROR("MapViewsMac: reserve failed: {}", std::strerror(errno));
-    return 1;
-  }
-
-  uint8_t* mapping_base = reinterpret_cast<uint8_t*>(reserved_base);
-  uint64_t granularity_mask = ~uint64_t(system_allocation_granularity_ - 1);
-
-  for (size_t n = 0; n < rex::countof(map_info); n++) {
-    size_t view_size = static_cast<size_t>(map_info[n].virtual_address_end -
-                                           map_info[n].virtual_address_start + 1);
-    size_t file_offset = static_cast<size_t>(map_info[n].target_address & granularity_mask);
-    void* target_address = mapping_base + map_info[n].virtual_address_start;
-    void* result = mmap(target_address, view_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
-                        mapping_, file_offset);
-    if (result == MAP_FAILED || result != target_address) {
-      int err = errno;
-      REXSYS_ERROR(
-          "MapViewsMac: map failed view {} addr 0x{:016X} size 0x{:X} offset 0x{:X} err {} ({})", n,
-          reinterpret_cast<uintptr_t>(target_address), view_size, file_offset, err,
-          std::strerror(err));
-      munmap(reserved_base, total_size);
-      for (auto& view : views_.all_views) {
-        view = nullptr;
-      }
-      return 1;
-    }
-    views_.all_views[n] = reinterpret_cast<uint8_t*>(result);
-  }
-
-  return 0;
-}
-#endif  // REX_PLATFORM_MAC
 
 int Memory::MapViews(uint8_t* mapping_base) {
   assert_true(rex::countof(map_info) == rex::countof(views_.all_views));
@@ -1393,13 +1333,29 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   alignment = rex::round_up(alignment, page_size_);
   uint32_t page_count = get_page_count(size, page_size_, page_size_shift_);
   low_address = std::max(heap_base_, rex::align(low_address, alignment));
-  high_address = std::min(heap_base_ + (heap_size_ - 1), rex::align(high_address, alignment));
+  // high_address is the last byte the allocation may use. Don't round it up
+  // to the alignment (xenia-canary #1215): a ceiling that isn't a multiple of
+  // it would let the search place the allocation above it, and aligning a
+  // high_address near UINT32_MAX wraps to zero.
+  high_address = std::min(heap_base_ + (heap_size_ - 1), high_address);
   if (high_address < low_address) {
     REXSYS_ERROR("BaseHeap::Alloc invalid requested range");
     return false;
   }
+  // The search below treats high_page_number as the last usable page, so it
+  // is the last page that ends at or below high_address. For a window ending
+  // one byte below an alignment boundary, the common case, allocations whose
+  // size is a multiple of the alignment land where they did before.
+  uint32_t high_page_end = ((high_address - heap_base_) >> page_size_shift_) + 1;
+  if (((high_address - heap_base_) & (page_size_ - 1)) != page_size_ - 1) {
+    --high_page_end;
+  }
+  if (!high_page_end) {
+    REXSYS_ERROR("BaseHeap::Alloc requested range is smaller than a page");
+    return false;
+  }
   uint32_t low_page_number = (low_address - heap_base_) >> page_size_shift_;
-  uint32_t high_page_number = (high_address - heap_base_) >> page_size_shift_;
+  uint32_t high_page_number = high_page_end - 1;
   low_page_number = std::min(uint32_t(page_table_.size()) - 1, low_page_number);
   high_page_number = std::min(uint32_t(page_table_.size()) - 1, high_page_number);
   if (high_page_number < low_page_number) {

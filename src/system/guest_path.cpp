@@ -41,4 +41,15 @@ std::string NormalizeGuestPath(std::string_view path) {
   return result;
 }
 
+std::optional<std::string> NormalizeDosDevicesRelativePath(std::string_view path) {
+  if (path.empty() || path.front() == '\\' || path.front() == '/' ||
+      path.find(':') != std::string_view::npos) {
+    return std::nullopt;
+  }
+  while (path.size() > 1 && (path.back() == '\\' || path.back() == '/')) {
+    path.remove_suffix(1);
+  }
+  return std::string(path);
+}
+
 }  // namespace rex::system

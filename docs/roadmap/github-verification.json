@@ -1,0 +1,351 @@
+{
+  "verified_at": "2026-09-23T13:03:16.142317+00:00",
+  "repo": "furqanagwan/rexglue-sdk",
+  "documentation_branch": "docs/windows-gdk-modernization-roadmap",
+  "issues": [
+    {
+      "id": "RG-GDK-001",
+      "number": 1,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/1",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "ee740d4fe0e345a117df3c51ff0ae3fbfabff3cf9bac9bfd8b595b70fe98d6a0",
+      "dependencies": []
+    },
+    {
+      "id": "RG-GDK-002",
+      "number": 2,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/2",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "ef5e0b7388764ae85032a0c039407ecf24daeda088b849dfc596252462920d64",
+      "dependencies": [
+        1
+      ]
+    },
+    {
+      "id": "RG-GDK-003",
+      "number": 3,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/3",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "fcc550f8616cf9b2f9f82949bd346c31834aca39f71b92149480e7dede73a6fa",
+      "dependencies": [
+        1
+      ]
+    },
+    {
+      "id": "RG-GDK-004",
+      "number": 4,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/4",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "7cc58fecb579d092a25d00892696c8ebb49ee60e10fe69dbd46ecd2ed1de54cf",
+      "dependencies": [
+        1
+      ]
+    },
+    {
+      "id": "RG-GDK-005",
+      "number": 5,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/5",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "19935eaec7ad66c795d0d38bd35b4b9dd4efdeced023797da873d07231d0c89b",
+      "dependencies": [
+        1,
+        6
+      ]
+    },
+    {
+      "id": "RG-GDK-006",
+      "number": 6,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/6",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "693037c8595e1abba6862c2cdfb0a015833ad323e599cb1053be7a20ae0b70e8",
+      "dependencies": [
+        1
+      ]
+    },
+    {
+      "id": "RG-GDK-007",
+      "number": 7,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/7",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "27de3d38e89dfd9510807c3eb955c386a1e9094cd09bde8a6fee3755075249b5",
+      "dependencies": [
+        6
+      ]
+    },
+    {
+      "id": "RG-GDK-008",
+      "number": 8,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/8",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "845d57646fd21011c6fe2ef7a4889df759b908999df1701e7a1b90bedab8e4ff",
+      "dependencies": [
+        6
+      ]
+    },
+    {
+      "id": "RG-GDK-009",
+      "number": 9,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/9",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "d3527aced8990350c9b00c1a40e15a43ec8c01de3ad805ffcbc6734f22b09519",
+      "dependencies": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "RG-GDK-010",
+      "number": 10,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/10",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "f3288730f29343f9f268a0431a8db1f0b196a03fbd01ed819bd02e5e02576036",
+      "dependencies": [
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "id": "RG-GDK-011",
+      "number": 11,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/11",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "622f9c59de5781a8d37c60871d8376796a0330c0d056ba382f9e40d41be48a8f",
+      "dependencies": [
+        4,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "id": "RG-GDK-012",
+      "number": 12,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/12",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "65aec94d64af65106f5b70530ba9f6fd34e1a688c6dda182bdd5799f474001f5",
+      "dependencies": [
+        6,
+        7
+      ]
+    },
+    {
+      "id": "RG-GDK-013",
+      "number": 13,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/13",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "761f1c2468d8da4b091b7806a3aea40d81d7ff61963e6cec8ac4c611e44b1e56",
+      "dependencies": [
+        1,
+        12
+      ]
+    },
+    {
+      "id": "RG-GDK-014",
+      "number": 14,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/14",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "95ec988c24b00eb3b958b88447b19a66ffb8e37bbb7a1ae5f34845cbc5373df8",
+      "dependencies": [
+        1
+      ]
+    },
+    {
+      "id": "RG-GDK-015",
+      "number": 15,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/15",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "58c615161f6e1f2eee148542f5644efdd8a1593be41d8db03f41aaade082e52e",
+      "dependencies": [
+        1,
+        14
+      ]
+    },
+    {
+      "id": "RG-GDK-016",
+      "number": 16,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/16",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "57eea2801091a2da48d578e0de97bfcce7e8f3bbe581a991b011be32193129bb",
+      "dependencies": [
+        4,
+        13,
+        15
+      ]
+    },
+    {
+      "id": "RG-GDK-017",
+      "number": 17,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/17",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "23a7b724b3805b25ecbb5ab9ddad6c32f79229f7c4d8f21fc05dc2ef9656892d",
+      "dependencies": [
+        3,
+        14,
+        15
+      ]
+    },
+    {
+      "id": "RG-GDK-018",
+      "number": 18,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/18",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "ea66e7d9c2b6d4bb0217fce56d259b48cef3455c7e8bd1f9ede35744a2b96917",
+      "dependencies": [
+        1,
+        14,
+        15
+      ]
+    },
+    {
+      "id": "RG-GDK-019",
+      "number": 19,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/19",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "7d9f1fab8d87bf691998f3e01a80d1f67992e00de100cfbb620c45b1a43b779e",
+      "dependencies": [
+        2,
+        18
+      ]
+    },
+    {
+      "id": "RG-GDK-020",
+      "number": 20,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/20",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "f712f169043081899605ca2c395011128513741fd94233bcc7a29b9c41e3b83d",
+      "dependencies": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "RG-GDK-021",
+      "number": 21,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/21",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "803fc2228dcffbf84b0ebecd27f90c10d84819162e6f847ddeff97388ede9fda",
+      "dependencies": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "RG-GDK-022",
+      "number": 22,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/22",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "6c2862fd9daa36d7a2b6e6fe246b0258f7aa619b8dd90fd66dab166224f90f20",
+      "dependencies": [
+        2,
+        17,
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "id": "RG-GDK-023",
+      "number": 23,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/23",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "5544551f75b0441342307e89278fd83dcc711aa60dc76116d4b9e4daee5d8f44",
+      "dependencies": [
+        7,
+        9,
+        10,
+        11,
+        12,
+        22
+      ]
+    },
+    {
+      "id": "RG-GDK-024",
+      "number": 24,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/24",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "a4d80a43a4aa3cc8bbf9ff04bf99813b0c99e0ec6b975987d318319d00145da9",
+      "dependencies": [
+        19,
+        20,
+        21,
+        23
+      ]
+    },
+    {
+      "id": "RG-GDK-025",
+      "number": 25,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/25",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "d0344773c860768ade6c6a0e7c77d1a8b0740a9dd5fc34c46e1332c776cb72b6",
+      "dependencies": [
+        22,
+        23,
+        24
+      ]
+    },
+    {
+      "id": "RG-GDK-026",
+      "number": 26,
+      "url": "https://github.com/furqanagwan/rexglue-sdk/issues/26",
+      "body_matches": true,
+      "labels_match": true,
+      "state": "OPEN",
+      "body_sha256": "84d663cae78a0fd07d41ffb786703ac2bfefd4870bc452d361437b7827bf5db5",
+      "dependencies": [
+        1
+      ]
+    }
+  ]
+}

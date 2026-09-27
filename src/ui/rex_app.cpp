@@ -25,6 +25,7 @@
 #include <rex/ui/overlay/console_overlay.h>
 #include <rex/ui/overlay/debug_overlay.h>
 #include <rex/ui/overlay/settings_overlay.h>
+#include <rex/audio/audio_backend.h>
 #include <rex/audio/audio_system.h>
 #include <rex/audio/sdl/sdl_audio_system.h>
 #include <rex/input/input_system.h>
@@ -43,12 +44,24 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <string_view>
 
 REXCVAR_DEFINE_STRING(gpu_plugin, "", "GPU",
                       "GPU emulation plugin to load at startup (e.g. 'xenos'); empty disables "
                       "GPU emulation")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+REXCVAR_DEFINE_STRING(gaming_runtime, "auto", "GDK",
+                      "Microsoft Gaming Runtime at startup: auto (initialize it in GDK builds and "
+                      "launch regardless), required (launch only when it is ready) or off")
+    .allowed({"auto", "required", "off"})
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+REXCVAR_DEFINE_INT32(gaming_runtime_timeout_ms, 10000, "GDK",
+                     "How long startup waits for the Gaming Runtime to initialize")
+    .range(100, 120000)
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 namespace rex {
@@ -197,7 +210,34 @@ bool ReXApp::SetupEnvironment() {
     REXLOG_DEBUG("  Metadata root:  {}", metadata_root_.string());
   }
 
-  return true;
+  return InitializeGamingRuntime();
+}
+
+bool ReXApp::InitializeGamingRuntime() {
+  const auto policy = system::ParseGamingRuntimePolicy(REXCVAR_GET(gaming_runtime))
+                          .value_or(system::GamingRuntimePolicy::kAuto);
+  if (policy == system::GamingRuntimePolicy::kOff) {
+    return true;
+  }
+  gaming_runtime_ = std::make_unique<system::GamingRuntime>();
+  const auto result = gaming_runtime_->Initialize(
+      std::chrono::milliseconds(REXCVAR_GET(gaming_runtime_timeout_ms)));
+  if (result.ok()) {
+    REXLOG_INFO("Gaming Runtime ready");
+  } else if (result.state == system::GamingRuntimeState::kUnavailable &&
+             policy == system::GamingRuntimePolicy::kAuto) {
+    REXLOG_DEBUG("Gaming Runtime: {}", result.message);
+  } else {
+    REXLOG_WARN("Gaming Runtime {}: {}", system::GamingRuntimeStateName(result.state),
+                result.message);
+  }
+  if (OnGamingRuntimeInitialized(result, policy)) {
+    return true;
+  }
+  REXLOG_ERROR("Startup stopped: the Gaming Runtime is {}",
+               system::GamingRuntimeStateName(result.state));
+  rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, result.message);
+  return false;
 }
 
 bool ReXApp::ConstructRuntime(const PathConfig& paths) {
@@ -307,7 +347,10 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
 
 bool ReXApp::SetupPresentation() {
   config_.gpu_plugin = REXCVAR_GET(gpu_plugin);
-  config_.audio_factory = REX_AUDIO_BACKEND(rex::audio::sdl::SDLAudioSystem);
+  config_.audio_factory = [](rex::runtime::FunctionDispatcher* dispatcher)
+      -> std::unique_ptr<rex::system::IAudioSystem> {
+    return rex::audio::CreateDefaultAudioSystem(dispatcher);
+  };
   config_.input_factory = REX_INPUT_BACKEND(rex::input::CreateDefaultInputSystem);
   config_.kernel_init = rex::kernel::InitializeKernel;
 
@@ -604,6 +647,8 @@ void ReXApp::OnDestroy() {
   }
   window_.reset();
   runtime_.reset();
+  // Last: the guest runtime's audio, input and GPU services are gone.
+  gaming_runtime_.reset();
 }
 
 void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provider) {

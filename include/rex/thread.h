@@ -35,11 +35,6 @@ namespace rex::thread {
 
 using namespace rex::literals;
 
-#if REX_PLATFORM_ANDROID
-void AndroidInitialize();
-void AndroidShutdown();
-#endif
-
 // This is more like an Event with self-reset when returning from Wait()
 class Fence {
  public:
@@ -121,12 +116,26 @@ void Sleep(std::chrono::duration<Rep, Period> duration) {
 enum class SleepResult {
   kSuccess,
   kAlerted,
+  // PreciseSleep's interrupt handle was signaled.
+  kInterrupted,
 };
+
+class WaitHandle;
 // Sleeps the current thread for at least as long as the given duration.
 // The thread is put in an alertable state and may wake to dispatch user
 // callbacks. If this happens the sleep returns early with
 // SleepResult::kAlerted.
 SleepResult AlertableSleep(std::chrono::microseconds duration);
+
+// Sleeps on the calling thread's high-resolution waitable timer: microsecond
+// precision, independent of the system timer resolution (15.6 ms by default)
+// and without raising it for the whole system. An alertable sleep returns
+// kAlerted when a user callback ran. Falls back to Sleep/AlertableSleep if
+// the timer can't be created.
+// `interrupt`, if given, ends the sleep early with kInterrupted when it is
+// signaled (the kernel's title termination event).
+SleepResult PreciseSleep(std::chrono::microseconds duration, bool alertable,
+                         WaitHandle* interrupt = nullptr);
 template <typename Rep, typename Period>
 SleepResult AlertableSleep(std::chrono::duration<Rep, Period> duration) {
   return AlertableSleep(std::chrono::duration_cast<std::chrono::microseconds>(duration));
@@ -222,6 +231,13 @@ WaitResult SignalAndWait(WaitHandle* wait_handle_to_signal, WaitHandle* wait_han
                          bool is_alertable,
                          std::chrono::milliseconds timeout = std::chrono::milliseconds::max());
 
+// Waits until any of the objects is signaled, with a timeout measured by the
+// calling thread's high-resolution timer (see PreciseSleep) rather than the
+// system timer. With 64 handles there is no room for the timer, and the
+// timeout is rounded up to whole milliseconds instead.
+std::pair<WaitResult, size_t> WaitAnyPrecise(WaitHandle* wait_handles[], size_t wait_handle_count,
+                                             bool is_alertable, std::chrono::microseconds timeout);
+
 std::pair<WaitResult, size_t> WaitMultiple(
     WaitHandle* wait_handles[], size_t wait_handle_count, bool wait_all, bool is_alertable,
     std::chrono::milliseconds timeout = std::chrono::milliseconds::max());
@@ -283,6 +299,10 @@ class Event : public WaitHandle {
   // the nonsignaled state after releasing the appropriate number of waiting
   // threads.
   virtual void Pulse() = 0;
+
+  // Returns whether the event is signaled, without satisfying a wait (an
+  // auto-reset event stays signaled).
+  virtual bool IsSignaled() = 0;
 };
 
 // Models a Win32-like semaphore object.
@@ -371,7 +391,6 @@ class Timer : public WaitHandle {
   virtual bool Cancel() = 0;
 };
 
-#if REX_PLATFORM_WIN32
 struct ThreadPriority {
   static const int32_t kLowest = -2;
   static const int32_t kBelowNormal = -1;
@@ -379,15 +398,6 @@ struct ThreadPriority {
   static const int32_t kAboveNormal = 1;
   static const int32_t kHighest = 2;
 };
-#else
-struct ThreadPriority {
-  static const int32_t kLowest = 1;
-  static const int32_t kBelowNormal = 8;
-  static const int32_t kNormal = 16;
-  static const int32_t kAboveNormal = 24;
-  static const int32_t kHighest = 32;
-};
-#endif
 
 // Models a Win32-like thread object.
 // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682453(v=vs.85).aspx

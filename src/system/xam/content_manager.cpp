@@ -10,6 +10,7 @@
  */
 
 #include <array>
+#include <span>
 #include <cstring>
 #include <queue>
 #include <string>
@@ -17,6 +18,7 @@
 #include <fmt/format.h>
 
 #include <rex/filesystem.h>
+#include <rex/logging.h>
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/devices/stfs_container_device.h>
 #include <rex/string.h>
@@ -39,9 +41,13 @@ static const char* kGameContentHeaderDirName = "Headers";
 static int content_device_id_ = 0;
 
 ContentPackage::ContentPackage(KernelState* kernel_state, const std::string_view root_name,
-                               const XCONTENT_AGGREGATE_DATA& data,
+                               uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
                                const std::filesystem::path& package_path)
-    : kernel_state_(kernel_state), root_name_(root_name), package_path_(package_path), license_(0) {
+    : kernel_state_(kernel_state),
+      root_name_(root_name),
+      package_path_(package_path),
+      xuid_(xuid),
+      license_(0) {
   device_path_ = fmt::format("\\Device\\Content\\{0}\\", ++content_device_id_);
   content_data_ = data;
 
@@ -179,7 +185,8 @@ std::unique_ptr<ContentPackage> ContentManager::ResolvePackage(
   if (!std::filesystem::exists(package_path)) {
     return nullptr;
   }
-  auto package = std::make_unique<ContentPackage>(kernel_state_, root_name, data, package_path);
+  auto package =
+      std::make_unique<ContentPackage>(kernel_state_, root_name, xuid, data, package_path);
   return package;
 }
 
@@ -208,18 +215,57 @@ X_RESULT ContentManager::WriteContentHeaderFile(uint64_t xuid, XCONTENT_AGGREGAT
     }
   }
 
-  rex::filesystem::CreateEmptyFile(header_path);
-
-  auto file = rex::filesystem::OpenFile(header_path, "wb");
-  if (!file) {
-    return X_ERROR_FILE_NOT_FOUND;
-  }
-  fwrite(&data, 1, sizeof(XCONTENT_AGGREGATE_DATA), file);
+  std::vector<uint8_t> bytes(sizeof(XCONTENT_AGGREGATE_DATA));
+  std::memcpy(bytes.data(), &data, sizeof(XCONTENT_AGGREGATE_DATA));
   if (license_mask != 0) {
-    fwrite(&license_mask, 1, sizeof(license_mask), file);
+    bytes.resize(bytes.size() + sizeof(license_mask));
+    std::memcpy(bytes.data() + sizeof(XCONTENT_AGGREGATE_DATA), &license_mask,
+                sizeof(license_mask));
   }
-  fclose(file);
-  return X_ERROR_SUCCESS;
+  // Written whole or not at all, so a crash never leaves a torn header.
+  return rex::filesystem::WriteFileDurably(header_path, bytes) ? X_ERROR_SUCCESS
+                                                               : X_ERROR_WRITE_FAULT;
+}
+
+X_RESULT ContentManager::FlushContent(const std::string_view root_name) {
+  uint64_t xuid;
+  XCONTENT_AGGREGATE_DATA data;
+  std::string resolved_path;
+  {
+    auto global_lock = global_critical_region_.Acquire();
+    auto it = open_packages_.find(string::string_key_case(root_name));
+    if (it == open_packages_.end()) {
+      return X_ERROR_FILE_NOT_FOUND;
+    }
+    xuid = it->second->xuid();
+    data = it->second->GetPackageContentData();
+    kernel_state_->file_system()->FindSymbolicLink(std::string(root_name) + ':', resolved_path);
+  }
+
+  // Guest writes go straight to host files; flushing makes them durable.
+  X_RESULT result = X_ERROR_SUCCESS;
+  const auto files = kernel_state_->object_table()->GetObjectsByType<XFile>(XObject::Type::File);
+  for (const object_ref<XFile>& file : files) {
+    if (!resolved_path.empty() &&
+        rex::string::utf8_starts_with(file->entry()->absolute_path(), resolved_path) &&
+        XFAILED(file->file()->Flush())) {
+      REXSYS_WARN("XamContentFlush: flushing {} failed", file->entry()->absolute_path());
+      result = X_ERROR_WRITE_FAULT;
+    }
+  }
+
+  // Content created before a crash may be missing its header; the package
+  // is only listed with its metadata once the header exists.
+  uint64_t used_xuid = (data.xuid != uint64_t(-1) && data.xuid != 0) ? uint64_t(data.xuid) : xuid;
+  const auto header_path =
+      ResolvePackageHeaderPath(data.file_name(), used_xuid, data.title_id, data.content_type);
+  if (!std::filesystem::exists(header_path)) {
+    const X_RESULT header_result = WriteContentHeaderFile(xuid, data);
+    if (XFAILED(header_result)) {
+      result = header_result;
+    }
+  }
+  return result;
 }
 
 X_RESULT ContentManager::ReadContentHeaderFile(const std::string_view file_name, uint64_t xuid,
@@ -315,6 +361,15 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
 }
 
 X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
+  // Closing content commits it on the console. Make the writes durable before
+  // the handles go, so a save closed without XamContentFlush still survives a
+  // system crash (xenia-canary #1220). The package is closed either way; a
+  // failed flush is reported.
+  const X_RESULT flush_result = FlushContent(root_name);
+  if (flush_result == X_ERROR_FILE_NOT_FOUND) {
+    return X_ERROR_FILE_NOT_FOUND;
+  }
+
   ContentPackage* package = nullptr;
   {
     auto global_lock = global_critical_region_.Acquire();
@@ -326,7 +381,7 @@ X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
     package = DetachPackage(it);
   }
   delete package;
-  return X_ERROR_SUCCESS;
+  return flush_result;
 }
 
 X_RESULT ContentManager::GetContentThumbnail(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,

@@ -22,7 +22,13 @@ XEvent::~XEvent() = default;
 void XEvent::Initialize(bool manual_reset, bool initial_state) {
   assert_false(event_);
 
+  manual_reset_ = manual_reset;
   this->CreateNative<X_KEVENT>();
+  auto* kevent = guest_object<X_KEVENT>();
+  // Leave the wait list alone: it holds the stashed handle.
+  kevent->header.type = manual_reset ? 0x00 : 0x01;  // Notification : Synchronization
+  kevent->header.signal_state = initial_state ? 1 : 0;
+  host_signaled_ = initial_state;
 
   if (manual_reset) {
     event_ = rex::thread::Event::CreateManualResetEvent(initial_state);
@@ -48,6 +54,7 @@ void XEvent::InitializeNative(void* native_ptr, X_DISPATCH_HEADER* header) {
   }
 
   bool initial_state = header->signal_state ? true : false;
+  host_signaled_ = initial_state;
   if (manual_reset_) {
     event_ = rex::thread::Event::CreateManualResetEvent(initial_state);
   } else {
@@ -61,35 +68,83 @@ void XEvent::Query(uint32_t* out_type, uint32_t* out_state) {
     *out_type = manual_reset_ ? 0x00 : 0x01;
   }
   if (out_state) {
-    // Query the live host event, not the stale guest header
-    auto result = rex::thread::Wait(event_.get(), false, std::chrono::milliseconds(0));
-    if (result == rex::thread::WaitResult::kSuccess) {
-      *out_state = 1;
-      // Re-signal since we consumed the signal by waiting
-      event_->Set();
-    } else {
-      *out_state = 0;
-    }
+    // The live host event; reading it doesn't satisfy a wait.
+    *out_state = event_->IsSignaled() ? 1 : 0;
   }
 }
 
+void XEvent::SetSignalState(bool signaled) {
+  if (guest_object()) {
+    guest_object<X_KEVENT>()->header.signal_state = signaled ? 1 : 0;
+  }
+  host_signaled_ = signaled;
+}
+
 int32_t XEvent::Set(uint32_t priority_increment, bool wait) {
+  // Held across the host Set so a waiter it releases clears the state after.
+  std::lock_guard<std::mutex> lock(state_lock_);
+  SetSignalState(true);
   event_->Set();
   return 1;
 }
 
 int32_t XEvent::Pulse(uint32_t priority_increment, bool wait) {
+  std::lock_guard<std::mutex> lock(state_lock_);
+  // KePulseEvent returns the state before the pulse and leaves it reset.
+  int32_t previous = host_signaled_ ? 1 : 0;
   event_->Pulse();
-  return 1;
+  SetSignalState(false);
+  return previous;
 }
 
 int32_t XEvent::Reset() {
+  std::lock_guard<std::mutex> lock(state_lock_);
+  SetSignalState(false);
   event_->Reset();
   return 1;
 }
 
 void XEvent::Clear() {
+  std::lock_guard<std::mutex> lock(state_lock_);
+  SetSignalState(false);
   event_->Reset();
+}
+
+void XEvent::WaitCallback() {
+  // A satisfied wait resets a synchronization event; a notification event
+  // stays signaled. The callback runs after the wait returns, possibly after
+  // another Set, so it records the host state rather than assuming a reset.
+  if (!manual_reset_) {
+    std::lock_guard<std::mutex> lock(state_lock_);
+    SetSignalState(event_->IsSignaled());
+  }
+}
+
+void XEvent::BeginSignal() {
+  std::lock_guard<std::mutex> lock(state_lock_);
+  SetSignalState(true);
+}
+
+void XEvent::CancelSignal() {
+  std::lock_guard<std::mutex> lock(state_lock_);
+  SetSignalState(event_->IsSignaled());
+}
+
+void XEvent::SyncFromGuest() {
+  if (!guest_object()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(state_lock_);
+  bool guest_signaled = guest_object<X_KEVENT>()->header.signal_state != 0;
+  if (guest_signaled == host_signaled_) {
+    return;
+  }
+  host_signaled_ = guest_signaled;
+  if (guest_signaled) {
+    event_->Set();
+  } else {
+    event_->Reset();
+  }
 }
 
 bool XEvent::Save(stream::ByteStream* stream) {
