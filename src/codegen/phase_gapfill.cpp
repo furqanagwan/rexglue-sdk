@@ -165,7 +165,7 @@ std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
     auto segments = splitRegionOnTerminators(region, binary, knownCallables);
 
     for (const auto& segment : segments) {
-      if (graph.isEntryPoint(segment.start)) {
+      if (graph.isEntryPoint(segment.start) || graph.getFunctionContaining(segment.start)) {
         entrySegments.push_back(segment);
       } else if (registerGapSegment(ctx, segment)) {
         segmentsCreated++;
@@ -200,16 +200,22 @@ std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
 // (and after any functions following it back to back) was never looked at.
 // Blood Stone's thunk sub_8222D580 hid sub_8222D588, and 007 Legends'
 // sub_826D3EE0 and sub_826D3F08 hid sub_826D3F38, each reached only by a tail
-// branch from another function.
+// branch from another function. A segment that starts inside a function
+// hides code the same way: 007 Legends' one-instruction thunk sub_82225D90,
+// called only through a pointer, follows a .pdata function ending there.
 
-// Follows the discovered bodies of the functions that start `segment` back to
-// back, adding them to `owners`. Returns the first address none of them
+// Follows the discovered bodies of the functions at or around the start of
+// `segment` back to back, adding them to `owners`. A .pdata or config
+// function owns its declared extent. Returns the first address none of them
 // covers.
 uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
                           std::vector<const FunctionNode*>& owners) {
   uint32_t cursor = segment.start;
   while (cursor < segment.end) {
     const FunctionNode* node = graph.getFunction(cursor);
+    if (!node) {
+      node = graph.getFunctionContaining(cursor);
+    }
     if (!node || !node->isDiscovered() || node->blocks().empty()) {
       break;
     }
@@ -220,6 +226,10 @@ uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
       if (block.base < segment.end) {
         bodyEnd = std::max(bodyEnd, block.end());
       }
+    }
+    if (node->authority() == FunctionAuthority::PDATA ||
+        node->authority() == FunctionAuthority::CONFIG) {
+      bodyEnd = std::max(bodyEnd, node->end());
     }
     if (bodyEnd <= cursor) {
       break;

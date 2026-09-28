@@ -225,17 +225,51 @@ revisited gap functions, so the code after those bodies was claimed by no
 one. The target in each is reached only by a tail branch from another
 function.
 
-The leftover pass now also takes the segments that start at a known entry.
-From the segment start it follows the discovered bodies of the functions
-there, back to back, and treats what follows as a leftover under the same
-rule: skipped when one of those functions branches into it, when it starts
+A third shape appeared at the first 007 Legends boot, a fatal call to the
+unregistered `0x82225D90`. That is a one-instruction thunk (`b` to another
+function) reached only through a pointer. It follows `sub_82225878`, whose
+`.pdata` extent ends exactly there. Its gap segment `0x82225B94..0x82225D94`
+starts inside that function, after one of its returns, so gap fill skipped it
+too.
+
+The leftover pass now also takes the segments that start at or inside a known
+function. From the segment start it follows the discovered bodies of the
+functions there, back to back, and treats what follows as a leftover under the
+same rule. A `.pdata` or config function owns its declared extent. A leftover
+is skipped when one of those functions branches into it, when it starts
 with zero padding, and for a lone return. Blocks past the segment's end
 don't count toward a body, since a function follows a tail branch to a
 function not yet known as its own code.
 
-Tests: two `[codegen][discovery]` fixtures, one with this shape (a thunk found
-by a call, followed by a function only a tail branch reaches) and one where
-a called function's own branch past its first return must stay local.
-Passing no entry segments to the pass fails the first with the titles'
-error. Quantum of Solace's generated code is byte-identical with and without
-the change (21,432 functions, all hints kept).
+Tests: three `[codegen][discovery]` fixtures:
+- a thunk found by a call, followed by a function only a tail branch reaches;
+  passing no entry segments to the pass fails it with the titles' error;
+- a thunk right after a sized function; dropping segments that start inside a
+  function fails it;
+- a called function's own branch past its first return, which must stay
+  local.
+
+Effect on generated code:
+
+| Title | Before | After | Removed | Added |
+| --- | --- | --- | --- | --- |
+| Quantum of Solace (all 32 hints kept) | 21,432 | 21,433 | 1 | 2 |
+| Blood Stone (no hints) | 61,778 | 61,782 | 1 | 5 |
+| 007 Legends (no hints) | 42,459 | 42,469 | 5 | 15 |
+
+The "before" counts for Blood Stone and Legends are with the entry-at-start
+rule alone.
+
+Each removed entry was the tail of a method now found whole from its real
+start. In Quantum of Solace, `sub_8211E7FC` (one of the RG-FIX-002 removals
+above, which reads `r11` set earlier in the method) becomes a label of
+`sub_8211E7E0`, a complete bounds-checked accessor that returns
+`E_INVALIDARG`. `sub_823FFD50` is a self-contained leaf.
+
+Title runs, GDK Release, NVIDIA GeForce RTX 5080 Laptop GPU:
+- Blood Stone, 007 Legends and Quantum of Solace each ran 90 seconds with no
+  error lines.
+- Blood Stone and Legends reach their animated front ends; Quantum of Solace
+  plays its intro.
+
+These are boot results, not gameplay.

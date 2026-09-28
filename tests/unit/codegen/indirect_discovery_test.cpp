@@ -142,6 +142,20 @@ TEST_CASE("A function after a called thunk is found when only a tail branch reac
   CHECK(a.ctx->graph.pendingCount() == 0);
 }
 
+TEST_CASE("A thunk right after a sized function is found", "[codegen][discovery]") {
+  // 0x00 E: cmpwi r3,0; beq 0x0C; blr; bctr   (16 bytes, as .pdata gives)
+  // 0x10 T: b Z                               (only ever reached indirectly)
+  // 0x14 Z: li r3,1; blr                      (an entry from config)
+  // Gap fill cuts 0x0C..0x14 as one segment, which starts inside E, so it
+  // used to be skipped (007 Legends 0x82225D90).
+  const uint32_t t = kBase + 0x10, z = kBase + 0x14;
+  Analyzed a({Cmpwi0(3), Beq(kBase + 4, kBase + 0x0C), Blr(), 0x4E800420, B(t, z), Li(3, 1), Blr()},
+             {z}, {{kBase, 16}});
+  CHECK(a.IsEntry(t));
+  CHECK(a.ctx->graph.getFunction(kBase)->containsAddress(kBase + 0x0C));
+  CHECK(a.ctx->graph.pendingCount() == 0);
+}
+
 TEST_CASE("A called function's own branch past its first return is not split off",
           "[codegen][discovery]") {
   // 0x00 entry: bl T; blr
