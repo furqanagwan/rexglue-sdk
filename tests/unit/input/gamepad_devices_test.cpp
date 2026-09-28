@@ -24,6 +24,7 @@ using rex::X_STATUS;
 
 using namespace rex::input;  // NOLINT
 using rex::input::gameinput::GamepadDevices;
+using rex::input::gameinput::PadTraits;
 using rex::input::gameinput::Rumble;
 
 namespace {
@@ -40,7 +41,7 @@ class TableDriver : public InputDriver {
   TableDriver() : InputDriver(nullptr, 0) {}
   X_STATUS Setup() override { return X_STATUS_SUCCESS; }
 
-  DeviceId Plug(HostPad* host) { return devices_.Connect(host, "test pad", false); }
+  DeviceId Plug(HostPad* host) { return devices_.Connect(host, "test pad"); }
   void Unplug(HostPad* host) { devices_.Disconnect(host); }
 
   void EnumerateDevices(std::vector<DeviceInfo>& out) override { devices_.Enumerate(out); }
@@ -273,8 +274,8 @@ TEST_CASE("GameInput keystrokes release on focus loss", "[input][gameinput]") {
 TEST_CASE("GameInput pads report a wired or wireless standard gamepad", "[input][gameinput]") {
   GamepadDevices devices;
   int a = 0, b = 0;
-  DeviceId wired = devices.Connect(&a, "wired", false);
-  DeviceId wireless = devices.Connect(&b, "wireless", true);
+  DeviceId wired = devices.Connect(&a, "wired");
+  DeviceId wireless = devices.Connect(&b, "wireless", {.wireless = true});
   X_INPUT_CAPABILITIES caps = {};
   REQUIRE(devices.GetCapabilities(wired, false, &caps) == X_ERROR_SUCCESS);
   CHECK(caps.type == 1);
@@ -286,4 +287,28 @@ TEST_CASE("GameInput pads report a wired or wireless standard gamepad", "[input]
   CHECK(uint16_t(caps.gamepad.buttons) == (0xF3FF | X_INPUT_GAMEPAD_GUIDE));
   CHECK((static_cast<uint64_t>(wired) >> 48) == 0x4749);
   CHECK(wired != wireless);
+}
+
+TEST_CASE("GameInput pads report the kind and motors the host found", "[input][gameinput]") {
+  GamepadDevices devices;
+  int wheel_host = 0, stick_host = 0;
+  DeviceId wheel = devices.Connect(&wheel_host, "wheel", {.subtype = XINPUT_DEVSUBTYPE_WHEEL});
+  DeviceId stick = devices.Connect(&stick_host, "stick",
+                                   {.subtype = XINPUT_DEVSUBTYPE_ARCADE_STICK, .rumble = false});
+
+  X_INPUT_CAPABILITIES caps = {};
+  REQUIRE(devices.GetCapabilities(wheel, false, &caps) == X_ERROR_SUCCESS);
+  CHECK(caps.sub_type == XINPUT_DEVSUBTYPE_WHEEL);
+  CHECK(uint16_t(caps.vibration.left_motor_speed) == 0xFFFF);
+  REQUIRE(devices.GetCapabilities(stick, false, &caps) == X_ERROR_SUCCESS);
+  CHECK(caps.sub_type == XINPUT_DEVSUBTYPE_ARCADE_STICK);
+  // No motors: XInput reports zero speeds.
+  CHECK(uint16_t(caps.vibration.left_motor_speed) == 0);
+  CHECK(uint16_t(caps.vibration.right_motor_speed) == 0);
+
+  std::vector<DeviceInfo> infos;
+  devices.Enumerate(infos);
+  REQUIRE(infos.size() == 2);
+  CHECK(infos[0].subtype == XINPUT_DEVSUBTYPE_WHEEL);
+  CHECK(infos[1].subtype == XINPUT_DEVSUBTYPE_ARCADE_STICK);
 }

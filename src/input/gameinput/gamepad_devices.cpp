@@ -13,13 +13,13 @@
 
 namespace rex::input::gameinput {
 
-DeviceId GamepadDevices::Connect(const void* host_device, std::string name, bool wireless) {
+DeviceId GamepadDevices::Connect(const void* host_device, std::string name, PadTraits traits) {
   Disconnect(host_device);
   Pad pad;
   pad.host_device = host_device;
   pad.id = static_cast<DeviceId>(next_id_++);
   pad.name = std::move(name);
-  pad.wireless = wireless;
+  pad.traits = traits;
   pad.active = active_;
   pads_.push_back(std::move(pad));
   return pads_.back().id;
@@ -53,6 +53,7 @@ void GamepadDevices::Enumerate(std::vector<DeviceInfo>& out) const {
     DeviceInfo info;
     info.id = pad.id;
     info.name = pad.name;
+    info.subtype = pad.traits.subtype;
     info.synthetic = false;
     out.push_back(info);
   }
@@ -93,12 +94,13 @@ X_RESULT GamepadDevices::GetCapabilities(DeviceId id, bool guide_button,
   if (!pad) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
-  // Same report as the SDL driver: a standard gamepad with every input.
-  // GameInput exposes no XInput subtype, so instruments are not identified.
+  // Every input, as the SDL driver reports. The subtype is what the host
+  // identified: GameInput knows wheels and arcade and flight sticks, but not
+  // Xbox 360 instruments, which report as gamepads.
   X_INPUT_CAPABILITIES caps = {};
-  caps.type = 0x01;      // XINPUT_DEVTYPE_GAMEPAD
-  caps.sub_type = 0x01;  // XINPUT_DEVSUBTYPE_GAMEPAD
-  caps.flags = pad->wireless ? uint16_t(X_INPUT_CAPS_WIRELESS) : uint16_t(0);
+  caps.type = XINPUT_DEVTYPE_GAMEPAD;
+  caps.sub_type = pad->traits.subtype;
+  caps.flags = pad->traits.wireless ? uint16_t(X_INPUT_CAPS_WIRELESS) : uint16_t(0);
   caps.gamepad.buttons = uint16_t(0xF3FF | (guide_button ? X_INPUT_GAMEPAD_GUIDE : 0));
   caps.gamepad.left_trigger = 0xFF;
   caps.gamepad.right_trigger = 0xFF;
@@ -106,8 +108,10 @@ X_RESULT GamepadDevices::GetCapabilities(DeviceId id, bool guide_button,
   caps.gamepad.thumb_ly = static_cast<int16_t>(0xFFFFu);
   caps.gamepad.thumb_rx = static_cast<int16_t>(0xFFFFu);
   caps.gamepad.thumb_ry = static_cast<int16_t>(0xFFFFu);
-  caps.vibration.left_motor_speed = 0xFFFFu;
-  caps.vibration.right_motor_speed = 0xFFFFu;
+  if (pad->traits.rumble) {
+    caps.vibration.left_motor_speed = 0xFFFFu;
+    caps.vibration.right_motor_speed = 0xFFFFu;
+  }
   *out_caps = caps;
   return X_ERROR_SUCCESS;
 }

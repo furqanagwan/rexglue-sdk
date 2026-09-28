@@ -28,6 +28,15 @@ struct Rumble {
   bool operator==(const Rumble&) const = default;
 };
 
+// What the host says about a pad, reported to the guest in its capabilities.
+struct PadTraits {
+  bool wireless = false;
+  uint8_t subtype = XINPUT_DEVSUBTYPE_GAMEPAD;
+  // Whether the pad has XInput's two motors; without them the capabilities
+  // report no vibration, as XInput does.
+  bool rumble = true;
+};
+
 // Everything the GameInput driver tells the guest, kept apart from GameInput
 // itself so the XInput semantics are testable without devices or the GDK:
 // device identity across connect/disconnect, packet numbers, the untouched
@@ -40,7 +49,7 @@ class GamepadDevices {
   // A newly connected host device gets a new DeviceId, even when the same
   // device reconnects, so no state from before the disconnect reaches the
   // guest. InputSystem decides which guest user the new id becomes.
-  DeviceId Connect(const void* host_device, std::string name, bool wireless);
+  DeviceId Connect(const void* host_device, std::string name, PadTraits traits = {});
   // Returns false for an unknown device. The id is gone afterwards: every
   // query for it reports X_ERROR_DEVICE_NOT_CONNECTED.
   bool Disconnect(const void* host_device);
@@ -77,7 +86,7 @@ class GamepadDevices {
     const void* host_device = nullptr;
     DeviceId id = DeviceId::kInvalid;
     std::string name;
-    bool wireless = false;
+    PadTraits traits;
     X_INPUT_STATE state = {};
     bool changed = true;  // XInput starts with packet_number = 1
     bool active = true;
