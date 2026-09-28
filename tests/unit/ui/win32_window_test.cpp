@@ -205,3 +205,83 @@ TEST_CASE("Functions queued from another thread run on the Win32 UI thread", "[u
   CHECK(ran);
   CHECK(on_ui_thread);
 }
+
+TEST_CASE("Win32 window takes a new size without a restart", "[ui][win32]") {
+  Harness h;
+  h.window->SetDesiredLogicalSize(800, 450);
+  Pump();
+  CHECK(h.window->GetActualPhysicalWidth() == h.window->SizeToPhysical(800));
+  CHECK(h.window->GetActualPhysicalHeight() == h.window->SizeToPhysical(450));
+
+  // While fullscreen the monitor keeps the window; the size applies on leaving.
+  h.window->SetFullscreen(true);
+  Pump();
+  h.window->SetDesiredLogicalSize(720, 400);
+  Pump();
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(monitor);
+  REQUIRE(GetMonitorInfoW(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONEAREST), &monitor));
+  CHECK(h.window->GetActualPhysicalWidth() ==
+        uint32_t(monitor.rcMonitor.right - monitor.rcMonitor.left));
+  h.window->SetFullscreen(false);
+  Pump();
+  CHECK(h.window->GetActualPhysicalWidth() == h.window->SizeToPhysical(720));
+  CHECK(h.window->GetActualPhysicalHeight() == h.window->SizeToPhysical(400));
+}
+
+TEST_CASE("Refreshing Win32 fullscreen leaves the window where it is", "[ui][win32]") {
+  Harness h;
+  RECT before;
+  REQUIRE(GetWindowRect(h.hwnd(), &before));
+  // Windowed: nothing to refresh, and the saved placement is not reapplied.
+  h.window->RefreshFullscreen();
+  Pump();
+  RECT after;
+  REQUIRE(GetWindowRect(h.hwnd(), &after));
+  CHECK(after.left == before.left);
+  CHECK(after.right - after.left == before.right - before.left);
+
+  // Fullscreen, refreshed (a resolution or fullscreen_exclusive change), then
+  // left: the window comes back as it was, not at the fullscreen rectangle.
+  h.window->SetFullscreen(true);
+  Pump();
+  h.window->RefreshFullscreen();
+  Pump();
+  h.window->SetFullscreen(false);
+  Pump();
+  REQUIRE(GetWindowRect(h.hwnd(), &after));
+  CHECK((GetWindowLongW(h.hwnd(), GWL_STYLE) & WS_CAPTION) == WS_CAPTION);
+  CHECK(after.right - after.left == before.right - before.left);
+  CHECK(after.bottom - after.top == before.bottom - before.top);
+}
+
+TEST_CASE("Win32 window moves to another monitor without a restart", "[ui][win32]") {
+  Harness h;
+  h.window->SetMonitor(1);  // The primary display.
+  Pump();
+  HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+  CHECK(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONULL) == primary);
+  // Past the displays present: logged, and the window stays.
+  RECT before;
+  REQUIRE(GetWindowRect(h.hwnd(), &before));
+  h.window->SetMonitor(16);
+  Pump();
+  RECT after;
+  REQUIRE(GetWindowRect(h.hwnd(), &after));
+  CHECK(after.left == before.left);
+  CHECK(after.top == before.top);
+}
+
+TEST_CASE("Win32 window reports its display's desktop size", "[ui][win32]") {
+  Harness h;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  REQUIRE(h.window->GetDisplayPixelSize(width, height));
+  // The process is per-monitor DPI aware, so the monitor rectangle is in
+  // physical pixels, as the desktop mode is.
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(monitor);
+  REQUIRE(GetMonitorInfoW(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONEAREST), &monitor));
+  CHECK(width == uint32_t(monitor.rcMonitor.right - monitor.rcMonitor.left));
+  CHECK(height == uint32_t(monitor.rcMonitor.bottom - monitor.rcMonitor.top));
+}

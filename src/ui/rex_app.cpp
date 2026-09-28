@@ -12,6 +12,8 @@
 #include <rex/rex_app.h>
 
 #include <cstdlib>
+#include <functional>
+#include <string>
 
 #include <rex/assert.h>
 #include <rex/cvar.h>
@@ -288,15 +290,15 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     ppc_info_.register_modules(runtime_->kernel_state());
   }
 
-  if (imgui_drawer_) {
-    auto* input_sys = static_cast<rex::input::InputSystem*>(runtime_->input_system());
-    if (input_sys) {
-      input_sys->SetActiveCallback([this]() {
-        if (!debug_overlay_ && !console_overlay_ && !settings_overlay_ && !achievements_overlay_)
-          return true;
-        return !imgui_drawer_->GetIO().WantCaptureMouse;
-      });
-    }
+  if (auto* input_sys = static_cast<rex::input::InputSystem*>(runtime_->input_system())) {
+    input_sys->SetActiveCallback([this]() {
+      if (window_ && !window_->HasFocus())
+        return false;
+      if (!imgui_drawer_ ||
+          (!debug_overlay_ && !console_overlay_ && !settings_overlay_ && !achievements_overlay_))
+        return true;
+      return !imgui_drawer_->GetIO().WantCaptureMouse;
+    });
   }
 
   std::string xex_image = "game:\\default.xex";
@@ -377,7 +379,7 @@ bool ReXApp::SetupPresentation() {
   }
 
   // Create window
-  window_ = rex::ui::Window::Create(app_context(), GetName(), 1280, 720);
+  window_ = rex::ui::Window::Create(app_context(), GetName());
   if (!window_) {
     REXLOG_ERROR("Failed to create window");
     return false;
@@ -393,11 +395,40 @@ bool ReXApp::SetupPresentation() {
   if (REXCVAR_GET(fullscreen)) {
     window_->SetFullscreen(true);
   }
-  rex::cvar::RegisterChangeCallback("fullscreen", [this](std::string_view, std::string_view value) {
-    if (window_) {
-      window_->SetFullscreen(rex::string::from_string<bool>(value, false));
-    }
+  window_->SetMonitor(REXCVAR_GET(monitor));
+
+  auto on_window_cvar = [this](const char* name, std::function<void(std::string_view)> apply) {
+    rex::cvar::RegisterChangeCallback(
+        name, [this, apply = std::move(apply)](std::string_view, std::string_view value) {
+          app_context().CallInUIThread([this, apply, value = std::string(value)] {
+            if (window_) {
+              apply(value);
+            }
+          });
+        });
+  };
+
+  on_window_cvar("fullscreen", [this](std::string_view value) {
+    window_->SetFullscreen(rex::string::from_string<bool>(value, false));
   });
+  on_window_cvar("fullscreen_exclusive",
+                 [this](std::string_view) { window_->RefreshFullscreen(); });
+  on_window_cvar("monitor", [this](std::string_view value) {
+    window_->SetMonitor(rex::string::from_string<int32_t>(value, 0));
+  });
+  auto apply_window_size = [this](std::string_view) {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    rex::ui::Window::ResolveConfiguredLogicalSize(width, height);
+    window_->SetDesiredLogicalSize(width, height);
+  };
+  on_window_cvar("window_width", apply_window_size);
+  on_window_cvar("window_height", apply_window_size);
+  on_window_cvar("resolution", [this, apply_window_size](std::string_view value) {
+    apply_window_size(value);
+    window_->RefreshFullscreen();
+  });
+
   window_->Open();
 
   auto* graphics_system = config_.graphics.get();

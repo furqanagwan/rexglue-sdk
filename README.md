@@ -142,6 +142,9 @@ and `right_stick_deadzone_percentage`, and `mnk_passthrough` presents the
 keyboard to titles that read one.
 Any build can use the native Win32 window instead of SDL with
 `ui_backend = "win32"` (opt-in): see [Windowing](docs/windowing.md).
+Both windows apply `monitor`, `window_width`/`window_height`, `resolution`
+and `fullscreen` without a restart, and `fullscreen_exclusive` switches the
+display mode instead of going borderless.
 Audio can go through XAudio2 instead of SDL with `audio_backend = "xaudio2"`
 (opt-in): see [Audio output](docs/audio-output.md).
 GDK titles own the Gaming Runtime (`gaming_runtime = "auto"`, `"required"` or
