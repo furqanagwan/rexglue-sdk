@@ -28,6 +28,7 @@ add_executable(unit_tests
     audio/conversion_test.cpp
     input/input_assignment_test.cpp
     input/input_system_test.cpp
+    input/mnk_keystroke_test.cpp
     input/keystroke_synthesizer_test.cpp
     input/gamepad_devices_test.cpp
     ui/win32_window_test.cpp
