@@ -60,6 +60,13 @@ void InitLogging(std::filesystem::path log_file = {},
                  spdlog::level::level_enum level = spdlog::level::info);
 
 /**
+ * As above, with nullptr meaning no file logging. Kept for callers of the
+ * earlier `const char*` signature: a std::filesystem::path built from nullptr
+ * is undefined behavior (it crashed the GPU test fixture).
+ */
+void InitLogging(const char* log_file, spdlog::level::level_enum level = spdlog::level::info);
+
+/**
  * Early-phase logging initialization (before config is loaded).
  * Creates a platform debug sink (OutputDebugString on Windows, stdout elsewhere)
  * so log lines emitted before InitLogging() is called are captured.

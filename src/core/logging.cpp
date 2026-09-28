@@ -311,6 +311,10 @@ void InitLogging(std::filesystem::path log_file, spdlog::level::level_enum level
   InitLogging(config);
 }
 
+void InitLogging(const char* log_file, spdlog::level::level_enum level) {
+  InitLogging(log_file ? std::filesystem::path(log_file) : std::filesystem::path(), level);
+}
+
 void ShutdownLogging() {
   std::lock_guard lock(g_mutex);
   if (!g_initialized && !g_early_initialized)
