@@ -11,7 +11,8 @@ host (Linux and macOS retired by RG-GDK-024) and Direct3D 12 is the only
 graphics backend (Vulkan removed by RG-GDK-023). The SDK builds and tests on
 Windows x64 with and without the April 2026 GDK. One title (Quantum of Solace)
 runs its recorded scene on NVIDIA. GDK packaging works for a minimal title. The
-native GameInput, Win32 window and XAudio2 paths are opt-in. AMD/Intel GPUs,
+native Win32 window, XAudio2 and GameInput (XInput outside GDK builds) are the
+defaults, and SDL is being removed. AMD/Intel GPUs,
 other titles and fresh machines are not validated. Each claim and its evidence
 is in [release evidence](docs/release-evidence.md). Public APIs may change.
 
@@ -135,13 +136,14 @@ installed `260404` edition and installs a package whose consumers resolve the
 GDK on their own machine; see [GDK toolchain](docs/gdk-toolchain.md) for the
 pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
-GDK builds can read pads through GameInput with `input_backend = "gameinput"`
-(opt-in; SDL stays the default): see [GameInput driver](docs/gameinput.md).
+GDK builds read pads through GameInput and other builds through XInput
+(`input_backend`): see [GameInput driver](docs/gameinput.md).
 Every input backend honours `vibration`, `left_stick_deadzone_percentage`
 and `right_stick_deadzone_percentage`, and `mnk_passthrough` presents the
 keyboard to titles that read one.
-Any build can use the native Win32 window instead of SDL with
-`ui_backend = "win32"` (opt-in): see [Windowing](docs/windowing.md).
+Every build uses the native Win32 window (`ui_backend = "win32"`) and XAudio2
+(`audio_backend = "xaudio2"`) by default: see [Windowing](docs/windowing.md)
+and [Audio output](docs/audio-output.md).
 Both windows apply `monitor`, `window_width`/`window_height`, `resolution`
 and `fullscreen` without a restart, and `fullscreen_exclusive` switches the
 display mode instead of going borderless.

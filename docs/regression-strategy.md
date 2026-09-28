@@ -284,8 +284,8 @@ flushing whose save is listed and read back after restart. The failing-flush
 case fails with error propagation disabled. Not run: power loss, titles.
 Parts 2-4 are open; see `docs/content-persistence.md`.
 
-RG-GDK-019 XAudio2 output (2026-09-26): opt-in `audio_backend = "xaudio2"`
-(SDL stays default). `unit_tests [audio][conversion]` checks per-channel impulse
+RG-GDK-019 XAudio2 output (2026-09-26): `audio_backend = "xaudio2"`, opt-in
+then and the default since 2026-09-28. `unit_tests [audio][conversion]` checks per-channel impulse
 placement for 5.1 and the stereo fold, weights, gain and clamping.
 `unit_tests [audio][xaudio2]` runs on the real XAudio2 and default endpoint
 (NVIDIA HDMI audio here): paced playback with one release per frame, clock
@@ -310,8 +310,8 @@ fails its test when disabled. Not run: Koei, Tekken Tag 2, LEGO LOTR, SCDA and
 007 Legends (no recompiled fixtures here); FFmpeg pin unchanged. See
 `docs/xma-audit.md`.
 
-RG-GDK-021 native Win32 window (2026-09-25): opt-in `ui_backend = "win32"`
-(SDL stays default). `unit_tests [ui][win32]` covers creation, DPI-scaled size,
+RG-GDK-021 native Win32 window (2026-09-25): `ui_backend = "win32"`, opt-in
+then and the default since 2026-09-28. `unit_tests [ui][win32]` covers creation, DPI-scaled size,
 resize, minimize and restore, fullscreen round trip, close veto versus
 programmatic close, key and gated character input, and cross-thread UI
 calls. `gpu_tests [gpu][win32]` presents D3D12 frames through the Win32 window
@@ -319,8 +319,8 @@ on WARP and NVIDIA across resize, minimize and restore, and closes with the
 presenter attached. SDL consumers and owners are in `docs/windowing.md`. Not
 run: titles, multi-monitor DPI moves, and AMD or Intel presentation.
 
-RG-GDK-020 GameInput (2026-09-25): opt-in `input_backend = "gameinput"`
-(GDK builds; SDL stays default). `unit_tests [input][gameinput]` covers the
+RG-GDK-020 GameInput (2026-09-25): `input_backend = "gameinput"` (GDK
+builds), opt-in then and the default since 2026-09-28. `unit_tests [input][gameinput]` covers the
 guest-facing matrix through `GamepadDevices`: four pads, unplug, same or
 different pad reconnecting, no phantom input, packet numbers, unfocused pad,
 rumble hold, focus stop and resume, no rumble after reconnect, and keystroke

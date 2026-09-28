@@ -1,13 +1,13 @@
 # GameInput driver (RG-GDK-020)
 
-GDK builds (`win-amd64-gdk`, see [GDK toolchain](gdk-toolchain.md)) include a native GameInput gamepad driver. It is **opt-in**: `input_backend` still defaults to `sdl`, and SDL and XInput stay in place until the driver reaches parity (issue acceptance: no dependency removal before parity).
+GDK builds (`win-amd64-gdk`, see [GDK toolchain](gdk-toolchain.md)) include a native GameInput gamepad driver. It is the **default** in GDK builds (owner decision, 2026-09-28); builds without the GDK default to XInput. SDL stays selectable until it is removed.
 
 ```toml
 [Input]
 input_backend = "gameinput"
 ```
 
-`input_backend = "gameinput"` falls back to SDL, with a warning, in a non-GDK build or when GameInput cannot start.
+`input_backend = "gameinput"` falls back to XInput, with a warning, in a non-GDK build or when GameInput cannot start.
 
 ## Runtime and deployment
 
@@ -18,7 +18,7 @@ input_backend = "gameinput"
 | Observed runtime | inbox `GameInput.dll` 0.2309.26100.9502, `GameInputRedist.dll` 3.5.270.0 |
 | Redistributable | GameInput redistributable (`GameInputRedist.msi`) from Microsoft; not copied into this repository |
 
-Because the DLL is loaded at runtime, a machine without GameInput still starts. The log names the failure and the fix: `GameInput.dll not found`, no `GameInputCreate` export, or `GameInputCreate failed (0x…)` with a pointer to the redistributable. The input system then uses SDL.
+Because the DLL is loaded at runtime, a machine without GameInput still starts. The log names the failure and the fix: `GameInput.dll not found`, no `GameInputCreate` export, or `GameInputCreate failed (0x…)` with a pointer to the redistributable. The input system then uses XInput.
 
 `GameInput.dll` stays loaded for the process lifetime. The runtime keeps worker threads after the last `IGameInput` release, and unloading the DLL under them crashes.
 

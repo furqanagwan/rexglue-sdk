@@ -6,12 +6,12 @@ Guest audio reaches the host through an `AudioDriver` per guest render client
 
 | Value | Output | Notes |
 | --- | --- | --- |
-| `sdl` (default) | `src/audio/sdl` | SDL3 audio stream |
-| `xaudio2` | `src/audio/xaudio2` | XAudio2 2.9, Windows 10 and later (RG-GDK-019) |
+| `xaudio2` (default) | `src/audio/xaudio2` | XAudio2 2.9, Windows 10 and later (RG-GDK-019) |
+| `sdl` | `src/audio/sdl` | SDL3 audio stream, until SDL is removed |
 | `nop` | none | Client registration fails; for tools |
 
-SDL stays the default until XAudio2 has been compared with it on titles (see
-Limitations). `rex::audio::CreateDefaultAudioSystem` applies the cvar; `ReXApp`
+XAudio2 became the default on 2026-09-28 by the owner's decision, ahead of the
+remaining default-switch gates (see [release evidence](release-evidence.md)). `rex::audio::CreateDefaultAudioSystem` applies the cvar; `ReXApp`
 uses it.
 
 ## XAudio2 driver

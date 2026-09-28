@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <rex/cvar.h>
+#include <rex/input/flags.h>
 #include <rex/input/input_system.h>
 
 #include "input/gameinput/gameinput_input_driver.h"
@@ -120,9 +121,10 @@ TEST_CASE("The GameInput driver starts against the installed runtime", "[gdk][ga
 
 TEST_CASE("A GameInput input system survives ReXApp's window attach", "[gdk][gameinput]") {
   // ReXApp: CreateDefaultInputSystem, then AttachWindow once the runtime is set up.
+  // GameInput is the GDK build's default (owner decision, 2026-09-28).
+  CHECK(REXCVAR_GET(input_backend) == "gameinput");
   REQUIRE(rex::cvar::SetFlagByName("input_backend", "gameinput"));
   auto input = CreateDefaultInputSystem(false);
-  REQUIRE(rex::cvar::SetFlagByName("input_backend", "sdl"));
   REQUIRE(input);
   input->AttachWindow(nullptr);
   input->SetActiveCallback([] { return true; });

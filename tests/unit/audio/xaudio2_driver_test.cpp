@@ -229,6 +229,9 @@ TEST_CASE("audio_backend selects the XAudio2 system and it serves a guest client
   rex::runtime::ExportResolver resolver;
   rex::runtime::FunctionDispatcher dispatcher(&memory, &resolver);
 
+  // XAudio2 is the default (owner decision, 2026-09-28).
+  CHECK(REXCVAR_GET(audio_backend) == "xaudio2");
+  const std::string saved = REXCVAR_GET(audio_backend);
   REXCVAR_SET(audio_backend, std::string("nop"));
   CHECK(dynamic_cast<rex::audio::nop::NopAudioSystem*>(
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
@@ -237,7 +240,7 @@ TEST_CASE("audio_backend selects the XAudio2 system and it serves a guest client
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
   REXCVAR_SET(audio_backend, std::string("xaudio2"));
   auto audio = rex::audio::CreateDefaultAudioSystem(&dispatcher);
-  REXCVAR_SET(audio_backend, std::string("sdl"));
+  REXCVAR_SET(audio_backend, saved);
   auto* xaudio2_system = dynamic_cast<rex::audio::xaudio2::XAudio2AudioSystem*>(audio.get());
   REQUIRE(xaudio2_system);
 

@@ -1,10 +1,10 @@
 # Native Win32 window and SDL ownership (RG-GDK-021)
 
-The SDK has two window and message-loop backends. SDL3 remains the default; the native Win32 window is opt-in until it has been compared with SDL on titles and the vendor hardware matrix:
+The SDK has two window and message-loop backends. The native Win32 window is the default (owner decision, 2026-09-28); SDL3 remains selectable until it is removed:
 
 ```toml
 [UI/Window]
-ui_backend = "win32"   # default "sdl"
+ui_backend = "sdl"   # default "win32"
 ```
 
 The entry point (`src/ui/windowed_app_main_sdl.cpp`, installed for title projects) reads `ui_backend` after parsing cvars and creates either `Win32WindowedAppContext` or `SDLWindowedAppContext`. `Window::Create` (`src/ui/window_factory.cpp`) then returns the matching window. Titles need no code change.
@@ -48,10 +48,10 @@ The D3D12 presenter is unchanged: both windows give it the same `Win32HwndSurfac
 
 | SDL consumer | Files | Owner | Native replacement | Status |
 | --- | --- | --- | --- | --- |
-| Window, message loop, entry point | `window_sdl.cpp`, `windowed_app_context_sdl.cpp`, `windowed_app_main_sdl.cpp` | RG-GDK-021 | `Win32Window`, `Win32WindowedAppContext` | Opt-in (`ui_backend = "win32"`); SDL stays default |
+| Window, message loop, entry point | `window_sdl.cpp`, `windowed_app_context_sdl.cpp`, `windowed_app_main_sdl.cpp` | RG-GDK-021 | `Win32Window`, `Win32WindowedAppContext` | Default (`ui_backend = "win32"`) |
 | Scancode to virtual key | `sdl_virtual_key.cpp` | RG-GDK-021 | Win32 messages carry virtual keys natively | Used only by the SDL window |
-| Gamepads | `src/input/sdl/sdl_input_driver.cpp` | RG-GDK-020 | GameInput driver ([GameInput](gameinput.md)) | Opt-in (`input_backend = "gameinput"`, GDK builds) |
-| Audio output | `src/audio/sdl/sdl_audio_driver.cpp` | RG-GDK-019 | XAudio2 driver ([Audio output](audio-output.md)) | Opt-in (`audio_backend = "xaudio2"`); SDL stays default |
+| Gamepads | `src/input/sdl/sdl_input_driver.cpp` | RG-GDK-020 | GameInput driver ([GameInput](gameinput.md)) in GDK builds, XInput otherwise | Default |
+| Audio output | `src/audio/sdl/sdl_audio_driver.cpp` | RG-GDK-019 | XAudio2 driver ([Audio output](audio-output.md)) | Default (`audio_backend = "xaudio2"`) |
 | Build and package | `thirdparty/CMakeLists.txt` (static SDL3), `find_dependency(SDL3)` in the package config, `SDL3::SDL3` on `rexui`, `rexinput`, `rexruntime` | RG-GDK-022 | Drop once the three rows above have validated replacements | Retained |
 
 The SDL gamepad and audio drivers initialize their own SDL subsystems (events, gamepad, audio) and do not need SDL video. They keep working under the Win32 window: the gamepad driver pumps SDL events through `CallInUIThread`, which the Win32 context runs.

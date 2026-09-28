@@ -18,8 +18,8 @@
 #include <rex/audio/xaudio2/xaudio2_audio_system.h>
 #endif
 
-REXCVAR_DEFINE_STRING(audio_backend, "sdl", "Audio",
-                      "Audio output: sdl, xaudio2 (Windows; falls back to sdl) or nop")
+REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio",
+                      "Audio output: xaudio2 (default; falls back to sdl), sdl or nop")
     .allowed({"sdl", "xaudio2", "nop"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
