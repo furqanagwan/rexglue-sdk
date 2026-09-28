@@ -21,7 +21,6 @@
 #include <rex/audio/audio_backend.h>
 #include <rex/audio/flags.h>
 #include <rex/audio/nop/nop_audio_system.h>
-#include <rex/audio/sdl/sdl_audio_system.h>
 #include <rex/audio/xaudio2/xaudio2_audio_driver.h>
 #include <rex/audio/xaudio2/xaudio2_audio_system.h>
 #include <rex/cvar.h>
@@ -235,8 +234,9 @@ TEST_CASE("audio_backend selects the XAudio2 system and it serves a guest client
   REXCVAR_SET(audio_backend, std::string("nop"));
   CHECK(dynamic_cast<rex::audio::nop::NopAudioSystem*>(
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
+  // A config written before SDL was removed still gets audio.
   REXCVAR_SET(audio_backend, std::string("sdl"));
-  CHECK(dynamic_cast<rex::audio::sdl::SDLAudioSystem*>(
+  CHECK(dynamic_cast<rex::audio::xaudio2::XAudio2AudioSystem*>(
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
   REXCVAR_SET(audio_backend, std::string("xaudio2"));
   auto audio = rex::audio::CreateDefaultAudioSystem(&dispatcher);

@@ -23,12 +23,10 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
 | D3D12 rendering, NVIDIA | Supported for the recorded scenes | GPU fixtures (RG-GDK-006 to 012); Quantum of Solace 90 s scene pass | Scene pass, not visual accuracy against hardware |
 | D3D12 rendering, AMD / Intel | Blocked | No hardware ([ADR-007](adr/ADR-007-local-gpu-validation-scope.md)); WARP runs are supplementary | Vendor-specific paths (sample layout, ROV) unverified |
-| Input: SDL (`input_backend = "sdl"`) | Supported until removal | `unit_tests [input]`; Quantum of Solace with an ROG Raikiri | Four-pad and guitar hardware not run |
+| Input, window and audio: SDL3 | Removed (RG-GDK-033, 2026-09-28) | Old configs naming `sdl` start the native backend with a warning (`unit_tests [audio][xaudio2]`) | — |
 | Input: XInput (default without the GDK) | Default | Quantum of Solace standard run with the ROG Raikiri (2026-09-28) | Subtypes from XInput; four pads not run |
 | Input: GameInput (default in GDK builds) | Default | [GameInput](gameinput.md); Quantum of Solace native run after the PR #82 fix | No guide button; inbox runtime 0.2309 / redist 3.5.270 only |
-| Window: SDL (`ui_backend = "sdl"`) | Supported until removal | Quantum of Solace standard run | — |
 | Window: Win32 (default) | Default | [Windowing](windowing.md); `gpu_tests [gpu][win32]`; Quantum of Solace native run | Multi-monitor DPI moves not run |
-| Audio: SDL (`audio_backend = "sdl"`) | Supported until removal | Quantum of Solace standard run | — |
 | Audio: XAudio2 (default) | Default | [Audio output](audio-output.md); `unit_tests [audio][xaudio2]`; Quantum of Solace native run | Physical device unplug not run; one HDMI endpoint |
 | Gaming Runtime lifecycle (`gaming_runtime`) | Supported in GDK builds | [Gaming Runtime and PC packaging](gdk-packaging.md); Quantum of Solace native run logs "Gaming Runtime ready" | Missing or old Gaming Services tested with fakes only |
 | `MicrosoftGame.config` and loose registration | Supported | `gdk.gameconfig_schema`; `gdk.smoke_registered` ([packaging](gdk-packaging.md)) | Registration as an application; elevated "as a game" not run |
@@ -82,8 +80,8 @@ These were the gates for a native backend to become the default:
 4. The fallback still works: a missing runtime falls back to SDL with a logged
    diagnostic (GameInput already does).
 
-Removing SDL itself additionally needs every consumer in the
-[SDL ownership map](windowing.md) replaced and its own roadmap issue.
+SDL3 was removed by RG-GDK-033 (issue #97) on 2026-09-28, with every consumer in
+the [SDL ownership map](windowing.md) replaced.
 
 Status on 2026-09-27: gate 1 met for all three. Gate 2 has one title soak each
 (Quantum of Solace native run). Gates 3 and 4 are partly met: GameInput falls
@@ -95,9 +93,8 @@ Every native path is selected at startup and can be undone without a rebuild:
 
 | Change | Roll back with |
 | --- | --- |
-| GameInput or XInput | `input_backend = "sdl"`, until SDL is removed |
-| Win32 window | `ui_backend = "sdl"`, until SDL is removed |
-| XAudio2 | `audio_backend = "sdl"`, until SDL is removed |
+| GameInput | `input_backend = "xinput"` |
+| SDL3 removal (Win32 window, XAudio2, XInput) | None by configuration: revert the RG-GDK-033 PR |
 | Gaming Runtime at startup | `gaming_runtime = "off"` |
 | Real ZPD occlusion counts (RG-GDK-010) | `occlusion_query` cvar (see [regression strategy](regression-strategy.md)) |
 | GDK build | Build the standard `win-amd64` preset; it needs no GDK |

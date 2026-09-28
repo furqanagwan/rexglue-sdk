@@ -7,8 +7,11 @@ Guest audio reaches the host through an `AudioDriver` per guest render client
 | Value | Output | Notes |
 | --- | --- | --- |
 | `xaudio2` (default) | `src/audio/xaudio2` | XAudio2 2.9, Windows 10 and later (RG-GDK-019) |
-| `sdl` | `src/audio/sdl` | SDL3 audio stream, until SDL is removed |
 | `nop` | none | Client registration fails; for tools |
+
+`sdl`, from configs written before SDL3 was removed (RG-GDK-033), starts XAudio2
+with a warning. With no audio device, XAudio2 keeps pacing guest frames on the
+clock until one appears, so titles keep running.
 
 XAudio2 became the default on 2026-09-28 by the owner's decision, ahead of the
 remaining default-switch gates (see [release evidence](release-evidence.md)). `rex::audio::CreateDefaultAudioSystem` applies the cvar; `ReXApp`
@@ -74,7 +77,7 @@ without it, engine creation fails and frames are paced by the clock.
 
 ## Limitations
 
-- No title has been run on the XAudio2 output, so the default stays SDL.
+- Quantum of Solace is the only title run on the XAudio2 output.
 - Unplugging and reconnecting a real device, and switching between 48 kHz and
   44.1-kHz-only endpoints, were not exercised. The loss paths are covered by
   simulated critical errors and stalls. This machine has one active endpoint
@@ -82,7 +85,5 @@ without it, engine creation fails and frames are paced by the clock.
 - The 5.1 speaker mapping on a real surround endpoint was not checked by ear;
   the conversion tests cover the channel order handed to XAudio2.
 - Output is not resampled to the guest clock (Xenia's `SetFrequencyRatio` from
-  the guest time scalar), matching the SDL output. Canary's audio pacing
+  the guest time scalar), as the removed SDL output did not either. Canary's audio pacing
   (`6e5b8324f`, oreyg, merged into Edge) is not ported.
-- SDL audio stays built: it is the default, and SDL itself is removed only by
-  RG-GDK-022 once every SDL consumer has a validated replacement.

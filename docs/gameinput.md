@@ -1,6 +1,6 @@
 # GameInput driver (RG-GDK-020)
 
-GDK builds (`win-amd64-gdk`, see [GDK toolchain](gdk-toolchain.md)) include a native GameInput gamepad driver. It is the **default** in GDK builds (owner decision, 2026-09-28); builds without the GDK default to XInput. SDL stays selectable until it is removed.
+GDK builds (`win-amd64-gdk`, see [GDK toolchain](gdk-toolchain.md)) include a native GameInput gamepad driver. It is the **default** in GDK builds (owner decision, 2026-09-28); builds without the GDK use XInput. SDL3, the earlier fallback, was removed (RG-GDK-033); `input_backend = "sdl"` in an old config starts the default with a warning.
 
 ```toml
 [Input]
@@ -32,7 +32,7 @@ The guest-facing state lives in `GamepadDevices` (`include/rex/input/gameinput/g
 * **Rumble:** holds until the guest changes it, as in XInput. It stops on focus loss and resumes on return; a request made while unfocused is kept and applied on return. It is stopped on disconnect and never carried into a reconnection. The left motor drives GameInput's low-frequency motor, the right the high-frequency one, and trigger motors stay off.
 * **Dead zones:** none by default. GameInput gamepad readings have none, and titles apply their own, as with XInput. Sticks map -1..1 to -32768..32767; triggers 0..1 to 0..255. `left_stick_deadzone_percentage` and `right_stick_deadzone_percentage` (0 to 1, default 0) add one in the shared input layer, for every backend. The scale matches Xenia Canary's cvars of the same name, so 0.12 is about XInput's 7849.
 * **Buttons:** the 14 GameInput gamepad buttons map one-to-one to XInput's. There is no guide button: it is not in `GameInputGamepadState`, and `RegisterGuideButtonCallback` is not used. On the installed runtime (inbox `GameInput.dll` 0.2309.26100.9502 forwarding to GameInputRedist 3.5.270) that call wrote its callback token through the `context` argument, over the driver's vtable pointer. The first virtual call after startup (ReXApp's `AttachWindow`) then crashed. Found running Quantum of Solace on 2026-09-27. Capabilities no longer advertise a guide button, even with `guide_button = true`.
-* **Keystrokes:** `XInputGetKeystroke` events come from `KeystrokeSynthesizer`, which is now shared with the SDL driver (same order, thresholds and repeat).
+* **Keystrokes:** `XInputGetKeystroke` events come from `KeystrokeSynthesizer`, which the removed SDL driver shared (same order, thresholds and repeat).
 * **Capabilities:** a gamepad (type 1) with every input, plus `X_INPUT_CAPS_WIRELESS` from `GameInputDeviceWireless`. The subtype comes from the device's `supportedInput`: a racing wheel is `XINPUT_DEVSUBTYPE_WHEEL` (2), an arcade stick 3 and a flight stick 4, even when it also offers the gamepad kind; anything else is a gamepad (1). A device without both body motors in `supportedRumbleMotors` reports zero vibration speeds, as XInput does. The connect log line records the kinds, subtype, motors and connection.
 * **Vibration switch:** `vibration = false` (default true) stops every backend's motors in the shared layer. `SetState` still succeeds, so titles see a connected pad.
 * **Dialogs:** while a XAM dialog (message box, keyboard, device selector) is open, the guest reads an untouched pad and no keystrokes. Buttons held as it closes stay hidden until released, and keystrokes made during it are discarded, so the press that dismissed it does not also act in the game.
@@ -44,11 +44,11 @@ The guest-facing state lives in `GamepadDevices` (`include/rex/input/gameinput/g
 * `unit_tests [keystroke]` (all builds): edge order, repeat timing, analog thresholds, inactive release.
 * `unit_tests [gdk][gameinput]` (GDK builds): stick, trigger and button mapping edges including NaN and clamping, rumble conversion, device kinds to subtypes, motors to vibration capability, and driver setup against the installed runtime. That test enumerated and read the one pad connected on the development machine and checked its capabilities carry the identified subtype.
 * `unit_tests [deadzone],[vibration],[ui_block],[hotplug]` (all builds): the shared layer every backend goes through.
-* The existing `[input]` assignment and merge tests pass unchanged, with SDL now on the shared synthesizer.
+* The existing `[input]` assignment and merge tests pass unchanged.
 
 ## Not established
 
 * Hardware matrix: behavior is proven through `GamepadDevices` and one connected pad's enumeration and reading. Four physical pads, hot-plug, wireless, rumble on hardware and focus loss in a running title were not exercised on devices.
-* Instruments: GameInput identifies wheels and arcade and flight sticks, but not Xbox 360 guitars, drums or dance pads, which read as gamepads (subtype 1). The SDL driver guesses those from the device name (upstream ReXGlue `78985dd`). No wheel or stick was connected to confirm the kinds a real device reports. Canary #1230 (subtype override, whammy neutral) is still an open SDL PR and is not adopted; guitar tests need guitar hardware.
+* Instruments: GameInput identifies wheels and arcade and flight sticks, but not Xbox 360 guitars, drums or dance pads, which read as gamepads (subtype 1). The removed SDL driver guessed those from the device name; XInput reports its own subtype. No wheel or stick was connected to confirm the kinds a real device reports. Canary #1230 (subtype override, whammy neutral) is still an open SDL PR and is not adopted; guitar tests need guitar hardware.
 * A packaged title with the runtime missing: the missing-runtime path is implemented and logged, but not exercised on a machine without GameInput.
 * An XInput-versus-GameInput side-by-side on the same device.

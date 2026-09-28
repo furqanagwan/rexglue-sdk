@@ -43,7 +43,7 @@ std::filesystem::path to_path(const std::u16string_view source) {
 namespace filesystem {
 
 std::filesystem::path GetExecutablePath() {
-  // _wpgmptr is only set for wmain entry points; a plain main (Catch2, SDL)
+  // _wpgmptr is only set for wmain entry points; a plain main (Catch2)
   // leaves it null and the debug CRT asserts. Ask the loader instead.
   std::wstring path(MAX_PATH, L'\0');
   while (true) {

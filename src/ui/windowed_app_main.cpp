@@ -1,7 +1,7 @@
 /**
- * @file        ui/windowed_app_main_sdl.cpp
- * @brief       Entry point for windowed applications (SDL3 or native Win32
- *              windowing, chosen by the ui_backend cvar)
+ * @file        ui/windowed_app_main.cpp
+ * @brief       Entry point for windowed applications (native Win32 window;
+ *              SDL3 was removed by RG-GDK-033)
  *
  * @copyright   Copyright (c) 2026 Tom Clay <tomc@tctechstuff.com>
  *              All rights reserved.
@@ -22,9 +22,7 @@
 #include <rex/platform.h>
 #include <rex/ui/windowed_app.h>
 #include <rex/ui/flags.h>
-#include <rex/ui/windowed_app_context_sdl.h>
 
-#if REX_PLATFORM_WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -36,11 +34,10 @@
 #include <shellapi.h>
 
 #include <rex/ui/windowed_app_context_win.h>
-#endif
 
 namespace {
 
-// Runs the app on an initialized context. Shared by both window backends.
+// Runs the app on an initialized context.
 template <typename AppContext>
 int RunApp(AppContext& app_context, const std::vector<std::string>& remaining) {
   std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
@@ -64,41 +61,24 @@ int RunWindowedApp(int argc, char** argv) {
   rex::cvar::ApplyEnvironment();
   rex::InitLoggingEarly();
 
-#if REX_PLATFORM_WIN32
   // Apartment-threaded COM for shell dialogs.
   if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
     return EXIT_FAILURE;
   }
-#endif
 
   int result = EXIT_FAILURE;
-#if REX_PLATFORM_WIN32
-  if (REXCVAR_GET(ui_backend) == "win32") {
-    {
-      rex::ui::Win32WindowedAppContext app_context(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
-      if (app_context.Initialize()) {
-        result = RunApp(app_context, remaining);
-      } else {
-        REXLOG_ERROR("Failed to initialize the Win32 windowed app context");
-      }
-    }
-    CoUninitialize();
-    return result;
-  }
-#endif
   {
-    rex::ui::SDLWindowedAppContext app_context;
+    rex::ui::Win32WindowedAppContext app_context(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
     if (app_context.Initialize()) {
       result = RunApp(app_context, remaining);
+    } else {
+      REXLOG_ERROR("Failed to initialize the Win32 windowed app context");
     }
   }
-#if REX_PLATFORM_WIN32
   CoUninitialize();
-#endif
   return result;
 }
 
-#if REX_PLATFORM_WIN32
 // Convert wide argv from CommandLineToArgvW to UTF-8 for cvar::Init.
 std::vector<std::string> WideArgsToUtf8(int argc, wchar_t** wargv) {
   std::vector<std::string> args;
@@ -118,11 +98,8 @@ std::vector<std::string> WideArgsToUtf8(int argc, wchar_t** wargv) {
   }
   return args;
 }
-#endif
 
 }  // namespace
-
-#if REX_PLATFORM_WIN32
 
 int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE hinstance_prev, LPWSTR command_line,
                     int show_cmd) {
@@ -143,11 +120,3 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE hinstance_prev, LPWSTR comman
   }
   return RunWindowedApp(static_cast<int>(argv_ptrs.size()), argv_ptrs.data());
 }
-
-#else
-
-int main(int argc, char* argv[]) {
-  return RunWindowedApp(argc, argv);
-}
-
-#endif

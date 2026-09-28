@@ -9,19 +9,19 @@
 #include <rex/audio/audio_backend.h>
 
 #include <rex/audio/nop/nop_audio_system.h>
-#include <rex/audio/sdl/sdl_audio_system.h>
+#include <rex/audio/xaudio2/xaudio2_audio_system.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
-#include <rex/platform.h>
 
-#if REX_PLATFORM_WIN32
-#include <rex/audio/xaudio2/xaudio2_audio_system.h>
-#endif
-
-REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio",
-                      "Audio output: xaudio2 (default; falls back to sdl), sdl or nop")
-    .allowed({"sdl", "xaudio2", "nop"})
+// "sdl" is still accepted so an old config starts: SDL was removed
+// (RG-GDK-033), and it now means XAudio2, with a warning.
+REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio", "Audio output: xaudio2 (default) or nop")
+    .allowed({"xaudio2", "nop", "sdl"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
+// Applied by every output driver; defined here since the SDL driver that
+// held it was removed.
+REXCVAR_DEFINE_BOOL(audio_mute, false, "Audio", "Mute audio output");
 
 namespace rex::audio {
 
@@ -31,14 +31,10 @@ std::unique_ptr<AudioSystem> CreateDefaultAudioSystem(
   if (backend == "nop") {
     return nop::NopAudioSystem::Create(function_dispatcher);
   }
-  if (backend == "xaudio2") {
-#if REX_PLATFORM_WIN32
-    return xaudio2::XAudio2AudioSystem::Create(function_dispatcher);
-#else
-    REXAPU_WARN("audio_backend=xaudio2 is Windows only; using SDL");
-#endif
+  if (backend == "sdl") {
+    REXAPU_WARN("audio_backend=sdl: SDL was removed; using XAudio2");
   }
-  return sdl::SDLAudioSystem::Create(function_dispatcher);
+  return xaudio2::XAudio2AudioSystem::Create(function_dispatcher);
 }
 
 }  // namespace rex::audio

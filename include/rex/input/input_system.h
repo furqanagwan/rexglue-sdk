@@ -120,7 +120,7 @@ class InputSystem : public system::IInputSystem {
   std::array<uint16_t, kMaxGuestUsers> consumed_buttons_ = {};
 };
 
-/// Create a default InputSystem: GameInput, XInput or SDL by input_backend,
+/// Create a default InputSystem: GameInput or XInput by input_backend,
 /// then MnK and NOP.
 /// In tool mode, only the NOP driver is added.
 std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode);

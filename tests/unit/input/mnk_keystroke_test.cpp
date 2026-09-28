@@ -1,8 +1,7 @@
 /**
  * @file        mnk_keystroke_test.cpp
  * @brief       Keyboard keystrokes: bound pad keys and raw passthrough
- *              (upstream ReXGlue 3f34ffc). Key events arrive the same way from
- *              the Win32 and SDL windows, so these hold for both.
+ *              (upstream ReXGlue 3f34ffc), from the Win32 window's key events.
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License

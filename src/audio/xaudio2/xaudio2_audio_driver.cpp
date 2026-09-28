@@ -338,7 +338,7 @@ bool XAudio2AudioDriver::CreateEngine() {
   mastering->GetVoiceDetails(&details);
   DWORD device_mask = 0;
   mastering->GetChannelMask(&device_mask);
-  // A mono or stereo endpoint gets the stereo fold, as with SDL; anything
+  // A mono or stereo endpoint gets the stereo fold; anything
   // wider gets 5.1 and XAudio2 maps it onto the endpoint's layout.
   const uint32_t channels = details.InputChannels > 2 ? 6 : 2;
 

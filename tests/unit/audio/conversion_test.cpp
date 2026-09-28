@@ -2,7 +2,7 @@
  * @file        conversion_test.cpp
  * @brief       Guest 5.1 frame to host layouts: channel impulses, fold, clipping
  *
- * Shared by the SDL and XAudio2 outputs (RG-GDK-019).
+ * Used by the XAudio2 output (RG-GDK-019).
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License
