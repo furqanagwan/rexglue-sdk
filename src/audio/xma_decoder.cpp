@@ -339,6 +339,10 @@ void XmaDecoder::WriteRegister(uint32_t addr, uint32_t value) {
     // 0601h (1804h) is written to with 0x02000000 and 0x03000000 around a lock
     // operation
     switch (r) {
+      case 0x0601:
+        // Stored above; nothing else to do. Logged, it was hundreds of lines a
+        // second in Blood Stone.
+        break;
       default: {
         const auto register_info = register_file_.GetRegisterInfo(r);
         if (register_info) {

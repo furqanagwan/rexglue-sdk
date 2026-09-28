@@ -49,18 +49,25 @@ constexpr uint32_t Beq(uint32_t from, uint32_t to) {
 
 class DiscoveryModule : public TestModule {
  public:
-  void LoadCode(const uint8_t* data, size_t size) {
+  // `pointer`, when set, is held by a data section as a method table would.
+  void LoadCode(const uint8_t* data, size_t size, uint32_t pointer = 0) {
     Load(kBase, data, size);
     pdata_[0] = uint8_t(kBase >> 24);
     pdata_[1] = uint8_t(kBase >> 16);
     binary_sections_.push_back({".pdata", kBase + uint32_t(size), 8, pdata_.data(), false, false});
+    for (size_t i = 0; i < 4; ++i) {
+      rdata_[i] = uint8_t(pointer >> (24 - 8 * i));
+    }
+    binary_sections_.push_back(
+        {".rdata", kBase + uint32_t(size) + 8, 8, rdata_.data(), false, false});
   }
-  uint32_t image_size() const override { return TestModule::image_size() + 8; }
+  uint32_t image_size() const override { return TestModule::image_size() + 16; }
   uint32_t exception_directory_address() const override { return kBase + TestModule::image_size(); }
   uint32_t exception_directory_size() const override { return 8; }
 
  private:
   std::array<uint8_t, 8> pdata_{};
+  std::array<uint8_t, 8> rdata_{};
 };
 
 // Runs the full analysis on `words` at kBase, with the given entries known
@@ -71,13 +78,14 @@ struct Analyzed {
   std::optional<CodegenContext> ctx;
 
   // `sized` entries get a declared size, as a function table entry gives one.
+  // `pointer`, when set, is held in data.
   Analyzed(const std::vector<uint32_t>& words, std::initializer_list<uint32_t> entries,
-           std::initializer_list<std::pair<uint32_t, uint32_t>> sized = {}) {
+           std::initializer_list<std::pair<uint32_t, uint32_t>> sized = {}, uint32_t pointer = 0) {
     for (uint32_t word : words) {
       bytes.insert(bytes.end(),
                    {uint8_t(word >> 24), uint8_t(word >> 16), uint8_t(word >> 8), uint8_t(word)});
     }
-    module.LoadCode(bytes.data(), bytes.size());
+    module.LoadCode(bytes.data(), bytes.size(), pointer);
     RecompilerConfig config;
     config.projectName = "discovery";
     for (uint32_t entry : entries) {
@@ -282,6 +290,17 @@ TEST_CASE("Shared blocks classify branches using the actual emitting function",
   CHECK(graph.classifyTarget(kBase + 4, kBase + 20, false, outer) == TargetKind::InternalLabel);
   CHECK(graph.classifyTarget(kBase + 16, kBase + 20, true, outer) == TargetKind::Function);
   CHECK(graph.classifyTarget(kBase + 16, kBase + 20, false, inner) == TargetKind::InternalLabel);
+}
+
+TEST_CASE("A return after an indirect tail dispatch is an entry when data points to it",
+          "[codegen][discovery]") {
+  // As below, but a method table holds 0x14: an empty method (Blood Stone's
+  // sub_8218F208).
+  Analyzed a({Blr(), 0x81630000, 0x816B0024, 0x7D6903A6, 0x4E800420, Blr()}, {kBase}, {},
+             kBase + 20);
+  CHECK(a.IsEntry(kBase + 20));
+  CHECK(a.ctx->graph.functionCount() == 3);
+  CHECK(a.ctx->graph.pendingCount() == 0);
 }
 
 TEST_CASE("An unreachable return after an indirect tail dispatch is not a new entry",

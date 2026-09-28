@@ -273,3 +273,32 @@ Title runs, GDK Release, NVIDIA GeForce RTX 5080 Laptop GPU:
   plays its intro.
 
 These are boot results, not gameplay.
+
+## Return-only leftovers that data points to, 2026-09-28
+
+The first play session of Blood Stone stopped after 48 seconds on a call to
+the unregistered `0x8218F208`. It is a lone `blr` after `sub_8218F1F8`, which
+ends in an indirect `bctr`. That is an empty method, called through a
+pointer.
+
+The conservative rule above skips a return-only leftover, since compilers
+leave unreachable `blr`s after tail dispatches and nothing else marks it as
+an entry. A pointer to it in a non-executable section is that evidence. A
+return-only leftover is now registered when a data section holds its address
+as an aligned big-endian word. The scan only runs when such a leftover
+exists, and only checks those candidates.
+
+Tests: a `[codegen][discovery]` fixture with a data pointer to the `blr`.
+Ignoring the pointer fails it, and the fixture without a pointer still gets
+no entry.
+
+Effect on generated code:
+
+| Title | Change |
+| --- | --- |
+| Blood Stone | 7 empty methods added, including `sub_8218F208`; none removed |
+| 007 Legends | Unchanged |
+| Quantum of Solace | Unchanged |
+
+The next session ran 99 seconds, into the first mission's load, and was
+closed normally with no error lines.
