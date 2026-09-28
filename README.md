@@ -137,6 +137,9 @@ pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
 GDK builds can read pads through GameInput with `input_backend = "gameinput"`
 (opt-in; SDL stays the default): see [GameInput driver](docs/gameinput.md).
+Every input backend honours `vibration`, `left_stick_deadzone_percentage`
+and `right_stick_deadzone_percentage`, and `mnk_passthrough` presents the
+keyboard to titles that read one.
 Any build can use the native Win32 window instead of SDL with
 `ui_backend = "win32"` (opt-in): see [Windowing](docs/windowing.md).
 Audio can go through XAudio2 instead of SDL with `audio_backend = "xaudio2"`
