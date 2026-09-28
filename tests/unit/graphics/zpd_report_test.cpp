@@ -88,3 +88,15 @@ TEST_CASE("ZPD report writes the lanes D3D polls on last, in one copy", "[zpd]")
     CHECK(words[i] == 0u);
   }
 }
+
+TEST_CASE("ZPD report reads a ROV counter slot lane by lane", "[zpd]") {
+  // Lane order is the shader's: Total (unused), ZFail, ZPass, StencilFail.
+  static_assert(XenosZPDReport::kCounterSizeBytes == 16);
+  const uint32_t slot[XenosZPDReport::kCount] = {999, 3, 5, 7};
+  XenosZPDReport report = XenosZPDReport::FromCounterSlot(slot);
+  CHECK(report.z_fail == 3u);
+  CHECK(report.z_pass == 5u);
+  CHECK(report.stencil_fail == 7u);
+  // Total is always the sum, never the stored lane.
+  CHECK(report.total() == 15u);
+}

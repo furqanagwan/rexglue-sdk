@@ -111,7 +111,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
     // If anything in this is structure is changed in a way not compatible with
     // the previous layout, invalidate the pipeline storages by increasing this
     // version number (0xYYYYMMDD)!
-    static constexpr uint32_t kVersion = 0x20260226;
+    static constexpr uint32_t kVersion = 0x20260928;
 
     enum class DepthStencilMode : uint32_t {
       kNoModifiers,
@@ -318,7 +318,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
     uint32_t alpha_to_mask;
     uint32_t edram_32bpp_tile_pitch_dwords_scaled;
     uint32_t edram_depth_base_dwords_scaled;
-    uint32_t padding_edram_depth_base_dwords_scaled;
+    // ZPD counter slot for ROV draws (RG-GDK-010a); UINT32_MAX when no
+    // occlusion query is open, which the shader treats as "don't count".
+    uint32_t zpd_counter_index;
 
     float color_exp_bias[4];
 
@@ -420,6 +422,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
       kAlphaToMask,
       kEdram32bppTilePitchDwordsScaled,
       kEdramDepthBaseDwordsScaled,
+      kZpdCounterIndex,
 
       kColorExpBias,
 
@@ -502,6 +505,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
   enum class UAVRegister {
     kSharedMemory,
     kEdram,
+    kZpdCounter,
   };
 
   uint64_t GetDefaultVertexShaderModification(
@@ -726,6 +730,10 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // unchanged or known that it's safe not to await kills/alphatest/AtoC),
   // returns from the shader.
   void ROV_DepthStencilTest();
+  // Adds the depth/stencil outcomes in system_temp_rov_params_ to the open
+  // ZPD query's counter slot: ZPass from the surviving coverage, and, with
+  // occlusion_query_full_counters, ZFail and StencilFail from bits 12:19.
+  void ROV_AddMSAASamplesToZPD(bool count_passed, bool count_failed);
   // Unpacks a 32bpp or a 64bpp color in packed_temp.packed_temp_components to
   // color_temp, using 2 temporary VGPRs.
   void ROV_UnpackColor(uint32_t rt_index, uint32_t packed_temp, uint32_t packed_temp_components,
@@ -934,6 +942,10 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // Whether the output merger should be emulated in pixel shaders.
   bool edram_rov_used_;
 
+  // Whether ROV shaders also count ZFail and StencilFail
+  // (occlusion_query_full_counters).
+  bool zpd_full_counters_;
+
   // Whether with RTV-based output-merger, k_8_8_8_8_GAMMA render targets are
   // stored as 8-bit with shader-side gamma conversion.
   bool gamma_render_target_as_unorm8_;
@@ -1065,6 +1077,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // 8:11 - Whether color buffers have been written to, if not written on the
   //        taken execution path, don't export according to Direct3D 9 register
   //        documentation (some games rely on this behavior).
+  // Bits 12:19 are only set with zpd_full_counters_ (occlusion queries):
+  // 12:15 - Samples that passed stencil and failed depth.
+  // 16:19 - Samples that failed stencil.
   // Y - Absolute resolution-scaled EDRAM offset for depth / stencil, in dwords,
   //     before and during depth testing. During color writing, when the depth /
   //     stencil address is not needed anymore, current color sample address.
@@ -1161,6 +1176,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
   uint32_t uav_count_;
   uint32_t uav_index_shared_memory_;
   uint32_t uav_index_edram_;
+  uint32_t uav_index_zpd_counter_;
 
   std::vector<SamplerBinding> sampler_bindings_;
 };

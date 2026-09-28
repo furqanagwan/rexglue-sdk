@@ -1,6 +1,7 @@
 /**
  * @file        zpd_fixture_test.cpp
- * @brief       EVENT_WRITE_ZPD occlusion query reports through the GPU plugin (RG-GDK-010)
+ * @brief       EVENT_WRITE_ZPD occlusion query reports through the GPU plugin (RG-GDK-010,
+ *              and the ROV path, RG-GDK-010a)
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License
@@ -72,6 +73,27 @@ uint32_t Total(GpuFixture& fixture, uint32_t report) {
 uint32_t ZFail(GpuFixture& fixture, uint32_t report) {
   const auto& counts = Counts(fixture, report);
   return uint32_t(counts.ZFail_A) + uint32_t(counts.ZFail_B);
+}
+
+uint32_t StencilFail(GpuFixture& fixture, uint32_t report) {
+  const auto& counts = Counts(fixture, report);
+  return uint32_t(counts.StencilFail_A) + uint32_t(counts.StencilFail_B);
+}
+
+// The ROV render target path, where the pixel shaders count samples. WARP's
+// ROV draws don't complete, and some adapters have no ROVs, so those skip.
+std::unique_ptr<GpuFixture> CreateRovFixture(std::string* error, bool full_counters) {
+  auto fixture = GpuFixture::Create(
+      error, {{"occlusion_query", "strict"},
+              {"async_shader_compilation", "false"},
+              {"render_target_path_d3d12", "rov"},
+              {"occlusion_query_full_counters", full_counters ? "true" : "false"}});
+  if (fixture && (fixture->provider().IsAdapterSoftware() ||
+                  !fixture->provider().AreRasterizerOrderedViewsSupported())) {
+    *error = "no hardware ROV support: " + fixture->Metadata();
+    return nullptr;
+  }
+  return fixture;
 }
 
 // Waits for the command processor to write the awaited report back. Reports
@@ -320,4 +342,174 @@ TEST_CASE("Fake mode reports the configured count for every interval", "[gpu][zp
 
   // query_occlusion_fake_sample_count, whatever was drawn.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 1000u);
+}
+
+TEST_CASE("ROV BEGIN/END query counts the samples drawn in between", "[gpu][zpd][rov]") {
+  std::string error;
+  auto fixture = CreateRovFixture(&error, false);
+  if (!fixture) {
+    SKIP("ROV fixture unavailable: " << error);
+  }
+  SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  WriteZPD(*fixture, begin, false);
+  DrawRect(*fixture, 0, 0, 16, 8, 0xFF00FF00);
+  WriteZPD(*fixture, end, true);
+  REQUIRE(AwaitReport(*fixture, end));
+  INFO(fixture->Metadata());
+
+  // Before RG-GDK-010a, ROV reported query_occlusion_fake_sample_count here.
+  CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 16u * 8u);
+  CHECK(Delta(Total(*fixture, end), Total(*fixture, begin)) == 16u * 8u);
+  CHECK(Delta(ZFail(*fixture, end), ZFail(*fixture, begin)) == 0u);
+}
+
+TEST_CASE("ROV depth-tested draws count only the samples that pass", "[gpu][zpd][rov]") {
+  std::string error;
+  auto fixture = CreateRovFixture(&error, false);
+  if (!fixture) {
+    SKIP("ROV fixture unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options;
+  options.color_base_tiles = 16;
+  options.depth_control.z_enable = 1;
+  options.depth_control.z_write_enable = 1;
+  options.depth_control.zfunc = xenos::CompareFunction::kAlways;
+  options.z = 0.5f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF000000);
+
+  uint32_t reports[3];
+  for (uint32_t& report : reports) {
+    report = AllocReport(*fixture);
+  }
+  options.depth_control.zfunc = xenos::CompareFunction::kLess;
+  WriteZPD(*fixture, reports[0], false);
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
+  WriteZPD(*fixture, reports[1], false);
+  options.z = 0.25f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
+  WriteZPD(*fixture, reports[2], true);
+  REQUIRE(AwaitReport(*fixture, reports[2]));
+  INFO(fixture->Metadata());
+
+  CHECK(Delta(ZPass(*fixture, reports[1]), ZPass(*fixture, reports[0])) == 0u);
+  CHECK(Delta(ZPass(*fixture, reports[2]), ZPass(*fixture, reports[1])) == 8u * 32u);
+  // Without full counters the failures are not counted.
+  CHECK(Delta(ZFail(*fixture, reports[1]), ZFail(*fixture, reports[0])) == 0u);
+}
+
+TEST_CASE("ROV full counters split depth and stencil failures", "[gpu][zpd][rov]") {
+  std::string error;
+  auto fixture = CreateRovFixture(&error, true);
+  if (!fixture) {
+    SKIP("ROV fixture unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options;
+  options.color_base_tiles = 16;
+  options.depth_control.z_enable = 1;
+  options.depth_control.z_write_enable = 1;
+  options.depth_control.zfunc = xenos::CompareFunction::kAlways;
+  options.z = 0.5f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF000000);
+
+  uint32_t reports[4];
+  for (uint32_t& report : reports) {
+    report = AllocReport(*fixture);
+  }
+  options.depth_control.z_write_enable = 0;
+  options.depth_control.zfunc = xenos::CompareFunction::kLess;
+  WriteZPD(*fixture, reports[0], false);
+  // Behind everywhere: every sample fails depth.
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
+  WriteZPD(*fixture, reports[1], false);
+  // Behind as well, and the stencil test never passes: a sample failing both
+  // counts once, as a stencil failure.
+  DrawOptions stencil = options;
+  stencil.z = 0.75f;
+  stencil.depth_control.stencil_enable = 1;
+  stencil.depth_control.stencilfunc = xenos::CompareFunction::kNever;
+  SetupDraw(*fixture, surface, 32, 32, stencil);
+  DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
+  WriteZPD(*fixture, reports[2], false);
+  // In front, no stencil: passes.
+  options.z = 0.25f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 4, 32, 0xFFFF0000);
+  WriteZPD(*fixture, reports[3], true);
+  REQUIRE(AwaitReport(*fixture, reports[3]));
+  INFO(fixture->Metadata());
+
+  struct Counters {
+    uint32_t zpass, zfail, stencil_fail, total;
+  };
+  auto interval = [&](uint32_t i) {
+    return Counters{Delta(ZPass(*fixture, reports[i + 1]), ZPass(*fixture, reports[i])),
+                    Delta(ZFail(*fixture, reports[i + 1]), ZFail(*fixture, reports[i])),
+                    Delta(StencilFail(*fixture, reports[i + 1]), StencilFail(*fixture, reports[i])),
+                    Delta(Total(*fixture, reports[i + 1]), Total(*fixture, reports[i]))};
+  };
+  Counters depth = interval(0);
+  CHECK(depth.zfail == 32u * 32u);
+  CHECK(depth.zpass == 0u);
+  CHECK(depth.stencil_fail == 0u);
+  CHECK(depth.total == 32u * 32u);
+  Counters stencil_failed = interval(1);
+  CHECK(stencil_failed.stencil_fail == 8u * 32u);
+  CHECK(stencil_failed.zfail == 0u);
+  CHECK(stencil_failed.zpass == 0u);
+  CHECK(stencil_failed.total == 8u * 32u);
+  Counters passed = interval(2);
+  CHECK(passed.zpass == 4u * 32u);
+  CHECK(passed.zfail + passed.stencil_fail == 0u);
+  CHECK(passed.total == 4u * 32u);
+}
+
+TEST_CASE("ROV counter slots are cleared when a query reuses them", "[gpu][zpd][rov]") {
+  std::string error;
+  auto fixture = CreateRovFixture(&error, false);
+  if (!fixture) {
+    SKIP("ROV fixture unavailable: " << error);
+  }
+  SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  // Each query releases its slot at resolve, and the next one takes it back.
+  for (uint32_t width = 1; width <= 32; ++width) {
+    WriteZPD(*fixture, begin, false);
+    DrawRect(*fixture, 0, 0, width, 2, 0xFFFFFFFF);
+    WriteZPD(*fixture, end, true);
+    REQUIRE(AwaitReport(*fixture, end));
+    INFO("width " << width);
+    REQUIRE(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == width * 2);
+  }
+}
+
+TEST_CASE("ROV MSAA queries count covered samples", "[gpu][zpd][rov]") {
+  std::string error;
+  auto fixture = CreateRovFixture(&error, false);
+  if (!fixture) {
+    SKIP("ROV fixture unavailable: " << error);
+  }
+  SetupDraw(*fixture, {xenos::MsaaSamples::k4X, 64}, 16, 16);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  WriteZPD(*fixture, begin, false);
+  DrawRect(*fixture, 0, 0, 8, 4, 0xFFFFFFFF);
+  WriteZPD(*fixture, end, true);
+  REQUIRE(AwaitReport(*fixture, end));
+  INFO(fixture->Metadata());
+
+  // The same host sample count as the host render target path.
+  CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 8u * 4u * 4u);
 }

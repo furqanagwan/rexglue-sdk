@@ -68,7 +68,7 @@ column until the title can be supplied. Results are as of 2026-09-27
 | Kernel import ABI and file IO | Dead Rising; Edge `887beea69` | Synthetic NtOpenFile import with distinct ShareAccess/OpenOptions; later boot/load/save | RG-GDK-014 | Synthetic: `kernel_tests [content]` pass; title not available (not-run) |
 | Timing, waits and title termination | NFS Shift, Riddick; Edge #233/#234/#251, Canary #872/#1025 | Delay and timeout accuracy per interval, absolute times, APC delivery, termination of blocked threads under contention with a watchdog | RG-GDK-015 | Synthetic: `kernel_tests [timing]` and `[termination]` pass (both timer modes; wake paths mutation-checked); Quantum of Solace 90 s pass in both modes; titles not available |
 | Dispatch headers and object reuse | Guitar Hero 5 DLC; Canary #1225/#1227 | Header mirrors host for events/semaphores, guest in-place writes, stale signature after handle reuse, concurrent wait/signal/reset/pulse | RG-GDK-014 | Synthetic: `kernel_tests [object_header]` pass (reproducer fails with the check removed); title not available |
-| ZPD and lens flares | Crackdown 2; Canary #1218 | Occluded/unoccluded scene, strict vs fast/readback modes, query ID reuse/wrap and MSAA | RG-GDK-010, #64 | Fixture: `gpu_tests [zpd]` pass (NVIDIA, WARP); ROV counters open (#64); title not available |
+| ZPD and lens flares | Crackdown 2; Canary #1218 | Occluded/unoccluded scene, strict vs fast/readback modes, query ID reuse/wrap and MSAA | RG-GDK-010, #64 | Fixture: `gpu_tests [zpd]` pass (NVIDIA, WARP); ROV counters `gpu_tests [zpd][rov]` pass (NVIDIA; WARP skips); RTV full counters open (#64); title not available |
 | Scalar shader math | Ace Combat 6; Canary #1190 | rcp/rsq/log/exp edge values and ground rendering; unrelated shader controls | RG-GDK-012 | Fixture: `gpu_tests [alu]` pass (NVIDIA, WARP); title not available |
 | EDRAM depth aliasing | title `4D530A26`; Canary #1222 | Color→depth→color bit preservation, occluded sprites, 1x/2x/4x sample readback | RG-GDK-009 | Fixture: EDRAM layout fixtures pass (NVIDIA, WARP); title not available |
 | AMD sample layout | title `4D5307F1`; Canary #1238 | Canonical EDRAM before/after depth-copy fixtures, exact sample indices | RG-GDK-009 | Fixture pass on NVIDIA and WARP; AMD hardware unavailable (ADR-007) |
@@ -390,8 +390,20 @@ the oracle: BEGIN/END, QueryBatch with empty intervals, depth-rejected samples,
 segments split across submissions, reused report memory with recycled host
 query slots, a PS-less draw without writes (0 samples without the empty-PS
 binding, on NVIDIA and WARP), 4x MSAA (host samples) and fast/fake modes. Not
-run: the ROV path (falls back to fake results; #64), AMD/Intel, VIZ (#65) and
-Crackdown 2 flares with the resolve readback modes (no title content).
+run: AMD/Intel, VIZ (#65) and Crackdown 2 flares with the resolve readback
+modes (no title content).
+
+RG-GDK-010a ROV occlusion counters (2026-09-28): with
+`render_target_path_d3d12 = "rov"` (Intel's default path) the pixel shaders
+count samples into a per-query counter slot instead of reporting fake counts.
+`occlusion_query_full_counters` (default off) adds ZFail and StencilFail on ROV.
+`gpu_tests [zpd][rov]` on NVIDIA covers BEGIN/END, depth-rejected draws, depth
+and stencil failures with full counters (a sample failing both counts once, as
+StencilFail), slot reuse (32 queries) and 4x MSAA. WARP skips, as its ROV draws
+don't complete. Mutations: restoring the fake fallback fails all five tests,
+skipping the slot clear fails the reuse test, and dropping stencil precedence
+fails the full-counter test. Not run: Intel and AMD ROV hardware, and the RTV
+hybrid Total count (#64).
 
 RG-GDK-004 heap ranges (2026-09-24, debug and release CTest): the AllocRange
 window cases in `unit_tests [memory]` pass; six of seven fail before the

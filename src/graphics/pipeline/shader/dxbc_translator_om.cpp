@@ -15,6 +15,7 @@
 #include <rex/graphics/flags.h>
 #include <rex/graphics/pipeline/render_target/cache.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
+#include <rex/graphics/xenos_zpd_report.h>
 #include <rex/graphics/pipeline/texture/cache.h>
 #include <rex/graphics/util/draw.h>
 #include <rex/math.h>
@@ -757,6 +758,13 @@ void DxbcShaderTranslator::ROV_DepthStencilTest() {
     // Depth test has failed.
     a_.OpElse();
     {
+      if (zpd_full_counters_) {
+        // Remember for the ZFail ZPD counter. Stencil is tested after this and
+        // may move the sample to StencilFail instead.
+        a_.OpOr(dxbc::Dest::R(system_temp_rov_params_, 0b0001),
+                dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX),
+                dxbc::Src::LU(1 << (12 + i)));
+      }
       // Exclude the bit from the covered sample mask.
       // sample_temp.x = old depth/stencil
       // sample_temp.y = old depth
@@ -894,6 +902,15 @@ void DxbcShaderTranslator::ROV_DepthStencilTest() {
         // sample_temp.y = stencil operation
         // sample_temp.z = free
         a_.OpUBFE(sample_temp_y_dest, dxbc::Src::LU(3), dxbc::Src::LU(3), sample_temp_z_src);
+        if (zpd_full_counters_) {
+          // Stencil failure takes precedence over depth failure.
+          a_.OpAnd(dxbc::Dest::R(system_temp_rov_params_, 0b0001),
+                   dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX),
+                   dxbc::Src::LU(~uint32_t(1 << (12 + i))));
+          a_.OpOr(dxbc::Dest::R(system_temp_rov_params_, 0b0001),
+                  dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX),
+                  dxbc::Src::LU(1 << (16 + i)));
+        }
         // Exclude the bit from the covered sample mask.
         // sample_temp.x = old depth/stencil
         // sample_temp.y = stencil operation
@@ -1116,6 +1133,12 @@ void DxbcShaderTranslator::ROV_DepthStencilTest() {
   }
 
   if (ROV_IsDepthStencilEarly()) {
+    if (zpd_full_counters_) {
+      // Failed samples are counted here: with early depth/stencil, a quad
+      // with no coverage left returns before the end of the shader.
+      ROV_AddMSAASamplesToZPD(false, true);
+    }
+
     // Check if safe to discard the whole 2x2 quad early, without running the
     // translated pixel shader, by checking if coverage is 0 in all pixels in
     // the quad and if there are no samples which failed the depth test, but
@@ -1916,6 +1939,62 @@ void DxbcShaderTranslator::CompletePixelShader_AlphaToMask() {
   a_.OpEndIf();
 }
 
+void DxbcShaderTranslator::ROV_AddMSAASamplesToZPD(bool count_passed, bool count_failed) {
+  if (!count_passed && !count_failed) {
+    return;
+  }
+  if (uav_index_zpd_counter_ == kBindingIndexUnallocated) {
+    uav_index_zpd_counter_ = uav_count_++;
+  }
+
+  uint32_t temp = PushSystemTemp();
+  dxbc::Dest temp_x_dest(dxbc::Dest::R(temp, 0b0001));
+  dxbc::Src temp_x_src(dxbc::Src::R(temp, dxbc::Src::kXXXX));
+  dxbc::Dest temp_y_dest(dxbc::Dest::R(temp, 0b0010));
+  dxbc::Src temp_y_src(dxbc::Src::R(temp, dxbc::Src::kYYYY));
+  dxbc::Dest temp_z_dest(dxbc::Dest::R(temp, 0b0100));
+  dxbc::Src temp_z_src(dxbc::Src::R(temp, dxbc::Src::kZZZZ));
+
+  dxbc::Src counter_index_src(LoadSystemConstant(SystemConstants::Index::kZpdCounterIndex,
+                                                 offsetof(SystemConstants, zpd_counter_index),
+                                                 dxbc::Src::kXXXX));
+
+  // UINT32_MAX: no occlusion query is open for this draw.
+  a_.OpINE(temp_x_dest, counter_index_src, dxbc::Src::LU(UINT32_MAX));
+  a_.OpIf(true, temp_x_src);
+  {
+    // The counter UAV is raw, so address it in bytes: four uint32 lanes per
+    // slot.
+    a_.OpUMul(dxbc::Dest::Null(), temp_y_dest, counter_index_src,
+              dxbc::Src::LU(XenosZPDReport::kCounterSizeBytes));
+    auto add_lane = [&](uint32_t sample_bits, uint32_t lane) {
+      a_.OpAnd(temp_x_dest, dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX),
+               dxbc::Src::LU(sample_bits));
+      a_.OpCountBits(temp_x_dest, temp_x_src);
+      a_.OpIf(true, temp_x_src);
+      {
+        a_.OpIAdd(temp_z_dest, temp_y_src, dxbc::Src::LU(lane * sizeof(uint32_t)));
+        a_.OpAtomicIAdd(
+            dxbc::Dest::U(uav_index_zpd_counter_, uint32_t(UAVRegister::kZpdCounter), 0),
+            temp_z_src, 0b0001, temp_x_src);
+      }
+      a_.OpEndIf();
+    };
+    if (count_passed) {
+      // Bits 0:3 are the surviving coverage; 4:7 are deferred depth/stencil
+      // writes and don't count.
+      add_lane(0b1111, XenosZPDReport::kZPass);
+    }
+    if (count_failed) {
+      add_lane(0b1111 << 12, XenosZPDReport::kZFail);
+      add_lane(0b1111 << 16, XenosZPDReport::kStencilFail);
+    }
+  }
+  a_.OpEndIf();
+
+  PopSystemTemp();
+}
+
 void DxbcShaderTranslator::CompletePixelShader_WriteToROV() {
   uint32_t temp = PushSystemTemp();
   dxbc::Dest temp_x_dest(dxbc::Dest::R(temp, 0b0001));
@@ -1969,6 +2048,8 @@ void DxbcShaderTranslator::CompletePixelShader_WriteToROV() {
 
   // system_temp_rov_params_.y (the depth / stencil sample address) is not
   // needed anymore, can be used for color writing.
+
+  ROV_AddMSAASamplesToZPD(true, zpd_full_counters_ && !ROV_IsDepthStencilEarly());
 
   if (!is_depth_only_pixel_shader_) {
     // Check if any sample is still covered after depth testing and writing,
