@@ -299,6 +299,7 @@ bool build_lwzx(BuilderContext& ctx);
 // Doubleword loads
 bool build_ld(BuilderContext& ctx);
 bool build_ldu(BuilderContext& ctx);
+bool build_ldbrx(BuilderContext& ctx);
 bool build_ldx(BuilderContext& ctx);
 bool build_ldux(BuilderContext& ctx);
 
@@ -344,6 +345,7 @@ bool build_stdcx(BuilderContext& ctx);
 // Doubleword stores
 bool build_std(BuilderContext& ctx);
 bool build_stdu(BuilderContext& ctx);
+bool build_stdbrx(BuilderContext& ctx);
 bool build_stdx(BuilderContext& ctx);
 bool build_stdux(BuilderContext& ctx);
 
@@ -554,6 +556,7 @@ bool build_vsrah(BuilderContext& ctx);
 bool build_vsraw(BuilderContext& ctx);
 bool build_vsrw(BuilderContext& ctx);
 bool build_vsro(BuilderContext& ctx);
+bool build_vrlb(BuilderContext& ctx);
 bool build_vrlh(BuilderContext& ctx);
 bool build_vrlw(BuilderContext& ctx);
 

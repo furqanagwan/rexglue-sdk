@@ -907,6 +907,17 @@ bool build_vsrah(BuilderContext& ctx) {
   return true;
 }
 
+bool build_vrlb(BuilderContext& ctx) {
+  // Rotate each byte left by the low 3 bits of the matching byte of vB.
+  for (size_t i = 0; i < 16; i++) {
+    ctx.println("	{{ uint8_t sh = {}.u8[{}] & 0x7;", ctx.v(ctx.insn.operands[2]), i);
+    ctx.println("	{}.u8[{}] = uint8_t(({}.u8[{}] << sh) | ({}.u8[{}] >> ((8 - sh) & 0x7))); }}",
+                ctx.v(ctx.insn.operands[0]), i, ctx.v(ctx.insn.operands[1]), i,
+                ctx.v(ctx.insn.operands[1]), i);
+  }
+  return true;
+}
+
 bool build_vrlh(BuilderContext& ctx) {
   auto vD = ctx.v(ctx.insn.operands[0]);
   auto vA = ctx.v(ctx.insn.operands[1]);
@@ -1327,7 +1338,9 @@ bool build_vpkd3d128(BuilderContext& ctx) {
       // Pack 4 elements into 64 bits (4 x 16-bit floats)
       // Guest element 0 goes to highest 16-bit position, element 3 to lowest
       // Output u16 index = (3-i) + 2*shift for element i
-      if (ctx.insn.operands[3] != 2 || ctx.insn.operands[4] > 2)
+      // Packs 2 and 3 place the 64 bits alike except at shift 3 (Xenia's
+      // vpkd3d128 permute masks).
+      if ((ctx.insn.operands[3] != 2 && ctx.insn.operands[3] != 3) || ctx.insn.operands[4] > 2)
         REXCODEGEN_WARN("Unexpected float16_4 pack instruction at {:X}", ctx.base);
 
       for (size_t i = 0; i < 4; i++) {

@@ -191,6 +191,15 @@ bool build_ldu(BuilderContext& ctx) {
   return true;
 }
 
+bool build_ldbrx(BuilderContext& ctx) {
+  // Load Doubleword Byte-Reverse Indexed
+  ctx.print("	{}.u64 = __builtin_bswap64(REX_LOAD_U64(", ctx.r(ctx.insn.operands[0]));
+  if (ctx.insn.operands[1] != 0)
+    ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
+  ctx.println("{}.u32));", ctx.r(ctx.insn.operands[2]));
+  return true;
+}
+
 bool build_ldx(BuilderContext& ctx) {
   ctx.emit_load_x_form("REX_LOAD_U64", "u64");
   return true;
@@ -429,6 +438,16 @@ bool build_std(BuilderContext& ctx) {
 
 bool build_stdu(BuilderContext& ctx) {
   emitStoreWithUpdate(ctx, "REX_STORE_U64", "u64");
+  return true;
+}
+
+bool build_stdbrx(BuilderContext& ctx) {
+  // Store Doubleword Byte-Reverse Indexed
+  ctx.print("{}", ctx.mmio_check_x_form() ? "	REX_MM_STORE_U64(" : "	REX_STORE_U64(");
+  if (ctx.insn.operands[1] != 0)
+    ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
+  ctx.println("{}.u32, __builtin_bswap64({}.u64));", ctx.r(ctx.insn.operands[2]),
+              ctx.r(ctx.insn.operands[0]));
   return true;
 }
 
