@@ -1088,6 +1088,26 @@ The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rex
 
 ## Review process
 
+### Local RG-FIX-002 discovery correction (2026-09-28)
+
+Source: this fork at `d6ccced`; issue
+[SDK #32](https://github.com/furqanagwan/rexglue-sdk/issues/32), with title
+evidence in [007 #6](https://github.com/furqanagwan/007/issues/6).
+This is a local correctness investigation, not an upstream port (external
+PR head/merge state: not applicable). Gap segmentation and block discovery
+disagree about the end of indirect/direct tail-dispatch segments. The bounded
+adaptation revisits unclaimed suffixes and handles explicitly tail-referenced
+constant-return shared leaves. It does not enable the rejected broad pointer
+scanner, import JIT machinery or add a title-specific global rule.
+
+[Diagnosis and regression record](indirect-function-discovery.md) includes
+the pinned XEX identity, object-table storage trace, rejected adjacency scan,
+rejected cleanup exemption, return-padding false candidates, positive and
+negative synthetic fixtures, and before/after registration and overlap counts.
+Other shared tails and switch-only entries remain outside the proven rule;
+the title keeps its explicit hints. No upstream regression claim is inferred
+from the local result.
+
 Monthly, and before each subsystem port or release: fetch upstream refs into the controlled reference checkout; record date, SHA, merge-base and patch-equivalence comparison. Read new/updated issues and PRs, including closed-unmerged work and regressions. Search subsystem terms plus AMD/NVIDIA/Intel and title IDs. Re-check older open watches. Record explicit classification, affected titles, JIT dependencies, tests and whether a ReXGlue issue is justified. Update existing issues rather than duplicate.
 
 Port only to the implementation fork, retaining author/license and full SHA/PR/issue provenance. Separate general corrections, driver workarounds and title profiles. Run baseline and vendor gates, record results, then merge through normal review. Never auto-merge from Xenia/Canary/Edge or make the runtime depend on the Edge checkout. Keep rejected proposals in this ledger to prevent rediscovery as apparently new fixes.

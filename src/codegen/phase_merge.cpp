@@ -11,7 +11,10 @@
 
 #include "codegen_flags.h"
 
+#include <algorithm>
+
 #include <rex/codegen/phases.h>
+#include "phase_helpers.h"
 
 #include <rex/logging.h>
 
@@ -23,6 +26,66 @@ using rex::memory::load_and_swap;
 namespace rex::codegen {
 
 namespace {
+
+//=============================================================================
+// Entries reached by a tail branch into another function (RG-FIX-002)
+//=============================================================================
+
+// A direct tail branch proves that a shared constant-return leaf is also an
+// entry. Restrict this to `li r3,N; blr`: an arbitrary shared epilogue may
+// depend on the caller's frame or localized registers and cannot safely be
+// emitted as an independent function. Jump-table references alone do not
+// establish an entry. Returns how many entries were added.
+size_t registerTailBranchesIntoBodies(CodegenContext& ctx) {
+  auto& graph = ctx.graph;
+  std::vector<uint32_t> targets;
+  for (const auto* node : graph.getPendingFunctions()) {
+    for (const auto& jump : node->unresolvedJumps()) {
+      if (jump.isCall || jump.isConditional || (jump.target & 3) ||
+          graph.isEntryPoint(jump.target)) {
+        continue;
+      }
+      // Exception-region scanning may not retain the conditional flag. Verify
+      // the source opcode too: only a direct b with LK=0 proves this tail entry.
+      const auto* source = ctx.binary().findSection(jump.site);
+      if (!source || !source->executable || source->end() - jump.site < 4 ||
+          (load_and_swap<uint32_t>(source->translate(jump.site)) & 0xFC000001u) != 0x48000000u) {
+        continue;
+      }
+      const FunctionNode* host = graph.getFunctionContaining(jump.target);
+      if (!host || host == node ||
+          !std::any_of(host->blocks().begin(), host->blocks().end(), [&](const Block& block) {
+            return block.contains(jump.target) && block.end() - jump.target >= 8;
+          })) {
+        continue;
+      }
+      const auto* section = ctx.binary().findSection(jump.target);
+      if (!section || !section->executable || section->end() - jump.target < 8) {
+        continue;
+      }
+      const auto* code = section->translate(jump.target);
+      // addi r3,r0,IMM is the li pseudo-instruction; the immediate is unrestricted.
+      if ((load_and_swap<uint32_t>(code) & 0xFFFF0000u) != 0x38600000u ||
+          load_and_swap<uint32_t>(code + 4) != 0x4E800020u) {
+        continue;
+      }
+      targets.push_back(jump.target);
+    }
+  }
+  size_t added = 0;
+  for (uint32_t target : targets) {
+    if (graph.isEntryPoint(target)) {
+      continue;
+    }
+    graph.addFunction(target, 4, FunctionAuthority::DISCOVERED, true);
+    REXCODEGEN_TRACE("Merge: 0x{:08X} is branched to from another function, registered", target);
+    added++;
+  }
+  if (added) {
+    discoverPendingFunctions(ctx, buildKnownFunctions(graph));
+  }
+  return added;
+}
 
 //=============================================================================
 // Merge to resolve jumps then seal functions
@@ -64,8 +127,13 @@ void mergeAndSeal(CodegenContext& ctx) {
       totalResolved += resolved;
     }
 
-    if (changesThisIteration == 0)
-      break;
+    if (changesThisIteration == 0) {
+      // Only once nothing else resolves: register the entries that other
+      // functions branch into, then resolve against them.
+      if (registerTailBranchesIntoBodies(ctx) == 0) {
+        break;
+      }
+    }
   }
 
   size_t sharedRegs = graph.markFuncletRegisterSharing();

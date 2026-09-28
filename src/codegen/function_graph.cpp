@@ -1255,9 +1255,9 @@ bool FunctionGraph::isMergeableEntryPoint(uint32_t addr) const {
 }
 
 TargetKind FunctionGraph::classifyTarget(uint32_t target, uint32_t callerAddr,
-                                         bool isCallInstruction) const {
-  // Find the caller's function
-  const FunctionNode* callerFn = getFunctionContaining(callerAddr);
+                                         bool isCallInstruction, const FunctionNode* caller) const {
+  // Address lookup alone is ambiguous when a shared block also has its own entry.
+  const FunctionNode* callerFn = caller ? caller : getFunctionContaining(callerAddr);
 
   // Case 1: Target is an import - always a call/tail-call
   if (isImport(target)) {
@@ -1269,6 +1269,17 @@ TargetKind FunctionGraph::classifyTarget(uint32_t target, uint32_t callerAddr,
     // bl to own base = recursive call (Function)
     // b to own base = loop back to start (InternalLabel)
     return isCallInstruction ? TargetKind::Function : TargetKind::InternalLabel;
+  }
+
+  // Case 3a: a branch (not a call) into the caller's own blocks stays local,
+  // even when another function also starts there. Discovery made it part of
+  // this body, so no tail call was recorded for it: a null check that returns
+  // 0 and otherwise falls into the virtual-call thunk after it, where the
+  // thunk is also its own entry (RG-FIX-002).
+  if (!isCallInstruction && callerFn &&
+      std::any_of(callerFn->blocks().begin(), callerFn->blocks().end(),
+                  [target](const Block& block) { return block.contains(target); })) {
+    return TargetKind::InternalLabel;
   }
 
   // Case 3: Target is a DIFFERENT function's entry point - this is a call/tail-call
