@@ -12,6 +12,7 @@
 #include "ppc/instruction.h"
 
 #include <algorithm>
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -240,6 +241,24 @@ uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
   return cursor;
 }
 
+// Addresses in executable sections that a non-executable section holds as an
+// aligned big-endian word: method tables and other function pointers.
+std::unordered_set<uint32_t> dataCodePointers(const BinaryView& binary) {
+  std::unordered_set<uint32_t> pointers;
+  for (const auto& section : binary.sections()) {
+    if (section.executable || !section.data) {
+      continue;
+    }
+    for (uint32_t offset = 0; offset + 4 <= section.size; offset += 4) {
+      const uint32_t value = load_and_swap<uint32_t>(section.data + offset);
+      if ((value & 3) == 0 && binary.isExecutable(value)) {
+        pointers.insert(value);
+      }
+    }
+  }
+  return pointers;
+}
+
 // Returns the gap functions registered in the leftovers of gap functions and
 // of `entrySegments`. A leftover is skipped when a function before it
 // branches into it (the code is that function's own, found later by Merge)
@@ -284,14 +303,22 @@ size_t gapFillLeftovers(CodegenContext& ctx, const std::vector<CodeRegion>& entr
   }
 
   size_t registered = 0;
+  std::optional<std::unordered_set<uint32_t>> pointers;
   for (const auto& leftover : leftovers) {
     for (const auto& segment : splitRegionOnTerminators(leftover, binary, knownCallables)) {
       // Compilers may leave an unreachable blr after a tail dispatch. Without
       // independent entry evidence, a return-only suffix is not a new function.
+      // A pointer to it in data is such evidence: an empty method in a method
+      // table (Blood Stone's sub_8218F208, after sub_8218F1F8's bctr).
       if (segment.size() == 4) {
         const auto* data = binary.translate(segment.start);
-        if (data && decode_instruction(segment.start, load_and_swap<uint32_t>(data)).is_return())
-          continue;
+        if (data && decode_instruction(segment.start, load_and_swap<uint32_t>(data)).is_return()) {
+          if (!pointers) {
+            pointers = dataCodePointers(binary);
+          }
+          if (!pointers->contains(segment.start))
+            continue;
+        }
       }
       if (registerGapSegment(ctx, segment)) {
         REXCODEGEN_TRACE("GapFill: leftover from 0x{:08X} gives sub_{:08X}", leftover.start,
