@@ -107,6 +107,8 @@ the direct branch from another function does, for this self-contained leaf.
   segmentation, entry ownership and exception-data checks. Skip a suffix
   targeted by the owner's unresolved branches, zero padding, and a standalone
   return-only suffix. Iterate with the existing discovery limit.
+  Segments that start at a function known before gap fill are revisited the
+  same way (see [Segments that start at a known entry](#segments-that-start-at-a-known-entry-2026-09-28)).
 * Preserve normal absorbed-gap cleanup. A recovered function does not get
   permission to protect every local block as another entry.
 * Once normal merge resolution converges, allow an aligned unconditional
@@ -203,3 +205,37 @@ wrote achievement 59 (`0x3B`), the same scene result as the fully hinted build.
 Manifests: `out/rgfix002/boot-{1,2}/run.json`. This is a boot and scene
 result: it proves the former missing-entry fatals are passed without their
 hints, not gameplay or save/load compatibility.
+
+## Segments that start at a known entry, 2026-09-28
+
+The first codegen of Blood Stone (title `4156081F`, `default.xex` v2) and of
+007 Legends (title `415608D8`, `default.xex` v4) each stopped on one
+unresolved branch, with no title hints:
+
+| Title | Branch | Code before the target |
+| --- | --- | --- |
+| Blood Stone | `b 0x8222D588` at `0x8222ADC0` | `sub_8222D580`, a two-instruction thunk found by a `bl`, ending in a tail branch to `sub_82229618` |
+| 007 Legends | `b 0x826D3F38` at `0x82885E64` | `sub_826D3EE0` and `sub_826D3F08`, both found by `bl`s, back to back, each ending in a tail branch |
+
+In both, the gap segment starts at a function found by a call before gap
+fill, whose tail target wasn't yet known when the segment was cut:
+`0x8222D580..0x8222D5D4` and `0x826D3EE0..0x826D3F54`. Gap fill skipped the
+whole segment because its start was an entry, and the leftover pass only
+revisited gap functions, so the code after those bodies was claimed by no
+one. The target in each is reached only by a tail branch from another
+function.
+
+The leftover pass now also takes the segments that start at a known entry.
+From the segment start it follows the discovered bodies of the functions
+there, back to back, and treats what follows as a leftover under the same
+rule: skipped when one of those functions branches into it, when it starts
+with zero padding, and for a lone return. Blocks past the segment's end
+don't count toward a body, since a function follows a tail branch to a
+function not yet known as its own code.
+
+Tests: two `[codegen][discovery]` fixtures, one with this shape (a thunk found
+by a call, followed by a function only a tail branch reaches) and one where
+a called function's own branch past its first return must stay local.
+Passing no entry segments to the pass fails the first with the titles'
+error. Quantum of Solace's generated code is byte-identical with and without
+the change (21,432 functions, all hints kept).

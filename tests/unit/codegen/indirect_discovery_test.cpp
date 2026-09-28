@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <array>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include <rex/codegen/analyze.h>
@@ -69,7 +70,9 @@ struct Analyzed {
   DiscoveryModule module;
   std::optional<CodegenContext> ctx;
 
-  Analyzed(const std::vector<uint32_t>& words, std::initializer_list<uint32_t> entries) {
+  // `sized` entries get a declared size, as a function table entry gives one.
+  Analyzed(const std::vector<uint32_t>& words, std::initializer_list<uint32_t> entries,
+           std::initializer_list<std::pair<uint32_t, uint32_t>> sized = {}) {
     for (uint32_t word : words) {
       bytes.insert(bytes.end(),
                    {uint8_t(word >> 24), uint8_t(word >> 16), uint8_t(word >> 8), uint8_t(word)});
@@ -79,6 +82,10 @@ struct Analyzed {
     config.projectName = "discovery";
     for (uint32_t entry : entries) {
       config.functions[entry] = FunctionConfig{};
+    }
+    for (const auto& [entry, size] : sized) {
+      config.functions[entry] = FunctionConfig{};
+      config.functions[entry].size = size;
     }
     ctx.emplace(CodegenContext::Create(BinaryView::fromModule(module), std::move(config)));
     ctx->analysisState().format = "xex";
@@ -110,6 +117,41 @@ TEST_CASE("A function after a thunk whose tail call was not yet known is found",
   CHECK(a.IsEntry(y));
   CHECK(a.IsEntry(t));
   CHECK(a.IsEntry(f));
+  CHECK(a.ctx->graph.pendingCount() == 0);
+}
+
+TEST_CASE("A function after a called thunk is found when only a tail branch reaches it",
+          "[codegen][discovery]") {
+  // 0x00 E: bl T; blr                   (8 bytes, from config)
+  // 0x08 T: addi r3,r3,-4; b Y           (found by E's call, before gap fill)
+  // 0x10 F: li r3,1; blr                 (reached only by G's tail branch)
+  // 0x18 G: b F                          (an entry from config)
+  // 0x1C Y: li r3,7; blr
+  // Gap fill cuts T..F as one segment starting at T, a known entry, so the
+  // whole segment used to be skipped (Blood Stone 0x8222D588, 007 Legends
+  // 0x826D3F38).
+  const uint32_t t = kBase + 0x08, f = kBase + 0x10, g = kBase + 0x18, y = kBase + 0x1C;
+  Analyzed a({B(kBase, t, true), Blr(), Addi(3, 3, -4), B(t + 4, y), Li(3, 1), Blr(), B(g, f),
+              Li(3, 7), Blr()},
+             {g}, {{kBase, 8}});
+  CHECK(a.IsEntry(t));
+  CHECK(a.IsEntry(f));
+  // T follows its branch to Y, not yet known, as its own code.
+  CHECK(a.ctx->graph.getFunction(t)->containsAddress(y));
+  CHECK(a.ctx->graph.classifyTarget(f, g, false) == TargetKind::Function);
+  CHECK(a.ctx->graph.pendingCount() == 0);
+}
+
+TEST_CASE("A called function's own branch past its first return is not split off",
+          "[codegen][discovery]") {
+  // 0x00 entry: bl T; blr
+  // 0x08 T: cmpwi r3,0; beq L; blr       (found by the call)
+  // 0x14 L: li r3,2; blr                 (T's own code, after its first blr)
+  const uint32_t t = kBase + 0x08, l = kBase + 0x14;
+  Analyzed a({B(kBase, t, true), Blr(), Cmpwi0(3), Beq(t + 4, l), Blr(), Li(3, 2), Blr()}, {kBase});
+  REQUIRE(a.IsEntry(t));
+  CHECK_FALSE(a.IsEntry(l));
+  CHECK(a.ctx->graph.getFunction(t)->containsAddress(l));
   CHECK(a.ctx->graph.pendingCount() == 0);
 }
 

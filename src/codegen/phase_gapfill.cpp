@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <unordered_set>
+#include <vector>
 
 #include <rex/codegen/phases.h>
 #include "codegen_flags.h"
@@ -142,7 +143,7 @@ bool registerGapSegment(CodegenContext& ctx, const CodeRegion& segment) {
   return true;
 }
 
-void gapFillCodeRegions(CodegenContext& ctx) {
+std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
   REXCODEGEN_TRACE("Analyze: checking for uncovered code regions...");
 
   auto& graph = ctx.graph;
@@ -157,13 +158,16 @@ void gapFillCodeRegions(CodegenContext& ctx) {
 
   size_t gapsFound = 0;
   size_t segmentsCreated = 0;
+  std::vector<CodeRegion> entrySegments;
 
   for (const auto& region : scan.codeRegions) {
     // Split region on terminators (blr, tail calls), then check each segment
     auto segments = splitRegionOnTerminators(region, binary, knownCallables);
 
     for (const auto& segment : segments) {
-      if (registerGapSegment(ctx, segment)) {
+      if (graph.isEntryPoint(segment.start)) {
+        entrySegments.push_back(segment);
+      } else if (registerGapSegment(ctx, segment)) {
         segmentsCreated++;
       }
     }
@@ -177,6 +181,7 @@ void gapFillCodeRegions(CodegenContext& ctx) {
   } else {
     REXCODEGEN_TRACE("Analyze: no uncovered regions found");
   }
+  return entrySegments;
 }
 
 //=============================================================================
@@ -184,51 +189,88 @@ void gapFillCodeRegions(CodegenContext& ctx) {
 //=============================================================================
 
 // A gap segment ends at a blr or at a tail call to a function known when the
-// segment was cut. An indirect bctr or a tail call to a function found later doesn't split it, so
-// discovery can end the segment's function well before the segment does: a
-// thunk `addi r3,r3,-4; b sub_X` followed by the next function. Those bytes
-// were then claimed by no one and never looked at again (RG-FIX-002).
+// segment was cut. An indirect bctr or a tail call to a function found later
+// doesn't split it, so discovery can end the segment's function well before
+// the segment does: a thunk `addi r3,r3,-4; b sub_X` followed by the next
+// function. Those bytes were then claimed by no one and never looked at again
+// (RG-FIX-002).
 //
-// Returns the gap functions registered in the leftovers. A leftover is
-// skipped when the function branches into it (the code is the function's
-// own, found later by Merge) or when it starts with zero padding.
-size_t gapFillLeftovers(CodegenContext& ctx) {
+// The same happens when a segment starts at a function a call found earlier:
+// gap fill skips the whole segment, so the code after that function's body
+// (and after any functions following it back to back) was never looked at.
+// Blood Stone's thunk sub_8222D580 hid sub_8222D588, and 007 Legends'
+// sub_826D3EE0 and sub_826D3F08 hid sub_826D3F38, each reached only by a tail
+// branch from another function.
+
+// Follows the discovered bodies of the functions that start `segment` back to
+// back, adding them to `owners`. Returns the first address none of them
+// covers.
+uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
+                          std::vector<const FunctionNode*>& owners) {
+  uint32_t cursor = segment.start;
+  while (cursor < segment.end) {
+    const FunctionNode* node = graph.getFunction(cursor);
+    if (!node || !node->isDiscovered() || node->blocks().empty()) {
+      break;
+    }
+    // Blocks past the segment don't count: a tail branch to a function not
+    // yet known is followed as if it were the function's own code.
+    uint32_t bodyEnd = cursor;
+    for (const auto& block : node->blocks()) {
+      if (block.base < segment.end) {
+        bodyEnd = std::max(bodyEnd, block.end());
+      }
+    }
+    if (bodyEnd <= cursor) {
+      break;
+    }
+    owners.push_back(node);
+    cursor = bodyEnd;
+  }
+  return cursor;
+}
+
+// Returns the gap functions registered in the leftovers of gap functions and
+// of `entrySegments`. A leftover is skipped when a function before it
+// branches into it (the code is that function's own, found later by Merge)
+// or when it starts with zero padding.
+size_t gapFillLeftovers(CodegenContext& ctx, const std::vector<CodeRegion>& entrySegments) {
   auto& graph = ctx.graph;
   auto& binary = ctx.binary();
 
   std::unordered_set<uint32_t> knownCallables;
+  std::vector<CodeRegion> segments = entrySegments;
   for (const auto& [addr, node] : graph.functions()) {
     knownCallables.insert(addr);
+    if (node->authority() == FunctionAuthority::GAP_FILL) {
+      segments.push_back({node->base(), node->end()});
+    }
   }
 
   std::vector<CodeRegion> leftovers;
-  for (const auto& [addr, node] : graph.functions()) {
-    if (node->authority() != FunctionAuthority::GAP_FILL || !node->isDiscovered() ||
-        node->blocks().empty()) {
-      continue;
-    }
-    uint32_t bodyEnd = node->base();
-    for (const auto& block : node->blocks()) {
-      bodyEnd = std::max(bodyEnd, block.end());
-    }
-    if (bodyEnd >= node->end()) {
+  for (const auto& segment : segments) {
+    std::vector<const FunctionNode*> owners;
+    const uint32_t leftoverStart = claimedPrefixEnd(graph, segment, owners);
+    if (owners.empty() || leftoverStart >= segment.end) {
       continue;
     }
     bool branchesIntoLeftover = false;
-    for (const auto& jump : node->unresolvedJumps()) {
-      if (jump.target >= bodyEnd && jump.target < node->end()) {
-        branchesIntoLeftover = true;
-        break;
+    for (const auto* owner : owners) {
+      for (const auto& jump : owner->unresolvedJumps()) {
+        if (jump.target >= leftoverStart && jump.target < segment.end) {
+          branchesIntoLeftover = true;
+          break;
+        }
       }
     }
     if (branchesIntoLeftover) {
       continue;
     }
-    const uint8_t* first = binary.translate(bodyEnd);
+    const uint8_t* first = binary.translate(leftoverStart);
     if (!first || load_and_swap<uint32_t>(first) == 0) {
       continue;
     }
-    leftovers.push_back({bodyEnd, node->end()});
+    leftovers.push_back({leftoverStart, segment.end});
   }
 
   size_t registered = 0;
@@ -242,8 +284,8 @@ size_t gapFillLeftovers(CodegenContext& ctx) {
           continue;
       }
       if (registerGapSegment(ctx, segment)) {
-        REXCODEGEN_TRACE("GapFill: leftover of the gap before 0x{:08X} gives sub_{:08X}",
-                         leftover.start, segment.start);
+        REXCODEGEN_TRACE("GapFill: leftover from 0x{:08X} gives sub_{:08X}", leftover.start,
+                         segment.start);
         registered++;
       }
     }
@@ -297,7 +339,7 @@ namespace phases {
 
 VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
   (void)reporter;
-  gapFillCodeRegions(ctx);
+  const std::vector<CodeRegion> entrySegments = gapFillCodeRegions(ctx);
 
   // Discover blocks for gap-filled functions
   auto known = buildKnownFunctions(ctx.graph, /*excludeGapFill=*/true);
@@ -308,7 +350,7 @@ VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
   // nothing new is found.
   size_t leftoverFunctions = 0;
   for (uint32_t pass = 0; pass < REXCVAR_GET(max_discovery_iterations); ++pass) {
-    size_t registered = gapFillLeftovers(ctx);
+    size_t registered = gapFillLeftovers(ctx, entrySegments);
     if (!registered) {
       break;
     }
