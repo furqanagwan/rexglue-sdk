@@ -333,6 +333,9 @@ class XThread : public XObject {
   bool is_running() const { return running_; }
 
   uint32_t thread_id() const { return thread_id_; }
+  // The guest stack: [stack_limit, stack_base), with a guard page each side.
+  uint32_t stack_base() const { return stack_base_; }
+  uint32_t stack_limit() const { return stack_limit_; }
   uint32_t last_error();
   void set_last_error(uint32_t error_code);
   void set_name(const std::string_view name);

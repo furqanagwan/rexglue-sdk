@@ -23,10 +23,14 @@
 #include <rex/system/export_resolver.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/function_dispatcher.h>
+#include <rex/system/mmio_handler.h>
+#include <rex/system/thread_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/xmemory.h>
 #include <rex/system/xthread.h>
 #include <rex/thread.h>
+
+#include <windows.h>
 
 REXCVAR_DEFINE_STRING(game_data_root, "", "Runtime", "Override game data path");
 REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
@@ -35,6 +39,40 @@ REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
 REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
 
 namespace rex {
+
+namespace {
+
+// Names the recompiled guest function a fatal guest access violation came
+// from, with the faulting thread's guest LR and stack pointer. The host
+// module and offset let the PC be symbolized later.
+void ReportUnhandledGuestFault(void* context, uint64_t host_pc) {
+  auto* dispatcher = static_cast<runtime::FunctionDispatcher*>(context);
+  uint64_t host_entry = 0;
+  const uint32_t guest = dispatcher->FindGuestFunctionByHostPc(host_pc, &host_entry);
+  std::string module = "?";
+  uint64_t module_offset = 0;
+  HMODULE handle = nullptr;
+  if (GetModuleHandleExW(
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          reinterpret_cast<LPCWSTR>(host_pc), &handle)) {
+    char path[MAX_PATH] = {};
+    GetModuleFileNameA(handle, path, MAX_PATH);
+    module = std::filesystem::path(path).filename().string();
+    module_offset = host_pc - reinterpret_cast<uint64_t>(handle);
+  }
+  auto* thread_state = runtime::ThreadState::Get();
+  const ::PPCContext* ctx = thread_state ? thread_state->context() : nullptr;
+  auto* xthread = system::XThread::IsInThread() ? system::XThread::GetCurrentThread() : nullptr;
+  REXSYS_ERROR(
+      "Unhandled guest fault at host {}+0x{:X}: in sub_{:08X}+0x{:X} (host), guest lr "
+      "0x{:08X}, r1 0x{:08X}, r3 0x{:08X}; guest thread {:X} stack 0x{:08X}-0x{:08X}",
+      module, module_offset, guest, guest ? host_pc - host_entry : 0, ctx ? uint32_t(ctx->lr) : 0,
+      ctx ? ctx->r1.u32 : 0, ctx ? ctx->r3.u32 : 0, xthread ? xthread->thread_id() : 0,
+      xthread ? xthread->stack_limit() : 0, xthread ? xthread->stack_base() : 0);
+  rex::FlushLogging();
+}
+
+}  // namespace
 
 // Static instance for global access
 Runtime* Runtime::instance_ = nullptr;
@@ -124,6 +162,9 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
 
   function_dispatcher_ =
       std::make_unique<runtime::FunctionDispatcher>(memory_.get(), export_resolver_.get());
+  if (auto* mmio = runtime::MMIOHandler::global_handler()) {
+    mmio->SetUnhandledFaultReporter(&ReportUnhandledGuestFault, function_dispatcher_.get());
+  }
 
   // Create virtual file system
   file_system_ = std::make_unique<rex::filesystem::VirtualFileSystem>();

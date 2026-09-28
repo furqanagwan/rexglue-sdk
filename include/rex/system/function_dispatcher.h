@@ -84,6 +84,12 @@ class FunctionDispatcher : public IModuleRegistrar {
                                uint32_t image_size, bool is_entrypoint = false);
   bool SetFunction(uint32_t guest_address, ::PPCFunc* func) override;
   ::PPCFunc* GetFunction(uint32_t guest_address);
+  /**
+   * The guest address of the registered function whose host code most likely
+   * contains `host_pc`: the one with the highest host entry at or below it.
+   * Returns 0 when none is below it. Takes no lock (used from fault reports).
+   */
+  uint32_t FindGuestFunctionByHostPc(uint64_t host_pc, uint64_t* host_entry = nullptr) const;
   bool HasAnyFunctionTable() const { return !module_tables_.empty(); }
   /**
    * caller_address must be inside a registered module, or 0 to mean "host-
