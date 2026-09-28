@@ -416,11 +416,15 @@ bool MMIOHandler::ExceptionCallback(arch::Exception* ex) {
     }
     // The address is not found within any range, so either a write watch or an
     // actual access violation.
+    bool handled = false;
     if (access_violation_callback_) {
-      return access_violation_callback_(std::move(lock), access_violation_callback_context_,
-                                        fault_host_address, is_write);
+      handled = access_violation_callback_(std::move(lock), access_violation_callback_context_,
+                                           fault_host_address, is_write);
     }
-    return false;
+    if (!handled && unhandled_fault_reporter_) {
+      unhandled_fault_reporter_(unhandled_fault_reporter_context_, ex->pc());
+    }
+    return handled;
   }
 
   auto rip = ex->pc();

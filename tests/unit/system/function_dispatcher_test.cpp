@@ -11,6 +11,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <utility>
+
 #include <rex/logging.h>
 #include <rex/math.h>
 #include <rex/ppc/context.h>
@@ -277,4 +279,38 @@ TEST_CASE("PPCContext: restoring a zeroed fpscr leaves host FP exception masks i
   constexpr uint32_t kGuestMask = PPCFPSCRRegister::GuestMask;
   CHECK((ctx.fpscr.getcsr() & ~kGuestMask) == (host_before & ~kGuestMask));
   CHECK(ctx.fpscr.csr == ctx.fpscr.getcsr());
+}
+
+namespace {
+// Distinct bodies, so identical-code folding can't merge them.
+void FaultFnA(PPCContext& ctx, uint8_t*) {
+  ctx.r3.u64 = 1;
+}
+void FaultFnB(PPCContext& ctx, uint8_t*) {
+  ctx.r4.u64 = 2;
+}
+}  // namespace
+
+TEST_CASE("FunctionDispatcher: a host PC maps to the guest function whose code holds it",
+          "[runtime][dispatcher]") {
+  auto& memory = GetTestMemory();
+  rex::runtime::ExportResolver resolver;
+  rex::runtime::FunctionDispatcher dispatcher(&memory, &resolver);
+
+  constexpr uint32_t kMod = 0x85000000u;
+  REQUIRE(dispatcher.InitializeFunctionTable(kMod, 0x10000u, kMod, 0x100000u));
+  REQUIRE(dispatcher.SetFunction(kMod + 0x100, &FaultFnA));
+  REQUIRE(dispatcher.SetFunction(kMod + 0x200, &FaultFnB));
+
+  const auto a = reinterpret_cast<uint64_t>(&FaultFnA);
+  const auto b = reinterpret_cast<uint64_t>(&FaultFnB);
+  const auto [low, low_guest] = a < b ? std::pair{a, kMod + 0x100} : std::pair{b, kMod + 0x200};
+  const auto [high, high_guest] = a < b ? std::pair{b, kMod + 0x200} : std::pair{a, kMod + 0x100};
+
+  uint64_t entry = 0;
+  CHECK(dispatcher.FindGuestFunctionByHostPc(high + 2, &entry) == high_guest);
+  CHECK(entry == high);
+  CHECK(dispatcher.FindGuestFunctionByHostPc(low, &entry) == low_guest);
+  CHECK(entry == low);
+  CHECK(dispatcher.FindGuestFunctionByHostPc(low - 1) == 0);
 }

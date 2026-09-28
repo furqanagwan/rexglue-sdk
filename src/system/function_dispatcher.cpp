@@ -282,6 +282,23 @@ bool FunctionDispatcher::SetFunction(uint32_t guest_address, ::PPCFunc* func) {
   return nullptr;
 }
 
+uint32_t FunctionDispatcher::FindGuestFunctionByHostPc(uint64_t host_pc,
+                                                       uint64_t* host_entry) const {
+  uint32_t best_guest = 0;
+  uint64_t best_host = 0;
+  for (const auto& [guest, func] : function_table_) {
+    const uint64_t host = reinterpret_cast<uint64_t>(func);
+    if (func && host <= host_pc && host > best_host) {
+      best_host = host;
+      best_guest = guest;
+    }
+  }
+  if (host_entry) {
+    *host_entry = best_host;
+  }
+  return best_guest;
+}
+
 uint32_t FunctionDispatcher::AllocateThunk(::PPCFunc* func, uint32_t caller_address) {
   std::lock_guard<std::recursive_mutex> lock(dispatch_mutex_);
   auto* mod = FindModuleByAddress(caller_address);

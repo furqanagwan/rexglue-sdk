@@ -59,6 +59,15 @@ class MMIOHandler {
                                               void* access_violation_callback_context);
   static MMIOHandler* global_handler();
 
+  // Called with the faulting host PC when a guest access violation reaches no
+  // handler, just before it is passed on and the process fails. Diagnostic
+  // only: it runs on the faulting thread and must not take locks.
+  using UnhandledFaultReporter = void (*)(void* context, uint64_t host_pc);
+  void SetUnhandledFaultReporter(UnhandledFaultReporter reporter, void* context) {
+    unhandled_fault_reporter_ = reporter;
+    unhandled_fault_reporter_context_ = context;
+  }
+
   bool RegisterRange(uint32_t virtual_address, uint32_t mask, uint32_t size, void* context,
                      MMIOReadCallback read_callback, MMIOWriteCallback write_callback);
   MMIORange* LookupRange(uint32_t virtual_address);
@@ -86,6 +95,9 @@ class MMIOHandler {
 
   AccessViolationCallback access_violation_callback_;
   void* access_violation_callback_context_;
+
+  UnhandledFaultReporter unhandled_fault_reporter_ = nullptr;
+  void* unhandled_fault_reporter_context_ = nullptr;
 
   static MMIOHandler* global_handler_;
 

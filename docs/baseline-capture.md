@@ -186,6 +186,29 @@ they contain the game's textures, shaders and buffers. Record them with
 and marker state in the metadata. Normal builds do not load PIX: its DLLs are
 present only in a process PIX launched.
 
+## Guest fault reports
+
+When a guest memory access faults and nothing handles it, the process fails
+with `0xC0000005`. Just before that, the runtime logs where it happened:
+
+```text
+Unhandled guest fault at host quantumofsolace.exe+0x597F1: in sub_82E00040+0x21 (host),
+guest lr 0x824A1234, r1 0x7016D800, r3 0x00000000; guest thread F8000028 stack 0x70130000-0x70170000
+```
+
+- **`sub_XXXXXXXX`:** the recompiled guest function whose host code holds the
+  faulting instruction. It is the registered function with the highest host
+  entry at or below the PC, so it is exact for code emitted in one piece.
+- **The host module and offset:** these symbolize the PC with
+  `llvm-symbolizer` when the build has symbols.
+- **LR, r1 and r3:** the faulting guest thread's context at the fault.
+- **The stack range:** shows whether the address was just past the thread's
+  own stack, which lands on a guard page.
+
+Test: `kernel_tests [kernel][fault]`. A child process runs a registered
+function that reads unmapped guest memory; the parent checks the report names
+it.
+
 ## Quantum of Solace identity and outstanding gates
 
 On 2026-09-23, the supplied ISO's root `default.xex` was inspected privately:
