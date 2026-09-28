@@ -172,20 +172,20 @@ bool ReXApp::SetupEnvironment() {
   if (std::filesystem::exists(config_path_))
     rex::cvar::LoadConfig(config_path_);
 
-  // Late-phase logging
-  std::string log_file_cvar = REXCVAR_GET(log_file);
   std::string log_level_str = REXCVAR_GET(log_level);
   if (REXCVAR_GET(log_verbose) && log_level_str == "info")
     log_level_str = "trace";
 
-  auto category_levels = rex::ParseCategoryLevelsFromConfig(config_path_);
-  auto log_config = rex::BuildLogConfig(log_file_cvar.empty() ? nullptr : log_file_cvar.c_str(),
-                                        log_level_str, category_levels);
-  if (log_file_cvar.empty()) {
-    log_config.app_name = std::string(GetName());
-    log_config.log_dir = (exe_dir / "logs").string();
-  }
-
+  auto log_config =
+      rex::BuildLogConfig(log_level_str, rex::ParseCategoryLevelsFromConfig(config_path_));
+  log_config.app_name = std::string(GetName());
+  log_config.log_dir = exe_dir / "logs";
+  // Each run is one file now (no rotation), so the directory is bounded
+  // instead: the 100 MiB the old 5 MiB x 20 rotation allowed. Titles can
+  // change it, or turn it off with 0, in OnConfigureLogging.
+  log_config.dir_budget_bytes = uint64_t(100) << 20;
+  OnConfigureLogging(log_config);
+  rex::ApplyLogCvarOverrides(log_config);
   rex::InitLogging(log_config);
   rex::RegisterLogLevelCallback();
 

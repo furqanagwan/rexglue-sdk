@@ -22,7 +22,8 @@
 namespace rexglue::cli {
 
 struct AppNameParts {
-  std::string snake_case;
+  std::string original;
+
   std::string pascal_case;
   std::string upper_case;
 };
@@ -47,45 +48,48 @@ inline bool validate_app_name(const std::string& input, std::string& error) {
 }
 
 inline AppNameParts parse_app_name(const std::string& input) {
-  std::vector<std::string> words;
-  std::string current;
-  for (char c : input) {
-    if (c == ' ' || c == '_' || c == '-') {
-      if (!current.empty()) {
-        words.push_back(current);
-        current.clear();
-      }
-    } else {
-      current += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-  }
-  if (!current.empty()) {
-    words.push_back(current);
-  }
+  constexpr auto is_separator = [](char c) { return c == ' ' || c == '_' || c == '-'; };
+
+  constexpr auto to_lower = [](char c) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  };
+  constexpr auto to_upper = [](char c) {
+    return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  };
 
   AppNameParts parts;
-  for (size_t i = 0; i < words.size(); ++i) {
-    if (i > 0)
-      parts.snake_case += '_';
-    parts.snake_case += words[i];
-  }
-  for (const auto& w : words) {
-    std::string word = w;
-    if (!word.empty() && std::isalpha(static_cast<unsigned char>(word[0]))) {
-      word[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(word[0])));
+  parts.original.reserve(input.size());
+  parts.pascal_case.reserve(input.size());
+  parts.upper_case.reserve(input.size());
+
+  // `original` keeps the letters' case but joins words with one underscore:
+  // it names files and CMake targets and is a C++ identifier in
+  // REX_DEFINE_APP. That is also exactly what earlier versions wrote for a
+  // lowercase name, so an existing project's manifest name ("my_game") still
+  // regenerates rexglue.cmake pointing at its own files. Upstream dropped the
+  // separators ("mygame"), which would break those projects.
+  bool at_new_word = true;
+  for (char c : input) {
+    if (is_separator(c)) {
+      at_new_word = true;
+      continue;
     }
-    parts.pascal_case += word;
-  }
-  for (const auto& w : words) {
-    for (char c : w) {
-      parts.upper_case += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+
+    if (at_new_word && !parts.original.empty()) {
+      parts.original += '_';
     }
+    parts.original += c;
+    parts.upper_case += to_upper(c);
+    parts.pascal_case += at_new_word ? to_upper(c) : to_lower(c);
+
+    at_new_word = false;
   }
+
   return parts;
 }
 
 inline nlohmann::json names_to_json(const AppNameParts& names) {
-  return {{"snake_case", names.snake_case},
+  return {{"original", names.original},
           {"pascal_case", names.pascal_case},
           {"upper_case", names.upper_case}};
 }
