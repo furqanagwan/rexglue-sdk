@@ -46,7 +46,15 @@ destructor side effects, nested-frame cleanup, independent snapshots, expiration
 and thread isolation. PPC assembly fixtures compile through the production
 emitter and execute the actual generated call sites.
 
-Full-suite and title-build results are pending. Initial generated fixture
+Win-amd64 Debug and Release CTest each passed 1,929 tests (four existing
+BitStream skips). Private codegen without jump hints recognized the pair in all
+three titles: Quantum of Solace `0x825ABAE0`/`0x825AB7C0`, Legends
+`0x828AB380`/`0x828AB650` and Blood Stone `0x82B15EC0`/`0x82B16190`. The GDK
+Release SDK installed and Blood Stone's generated project built and linked.
+Quantum of Solace's interactive save-and-exit check is tracked in the 007
+repository.
+
+Initial generated fixture
 failures were unresolved synthetic helper calls; registering the reserved helper
 symbols in the test graph fixed that test harness omission. The first scanner
 probe correctly refused the pair until its relocation validation accounted for

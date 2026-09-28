@@ -450,19 +450,21 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
   auto jumps = ScanCrtJumps(binary);
   if (ApplyCrtJumpCandidates(jumps, config)) {
     auto* data = binary.translate(config.setJmpAddress);
-    config.setJmpHookAddress = (load_and_swap<uint32_t>(data) << 16) +
-                               int16_t(load_and_swap<uint32_t>(data + 4));
-    REXCODEGEN_INFO("Recognized CRT setjmp at 0x{:08X}, longjmp at 0x{:08X}",
-                    config.setJmpAddress, config.longJmpAddress);
+    config.setJmpHookAddress =
+        (load_and_swap<uint32_t>(data) << 16) + int16_t(load_and_swap<uint32_t>(data + 4));
+    REXCODEGEN_INFO("Recognized CRT setjmp at 0x{:08X}, longjmp at 0x{:08X}", config.setJmpAddress,
+                    config.longJmpAddress);
   } else if (!jumps.setjmp.empty() || !jumps.longjmp.empty()) {
-    REXCODEGEN_WARN("CRT jump candidates are incomplete, ambiguous or conflict with explicit hints; "
-                    "keeping configured jump addresses ({} setjmp, {} longjmp candidates)",
-                    jumps.setjmp.size(), jumps.longjmp.size());
+    REXCODEGEN_WARN(
+        "CRT jump candidates are incomplete, ambiguous or conflict with explicit hints; "
+        "keeping configured jump addresses ({} setjmp, {} longjmp candidates)",
+        jumps.setjmp.size(), jumps.longjmp.size());
   }
   if ((config.setJmpAddress || config.longJmpAddress) &&
       (config.ctrAsLocalVariable || config.xerAsLocalVariable ||
        config.reservedRegisterAsLocalVariable || config.crRegistersAsLocalVariables ||
-       config.nonArgumentRegistersAsLocalVariables || config.nonVolatileRegistersAsLocalVariables)) {
+       config.nonArgumentRegistersAsLocalVariables ||
+       config.nonVolatileRegistersAsLocalVariables)) {
     return Err(ErrorCategory::Config,
                "setjmp/longjmp requires guest registers in PPCContext: disable register "
                "localization options before regenerating");
