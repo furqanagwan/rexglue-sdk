@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 
 #include <rex/dbg.h>
 #include <rex/input/device_assignment.h>
@@ -29,8 +30,16 @@
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
-REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input",
-                      "Input backend: sdl, xinput, gameinput (GDK builds; falls back to sdl)")
+// Native by default (owner decision, 2026-09-28): GameInput in GDK builds,
+// XInput otherwise. SDL remains selectable until it is removed.
+#if REX_HAS_GAMEINPUT
+#define REX_DEFAULT_INPUT_BACKEND "gameinput"
+#else
+#define REX_DEFAULT_INPUT_BACKEND "xinput"
+#endif
+REXCVAR_DEFINE_STRING(input_backend, REX_DEFAULT_INPUT_BACKEND, "Input",
+                      "Input backend: gameinput (GDK builds, the default there), xinput (the "
+                      "default otherwise) or sdl. GameInput falls back to XInput")
     .allowed({"sdl", "xinput", "gameinput"});
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
@@ -546,37 +555,41 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
   auto input = std::make_unique<InputSystem>(nullptr);
 
   if (!tool_mode) {
-#if REX_PLATFORM_WIN32
-    if (REXCVAR_GET(input_backend) == "xinput") {
-      auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
-      if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
-        input->AddDriver(std::move(xinput_driver));
-      }
-    }
-#endif
-
-    bool use_sdl = REXCVAR_GET(input_backend) == "sdl";
-    if (REXCVAR_GET(input_backend) == "gameinput") {
+    std::string backend = REXCVAR_GET(input_backend);
+    if (backend == "gameinput") {
 #if REX_HAS_GAMEINPUT
       auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
       if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(gameinput_driver));
       } else {
-        REXLOG_WARN("input_backend=gameinput: GameInput unavailable, using SDL instead");
-        use_sdl = true;
+        REXLOG_WARN("input_backend=gameinput: GameInput unavailable, using XInput instead");
+        backend = "xinput";
       }
 #else
-      REXLOG_WARN("input_backend=gameinput needs a GDK build (REXGLUE_USE_GDK); using SDL");
-      use_sdl = true;
+      REXLOG_WARN("input_backend=gameinput needs a GDK build (REXGLUE_USE_GDK); using XInput");
+      backend = "xinput";
 #endif
     }
 
-    if (use_sdl) {
+#if REX_PLATFORM_WIN32
+    if (backend == "xinput") {
+      auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
+      if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(xinput_driver));
+      } else {
+        REXLOG_WARN("input_backend=xinput: XInput unavailable, using SDL instead");
+        backend = "sdl";
+      }
+    }
+#endif
+
+    if (backend == "sdl") {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
       }
     }
+    REXLOG_INFO("Input: {} driver", backend);
 
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);

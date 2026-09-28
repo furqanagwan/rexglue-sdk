@@ -14,8 +14,8 @@
 
 namespace rex::audio {
 
-/// The audio system for the audio_backend cvar: "sdl" (default), "xaudio2"
-/// (Windows) or "nop". An unavailable choice falls back to SDL with a warning.
+/// The audio system for the audio_backend cvar: "xaudio2" (default, Windows), "sdl"
+/// or "nop". An unavailable choice falls back to SDL with a warning.
 std::unique_ptr<AudioSystem> CreateDefaultAudioSystem(
     runtime::FunctionDispatcher* function_dispatcher);
 

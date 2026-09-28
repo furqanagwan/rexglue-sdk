@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+#include <rex/cvar.h>
+#include <rex/ui/flags.h>
 #include <rex/ui/ui_event.h>
 #include <rex/ui/virtual_key.h>
 #include <rex/ui/window.h>
@@ -284,4 +286,9 @@ TEST_CASE("Win32 window reports its display's desktop size", "[ui][win32]") {
   REQUIRE(GetMonitorInfoW(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONEAREST), &monitor));
   CHECK(width == uint32_t(monitor.rcMonitor.right - monitor.rcMonitor.left));
   CHECK(height == uint32_t(monitor.rcMonitor.bottom - monitor.rcMonitor.top));
+}
+
+TEST_CASE("The Win32 window is the default", "[ui][win32]") {
+  // Owner decision, 2026-09-28: native backends by default.
+  CHECK(REXCVAR_GET(ui_backend) == "win32");
 }
