@@ -733,6 +733,11 @@ void SaveConfig(const std::filesystem::path& config_path) {
   }
 
   try {
+    // The per-user settings folder may not exist yet.
+    std::error_code ec;
+    if (config_path.has_parent_path()) {
+      std::filesystem::create_directories(config_path.parent_path(), ec);
+    }
     std::ofstream file(config_path);
     if (!file) {
       REXLOG_ERROR("SaveConfig: failed to open {}", config_path.string());

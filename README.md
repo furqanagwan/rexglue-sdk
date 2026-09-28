@@ -187,6 +187,10 @@ named at startup:
 .\my_title.exe --game_data_root=D:/PrivateGames/MyTitle --user_data_root=D:/Saves/MyTitle --gpu_plugin=xenos
 ```
 
+Both paths are optional: by default the title finds its game files in a `game`
+folder beside the executable (or the executable's own folder), keeps saves in
+`Saved Games\<name>` and caches, logs and settings in `%LOCALAPPDATA%\<name>`,
+as an Xbox PC game does ([data locations](docs/data-locations.md)).
 This is how the Quantum of Solace baseline runs. Add `--input_backend=gameinput`,
 `--ui_backend=win32` and `--audio_backend=xaudio2` for the native paths (GameInput
 needs a GDK build). `rexglue init gameconfig` adds a `MicrosoftGame.config` for

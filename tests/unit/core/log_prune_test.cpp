@@ -12,6 +12,7 @@
 #include <fstream>
 #include <string>
 
+#include <rex/cvar.h>
 #include <rex/logging.h>
 
 namespace fs = std::filesystem;
@@ -66,4 +67,18 @@ TEST_CASE("Runs within the log budget are kept", "[logging]") {
   rex::PruneLogDirectory(dir.path, "game", 2000);
   CHECK(fs::exists(dir.path / "game_001.log"));
   CHECK(fs::exists(dir.path / "game_002.log"));
+}
+
+TEST_CASE("The log_dir flag moves sequential logs out of the default folder", "[core][log]") {
+  rex::LogConfig config;
+  config.log_dir = "C:/default/logs";
+  REQUIRE(rex::cvar::SetFlagByName("log_dir", "C:/chosen/logs"));
+  rex::ApplyLogCvarOverrides(config);
+  CHECK(config.log_dir == fs::path("C:/chosen/logs"));
+
+  REQUIRE(rex::cvar::SetFlagByName("log_dir", ""));
+  rex::LogConfig untouched;
+  untouched.log_dir = "C:/default/logs";
+  rex::ApplyLogCvarOverrides(untouched);
+  CHECK(untouched.log_dir == fs::path("C:/default/logs"));
 }

@@ -42,6 +42,9 @@ REXCVAR_DEFINE_STRING(log_level, "info", "Log",
 
 REXCVAR_DEFINE_STRING(log_file, "", "Log", "Log file path (empty = auto sequential naming)");
 
+REXCVAR_DEFINE_STRING(log_dir, "", "Log",
+                      "Folder for sequentially named logs (empty = the title's default)");
+
 REXCVAR_DEFINE_BOOL(log_verbose, false, "Log", "Enable verbose logging (sets level to trace)")
     .debug_only();
 
@@ -585,6 +588,9 @@ LogConfig BuildLogConfig(const std::string& cli_level,
 void ApplyLogCvarOverrides(LogConfig& config) {
   if (rex::cvar::HasNonDefaultValue("log_file")) {
     config.log_file = std::string(REXCVAR_GET(log_file));
+  }
+  if (rex::cvar::HasNonDefaultValue("log_dir")) {
+    config.log_dir = std::string(REXCVAR_GET(log_dir));
   }
   if (rex::cvar::HasNonDefaultValue("log_flush_interval")) {
     config.flush_interval = std::chrono::seconds(REXCVAR_GET(log_flush_interval));

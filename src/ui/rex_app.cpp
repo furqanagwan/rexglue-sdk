@@ -19,6 +19,7 @@
 #include <rex/cvar.h>
 #include <rex/ui/flags.h>
 #include <rex/kernel/crt/heap.h>
+#include <rex/data_locations.h>
 #include <rex/filesystem.h>
 #include <rex/logging/sink.h>
 #include <rex/logging.h>
@@ -149,20 +150,27 @@ bool ReXApp::OnInitialize() {
 
 bool ReXApp::SetupEnvironment() {
   auto exe_dir = rex::filesystem::GetExecutableFolder();
+  // Where an Xbox PC game keeps its files (docs/data-locations.md): saves
+  // under Saved Games, caches, logs and settings under local app data.
+  const auto locations = rex::filesystem::DefaultTitleDataLocations(
+      rex::filesystem::GetSavedGamesFolder(), rex::filesystem::GetLocalAppDataFolder(), GetName());
 
+  // Game data: cvar override, or the game files beside the executable
   std::filesystem::path game_dir;
   std::string game_data_cvar = REXCVAR_GET(game_data_root);
   if (!game_data_cvar.empty()) {
     game_dir = game_data_cvar;
+  } else {
+    game_dir = rex::filesystem::FindGameDataRoot(exe_dir);
   }
 
-  // User data: cvar override, or platform user directory
+  // User data: cvar override, or Saved Games\<name>
   std::filesystem::path user_dir;
   std::string user_data_cvar = REXCVAR_GET(user_data_root);
   if (!user_data_cvar.empty()) {
     user_dir = user_data_cvar;
   } else {
-    user_dir = rex::filesystem::GetUserFolder() / GetName();
+    user_dir = locations.user_data;
   }
 
   // Update data: cvar override, or empty (opt-in)
@@ -172,13 +180,16 @@ bool ReXApp::SetupEnvironment() {
     update_dir = update_data_cvar;
   }
 
-  // Cache: cvar override, or user_dir/cache
+  // Cache: cvar override, or local app data. With an explicit user data
+  // folder and no cache override, the cache stays inside it as before.
   std::filesystem::path cache_dir;
   std::string cache_root_cvar = REXCVAR_GET(cache_root);
   if (!cache_root_cvar.empty()) {
     cache_dir = cache_root_cvar;
-  } else {
+  } else if (!user_data_cvar.empty()) {
     cache_dir = user_dir / "cache";
+  } else {
+    cache_dir = locations.cache;
   }
 
   std::filesystem::path metadata_dir;
@@ -187,8 +198,14 @@ bool ReXApp::SetupEnvironment() {
     metadata_dir = metadata_root_cvar;
   }
 
-  PathConfig path_config{game_dir,  user_dir,     update_dir,
-                         cache_dir, metadata_dir, exe_dir / (std::string(GetName()) + ".toml")};
+  // Settings: a <name>.toml beside the executable still wins (development
+  // builds and existing projects); otherwise the per-user one.
+  auto config_path = exe_dir / (std::string(GetName()) + ".toml");
+  if (!std::filesystem::exists(config_path)) {
+    config_path = locations.config;
+  }
+
+  PathConfig path_config{game_dir, user_dir, update_dir, cache_dir, metadata_dir, config_path};
   OnConfigurePaths(path_config);
   game_data_root_ = path_config.game_data_root;
   user_data_root_ = path_config.user_data_root;
@@ -209,7 +226,7 @@ bool ReXApp::SetupEnvironment() {
   auto log_config =
       rex::BuildLogConfig(log_level_str, rex::ParseCategoryLevelsFromConfig(config_path_));
   log_config.app_name = std::string(GetName());
-  log_config.log_dir = exe_dir / "logs";
+  log_config.log_dir = locations.logs;
   // Each run is one file now (no rotation), so the directory is bounded
   // instead: the 100 MiB the old 5 MiB x 20 rotation allowed. Titles can
   // change it, or turn it off with 0, in OnConfigureLogging.
@@ -225,7 +242,25 @@ bool ReXApp::SetupEnvironment() {
   OnPostInitLogging();
 
   if (std::filesystem::exists(config_path_))
-    REXLOG_DEBUG("Loaded config: {}", config_path_.filename().string());
+    REXLOG_DEBUG("Loaded config: {}", config_path_.string());
+
+  // Earlier builds kept user data in Documents\<name>, which OneDrive syncs.
+  if (user_data_cvar.empty() && user_data_root_ == locations.user_data) {
+    const auto legacy = rex::filesystem::GetUserFolder() / GetName();
+    const auto move = rex::filesystem::MoveLegacyUserData(legacy, user_data_root_, cache_root_);
+    if (move.moved || move.copied) {
+      REXLOG_INFO("Moved user data from {} to {}{}", legacy.string(), user_data_root_.string(),
+                  move.copied ? " (copied; the old folder was left in place)" : "");
+    }
+    if (move.moved_cache) {
+      REXLOG_INFO("Moved the cache from {} to {}", (legacy / "cache").string(),
+                  cache_root_.string());
+    }
+    if (!move.error.empty()) {
+      REXLOG_WARN("Could not move user data from {} to {}: {}", legacy.string(),
+                  user_data_root_.string(), move.error);
+    }
+  }
 
   REXLOG_INFO("{} starting, {}", GetName(), REXGLUE_BUILD_TITLE);
   if (!game_data_root_.empty()) {
@@ -238,6 +273,7 @@ bool ReXApp::SetupEnvironment() {
     REXLOG_DEBUG("  Update data:    {}", update_data_root_.string());
   }
   REXLOG_DEBUG("  Cache root:     {}", cache_root_.string());
+  REXLOG_DEBUG("  Logs:           {}", log_config.log_dir.string());
   if (!metadata_root_.empty()) {
     REXLOG_DEBUG("  Metadata root:  {}", metadata_root_.string());
   }
@@ -274,7 +310,10 @@ bool ReXApp::InitializeGamingRuntime() {
 
 bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   if (paths.game_data_root.empty()) {
-    auto msg = std::string("--game_data_root was not provided.");
+    auto msg = fmt::format(
+        "Game files not found. Put the extracted disc in {} (default.xex at its top), or pass "
+        "--game_data_root.",
+        (rex::filesystem::GetExecutableFolder() / "game").string());
     REXLOG_ERROR("{}", msg);
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
     return false;
