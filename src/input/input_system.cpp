@@ -589,6 +589,7 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
         input->AddDriver(std::move(sdl_driver));
       }
     }
+    REXLOG_INFO("Input: {} driver", backend);
 
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);

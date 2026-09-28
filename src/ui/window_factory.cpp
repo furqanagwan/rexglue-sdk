@@ -13,6 +13,7 @@
 
 #include <rex/cvar.h>
 #include <rex/graphics/video_mode_util.h>
+#include <rex/logging.h>
 #include <rex/ui/flags.h>
 #include <rex/ui/window.h>
 #include <rex/ui/window_sdl.h>
@@ -35,9 +36,11 @@ std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
   // The app context decides the platform: the entry point creates a
   // Win32WindowedAppContext for ui_backend = "win32" (RG-GDK-021).
   if (dynamic_cast<Win32WindowedAppContext*>(&app_context)) {
+    REXLOG_INFO("Window: native Win32");
     return std::make_unique<Win32Window>(app_context, title, desired_logical_width,
                                          desired_logical_height);
   }
+  REXLOG_INFO("Window: SDL");
   return std::make_unique<WindowSDL>(app_context, title, desired_logical_width,
                                      desired_logical_height);
 }
