@@ -24,6 +24,7 @@ add_executable(unit_tests
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
     system/gaming_runtime_test.cpp
+    system/title_display_name_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp

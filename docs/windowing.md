@@ -41,7 +41,7 @@ Adapted for this SDK:
 | Native menus | none | none (Xenia's Win32 menus not ported, to keep parity) |
 | `video_driver` cvar | SDL video driver | Removed with SDL |
 | Horizontal wheel | yes | yes (`WM_MOUSEHWHEEL`) |
-| Title and icon | Project name plus the SDK build stamp | The project name until launch. Once the executable is loaded, `ReXApp` shows the title's own name from its XDBF string table (in the `user_language` language when the title has it, else its default language) and its XDBF dashboard icon. Nothing else is added to the name: Quantum of Solace shows `Quantum of Solace`. A title without an XDBF resource keeps the project name. The build stamp is in the log's first line and the debug overlay |
+| Title and icon | Project name plus the SDK build stamp | The project name until launch. Once the executable is loaded, `ReXApp` shows the title's own name from its XDBF string table (in the `user_language` language when the title has it, else its default language) and its XDBF dashboard icon. Nothing else is added to the name, and trademark, registered and copyright signs are dropped (`TitleDisplayName`): Quantum of Solace shows `Quantum of Solace`, Blood Stone `007: Blood Stone` and 007 Legends `007 Legends` (its XDBF name is `007™ Legends`). A title without an XDBF resource keeps the project name. The build stamp is in the log's first line and the debug overlay |
 | Unicode text | not applicable | The class and window are Unicode, so unhandled messages go to `DefWindowProcW`. The ANSI `DefWindowProc` cut the title to its first letter |
 
 The D3D12 presenter is unchanged: both windows give it the same `Win32HwndSurface` (HWND plus HINSTANCE).
