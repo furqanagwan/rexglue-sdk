@@ -74,8 +74,7 @@ One complete static pointer-storage trace is:
    `0x82462498` installs that same object table at `0x824624A0`.
    Thus the target occupies virtual-method slot `+0x20`; this is an object
    dispatch table, not merely an unexplained sequence of executable pointers.
-   No RTTI Complete Object Locator is found by this SDK's scanner. This is a
-   static storage trace, not a claim to have captured the live object/call site.
+   No RTTI Complete Object Locator is found by this SDK's scanner.
 3. The original target has five instructions: three pointer loads through
    object offsets `0x1C`, `0x10`, `0x1C`, a floating-point load at `+0x3C`,
    and `blr`. It is an independent method, not a switch-table label.
@@ -84,6 +83,15 @@ One complete static pointer-storage trace is:
    preceding method's indirect `bctr` at `0x8246258C`. Block discovery correctly
    stops that method at `0x82462590`. The segment retains its larger provisional
    extent; the suffix containing the independent method is never reconsidered.
+
+A private diagnostic boot then confirmed the live chain. At the recovered
+method's first invocation, the object pointer was `0xADD945F0`, its first
+dword was `0x820969F8`, the table's `+0x20` dword was `0x82462590`, and LR
+was `0x8248478C`. Original instructions at `0x8248477C..0x82484788` load
+the object's table, load its `+0x20` slot, move it to CTR and execute `bctrl`.
+The trace is retained privately in `out/rgfix002/trace-run/stderr.log`.
+This diagnostic executable is separate from the uninstrumented regression
+runs; forced regeneration removed its temporary entry logging before rebuilding.
 
 There is a second, distinct case at `0x821C1BF8`: it is a `li r3,constant;
 blr` leaf inside the switch function `0x821C1B90`, also reached by an
@@ -141,7 +149,15 @@ shared epilogues. Overlapping-owner branch classification is checked separately.
 Private decoded sections, phase graph censuses and generated output comparisons
 are retained under the ignored SDK build output (`out/rgfix002`). They are not
 repository assets. Final build and title-run evidence is recorded below when
-the regression gates complete.
+the regression gates complete; see "Title runs" below.
+
+Both standard Windows x64 Debug and Release builds complete. Each final CTest
+run discovers 1,900 tests: **1,896 pass, four pre-existing BitStream write tests
+skip, zero fail**. The GDK Debug and Release builds (`win-amd64-gdk`) also pass
+all 1,918 tests. This includes 1,462 generated PPC tests, 42 GPU tests and
+34 kernel tests. The ten discovery fixtures pass 49 assertions. Shader bytecode
+reproducibility, roadmap validation, documentation checks and whitespace checks
+also pass. GitHub's format checks pass on the implementation commit `b98f638`.
 
 ### Pinned no-hints comparison
 
@@ -161,6 +177,13 @@ unexplained new overlap; it cannot prove every function boundary in the game.
 The six removed entries are internal blocks of recovered methods:
 `0x8211E7BC`, `0x8211E7FC`, `0x8233AE7C`, `0x824E16D4`, `0x824E16FC`,
 `0x824E1724`.
+Three of them (`0x8211E7FC`, `0x824E16D4`, `0x824E16FC`) were gap-fill entries
+in the hinted title build that runs today, so they were checked for data
+references before being dropped: none of the six appears as a big-endian
+pointer in any non-executable section. The only occurrence is `0x8233AE7C` at
+`0x8233AE54`, inside the code section just before it, which fits a jump table
+rather than a method table. An indirect call to one of them would therefore
+need a table this search did not see.
 
 Automatic discovery recovers all 13 non-switch methods from the title's 32
 hints, plus the one directly referenced switch leaf without hints. The other
@@ -170,3 +193,13 @@ hints: partially hinting that switch changes the host's discovered blocks,
 so the shared-leaf rule no longer applies to its unhinted case. Broadening
 discovery just to bypass that boundary would defeat the conservative rule.
 The tracked 007 configuration retains all 32 hints.
+
+### Title runs
+
+Two uninstrumented 90-second boots of the private build (13 method hints
+removed, 19 switch-leaf hints kept; NVIDIA GeForce RTX 5080 Laptop GPU,
+driver 32.0.16.1714) both ran for the full duration with no error lines and
+wrote achievement 59 (`0x3B`), the same scene result as the fully hinted build.
+Manifests: `out/rgfix002/boot-{1,2}/run.json`. This is a boot and scene
+result: it proves the former missing-entry fatals are passed without their
+hints, not gameplay or save/load compatibility.
