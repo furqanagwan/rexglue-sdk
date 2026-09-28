@@ -12,6 +12,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <rex/memory.h>
@@ -148,6 +149,10 @@ class XdbfGameData : public XdbfWrapper {
 
   std::string title(XLanguage language) const;
 };
+
+// A title name as shown in the window: without trademark, registered and
+// copyright signs (U+2122, U+00AE, U+00A9), and with whitespace collapsed.
+std::string TitleDisplayName(std::string_view name);
 
 }  // namespace util
 }  // namespace system

@@ -133,6 +133,38 @@ std::string XdbfGameData::title(XLanguage language) const {
   return GetStringTableEntry(language, kXdbfIdTitle);
 }
 
+std::string TitleDisplayName(std::string_view name) {
+  // UTF-8 for U+2122, U+00AE and U+00A9.
+  static constexpr std::string_view kMarks[] = {"\xE2\x84\xA2", "\xC2\xAE", "\xC2\xA9"};
+  std::string out;
+  bool pending_space = false;
+  size_t i = 0;
+  while (i < name.size()) {
+    bool mark = false;
+    for (std::string_view m : kMarks) {
+      if (name.substr(i, m.size()) == m) {
+        i += m.size();
+        mark = true;
+        break;
+      }
+    }
+    if (mark) {
+      continue;
+    }
+    const char c = name[i++];
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+      pending_space = !out.empty();
+      continue;
+    }
+    if (pending_space) {
+      out.push_back(' ');
+      pending_space = false;
+    }
+    out.push_back(c);
+  }
+  return out;
+}
+
 }  // namespace util
 }  // namespace system
 }  // namespace rex

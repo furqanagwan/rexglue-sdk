@@ -82,9 +82,9 @@ void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_st
   }
   const system::XLanguage language =
       db.GetExistingLanguage(static_cast<system::XLanguage>(REXCVAR_GET(user_language)));
-  std::string name = db.title(language);
+  std::string name = system::util::TitleDisplayName(db.title(language));
   if (name.empty()) {
-    name = db.title();
+    name = system::util::TitleDisplayName(db.title());
   }
   if (!name.empty()) {
     window.SetTitle(name);
