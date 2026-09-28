@@ -5,7 +5,7 @@
  * Starts the Gaming Runtime the way ReXApp does (rex::system::GamingRuntime,
  * off-thread with a timeout), records whether the process has package
  * identity, bumps a save counter where ReXApp keeps user data by default
- * (Documents/<name>, outside the package), uninitializes and exits. It is a
+ * (Saved Games/<name>, outside the package), uninitializes and exits. It is a
  * GUI-subsystem program so a `wdapp launch` shows no console; the report goes
  * to %REXGLUE_GDK_SMOKE_OUT% when set, else gdk_smoke_result.txt beside the
  * executable, else (an installed package is read-only) beside the save.
@@ -15,6 +15,7 @@
  * @license     BSD 3-Clause License
  */
 
+#include <rex/data_locations.h>
 #include <rex/filesystem.h>
 #include <rex/system/gaming_runtime.h>
 
@@ -44,9 +45,9 @@ std::filesystem::path ReportPath() {
   return std::filesystem::path(std::wstring(module, length)).parent_path() / "gdk_smoke_result.txt";
 }
 
-// ReXApp's default user_data_root is GetUserFolder() / <app name>.
+// ReXApp's default user_data_root is Saved Games / <app name>.
 int BumpSaveCounter() {
-  const auto dir = rex::filesystem::GetUserFolder() / "rexglue_gdk_smoke";
+  const auto dir = rex::filesystem::GetSavedGamesFolder() / "rexglue_gdk_smoke";
   std::filesystem::create_directories(dir);
   const auto path = dir / "save.txt";
   int count = 0;
@@ -67,7 +68,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   std::ofstream report(ReportPath(), std::ios::trunc);
   if (!report) {
     // An installed package's folder is read-only: report beside the save.
-    const auto dir = rex::filesystem::GetUserFolder() / "rexglue_gdk_smoke";
+    const auto dir = rex::filesystem::GetSavedGamesFolder() / "rexglue_gdk_smoke";
     std::filesystem::create_directories(dir);
     report.open(dir / "gdk_smoke_result.txt", std::ios::trunc);
   }

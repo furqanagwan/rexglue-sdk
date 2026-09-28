@@ -18,6 +18,7 @@
 
 #include "platform_win.h"
 
+#include <rex/data_locations.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
 #include <rex/string.h>
@@ -61,6 +62,26 @@ std::filesystem::path GetExecutablePath() {
 
 std::filesystem::path GetExecutableFolder() {
   return GetExecutablePath().parent_path();
+}
+
+namespace {
+std::filesystem::path KnownFolder(REFKNOWNFOLDERID id) {
+  std::filesystem::path result;
+  PWSTR path;
+  if (SUCCEEDED(SHGetKnownFolderPath(id, KF_FLAG_CREATE, nullptr, &path))) {
+    result.assign(path);
+  }
+  CoTaskMemFree(path);
+  return result;
+}
+}  // namespace
+
+std::filesystem::path GetSavedGamesFolder() {
+  return KnownFolder(FOLDERID_SavedGames);
+}
+
+std::filesystem::path GetLocalAppDataFolder() {
+  return KnownFolder(FOLDERID_LocalAppData);
 }
 
 std::filesystem::path GetUserFolder() {

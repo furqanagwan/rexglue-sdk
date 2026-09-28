@@ -20,7 +20,7 @@
 #   to an MSIXVC, then `wdapp install`.
 # Both deployment modes launch with `wdapp launch <AUMID>`, require the
 # package's identity in the process, then remove the package, deploy it again
-# and require the save counter the title keeps under Documents (where ReXApp
+# and require the save counter the title keeps under Saved Games (where ReXApp
 # keeps user data, outside the package) to carry over, and finally remove it.
 # They change the user's installed apps, so they run only when
 # REXGLUE_GDK_DEPLOY_SMOKE=1 (Developer Mode is needed to register).
@@ -38,7 +38,8 @@ $exeName = Split-Path -Leaf $Title
 $gdkBin = Join-Path ${env:ProgramFiles(x86)} 'Microsoft GDK\bin'
 $wdapp = Join-Path $gdkBin 'wdapp.exe'
 $makepkg = Join-Path $gdkBin 'makepkg.exe'
-$saveDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'rexglue_gdk_smoke'
+$savedGames = (New-Object -ComObject Shell.Application).Namespace('shell:SavedGames').Self.Path
+$saveDir = Join-Path $savedGames 'rexglue_gdk_smoke'
 $work = Join-Path ([IO.Path]::GetTempPath()) "rexglue_gdk_smoke_$($Mode.ToLower())"
 $script:failed = $false
 
@@ -218,7 +219,7 @@ function Test-Deployment {
         if (Remove-Smoke) { Pass 'remove: package gone' } else { Fail 'remove: package still present' }
         $second = Deploy-And-Launch 'redeploy' $source
         if ($first -and $second -and $first.save -eq '1' -and $second.save -eq '2') {
-            Pass 'save data under Documents survived removing and redeploying the package (1 -> 2)'
+            Pass 'save data under Saved Games survived removing and redeploying the package (1 -> 2)'
         } else {
             Fail "save data across redeploy: first '$($first.save)', second '$($second.save)'"
         }

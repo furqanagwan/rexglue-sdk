@@ -131,10 +131,11 @@ AUMID (`<PackageFamilyName>!Game`, where `Game` is the executable `Id` the
 config sets).
 
 **Saves across reinstall.** `ReXApp` keeps user data under
-`Documents\<title>` by default (`user_data_root`), outside the package and
-outside MSIX file virtualization. Unregistering or uninstalling leaves saves in
-place, and a reinstall picks them up. An installed package's own folder
-(`C:\Program Files\WindowsApps\...`) is read-only.
+`Saved Games\<title>` by default (`user_data_root`), outside the package and
+outside MSIX file virtualization ([data locations](data-locations.md)).
+Unregistering or uninstalling leaves saves in place, and a reinstall picks
+them up. An installed package's own folder (`C:\Program Files\WindowsApps\...`)
+is read-only.
 
 ## Smoke test
 

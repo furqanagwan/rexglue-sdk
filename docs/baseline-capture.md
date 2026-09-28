@@ -73,11 +73,12 @@ A title that keeps running until stopped is recorded with `--run-for SECONDS`.
 Still running at the end is `execution_status: ran-for-duration`, which can be
 assessed as a pass; exiting early is still `completed` or `failed`.
 `--screenshot-at SECONDS` (repeatable) saves the primary screen. `--collect-new
-DIR` copies files the title created or changed in DIR (its `logs/` folder)
-into the run. The title is stopped even if the recorder hits an error.
+DIR` copies files the title created or changed in DIR (its logs folder,
+`%LOCALAPPDATA%\<name>\logs` unless the title is given `--log_dir`) into the
+run. The title is stopped even if the recorder hits an error.
 
 ```powershell
-python scripts/capture_baseline.py --output C:/private/runs/qos-soak-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --run-for 90 --screenshot-at 30 --screenshot-at 85 --collect-new C:/private/qos/build/logs -- C:/private/qos/build/quantumofsolace.exe --game_data_root=C:/private/qos/game --user_data_root=C:/private/qos/user-001 --gpu_plugin=xenos
+python scripts/capture_baseline.py --output C:/private/runs/qos-soak-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --run-for 90 --screenshot-at 30 --screenshot-at 85 --collect-new C:/private/qos/build/logs -- C:/private/qos/build/quantumofsolace.exe --game_data_root=C:/private/qos/game --user_data_root=C:/private/qos/user-001 --log_dir=C:/private/qos/build/logs --gpu_plugin=xenos
 python scripts/capture_baseline.py --output C:/private/runs/qos-boot-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --artifact C:/private/qos/boot.png --timeout 120 -- C:/private/qos/QuantumOfSolace.exe
 python scripts/assess_baseline.py --run C:/private/runs/qos-boot-001 --output C:/private/runs/qos-boot-001-review.json --status fail --reviewer maintainer --reason "Boot fails before the menu; see the hashed run artifacts"
 python -m unittest discover -s scripts/tests -p 'test_*baseline.py'
