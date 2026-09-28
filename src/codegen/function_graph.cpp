@@ -482,6 +482,19 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
   emit_println(out, "DEFINE_REX_FUNC({}) {{", name);
   emit_println(out, "\tREX_FUNC_PROLOGUE();");
 
+  // Taking setjmp's address cannot preserve its native caller's continuation.
+  // Fail explicitly instead of emitting an ordinary returning PPC substitute.
+  if (base() == ctx.config.setJmpAddress) {
+    emit_println(out, "\tthrow std::runtime_error(\"Indirect guest setjmp is not supported\");");
+    emit_println(out, "}}\n");
+    return out;
+  }
+  if (base() == ctx.config.longJmpAddress) {
+    emit_println(out, "\trex::ppc::NonlocalJumpFrame::Jump(ctx.r3.u32, ctx.r4.s32);");
+    emit_println(out, "}}\n");
+    return out;
+  }
+
   // --- Second pass: emit instruction code ---
   const JumpTable* activeJt = nullptr;
   bool allRecompiled = true;
@@ -671,7 +684,7 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
   }
 
   if (localVariables.env)
-    emit_println(out, "\tPPCContext env{{}};");
+    emit_println(out, "\trex::ppc::NonlocalJumpFrame env;");
   if (localVariables.temp)
     emit_println(out, "\tPPCRegister temp{{}};");
   if (localVariables.v_temp)

@@ -58,7 +58,13 @@ void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
   // Extract only test_ prefixed symbols as function entry points
   std::vector<std::pair<size_t, std::string>> testFunctions;
   for (const auto& [addr, name] : symbols) {
-    if (name.starts_with("test_")) {
+    // Synthetic non-local-jump fixtures exercise the production call emitter
+    // without embedding a proprietary CRT in the instruction test corpus.
+    if (name == "__rex_test_setjmp")
+      ctx.Config().setJmpAddress = static_cast<uint32_t>(addr);
+    if (name == "__rex_test_longjmp")
+      ctx.Config().longJmpAddress = static_cast<uint32_t>(addr);
+    if (name.starts_with("test_") || name == "__rex_test_setjmp" || name == "__rex_test_longjmp") {
       testFunctions.push_back({addr, name});
     }
   }

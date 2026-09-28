@@ -20,6 +20,7 @@ add_executable(unit_tests
     graphics/debug_markers_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
+    ppc/nonlocal_jump_test.cpp
     system/guest_path_test.cpp
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
@@ -40,6 +41,7 @@ add_executable(unit_tests
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp
     codegen/indirect_discovery_test.cpp
+    codegen/crt_jump_scanner_test.cpp
     codegen/game_config_test.cpp
     rexglue/app_name_test.cpp
 )

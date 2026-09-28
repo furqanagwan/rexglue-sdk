@@ -11,3 +11,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [Local GPU validation scope](ADR-007-local-gpu-validation-scope.md)
 - [Guest shader IR: DXBC now, Edge DXIL staged](ADR-008-shader-ir-dxbc-vs-dxil.md)
 - [Title compatibility profiles: fix catalog, no database](ADR-009-title-compatibility-profiles.md)
+- [CRT non-local jumps in static code](ADR-010-static-nonlocal-jumps.md)

@@ -72,6 +72,12 @@ non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-val
 
 For quick start guide, full CLI reference, and config file options, see the [wiki](https://github.com/rexglue/rexglue-sdk/wiki).
 
+Codegen recognizes a verified CRT `setjmp`/`longjmp` pair without per-title
+addresses. Explicit overrides remain authoritative. Native jumps require guest
+register localization to be disabled; unsupported jump paths fail explicitly.
+See the [scope and validation record](docs/crt-nonlocal-jumps.md) before relying
+on this for a title's save/exit or error recovery.
+
 ReXGlue has independent Git history containing adapted Xenia-derived source.
 There is no proven single Xenia base revision for the entire initial import.
 The [ancestry analysis](docs/investigation.md) records exact reachable tips,
