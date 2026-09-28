@@ -84,6 +84,8 @@ std::optional<int> RunNumber(const std::filesystem::path& file, std::string_view
   return number;
 }
 
+}  // namespace
+
 void PruneLogDirectory(const std::filesystem::path& logs_dir, std::string_view app_name,
                        uint64_t budget_bytes) {
   std::string prefix = std::string(app_name) + "_";
@@ -117,6 +119,8 @@ void PruneLogDirectory(const std::filesystem::path& logs_dir, std::string_view a
     }
   }
 }
+
+namespace {
 
 std::filesystem::path NextSequentialLogPath(const std::filesystem::path& logs_dir,
                                             std::string_view app_name) {

@@ -62,6 +62,12 @@ inline AppNameParts parse_app_name(const std::string& input) {
   parts.pascal_case.reserve(input.size());
   parts.upper_case.reserve(input.size());
 
+  // `original` keeps the letters' case but joins words with one underscore:
+  // it names files and CMake targets and is a C++ identifier in
+  // REX_DEFINE_APP. That is also exactly what earlier versions wrote for a
+  // lowercase name, so an existing project's manifest name ("my_game") still
+  // regenerates rexglue.cmake pointing at its own files. Upstream dropped the
+  // separators ("mygame"), which would break those projects.
   bool at_new_word = true;
   for (char c : input) {
     if (is_separator(c)) {
@@ -69,6 +75,9 @@ inline AppNameParts parse_app_name(const std::string& input) {
       continue;
     }
 
+    if (at_new_word && !parts.original.empty()) {
+      parts.original += '_';
+    }
     parts.original += c;
     parts.upper_case += to_upper(c);
     parts.pascal_case += at_new_word ? to_upper(c) : to_lower(c);

@@ -13,6 +13,7 @@ add_executable(unit_tests
     core/hash_test.cpp
     core/stream_test.cpp
     core/chrono_test.cpp
+    core/log_prune_test.cpp
     graphics/texture_layout_test.cpp
     graphics/zpd_report_test.cpp
     graphics/float_precision_test.cpp
@@ -38,6 +39,7 @@ add_executable(unit_tests
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp
     codegen/game_config_test.cpp
+    rexglue/app_name_test.cpp
 )
 
 if(WIN32)

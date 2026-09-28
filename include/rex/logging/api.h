@@ -13,8 +13,10 @@
 
 #include <rex/logging/types.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <span>
+#include <string_view>
 
 #include <rex/cvar.h>
 
@@ -247,6 +249,14 @@ LogConfig BuildLogConfig(const std::string& cli_level,
                          const std::map<std::string, std::string>& category_levels);
 
 void ApplyLogCvarOverrides(LogConfig& config);
+
+/**
+ * Deletes whole runs of `<app_name>_NNN*.log` in `logs_dir`, oldest first,
+ * until the files left fit in `budget_bytes`. InitLogging calls it before
+ * opening a new run when LogConfig::dir_budget_bytes is set.
+ */
+void PruneLogDirectory(const std::filesystem::path& logs_dir, std::string_view app_name,
+                       uint64_t budget_bytes);
 
 const LogConfig& LoggingConfig();
 
