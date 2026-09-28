@@ -1220,7 +1220,7 @@ LRESULT Win32Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
     WindowDestructionReceiver destruction_receiver(this);
     return HandleMouse(message, wParam, lParam, destruction_receiver)
                ? 0
-               : DefWindowProc(hWnd, message, wParam, lParam);
+               : DefWindowProcW(hWnd, message, wParam, lParam);
   }
   if (message >= WM_KEYFIRST && message <= WM_KEYLAST) {
     WindowDestructionReceiver destruction_receiver(this);
@@ -1230,7 +1230,7 @@ LRESULT Win32Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
     if (handled && message != WM_SYSKEYDOWN && message != WM_SYSKEYUP) {
       return 0;
     }
-    return DefWindowProc(hWnd, message, wParam, lParam);
+    return DefWindowProcW(hWnd, message, wParam, lParam);
   }
 
   switch (message) {
@@ -1473,7 +1473,7 @@ LRESULT Win32Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
   // have been closed or destroyed by a handler, making hwnd_ null even though
   // DefWindowProc still needs to be called to propagate the closing-related
   // messages needed by Windows, or inaccessible (due to use-after-free) at all.
-  return DefWindowProc(hWnd, message, wParam, lParam);
+  return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
 LRESULT CALLBACK Win32Window::WndProcThunk(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -1504,7 +1504,7 @@ LRESULT CALLBACK Win32Window::WndProcThunk(HWND hWnd, UINT message, WPARAM wPara
       }
     }
   }
-  return DefWindowProc(hWnd, message, wParam, lParam);
+  return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
 }  // namespace rex::ui
