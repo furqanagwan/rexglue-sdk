@@ -33,6 +33,11 @@ Adapted for this SDK:
 | Relative mouse (MnK mouse look) | SDL relative mode | Raw input (`WM_INPUT`) deltas as `MouseEvent::dx/dy`, cursor clipped to the client area while focused |
 | Warp to center | `SDL_WarpMouseInWindow` | `SetCursorPos`, verified with `GetCursorPos` |
 | `monitor` cvar | Display index, 1 = primary | Same (primary first, then enumeration order), centered on that monitor's work area |
+| Window size | `window_width`/`window_height`, then `resolution`, then `video_mode_*` (upstream ReXGlue `289f518`) | Same order; both windows size through `Window::Create` in `window_factory.cpp` |
+| Live changes (`monitor`, `window_width`/`height`, `resolution`, `fullscreen`, `fullscreen_exclusive`) | Applied without a restart (upstream `923c1a5`) | Same. While fullscreen, a new monitor moves the fullscreen window and the saved window; a new size is kept for when fullscreen is left. A maximized or minimized window keeps its size |
+| `fullscreen_exclusive` (default off) | `SDL_SetWindowFullscreenMode` with the closest mode (upstream `1406e1b`) | `ChangeDisplaySettingsExW(CDS_FULLSCREEN)` on the window's display, with the same mode choice (`src/ui/display_mode.h`): the `resolution` size or the desktop's, exact or else the smallest covering mode, at the desktop refresh rate or the fastest. The desktop mode comes back on leaving fullscreen, on close, and on switching away, which minimizes the window as SDL does; switching back applies the mode again. Windows also restores it if the process dies |
+| Display size (`GetDisplayPixelSize`) | Desktop mode of the window's display | Same, from the registry mode, so it stays the desktop's while a mode is switched |
+| Input while unfocused | Neutral (upstream `1406e1b`, in `ReXApp`) | Same, for every input backend |
 | Native menus | none | none (Xenia's Win32 menus not ported, to keep parity) |
 | `video_driver` cvar | SDL video driver | ignored |
 | Horizontal wheel | yes | yes (`WM_MOUSEHWHEEL`) |
@@ -59,6 +64,11 @@ No other code uses SDL. Dialogs are ImGui overlays drawn by the presenter, and t
   - the Win32 context creates a `Win32Window` with a live HWND and a DPI-scaled client size
   - resize, minimize and restore reach listeners
   - fullscreen covers the monitor and restores the frame and size
+  - a new size applies at once when windowed, and after leaving fullscreen when set during it
+  - refreshing fullscreen (a `resolution` or `fullscreen_exclusive` change) neither moves a windowed window nor loses the saved one
+  - `monitor` moves the window live; an index past the displays leaves it
+  - the display size is the monitor's desktop mode
+- `unit_tests [ui][display_mode]`: exact size, refresh preference, smallest covering mode, largest fallback, colour depth, no modes.
   - user close can be vetoed; programmatic close cannot
   - keys reach input listeners; characters arrive only with text input active
   - functions queued from another thread run on the UI thread
@@ -68,5 +78,6 @@ No other code uses SDL. Dialogs are ImGui overlays drawn by the presenter, and t
 
 - Title-level parity with the SDL window (no title content): input feel, overlays, fullscreen toggling during gameplay, mouse look.
 - Multi-monitor moves across different DPIs (one monitor here), DPI change at runtime, and WM_DPICHANGED while fullscreen.
+- `fullscreen_exclusive` switching is not in the automated tests, which would change the developer's display. The mode choice is unit-tested, and the switch was checked by hand in Quantum of Solace (see the port's PR).
 - AMD and Intel presentation; hardware results are NVIDIA only, with WARP as a supplement.
 - A GDK-packaged title using the Win32 window (RG-GDK-022).

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <optional>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <rex/assert.h>
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
+#include <rex/graphics/video_mode_util.h>
 #include <rex/logging.h>
 #include <rex/string/utf8.h>
 #include <rex/ui/flags.h>
@@ -34,6 +36,8 @@
 #include <shellapi.h>
 #include <windowsx.h>
 
+#include "display_mode.h"
+
 namespace rex::ui {
 
 namespace {
@@ -43,6 +47,10 @@ constexpr wchar_t kWindowClassName[] = L"ReXGlueWindowClass";
 std::wstring ToWide(const std::string& text) {
   std::u16string utf16 = rex::string::to_utf16(text);
   return std::wstring(utf16.begin(), utf16.end());
+}
+
+std::string FromWide(const std::wstring& text) {
+  return rex::string::to_utf8(std::u16string(text.begin(), text.end()));
 }
 
 const Win32WindowedAppContext& Win32Context(const WindowedAppContext& app_context) {
@@ -71,6 +79,7 @@ Win32Window::~Win32Window() {
     hwnd_ = nullptr;
     relative_mouse_mode_ = false;
     UpdateCursorClip();
+    RestoreDisplayMode();
     SetWindowLongPtr(hwnd, GWLP_USERDATA, 0);
     DestroyWindow(hwnd);
   }
@@ -299,10 +308,9 @@ bool Win32Window::OpenImpl() {
   return true;
 }
 
-void Win32Window::ApplyMonitorSelection() {
-  int32_t monitor_index = REXCVAR_GET(monitor);
+HMONITOR Win32Window::MonitorForIndex(int32_t monitor_index) {
   if (monitor_index <= 0) {
-    return;
+    return nullptr;
   }
   // 1 is the primary display, then the others in enumeration order.
   std::vector<HMONITOR> monitors;
@@ -321,13 +329,20 @@ void Win32Window::ApplyMonitorSelection() {
   if (size_t(monitor_index) > monitors.size()) {
     REXLOG_WARN("monitor cvar is {} but only {} display(s) present; using default", monitor_index,
                 monitors.size());
+    return nullptr;
+  }
+  return monitors[monitor_index - 1];
+}
+
+void Win32Window::ApplyMonitorSelection() {
+  HMONITOR monitor = MonitorForIndex(GetMonitor());
+  if (!monitor) {
     return;
   }
   MONITORINFO monitor_info = {};
   monitor_info.cbSize = sizeof(monitor_info);
   RECT window_rect;
-  if (!GetMonitorInfoW(monitors[monitor_index - 1], &monitor_info) ||
-      !GetWindowRect(hwnd_, &window_rect)) {
+  if (!GetMonitorInfoW(monitor, &monitor_info) || !GetWindowRect(hwnd_, &window_rect)) {
     return;
   }
   const RECT& work = monitor_info.rcWork;
@@ -337,6 +352,193 @@ void Win32Window::ApplyMonitorSelection() {
                work.top + ((work.bottom - work.top) - height) / 2, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
   // A monitor with another DPI sends WM_DPICHANGED, which resizes as usual.
+}
+
+void Win32Window::ApplyNewMonitor() {
+  if (!hwnd_) {
+    return;
+  }
+  if (!fullscreen_applied_) {
+    ApplyMonitorSelection();
+    return;
+  }
+  HMONITOR monitor = MonitorForIndex(GetMonitor());
+  if (!monitor) {
+    return;
+  }
+  // Leaving fullscreen later returns to the new display: move the saved
+  // window there, keeping its size.
+  RestoreDisplayMode();
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  if (GetMonitorInfoW(monitor, &monitor_info)) {
+    RECT& normal = pre_fullscreen_placement_.rcNormalPosition;
+    const RECT& work = monitor_info.rcWork;
+    const LONG width = normal.right - normal.left;
+    const LONG height = normal.bottom - normal.top;
+    normal.left = work.left + ((work.right - work.left) - width) / 2;
+    normal.top = work.top + ((work.bottom - work.top) - height) / 2;
+    normal.right = normal.left + width;
+    normal.bottom = normal.top + height;
+  }
+  WindowDestructionReceiver destruction_receiver(this);
+  CoverMonitor(monitor, destruction_receiver);
+}
+
+void Win32Window::ApplyNewDesiredLogicalSize() {
+  if (!hwnd_) {
+    return;
+  }
+  if (fullscreen_applied_) {
+    // Applied when fullscreen is left: the saved window takes the new size,
+    // at the DPI it was saved at.
+    pre_fullscreen_normal_client_width_ =
+        ConvertSizeDpi(GetDesiredLogicalWidth(), pre_fullscreen_dpi_, GetMediumDpi());
+    pre_fullscreen_normal_client_height_ =
+        ConvertSizeDpi(GetDesiredLogicalHeight(), pre_fullscreen_dpi_, GetMediumDpi());
+    RECT rect = {0, 0, LONG(pre_fullscreen_normal_client_width_),
+                 LONG(pre_fullscreen_normal_client_height_)};
+    AdjustWindowRectangle(rect, GetWindowLong(hwnd_, GWL_STYLE) | WS_OVERLAPPEDWINDOW, FALSE,
+                          GetWindowLong(hwnd_, GWL_EXSTYLE), pre_fullscreen_dpi_);
+    RECT& normal = pre_fullscreen_placement_.rcNormalPosition;
+    normal.right = normal.left + (rect.right - rect.left);
+    normal.bottom = normal.top + (rect.bottom - rect.top);
+    return;
+  }
+  // As the SDL window: a maximized or minimized window keeps its size.
+  if (IsZoomed(hwnd_) || IsIconic(hwnd_)) {
+    return;
+  }
+  RECT rect = {0, 0, LONG(SizeToPhysical(GetDesiredLogicalWidth())),
+               LONG(SizeToPhysical(GetDesiredLogicalHeight()))};
+  AdjustWindowRectangle(rect);
+  SetWindowPos(hwnd_, nullptr, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
+               SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+bool Win32Window::GetDisplayPixelSize(uint32_t& width, uint32_t& height) const {
+  if (!hwnd_) {
+    return false;
+  }
+  MONITORINFOEXW monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  if (!GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &monitor_info)) {
+    return false;
+  }
+  // The registry mode is the desktop's, whatever mode is current.
+  DEVMODEW desktop = {};
+  desktop.dmSize = sizeof(desktop);
+  if (!EnumDisplaySettingsExW(monitor_info.szDevice, ENUM_REGISTRY_SETTINGS, &desktop, 0)) {
+    return false;
+  }
+  width = desktop.dmPelsWidth;
+  height = desktop.dmPelsHeight;
+  return width > 0 && height > 0;
+}
+
+bool Win32Window::SwitchDisplayMode(HMONITOR monitor) {
+  MONITORINFOEXW monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  if (!GetMonitorInfoW(monitor, &monitor_info)) {
+    return false;
+  }
+  const std::wstring device = monitor_info.szDevice;
+  const std::string device_name = FromWide(device);
+  DEVMODEW desktop = {};
+  desktop.dmSize = sizeof(desktop);
+  if (!EnumDisplaySettingsExW(device.c_str(), ENUM_REGISTRY_SETTINGS, &desktop, 0)) {
+    REXLOG_WARN("No desktop mode for display {}: staying borderless", device_name);
+    return false;
+  }
+  int32_t width = 0;
+  int32_t height = 0;
+  if (!rex::graphics::video_mode_util::TryGetResolutionPresetFromCVar(width, height) ||
+      width <= 0 || height <= 0) {
+    width = int32_t(desktop.dmPelsWidth);
+    height = int32_t(desktop.dmPelsHeight);
+  }
+
+  std::vector<DisplayMode> modes;
+  std::vector<DEVMODEW> devmodes;
+  for (DWORD i = 0;; i++) {
+    DEVMODEW devmode = {};
+    devmode.dmSize = sizeof(devmode);
+    if (!EnumDisplaySettingsExW(device.c_str(), i, &devmode, 0)) {
+      break;
+    }
+    modes.push_back({devmode.dmPelsWidth, devmode.dmPelsHeight, devmode.dmDisplayFrequency,
+                     devmode.dmBitsPerPel});
+    devmodes.push_back(devmode);
+  }
+  std::optional<DisplayMode> chosen =
+      ChooseFullscreenMode(modes, uint32_t(width), uint32_t(height), desktop.dmDisplayFrequency);
+  if (!chosen) {
+    REXLOG_WARN("Display {} has no mode near {}x{}: staying borderless", device_name, width,
+                height);
+    return false;
+  }
+  if (switched_display_ != device) {
+    RestoreDisplayMode();
+  }
+  if (chosen->width == desktop.dmPelsWidth && chosen->height == desktop.dmPelsHeight &&
+      chosen->refresh_hz == desktop.dmDisplayFrequency) {
+    // The desktop mode already: borderless is the same picture.
+    RestoreDisplayMode();
+    return true;
+  }
+  size_t chosen_index = 0;
+  while (!(modes[chosen_index] == *chosen)) {
+    chosen_index++;
+  }
+  DEVMODEW devmode = devmodes[chosen_index];
+  devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL;
+  // CDS_FULLSCREEN: temporary, so Windows restores the desktop mode if the
+  // process ends without doing it.
+  LONG result =
+      ChangeDisplaySettingsExW(device.c_str(), &devmode, nullptr, CDS_FULLSCREEN, nullptr);
+  if (result != DISP_CHANGE_SUCCESSFUL) {
+    REXLOG_WARN("ChangeDisplaySettingsEx({}x{} @ {} Hz) on {} failed ({}): staying borderless",
+                chosen->width, chosen->height, chosen->refresh_hz, device_name, result);
+    return false;
+  }
+  switched_display_ = device;
+  REXLOG_INFO("Exclusive fullscreen mode {}x{} @ {} Hz on display {}", chosen->width,
+              chosen->height, chosen->refresh_hz, device_name);
+  return true;
+}
+
+void Win32Window::RestoreDisplayMode() {
+  if (switched_display_.empty()) {
+    return;
+  }
+  ChangeDisplaySettingsExW(switched_display_.c_str(), nullptr, nullptr, 0, nullptr);
+  switched_display_.clear();
+}
+
+void Win32Window::CoverMonitor(HMONITOR monitor, WindowDestructionReceiver& destruction_receiver) {
+  if (REXCVAR_GET(fullscreen_exclusive)) {
+    SwitchDisplayMode(monitor);
+  } else {
+    RestoreDisplayMode();
+  }
+  // After the switch: the monitor rectangle follows the mode.
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  if (!GetMonitorInfoW(monitor, &monitor_info)) {
+    return;
+  }
+  BeginBatchedSizeUpdate();
+  // Resize the window to fullscreen _after_ removing the decorations, so the
+  // new size never needs composition and independent low-latency presentation
+  // is possible immediately (a composed window may otherwise stay composed).
+  SetWindowPos(hwnd_, HWND_TOP, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+               monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+               monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+               SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  if (destruction_receiver.IsWindowDestroyed()) {
+    return;
+  }
+  EndBatchedSizeUpdate(destruction_receiver);
 }
 
 void Win32Window::RequestCloseImpl() {
@@ -361,6 +563,7 @@ void Win32Window::PerformClose(HWND hwnd, bool destroy_window) {
   }
   relative_mouse_mode_ = false;
   UpdateCursorClip();
+  RestoreDisplayMode();
   // Set hwnd_ to null to ignore events from now on since this Win32Window is
   // entering an indeterminate state - this should be done at some point in
   // closing anyway.
@@ -387,6 +590,11 @@ void Win32Window::ApplyNewFullscreen() {
     ApplyFullscreenEntry(destruction_receiver);
     return;
   }
+  if (!fullscreen_applied_) {
+    return;
+  }
+  fullscreen_applied_ = false;
+  RestoreDisplayMode();
   // Changing the style may change the size too, don't handle the resize
   // multiple times (also potentially with the listeners changing the desired
   // fullscreen if called from the handling of some message like WM_SIZE).
@@ -680,6 +888,14 @@ void Win32Window::ApplyFullscreenEntry(WindowDestructionReceiver& destruction_re
   if (!IsFullscreen()) {
     return;
   }
+  if (fullscreen_applied_) {
+    // Already borderless: only the display mode may need to follow the cvars.
+    HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST);
+    if (monitor) {
+      CoverMonitor(monitor, destruction_receiver);
+    }
+    return;
+  }
 
   // https://blogs.msdn.com/b/oldnewthing/archive/2010/04/12/9994016.aspx
   pre_fullscreen_dpi_ = dpi_;
@@ -720,17 +936,9 @@ void Win32Window::ApplyFullscreenEntry(WindowDestructionReceiver& destruction_re
     return;
   }
 
-  // Resize the window to fullscreen _after_ removing the decorations, so the
-  // new size never needs composition and independent low-latency presentation
-  // is possible immediately (a composed window may otherwise stay composed).
-  SetWindowPos(hwnd_, HWND_TOP, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
-               monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-               monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-               SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-  if (destruction_receiver.IsWindowDestroyedOrClosed()) {
-    if (!destruction_receiver.IsWindowDestroyed()) {
-      EndBatchedSizeUpdate(destruction_receiver);
-    }
+  fullscreen_applied_ = true;
+  CoverMonitor(monitor, destruction_receiver);
+  if (destruction_receiver.IsWindowDestroyed()) {
     return;
   }
 
@@ -1154,6 +1362,23 @@ LRESULT Win32Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
         // special maximized handling is needed.
         SetWindowPos(hwnd_, nullptr, int(rect->left), int(rect->top), int(rect->right - rect->left),
                      int(rect->bottom - rect->top), SWP_NOZORDER | SWP_NOACTIVATE);
+        if (destruction_receiver.IsWindowDestroyedOrClosed()) {
+          break;
+        }
+      }
+    } break;
+
+    case WM_ACTIVATEAPP: {
+      if (!wParam && !switched_display_.empty()) {
+        RestoreDisplayMode();
+        ShowWindow(hwnd_, SW_MINIMIZE);
+      } else if (wParam && fullscreen_applied_ && REXCVAR_GET(fullscreen_exclusive) &&
+                 switched_display_.empty()) {
+        WindowDestructionReceiver destruction_receiver(this);
+        HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST);
+        if (monitor) {
+          CoverMonitor(monitor, destruction_receiver);
+        }
         if (destruction_receiver.IsWindowDestroyedOrClosed()) {
           break;
         }

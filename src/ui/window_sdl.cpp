@@ -21,6 +21,7 @@
 #include <utf8.h>
 
 #include <rex/cvar.h>
+#include <rex/graphics/video_mode_util.h>
 #include <rex/logging.h>
 #include <rex/platform.h>
 #include <rex/ui/flags.h>

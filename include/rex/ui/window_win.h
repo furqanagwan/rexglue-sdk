@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include <rex/ui/window.h>
@@ -43,6 +44,9 @@ class Win32Window final : public Window {
   void* GetNativeWindowHandle() const override { return hwnd_; }
   bool SetRelativeMouseMode(bool enable) override;
   bool WarpMouseToCenter(int32_t& x_out, int32_t& y_out) override;
+  // The desktop mode of the window's display, even while fullscreen_exclusive
+  // has switched it.
+  bool GetDisplayPixelSize(uint32_t& width, uint32_t& height) const override;
 
  protected:
   bool OpenImpl() override;
@@ -51,6 +55,8 @@ class Win32Window final : public Window {
   uint32_t GetLatestDpiImpl() const override;
 
   void ApplyNewFullscreen() override;
+  void ApplyNewMonitor() override;
+  void ApplyNewDesiredLogicalSize() override;
   void ApplyNewTitle() override;
   void LoadAndApplyIcon(const void* buffer, size_t size,
                         bool can_apply_state_in_current_phase) override;
@@ -75,10 +81,22 @@ class Win32Window final : public Window {
   uint32_t GetCurrentSystemDpi() const;
   uint32_t GetCurrentDpi() const;
 
-  // Centers the window on the `monitor` cvar's display (1-based, 0 = leave).
+  // The display for a 1-based monitor index, primary first; null for 0 or an
+  // index past the displays present (logged).
+  static HMONITOR MonitorForIndex(int32_t monitor_index);
+  // Centers the window on GetMonitor()'s display (0 = leave it).
   void ApplyMonitorSelection();
 
   void ApplyFullscreenEntry(WindowDestructionReceiver& destruction_receiver);
+  // Sizes the borderless window over `monitor`, first switching its display
+  // mode when fullscreen_exclusive is on (and back to the desktop mode when
+  // it is off).
+  void CoverMonitor(HMONITOR monitor, WindowDestructionReceiver& destruction_receiver);
+  // Switches `monitor` to the mode for the resolution cvar (or its desktop
+  // size). Returns false, staying borderless, when the display refuses.
+  bool SwitchDisplayMode(HMONITOR monitor);
+  // Back to the desktop mode of the display switched, if any.
+  void RestoreDisplayMode();
 
   void HandleSizeUpdate(WindowDestructionReceiver& destruction_receiver);
   // For updating multiple factors that may influence the window size at once,
@@ -127,6 +145,12 @@ class Win32Window final : public Window {
 
   bool minimized_ = false;
   bool relative_mouse_mode_ = false;
+
+  // Whether the window currently is borderless over a monitor, as opposed to
+  // IsFullscreen, the desired state.
+  bool fullscreen_applied_ = false;
+  // The display whose mode fullscreen_exclusive changed, empty when none.
+  std::wstring switched_display_;
 
   uint32_t pre_fullscreen_dpi_ = USER_DEFAULT_SCREEN_DPI;
   WINDOWPLACEMENT pre_fullscreen_placement_ = {};

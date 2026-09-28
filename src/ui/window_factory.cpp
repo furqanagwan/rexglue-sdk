@@ -21,10 +21,6 @@
 
 namespace rex::ui {
 
-namespace {
-
-}  // namespace
-
 std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
                                        const std::string_view title) {
   uint32_t width = 0;
