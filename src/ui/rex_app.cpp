@@ -35,7 +35,9 @@
 #include <rex/system.h>
 #include <rex/system/achievement_manager.h>
 #include <rex/system/gpu_plugin.h>
+#include <rex/system/flags.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/util/xdbf_utils.h>
 #include <rex/system/xthread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/keybinds.h>
@@ -66,6 +68,35 @@ REXCVAR_DEFINE_INT32(gaming_runtime_timeout_ms, 10000, "GDK",
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 namespace rex {
+
+namespace {
+
+// Shows the title as the console would: its name from the XDBF string table,
+// in the user's language when it has one, and its dashboard icon. Leaves the
+// window as it is when the executable has no XDBF resource.
+void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_state) {
+  const system::util::XdbfGameData db = kernel_state.title_xdbf();
+  if (!db.is_valid()) {
+    REXLOG_WARN("Title has no XDBF resource; keeping the project name as the window title");
+    return;
+  }
+  const system::XLanguage language =
+      db.GetExistingLanguage(static_cast<system::XLanguage>(REXCVAR_GET(user_language)));
+  std::string name = db.title(language);
+  if (name.empty()) {
+    name = db.title();
+  }
+  if (!name.empty()) {
+    window.SetTitle(name);
+    REXLOG_INFO("Title: {}", name);
+  }
+  const system::util::XdbfBlock icon = db.icon();
+  if (icon) {
+    window.SetIcon(icon.buffer, icon.size);
+  }
+}
+
+}  // namespace
 
 // --- ReXApp ---
 
@@ -196,7 +227,7 @@ bool ReXApp::SetupEnvironment() {
   if (std::filesystem::exists(config_path_))
     REXLOG_DEBUG("Loaded config: {}", config_path_.filename().string());
 
-  REXLOG_DEBUG("{} starting", GetName());
+  REXLOG_INFO("{} starting, {}", GetName(), REXGLUE_BUILD_TITLE);
   if (!game_data_root_.empty()) {
     REXLOG_DEBUG("  Game directory: {}", game_data_root_.string());
   }
@@ -384,9 +415,9 @@ bool ReXApp::SetupPresentation() {
     return false;
   }
 
-  // Set window title with SDK build stamp
-  std::string title = std::string(GetName()) + " " + REXGLUE_BUILD_TITLE;
-  window_->SetTitle(title);
+  // The project name until the title's own name and icon are known at launch.
+  // The SDK build stamp is in the log and the debug overlay.
+  window_->SetTitle(GetName());
 
   window_->AddListener(this);
   window_->AddInputListener(this, 0);
@@ -527,6 +558,10 @@ void ReXApp::LaunchModule() {
       REXLOG_ERROR("Failed to launch module");
       app_context().QuitFromUIThread();
       return;
+    }
+
+    if (window_) {
+      ApplyTitleIdentity(*window_, *runtime_->kernel_state());
     }
 
     auto* graphics_system = runtime_->graphics_system();

@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -97,6 +98,31 @@ TEST_CASE("A Win32 app context creates a native Win32 window", "[ui][win32]") {
   CHECK(h.window->GetActualPhysicalHeight() == uint32_t(client.bottom));
   // The requested logical size, scaled to the window's DPI.
   CHECK(h.window->GetActualPhysicalWidth() == h.window->SizeToPhysical(640));
+}
+
+TEST_CASE("The Win32 window shows the full title and a title icon", "[ui][win32]") {
+  Harness h;
+  // A title's XDBF name is UTF-8 and may leave ASCII ("Légendes").
+  h.window->SetTitle("Quantum of Solace L\xC3\xA9gendes");
+  Pump();
+  wchar_t text[64] = {};
+  GetWindowTextW(h.hwnd(), text, 64);
+  CHECK(std::wstring(text) == L"Quantum of Solace Légendes");
+  CHECK(SendMessageW(h.hwnd(), WM_GETTEXTLENGTH, 0, 0) == 26);
+
+  // XDBF title icons are PNG; a 4x4 red one.
+  static const uint8_t kPng[] = {
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+      0x52, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x08, 0x06, 0x00, 0x00, 0x00, 0xA9,
+      0xF1, 0x9E, 0x7E, 0x00, 0x00, 0x00, 0x12, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8,
+      0xCF, 0xC0, 0xF0, 0x1F, 0x19, 0x33, 0x90, 0x2E, 0x00, 0x00, 0x3C, 0x40, 0x1F, 0xE1, 0xE0,
+      0x81, 0x77, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82};
+  CHECK(SendMessageW(h.hwnd(), WM_GETICON, ICON_BIG, 0) == 0);
+  h.window->SetIcon(kPng, sizeof(kPng));
+  CHECK(SendMessageW(h.hwnd(), WM_GETICON, ICON_BIG, 0) != 0);
+  CHECK(SendMessageW(h.hwnd(), WM_GETICON, ICON_SMALL, 0) != 0);
+  h.window->ResetIcon();
+  CHECK(SendMessageW(h.hwnd(), WM_GETICON, ICON_BIG, 0) == GetClassLongPtrW(h.hwnd(), GCLP_HICON));
 }
 
 TEST_CASE("Win32 window resize, minimize and restore reach the listeners", "[ui][win32]") {
