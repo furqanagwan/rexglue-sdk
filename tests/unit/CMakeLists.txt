@@ -38,6 +38,7 @@ add_executable(unit_tests
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp
+    codegen/indirect_discovery_test.cpp
     codegen/game_config_test.cpp
     rexglue/app_name_test.cpp
 )

@@ -11,9 +11,11 @@
 
 #include "ppc/instruction.h"
 
+#include <algorithm>
 #include <unordered_set>
 
 #include <rex/codegen/phases.h>
+#include "codegen_flags.h"
 #include "phase_helpers.h"
 
 #include <rex/logging.h>
@@ -86,6 +88,9 @@ std::vector<CodeRegion> splitRegionOnTerminators(
 
 // Check if address looks like exception handler data (handler ptr + rdata ptr)
 bool looksLikeExceptionData(const BinaryView& binary, const FunctionGraph& graph, uint32_t addr) {
+  const auto* section = binary.findSection(addr);
+  if (!section || section->end() - addr < 8)
+    return false;
   const uint8_t* data = binary.translate(addr);
   if (!data)
     return false;
@@ -119,6 +124,24 @@ bool looksLikeExceptionData(const BinaryView& binary, const FunctionGraph& graph
   return false;
 }
 
+// Registers a segment as a GAP_FILL function unless it starts at a known
+// entry, inside another function, or on exception data. Returns whether it
+// registered one.
+bool registerGapSegment(CodegenContext& ctx, const CodeRegion& segment) {
+  auto& graph = ctx.graph;
+  if (graph.isEntryPoint(segment.start))
+    return false;
+  if (graph.getFunctionContaining(segment.start))
+    return false;
+  if (looksLikeExceptionData(ctx.binary(), graph, segment.start))
+    return false;
+  uint32_t segmentSize = segment.size();
+  graph.addFunction(segment.start, segmentSize, FunctionAuthority::GAP_FILL, false);
+  REXCODEGEN_TRACE("GapFill: registered sub_{:08X} (0x{:08X}-0x{:08X}, {} bytes)", segment.start,
+                   segment.start, segment.end, segmentSize);
+  return true;
+}
+
 void gapFillCodeRegions(CodegenContext& ctx) {
   REXCODEGEN_TRACE("Analyze: checking for uncovered code regions...");
 
@@ -140,25 +163,9 @@ void gapFillCodeRegions(CodegenContext& ctx) {
     auto segments = splitRegionOnTerminators(region, binary, knownCallables);
 
     for (const auto& segment : segments) {
-      // Skip if this segment's start is already a registered function entry
-      if (graph.isEntryPoint(segment.start))
-        continue;
-
-      // Skip if this segment's start is inside another function
-      if (auto* containingFunc = graph.getFunctionContaining(segment.start)) {
-        continue;
+      if (registerGapSegment(ctx, segment)) {
+        segmentsCreated++;
       }
-
-      // Skip if this looks like exception handler data (handler ptr + rdata ptr)
-      if (looksLikeExceptionData(binary, graph, segment.start))
-        continue;
-
-      uint32_t segmentSize = segment.size();
-      graph.addFunction(segment.start, segmentSize, FunctionAuthority::GAP_FILL, false);
-
-      REXCODEGEN_TRACE("GapFill: registered sub_{:08X} (0x{:08X}-0x{:08X}, {} bytes)",
-                       segment.start, segment.start, segment.end, segmentSize);
-      segmentsCreated++;
     }
 
     gapsFound++;
@@ -170,6 +177,78 @@ void gapFillCodeRegions(CodegenContext& ctx) {
   } else {
     REXCODEGEN_TRACE("Analyze: no uncovered regions found");
   }
+}
+
+//=============================================================================
+// Leftovers of gap segments (RG-FIX-002)
+//=============================================================================
+
+// A gap segment ends at a blr or at a tail call to a function known when the
+// segment was cut. An indirect bctr or a tail call to a function found later doesn't split it, so
+// discovery can end the segment's function well before the segment does: a
+// thunk `addi r3,r3,-4; b sub_X` followed by the next function. Those bytes
+// were then claimed by no one and never looked at again (RG-FIX-002).
+//
+// Returns the gap functions registered in the leftovers. A leftover is
+// skipped when the function branches into it (the code is the function's
+// own, found later by Merge) or when it starts with zero padding.
+size_t gapFillLeftovers(CodegenContext& ctx) {
+  auto& graph = ctx.graph;
+  auto& binary = ctx.binary();
+
+  std::unordered_set<uint32_t> knownCallables;
+  for (const auto& [addr, node] : graph.functions()) {
+    knownCallables.insert(addr);
+  }
+
+  std::vector<CodeRegion> leftovers;
+  for (const auto& [addr, node] : graph.functions()) {
+    if (node->authority() != FunctionAuthority::GAP_FILL || !node->isDiscovered() ||
+        node->blocks().empty()) {
+      continue;
+    }
+    uint32_t bodyEnd = node->base();
+    for (const auto& block : node->blocks()) {
+      bodyEnd = std::max(bodyEnd, block.end());
+    }
+    if (bodyEnd >= node->end()) {
+      continue;
+    }
+    bool branchesIntoLeftover = false;
+    for (const auto& jump : node->unresolvedJumps()) {
+      if (jump.target >= bodyEnd && jump.target < node->end()) {
+        branchesIntoLeftover = true;
+        break;
+      }
+    }
+    if (branchesIntoLeftover) {
+      continue;
+    }
+    const uint8_t* first = binary.translate(bodyEnd);
+    if (!first || load_and_swap<uint32_t>(first) == 0) {
+      continue;
+    }
+    leftovers.push_back({bodyEnd, node->end()});
+  }
+
+  size_t registered = 0;
+  for (const auto& leftover : leftovers) {
+    for (const auto& segment : splitRegionOnTerminators(leftover, binary, knownCallables)) {
+      // Compilers may leave an unreachable blr after a tail dispatch. Without
+      // independent entry evidence, a return-only suffix is not a new function.
+      if (segment.size() == 4) {
+        const auto* data = binary.translate(segment.start);
+        if (data && decode_instruction(segment.start, load_and_swap<uint32_t>(data)).is_return())
+          continue;
+      }
+      if (registerGapSegment(ctx, segment)) {
+        REXCODEGEN_TRACE("GapFill: leftover of the gap before 0x{:08X} gives sub_{:08X}",
+                         leftover.start, segment.start);
+        registered++;
+      }
+    }
+  }
+  return registered;
 }
 
 //=============================================================================
@@ -224,6 +303,20 @@ VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
   auto known = buildKnownFunctions(ctx.graph, /*excludeGapFill=*/true);
   size_t discovered = discoverPendingFunctions(ctx, known);
   REXCODEGEN_TRACE("Analyze: discovered blocks for {} gap-filled functions", discovered);
+
+  // Leftovers can hold more leftovers (a run of thunks), so repeat until
+  // nothing new is found.
+  size_t leftoverFunctions = 0;
+  for (uint32_t pass = 0; pass < REXCVAR_GET(max_discovery_iterations); ++pass) {
+    size_t registered = gapFillLeftovers(ctx);
+    if (!registered) {
+      break;
+    }
+    leftoverFunctions += registered;
+    known = buildKnownFunctions(ctx.graph, /*excludeGapFill=*/true);
+    discoverPendingFunctions(ctx, known);
+  }
+  REXCODEGEN_DEBUG("GapFill: {} functions registered in gap segment leftovers", leftoverFunctions);
 
   cleanupAbsorbedGapFills(ctx);
 
