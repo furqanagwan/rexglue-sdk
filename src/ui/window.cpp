@@ -44,16 +44,11 @@ REXCVAR_DEFINE_INT32(monitor, 0, "UI/Window",
                      "second monitor, etc.)")
     .range(0, 16);
 
-REXCVAR_DEFINE_STRING(video_driver, "", "UI/Window",
-                      "SDL video driver to use, such as \"wayland\" or \"x11\". Empty picks "
-                      "SDL's default for the session")
-    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
-
-// RG-GDK-021: the native Win32 window is opt-in until it matches the SDL
-// window on hardware; input and audio keep their own backends either way.
+// "sdl" is still accepted so an old config starts: SDL was removed
+// (RG-GDK-033), and the entry point warns and uses the Win32 window.
 REXCVAR_DEFINE_STRING(ui_backend, "win32", "UI/Window",
-                      "Window and message loop: win32 (the native window, default) or sdl")
-    .allowed({"sdl", "win32"})
+                      "Window and message loop: win32 (the only one since SDL was removed)")
+    .allowed({"win32", "sdl"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_INT32(video_mode_width, 1280, "Display", "Guest video mode width in pixels")
@@ -538,7 +533,7 @@ void Window::OnSurfaceChanged(bool new_surface_potentially_exists) {
     // Usually a session whose native surface extension the driver lacks.
     REXLOG_ERROR(
         "No presentable surface for this window. The graphics provider supports surface types "
-        "{:#x}. Set the video_driver cvar to force a different session type.",
+        "{:#x}.",
         supported_types);
   }
 }

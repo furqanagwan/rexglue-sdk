@@ -72,7 +72,7 @@ class MnkInputDriver final : public InputDriver,
   void RefreshBoundKeystrokesLocked();
 
   // Called from the guest thread. The rest of the capture path stays on the UI
-  // thread, since every Window call in it reaches SDL.
+  // thread, since every Window call in it is a UI-thread call.
   void QueueMouseCaptureUpdate(bool should_capture);
   void ApplyMouseCaptureFromUIThread();
   void ReleaseMouseCaptureFromUIThread(rex::ui::Window* window);

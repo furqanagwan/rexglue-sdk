@@ -232,7 +232,7 @@ void AudioSystem::Shutdown() {
     worker_thread_.reset();
   }
 
-  // Destroy all active client drivers (closes SDL audio devices, stopping
+  // Destroy all active client drivers (closes their output voices, stopping
   // callback threads) before the semaphores they reference are destroyed.
   for (size_t i = 0; i < kMaximumClientCount; i++) {
     if (clients_[i].in_use) {

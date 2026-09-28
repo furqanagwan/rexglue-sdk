@@ -29,7 +29,6 @@
 #include <rex/ui/overlay/settings_overlay.h>
 #include <rex/audio/audio_backend.h>
 #include <rex/audio/audio_system.h>
-#include <rex/audio/sdl/sdl_audio_system.h>
 #include <rex/input/input_system.h>
 #include <rex/kernel/init.h>
 #include <rex/string/numeric.h>

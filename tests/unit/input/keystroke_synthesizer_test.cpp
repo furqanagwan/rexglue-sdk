@@ -1,6 +1,6 @@
 /**
  * @file        keystroke_synthesizer_test.cpp
- * @brief       Gamepad keystroke events shared by the SDL and GameInput drivers
+ * @brief       Gamepad keystroke events of the GameInput driver
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License

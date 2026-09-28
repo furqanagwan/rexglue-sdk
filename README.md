@@ -12,7 +12,7 @@ graphics backend (Vulkan removed by RG-GDK-023). The SDK builds and tests on
 Windows x64 with and without the April 2026 GDK. One title (Quantum of Solace)
 runs its recorded scene on NVIDIA. GDK packaging works for a minimal title. The
 native Win32 window, XAudio2 and GameInput (XInput outside GDK builds) are the
-defaults, and SDL is being removed. AMD/Intel GPUs,
+only backends; SDL3 was removed (RG-GDK-033). AMD/Intel GPUs,
 other titles and fresh machines are not validated. Each claim and its evidence
 is in [release evidence](docs/release-evidence.md). Public APIs may change.
 
@@ -60,8 +60,9 @@ See [architecture plan](docs/architecture-plan.md) and [decisions](docs/adr/READ
 
 For the Windows D3D12 compatibility baseline and the first Quantum of Solace
 runs, see [baseline capture](docs/baseline-capture.md). As of 2026-09-27 Quantum
-of Solace boots to early 3D views and runs a 90 s soak both on the default SDL
-backends and on a GDK build with GameInput, the Win32 window and XAudio2. This is
+of Solace boots to early 3D views and runs a 90 s soak on the standard build
+(XInput, the Win32 window and XAudio2) and on a GDK build (GameInput instead of
+XInput). This is
 a scene result, not gameplay: interactive progress is tracked in the 007
 repository.
 For the April 2026 GDK PC capability map and issue ownership, see the
@@ -144,11 +145,9 @@ keyboard to titles that read one.
 Every build uses the native Win32 window (`ui_backend = "win32"`) and XAudio2
 (`audio_backend = "xaudio2"`) by default: see [Windowing](docs/windowing.md)
 and [Audio output](docs/audio-output.md).
-Both windows apply `monitor`, `window_width`/`window_height`, `resolution`
+The window applies `monitor`, `window_width`/`window_height`, `resolution`
 and `fullscreen` without a restart, and `fullscreen_exclusive` switches the
 display mode instead of going borderless.
-Audio can go through XAudio2 instead of SDL with `audio_backend = "xaudio2"`
-(opt-in): see [Audio output](docs/audio-output.md).
 GDK titles own the Gaming Runtime (`gaming_runtime = "auto"`, `"required"` or
 `"off"`), `rexglue init gameconfig` writes a PC `MicrosoftGame.config` from the
 title's own identity, and the pinned `makepkg`/`wdapp` commands register,

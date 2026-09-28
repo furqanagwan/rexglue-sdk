@@ -1,13 +1,13 @@
-# Native Win32 window and SDL ownership (RG-GDK-021)
+# Native Win32 window (RG-GDK-021) and the SDL3 removal (RG-GDK-033)
 
-The SDK has two window and message-loop backends. The native Win32 window is the default (owner decision, 2026-09-28); SDL3 remains selectable until it is removed:
+The SDK has one window and message loop: the native Win32 window. SDL3 was the
+default until 2026-09-28 and was removed by RG-GDK-033. `ui_backend = "sdl"` in
+an old config starts the Win32 window with a warning.
 
-```toml
-[UI/Window]
-ui_backend = "sdl"   # default "win32"
-```
-
-The entry point (`src/ui/windowed_app_main_sdl.cpp`, installed for title projects) reads `ui_backend` after parsing cvars and creates either `Win32WindowedAppContext` or `SDLWindowedAppContext`. `Window::Create` (`src/ui/window_factory.cpp`) then returns the matching window. Titles need no code change.
+The entry point (`src/ui/windowed_app_main.cpp`, installed for title projects)
+parses cvars, creates the `Win32WindowedAppContext` and runs the app.
+`Window::Create` (`src/ui/window_factory.cpp`) returns the `Win32Window`. Titles
+need no code change; rebuilding against the new SDK is enough.
 
 ## Win32 window
 
@@ -24,7 +24,7 @@ Kept as in the source:
 
 Adapted for this SDK:
 
-| Behavior | SDL window | Win32 window |
+| Behavior | Removed SDL window | Win32 window |
 | --- | --- | --- |
 | DPI awareness | SDL sets it | The context calls `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)`, since titles carry no manifest |
 | User close | `OnCloseRequested` veto | Same: `WM_CLOSE` asks listeners first; `RequestClose()` skips the veto |
@@ -39,24 +39,22 @@ Adapted for this SDK:
 | Display size (`GetDisplayPixelSize`) | Desktop mode of the window's display | Same, from the registry mode, so it stays the desktop's while a mode is switched |
 | Input while unfocused | Neutral (upstream `1406e1b`, in `ReXApp`) | Same, for every input backend |
 | Native menus | none | none (Xenia's Win32 menus not ported, to keep parity) |
-| `video_driver` cvar | SDL video driver | ignored |
+| `video_driver` cvar | SDL video driver | Removed with SDL |
 | Horizontal wheel | yes | yes (`WM_MOUSEHWHEEL`) |
 
 The D3D12 presenter is unchanged: both windows give it the same `Win32HwndSurface` (HWND plus HINSTANCE).
 
-## SDL consumers and owners
+## SDL consumers (all removed)
 
-| SDL consumer | Files | Owner | Native replacement | Status |
-| --- | --- | --- | --- | --- |
-| Window, message loop, entry point | `window_sdl.cpp`, `windowed_app_context_sdl.cpp`, `windowed_app_main_sdl.cpp` | RG-GDK-021 | `Win32Window`, `Win32WindowedAppContext` | Default (`ui_backend = "win32"`) |
-| Scancode to virtual key | `sdl_virtual_key.cpp` | RG-GDK-021 | Win32 messages carry virtual keys natively | Used only by the SDL window |
-| Gamepads | `src/input/sdl/sdl_input_driver.cpp` | RG-GDK-020 | GameInput driver ([GameInput](gameinput.md)) in GDK builds, XInput otherwise | Default |
-| Audio output | `src/audio/sdl/sdl_audio_driver.cpp` | RG-GDK-019 | XAudio2 driver ([Audio output](audio-output.md)) | Default (`audio_backend = "xaudio2"`) |
-| Build and package | `thirdparty/CMakeLists.txt` (static SDL3), `find_dependency(SDL3)` in the package config, `SDL3::SDL3` on `rexui`, `rexinput`, `rexruntime` | RG-GDK-022 | Drop once the three rows above have validated replacements | Retained |
+| SDL consumer | Files | Replacement | Status |
+| --- | --- | --- | --- |
+| Window, message loop, entry point | `window_sdl.cpp`, `windowed_app_context_sdl.cpp`, `windowed_app_main_sdl.cpp` | `Win32Window`, `Win32WindowedAppContext`, `windowed_app_main.cpp` (RG-GDK-021) | Removed (RG-GDK-033) |
+| Scancode to virtual key | `sdl_virtual_key.cpp` | Win32 messages carry virtual keys natively | Removed |
+| Gamepads | `sdl_input_driver.cpp`, `hid_mappings_file` cvar | GameInput in GDK builds ([GameInput](gameinput.md), RG-GDK-020), XInput otherwise | Removed |
+| Audio output | `sdl_audio_driver.cpp` | XAudio2 ([Audio output](audio-output.md), RG-GDK-019); `audio_mute` moved to `audio_backend.cpp` | Removed |
+| Build and package | the `sdl3` submodule (static SDL3), `find_dependency(SDL3)` in the package config, `SDL3::SDL3` on `rexui`, `rexaudio`, `rexinput`, `rexruntime` | None needed | Removed |
 
-The SDL gamepad and audio drivers initialize their own SDL subsystems (events, gamepad, audio) and do not need SDL video. They keep working under the Win32 window: the gamepad driver pumps SDL events through `CallInUIThread`, which the Win32 context runs.
-
-No other code uses SDL. Dialogs are ImGui overlays drawn by the presenter, and there are no SDL message boxes or file pickers.
+Dialogs are ImGui overlays drawn by the presenter; nothing else used SDL.
 
 ## Tests
 
@@ -76,7 +74,7 @@ No other code uses SDL. Dialogs are ImGui overlays drawn by the presenter, and t
 
 ## Not established
 
-- Title-level parity with the SDL window (no title content): input feel, overlays, fullscreen toggling during gameplay, mouse look.
+- In-title checks of overlays, fullscreen toggling during gameplay and mouse look on the Win32 window.
 - Multi-monitor moves across different DPIs (one monitor here), DPI change at runtime, and WM_DPICHANGED while fullscreen.
 - `fullscreen_exclusive` switching is not in the automated tests, which would change the developer's display. The mode choice is unit-tested, and the switch was checked by hand in Quantum of Solace (see the port's PR).
 - AMD and Intel presentation; hardware results are NVIDIA only, with WARP as a supplement.

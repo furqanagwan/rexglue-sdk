@@ -21,7 +21,6 @@
 #include <rex/input/input_system.h>
 #include <rex/input/mnk/mnk_input_driver.h>
 #include <rex/input/nop/nop_input_driver.h>
-#include <rex/input/sdl/sdl_input_driver.h>
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
 #if REX_HAS_GAMEINPUT
@@ -30,17 +29,18 @@
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
-// Native by default (owner decision, 2026-09-28): GameInput in GDK builds,
-// XInput otherwise. SDL remains selectable until it is removed.
+// GameInput in GDK builds, XInput otherwise. "sdl" is still accepted so an
+// old config starts: SDL was removed (RG-GDK-033), and it now means the
+// default, with a warning.
 #if REX_HAS_GAMEINPUT
 #define REX_DEFAULT_INPUT_BACKEND "gameinput"
 #else
 #define REX_DEFAULT_INPUT_BACKEND "xinput"
 #endif
 REXCVAR_DEFINE_STRING(input_backend, REX_DEFAULT_INPUT_BACKEND, "Input",
-                      "Input backend: gameinput (GDK builds, the default there), xinput (the "
-                      "default otherwise) or sdl. GameInput falls back to XInput")
-    .allowed({"sdl", "xinput", "gameinput"});
+                      "Input backend: gameinput (GDK builds, the default there) or xinput (the "
+                      "default otherwise). GameInput falls back to XInput")
+    .allowed({"gameinput", "xinput", "sdl"});
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
 
@@ -556,6 +556,10 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 
   if (!tool_mode) {
     std::string backend = REXCVAR_GET(input_backend);
+    if (backend == "sdl") {
+      REXLOG_WARN("input_backend=sdl: SDL was removed; using {}", REX_DEFAULT_INPUT_BACKEND);
+      backend = REX_DEFAULT_INPUT_BACKEND;
+    }
     if (backend == "gameinput") {
 #if REX_HAS_GAMEINPUT
       auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
@@ -571,24 +575,17 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 #endif
     }
 
-#if REX_PLATFORM_WIN32
     if (backend == "xinput") {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(xinput_driver));
       } else {
-        REXLOG_WARN("input_backend=xinput: XInput unavailable, using SDL instead");
-        backend = "sdl";
+        // Keyboard and mouse still work through MnK.
+        REXLOG_ERROR("input_backend=xinput: xinput1_4.dll unavailable; no gamepads");
+        backend = "none";
       }
     }
-#endif
 
-    if (backend == "sdl") {
-      auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
-      if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
-        input->AddDriver(std::move(sdl_driver));
-      }
-    }
     REXLOG_INFO("Input: {} driver", backend);
 
     // MnK driver (keyboard/mouse -> controller emulation)

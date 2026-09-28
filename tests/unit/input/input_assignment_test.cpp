@@ -46,7 +46,7 @@ std::vector<DeviceId> For(const DeviceAssignment& a, uint32_t user) {
   return out;
 }
 
-/// Exercises assignment with no SDL, window, or OS behind it.
+/// Exercises assignment with no driver, window, or OS behind it.
 class FakeDriver : public InputDriver {
  public:
   FakeDriver() : InputDriver(nullptr, 0) {}

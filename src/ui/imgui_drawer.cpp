@@ -676,7 +676,7 @@ void ImGuiDrawer::SetWindowTextInputActive(bool active) {
     return;
   }
   text_input_active_ = active;
-  // SDL text input is main thread only, and in detached mode Draw is not.
+  // Window text input is changed on the UI thread only, and in detached mode Draw is not.
   Window* window = window_;
   window->app_context().CallInUIThread([window, active] { window->SetTextInputActive(active); });
 }
