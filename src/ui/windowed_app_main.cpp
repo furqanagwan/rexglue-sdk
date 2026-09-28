@@ -66,10 +66,6 @@ int RunWindowedApp(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  if (REXCVAR_GET(ui_backend) == "sdl") {
-    REXLOG_WARN("ui_backend=sdl: SDL was removed; using the native Win32 window");
-  }
-
   int result = EXIT_FAILURE;
   {
     rex::ui::Win32WindowedAppContext app_context(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);

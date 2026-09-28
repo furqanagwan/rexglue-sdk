@@ -31,6 +31,11 @@ std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
 std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
                                        const std::string_view title, uint32_t desired_logical_width,
                                        uint32_t desired_logical_height) {
+  // Warned here rather than at the entry point, where the log file is not
+  // open yet.
+  if (REXCVAR_GET(ui_backend) == "sdl") {
+    REXLOG_WARN("ui_backend=sdl: SDL was removed; using the native Win32 window");
+  }
   REXLOG_INFO("Window: native Win32");
   return std::make_unique<Win32Window>(app_context, title, desired_logical_width,
                                        desired_logical_height);

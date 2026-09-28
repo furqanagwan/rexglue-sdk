@@ -45,7 +45,7 @@ REXCVAR_DEFINE_INT32(monitor, 0, "UI/Window",
     .range(0, 16);
 
 // "sdl" is still accepted so an old config starts: SDL was removed
-// (RG-GDK-033), and the entry point warns and uses the Win32 window.
+// (RG-GDK-033), and Window::Create warns and makes the Win32 window.
 REXCVAR_DEFINE_STRING(ui_backend, "win32", "UI/Window",
                       "Window and message loop: win32 (the only one since SDL was removed)")
     .allowed({"win32", "sdl"})
