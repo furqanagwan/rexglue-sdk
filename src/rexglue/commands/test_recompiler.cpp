@@ -216,6 +216,8 @@ std::vector<TestSpec> ParseTestSpecs(const std::string& asmPath,
     if (colonIndex == std::string::npos)
       continue;
     auto name = line.substr(0, colonIndex);
+    if (name == "__rex_test_setjmp" || name == "__rex_test_longjmp")
+      continue;  // Helper entries are emitted, but have no standalone test spec.
     auto symbolIt = symbols.find(name);
     if (symbolIt == symbols.end())
       continue;

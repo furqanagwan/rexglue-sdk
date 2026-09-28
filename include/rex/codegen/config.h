@@ -113,6 +113,8 @@ struct RecompilerConfig {
   std::unordered_map<uint32_t, MidAsmHook> midAsmHooks;
   uint32_t longJmpAddress = 0;
   uint32_t setJmpAddress = 0;
+  // Analysis-only guard for the recognized CRT's optional setjmp hook.
+  uint32_t setJmpHookAddress = 0;
 
   // === rexcrt: CRT function address overrides ===
   // Maps function name -> guest address (e.g. "CreateFileA" -> 0x8248B780)

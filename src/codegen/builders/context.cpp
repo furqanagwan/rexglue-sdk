@@ -176,19 +176,23 @@ void BuilderContext::emit_function_call(uint32_t address) {
   const auto& cfg = config();
 
   if (address == cfg.longJmpAddress) {
-    // Use custom ppc_longjmp that uses guest address as key (not for storage)
-    println("\tppc_longjmp({}.u32, {}.s32);", r(3), r(4));
+    println("\trex::ppc::NonlocalJumpFrame::Jump({}.u32, {}.s32);", r(3), r(4));
     return;
   }
 
   if (address == cfg.setJmpAddress) {
-    // Save PPCContext for restoration after longjmp
-    println("\t{} = ctx;", env());
-    // Use custom ppc_setjmp that uses guest address as key
-    println("\t{}.s64 = ppc_setjmp({}.u32);", temp(), r(3));
-    // Restore PPCContext if returning from longjmp
-    println("\tif ({}.s64 != 0) ctx = {};", temp(), env());
-    println("\t{} = {};", r(3), temp());
+    if (std::ranges::any_of(fn.tailCalls(), [&](const auto& edge) { return edge.site == base; })) {
+      println("\tthrow std::runtime_error(\"Tail-called guest setjmp is not supported\");");
+      return;
+    }
+    if (cfg.setJmpHookAddress) {
+      println("\tif (REX_LOAD_U32(0x{:08X}) != 0)", cfg.setJmpHookAddress);
+      println("\t\tthrow std::runtime_error(\"Guest setjmp hook is not supported\");");
+    }
+    // setjmp must execute in this caller's frame. Restore ctx after native
+    // unwinding; no modified automatic local is read on return.
+    println("\tif (setjmp({}.Save({}.u32, ctx)) == 0) {}.s64 = 0;", env(), r(3), r(3));
+    println("\telse {}.Restore(ctx);", env());
     return;
   }
 

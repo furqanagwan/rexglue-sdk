@@ -1135,3 +1135,15 @@ retrieved up to 100 comments/files per selected item; no selected comment thread
 was truncated. Refresh rather than treating the snapshot as permanent upstream
 status. The first-parent boundary is not necessarily a project's first original
 fork; retained author dates can predate rewritten history.
+
+## RG-FIX-006: static CRT non-local jumps (2026-09-28)
+
+Original adaptation of the SDK's existing manual host-jump support at
+`8e4b9f10c502a7696058b5522923701a11e7b27e`; no upstream patch ported.
+[Investigation and regression record](crt-nonlocal-jumps.md) pins the reference
+and separates recognition, synthetic execution and title evidence.
+Read-only Edge `12e3b4223dd4c2e41d57ea4b4477546affe4ce10` uses native Windows
+unwinding for JIT/thread reentry; classification D/C, not imported. No upstream
+PR/merge or regression status is asserted. The shared static implementation is
+tracked by [SDK #107](https://github.com/furqanagwan/rexglue-sdk/issues/107) and
+[ADR-010](adr/ADR-010-static-nonlocal-jumps.md).
