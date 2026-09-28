@@ -147,6 +147,9 @@ class D3D12CommandProcessor : public CommandProcessor {
     kEdramR32G32UintUAV,
     kEdramR32G32B32A32UintUAV,
 
+    // ROV occlusion query counter slots (RG-GDK-010a).
+    kZpdCounterRawUAV,
+
     kGammaRampTableSRV,
     kGammaRampPWLSRV,
 
@@ -683,8 +686,12 @@ class D3D12CommandProcessor : public CommandProcessor {
     uint32_t query_generation = 0;
     uint32_t scale_area = 1;
     ReportHandle report_handle = kInvalidReportHandle;
+    // Read from the ROV counter slot rather than the occlusion query.
+    bool counter = false;
   };
   std::deque<PendingQueryResolve> zpd_resolves_in_flight_;
+  // The open query counts in the ROV shaders rather than a D3D12 query.
+  bool zpd_active_query_is_rov_ = false;
   struct VertexBufferState {
     uint32_t address = UINT32_MAX;
     uint32_t size = UINT32_MAX;

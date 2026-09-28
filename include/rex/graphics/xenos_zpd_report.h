@@ -54,6 +54,17 @@ namespace rex::graphics {
 // the other counters (occlusion_query_full_counters and the ROV counter path)
 // isn't ported yet, so ZFail and StencilFail stay zero and Total equals ZPass.
 struct XenosZPDReport {
+  // Lanes of a host counter slot (four uint32 per open query), written by the
+  // ROV pixel shaders.
+  enum Counter : uint32_t {
+    kTotal,
+    kZFail,
+    kZPass,
+    kStencilFail,
+    kCount,
+  };
+  static constexpr uint32_t kCounterSizeBytes = kCount * sizeof(uint32_t);
+
   uint64_t z_fail = 0;
   uint64_t z_pass = 0;
   uint64_t stencil_fail = 0;
@@ -69,6 +80,16 @@ struct XenosZPDReport {
   }
 
   // Native host occlusion query. ZPass only.
+  // A counter slot read back from the host. Total is not stored separately:
+  // it is always the sum of the other three.
+  static XenosZPDReport FromCounterSlot(const uint32_t* slot) {
+    XenosZPDReport report;
+    report.z_fail = slot[kZFail];
+    report.z_pass = slot[kZPass];
+    report.stencil_fail = slot[kStencilFail];
+    return report;
+  }
+
   static XenosZPDReport FromNativeQuery(uint64_t passed) {
     XenosZPDReport report;
     report.z_pass = passed;

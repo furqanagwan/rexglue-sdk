@@ -62,6 +62,13 @@ REXCVAR_DEFINE_STRING(occlusion_query, "fast", "GPU",
     .allowed({"fake", "fast", "fast-alt", "strict"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU",
+                    "Also count the samples that fail the depth or stencil test in occlusion "
+                    "queries, as the Xbox 360 does. Only the ROV path "
+                    "(render_target_path_d3d12 = \"rov\") counts them; otherwise they stay "
+                    "0 and the total equals the passed count. Changes the translated shaders")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
 REXCVAR_DEFINE_STRING(readback_resolve, "none", "GPU",
                       "Controls CPU readback of render-to-texture resolve results.\n"
                       " none: Disable readback (default)\n"
