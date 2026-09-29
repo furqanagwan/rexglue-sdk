@@ -74,10 +74,13 @@ REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU",
                     "0 and the total equals the passed count. Changes the translated shaders")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-REXCVAR_DEFINE_STRING(readback_resolve, "none", "GPU",
+// "fast" by default, as Canary (since 2025-12-04) and Edge read back by
+// default: without it, titles that read render-to-texture results on the CPU
+// see stale memory (Blood Stone computes its exposure from one and turns white).
+REXCVAR_DEFINE_STRING(readback_resolve, "fast", "GPU",
                       "Controls CPU readback of render-to-texture resolve results.\n"
-                      " none: Disable readback (default)\n"
-                      " fast: Read previous frame (delayed, copy every frame)\n"
+                      " none: Disable readback (breaks titles that read results back)\n"
+                      " fast: Read previous frame (delayed, copy every frame; default)\n"
                       " some: Read previous frame (delayed, copy on cache miss)\n"
                       " full: Immediate sync readback (accurate but stalls)")
     .allowed({"none", "fast", "some", "full"})
