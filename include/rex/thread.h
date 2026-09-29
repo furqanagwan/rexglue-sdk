@@ -87,6 +87,13 @@ uint32_t logical_processor_count();
 // Must be called at startup before attempting to set thread affinity.
 void EnableAffinityConfiguration();
 
+// Raises the system timer resolution for this process to the finest the
+// system allows (0.5 ms on current Windows), as Xenia does at startup
+// (DrChat, 73c30d87a). Without it, Windows wakes sleeps and waits in 15.6 ms
+// steps, so a 1 ms sleep lasts 15.6 ms. Returns the resolution now in effect,
+// in 100 ns units, or 0 when it could not be queried.
+uint32_t RequestHighTimerResolution();
+
 // Gets a stable thread-specific ID, but may not be. Use for informative
 // purposes only.
 uint32_t current_thread_system_id();

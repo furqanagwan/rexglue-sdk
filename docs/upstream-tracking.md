@@ -1100,6 +1100,14 @@ Not implemented, with reasons:
 - Result: the same menu run went to 56-58 fps, and 45-49 fps where frames take longer than one refresh (the vsync-off run shows p99 18-22 ms there). Tests: `unit_tests [graphics][vblank]`.
 - Known regressions: none reported upstream.
 
+### xenia-project/xenia `73c30d87a`: high timer resolution at startup (2026-09-29)
+
+- Source: DrChat, 2018-05-22, "[App] Request high-performance timer resolution on Windows" (`src/xenia/base/main_win.cc`, still in Canary and Edge at `12e3b4223`). Classification A, all titles.
+- Local evidence: the ReXGlue entry point never did this, so every millisecond sleep in the SDK woke in 15.6 ms steps. After the vblank pacing fix, Quantum of Solace still spent frames waiting: its render thread spins in D3D's ring-space wait (`sub_820E7098`, found by sampling the thread and mapping host addresses through `PPCFuncMappings`) while the command processor slept in `PM4_WAIT_REG_MEM`, whose `Sleep(wait / 0x100 ms)` lasted 15.6 ms.
+- Adaptation: `rex::thread::RequestHighTimerResolution()` sets the finest resolution (`NtQueryTimerResolution` / `NtSetTimerResolution`, 0.5 ms here) in the Windows entry point; ReXApp logs it. Edge's precise-sleep variant of `WAIT_REG_MEM` is not needed at this resolution.
+- Result: the same menu run holds 59-60 fps, p95 17.6-18.1 ms (was 45-59 fps, p95 about 31 ms). Test: `unit_tests [core][timer]` (a 1 ms sleep averaged 1.33 ms).
+- Known regressions: none; Windows 11 honours the request per process while the window is visible.
+
 ## Upstream ReXGlue since v0.10.0
 
 The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk) `v0.10.0` (`c94f5eb`). Upstream `main` has not moved since. Its `development` branch had 15 commits by 2026-09-27 (head `5cf287f`), reviewed here and ported in groups with the original authors kept.

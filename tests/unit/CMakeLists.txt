@@ -15,6 +15,7 @@ add_executable(unit_tests
     core/stream_test.cpp
     core/chrono_test.cpp
     core/log_prune_test.cpp
+    core/timer_resolution_test.cpp
     graphics/texture_layout_test.cpp
     graphics/zpd_report_test.cpp
     graphics/float_precision_test.cpp
