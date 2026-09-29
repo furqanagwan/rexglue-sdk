@@ -14,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 #include <rex/kernel.h>
 #include <rex/memory.h>
@@ -236,8 +237,11 @@ class XmaContext {
   static kPacketInfo GetPacketInfo(const uint8_t* packet, uint32_t frame_offset);
   // Bit offset in buffer of the next frame start of this sub-stream at or after
   // packet next_packet_index, or kBitsPerPacketHeader when the buffer has none.
+  // When the skip chain runs past the buffer, next_buffer_packet receives the
+  // packet index where it continues in the other input buffer (0 otherwise).
   static uint32_t GetNextPacketReadOffset(const uint8_t* buffer, uint32_t next_packet_index,
-                                          uint32_t current_input_packet_count);
+                                          uint32_t current_input_packet_count,
+                                          uint32_t* next_buffer_packet = nullptr);
 
   void SignalWorkDone() {
     if (work_completion_event_) {
@@ -251,7 +255,11 @@ class XmaContext {
   }
 
  private:
-  static void SwapInputBuffer(XMA_CONTEXT_DATA* data);
+  // Moves to the other input buffer, reading from its packet start_packet.
+  void SwapInputBuffer(XMA_CONTEXT_DATA* data, uint32_t start_packet = 0);
+  // GetNextPacketReadOffset, returning 0 when no frame of the stream starts.
+  static uint32_t FindStreamFrame(const uint8_t* buffer, uint32_t packet_index,
+                                  uint32_t packet_count, uint32_t* next_buffer_packet);
   static int GetSampleRate(int id);
   static int16_t GetPacketNumber(size_t size, size_t bit_offset);
   static uint32_t GetCurrentInputBufferSize(XMA_CONTEXT_DATA* data);
@@ -271,6 +279,10 @@ class XmaContext {
   int PrepareDecoder(int sample_rate, bool is_two_channel);
   void PreparePacket(uint32_t frame_size, uint32_t frame_padding);
   bool DecodePacket(AVCodecContext* av_context, const AVPacket* av_packet, AVFrame* av_frame);
+  // Logs the stream's configuration once, on its first undecodable frame, and
+  // with xma_dump_dir set saves the context and input buffers there.
+  void ReportStreamFailure(const XMA_CONTEXT_DATA& data, const uint8_t* packet,
+                           uint32_t packet_index);
 
   void StoreContextMerged(const XMA_CONTEXT_DATA& data, const XMA_CONTEXT_DATA& initial_data,
                           uint8_t* context_ptr);
@@ -286,6 +298,12 @@ class XmaContext {
   std::atomic<bool> is_allocated_ = false;
   std::atomic<bool> is_enabled_ = false;
   std::atomic<uint32_t> decode_failure_count_ = 0;
+  // Set on the first failed frame of a stream; cleared with the decoder state.
+  bool stream_failure_reported_ = false;
+  bool stream_start_logged_ = false;
+  // Diagnostic-only copy taken before invalidating guest input. The guest may
+  // reuse or free an invalid buffer before a later decode failure.
+  std::vector<uint8_t> previous_buffer_;
 
   // ffmpeg structures
   AVPacket* av_packet_ = nullptr;

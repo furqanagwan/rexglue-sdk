@@ -197,6 +197,10 @@ add_subdirectory(src/kernel)
 add_subdirectory(src/codegen)
 add_subdirectory(src/rexglue)
 
+if(PROJECT_IS_TOP_LEVEL)
+    add_subdirectory(tools)
+endif()
+
 # Add tests subdirectory if tests are enabled
 if(REXGLUE_BUILD_TESTS)
     enable_testing()

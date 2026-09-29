@@ -1197,3 +1197,20 @@ unwinding for JIT/thread reentry; classification D/C, not imported. No upstream
 PR/merge or regression status is asserted. The shared static implementation is
 tracked by [SDK #107](https://github.com/furqanagwan/rexglue-sdk/issues/107) and
 [ADR-010](adr/ADR-010-static-nonlocal-jumps.md).
+
+## RG-GDK-040: cross-buffer XMA sub-streams (2026-09-29)
+
+Classification B, shared compatibility adaptation: Canary
+[PR #983](https://github.com/xenia-canary/xenia-canary/pull/983), merged
+2026-05-14 as `b575c684187d6a77a91cb8ff3297173326206a58`, head
+`c77d274464a971b8c47ad53527ee43f694a2433d`; compared at Edge reference
+`12e3b4223dd4c2e41d57ea4b4477546affe4ce10`. Keep the target sub-stream's
+packet-index remainder across input buffers. The earlier RG-GDK-018 audit had
+deferred this path without a two-buffer fixture. Legends captures and real
+FFmpeg synthetic tests now demonstrate the missing behavior. No wholesale
+context or codec replacement. The PR's AC6/Afro Samurai improvements and spot
+checks are upstream reports, not local title coverage. Split-header, frameless
+skip-chain, loop and drain follow-ups remain covered by the existing suite.
+Closed-unmerged Edge #236's silence fallback remains rejected. Detailed source,
+review comments, limitations, tooling and validation: [RG-GDK-040 record](xma-cross-buffer-streams.md),
+[SDK issue #124](https://github.com/furqanagwan/rexglue-sdk/issues/124).

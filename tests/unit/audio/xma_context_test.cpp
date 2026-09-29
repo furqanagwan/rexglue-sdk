@@ -16,11 +16,14 @@
 #include <chrono>
 #include <cstring>
 #include <future>
+#include <filesystem>
+#include <fstream>
 #include <thread>
 #include <vector>
 
 #include <rex/audio/xma/context.h>
 #include <rex/audio/xma/helpers.h>
+#include <rex/cvar.h>
 #include <rex/system/xmemory.h>
 
 #include "test_memory.h"
@@ -29,6 +32,7 @@ using rex::audio::kPacketInfo;
 using rex::audio::XMA_CONTEXT_DATA;
 using rex::audio::XmaContext;
 using rex::testing::GetTestMemory;
+REXCVAR_DECLARE(std::string, xma_dump_dir);
 
 namespace {
 
@@ -448,4 +452,226 @@ TEST_CASE("XMA consume-only kick drains the frame left by a full buffer", "[audi
   data = h.Kick();
   CHECK(data.output_buffer_write_offset == (data.output_buffer_read_offset + 1) % kOutputBlocks);
   CHECK(data.output_buffer_valid);
+}
+
+// --- Multi-stream buffers ----------------------------------------------------
+
+namespace {
+
+// Writes whole frames into one packet from its first data bit.
+void FillPacket(uint8_t* packet, const std::vector<Bits>& frames, uint8_t skip) {
+  std::vector<uint8_t> bytes(kPacketBytes, 0);
+  uint32_t bit = kHeaderBits;
+  for (const Bits& frame : frames) {
+    for (bool b : frame) {
+      if (b) {
+        SetBit(bytes, bit);
+      }
+      ++bit;
+    }
+  }
+  REQUIRE(bit <= kPacketBits);
+  std::memcpy(packet, bytes.data(), kPacketBytes);
+  WritePacketHeader(packet, uint32_t(frames.size()), kHeaderBits, true, skip);
+}
+
+}  // namespace
+
+TEST_CASE("XMA skip chain reports where it continues in the next buffer", "[audio][xma]") {
+  // Three packets: the chain from packet 1 skips two, overrunning by one.
+  std::vector<uint8_t> buffer(3 * kPacketBytes, 0);
+  uint8_t* p = buffer.data();
+  WritePacketHeader(p + 0 * kPacketBytes, 1, kHeaderBits, true, 1);
+  WritePacketHeader(p + 1 * kPacketBytes, 0, 0, true, 2);
+  WritePacketHeader(p + 2 * kPacketBytes, 1, kHeaderBits, true, 0);
+  uint32_t next_buffer_packet = 99;
+  CHECK(XmaContext::GetNextPacketReadOffset(p, 1, 3, &next_buffer_packet) == kHeaderBits);
+  CHECK(next_buffer_packet == 1);
+  CHECK(XmaContext::GetNextPacketReadOffset(p, 3, 3, &next_buffer_packet) == kHeaderBits);
+  CHECK(next_buffer_packet == 0);
+  CHECK(XmaContext::GetNextPacketReadOffset(p, 2, 3, &next_buffer_packet) ==
+        2 * kPacketBits + kHeaderBits);
+  CHECK(next_buffer_packet == 0);
+}
+
+TEST_CASE("XMA sub-stream continues at its own packet in the next buffer", "[audio][xma]") {
+  bool delayed = false;
+  SECTION("both buffers ready") {}
+  SECTION("next buffer filled on a later kick") {
+    delayed = true;
+  }
+  // A 3-channel sound as 007 Legends streams it: stereo sub-stream A and mono
+  // sub-stream B interleaved through both input buffers. The mono context
+  // follows B from packet 1 of buffer 0 to packet 1 of buffer 1; restarting at
+  // packet 0 would feed it A's stereo frames, which do not decode as mono.
+  auto mono = [](bool more) {
+    return std::vector<Bits>{SilentFrame(5000, false, true), SilentFrame(5000, false, more)};
+  };
+  auto stereo = std::vector<Bits>{SilentFrame(5000, true, true), SilentFrame(5000, true, true)};
+
+  Stream first;
+  first.bytes.assign(3 * kPacketBytes, 0);
+  FillPacket(first.bytes.data() + 0 * kPacketBytes, stereo, 1);      // A -> packet 2
+  FillPacket(first.bytes.data() + 1 * kPacketBytes, mono(true), 2);  // B -> next buffer, 1
+  FillPacket(first.bytes.data() + 2 * kPacketBytes, stereo, 0);      // A -> next buffer, 0
+  Harness h(first);
+
+  using rex::memory::kSystemHeapPhysical;
+  const uint32_t second_ptr = h.memory.SystemHeapAlloc(2 * kPacketBytes, 4096, kSystemHeapPhysical);
+  REQUIRE(second_ptr);
+  uint8_t* second = h.memory.TranslateVirtual(second_ptr);
+  FillPacket(second + 0 * kPacketBytes, stereo, 1);
+  FillPacket(second + 1 * kPacketBytes, mono(false), 0);
+
+  XMA_CONTEXT_DATA data = h.Load();
+  data.input_buffer_read_offset = kPacketBits + kHeaderBits;
+  data.input_buffer_1_ptr = h.memory.GetPhysicalAddress(second_ptr);
+  data.input_buffer_1_packet_count = 2;
+  data.input_buffer_1_valid = !delayed;
+  h.Store(data);
+  data = h.Kick();
+
+  if (delayed) {
+    CHECK(uint32_t(data.current_buffer) == 1);
+    CHECK(uint32_t(data.input_buffer_read_offset) == kPacketBits + kHeaderBits);
+    CHECK_FALSE(data.IsAnyInputBufferValid());
+    CHECK(BlocksWritten(data) == kBlocksPerMonoFrame);
+    data.input_buffer_1_valid = 1;
+    h.Store(data);
+    data = h.Kick();
+  }
+
+  CHECK(uint32_t(data.current_buffer) == 0);
+  CHECK(uint32_t(data.input_buffer_read_offset) == kHeaderBits);
+  CHECK(uint32_t(data.input_buffer_0_valid) == 0);
+  CHECK(uint32_t(data.input_buffer_1_valid) == 0);
+  CHECK(uint32_t(data.error_status) == 0);
+  CHECK(h.context.decode_failure_count() == 0);
+  // Four mono frames: the first primes the realignment.
+  CHECK(BlocksWritten(data) == 3 * kBlocksPerMonoFrame);
+  CHECK_FALSE(data.IsAnyInputBufferValid());
+  h.memory.SystemHeapFree(second_ptr);
+}
+
+TEST_CASE("XMA split frames use the next buffer's stream packet in either direction",
+          "[audio][xma]") {
+  bool reverse = false;
+  bool split_header = false;
+  SECTION("payload split forward") {}
+  SECTION("payload split backward") {
+    reverse = true;
+  }
+  SECTION("header split forward") {
+    split_header = true;
+  }
+  SECTION("header split backward") {
+    reverse = split_header = true;
+  }
+  // The first three frames leave either 1352 payload bits or 10 header bits
+  // in the first packet. Frame four continues in packet 1 of the next buffer.
+  auto mono =
+      BuildStream(SilentFrames(split_header ? std::vector<uint32_t>{5000, 5000, 6342, 2000, 2000}
+                                            : std::vector<uint32_t>{5000, 5000, 5000, 4000, 2000}),
+                  2);
+  Stream first;
+  first.bytes.assign(3 * kPacketBytes, 0);
+  auto stereo = std::vector<Bits>{SilentFrame(5000, true, true), SilentFrame(5000, true, false)};
+  FillPacket(first.bytes.data(), stereo, 1);
+  FillPacket(first.bytes.data() + 2 * kPacketBytes, stereo, 0);
+  std::memcpy(first.bytes.data() + kPacketBytes, mono.bytes.data(), kPacketBytes);
+  first.bytes[kPacketBytes + 3] = 2;
+  Harness h(first);
+  const uint32_t next =
+      h.memory.SystemHeapAlloc(2 * kPacketBytes, 4096, rex::memory::kSystemHeapPhysical);
+  REQUIRE(next);
+  auto* bytes = h.memory.TranslateVirtual(next);
+  FillPacket(bytes, stereo, 1);
+  std::memcpy(bytes + kPacketBytes, mono.bytes.data() + kPacketBytes, kPacketBytes);
+  auto data = h.Load();
+  data.input_buffer_1_ptr = h.memory.GetPhysicalAddress(next);
+  data.input_buffer_1_packet_count = 2;
+  data.input_buffer_1_valid = 1;
+  data.input_buffer_read_offset = kPacketBits + kHeaderBits;
+  if (reverse) {
+    const uint32_t first_ptr = data.input_buffer_0_ptr;
+    data.input_buffer_0_ptr = data.input_buffer_1_ptr;
+    data.input_buffer_1_ptr = first_ptr;
+    data.input_buffer_0_packet_count = 2;
+    data.input_buffer_1_packet_count = 3;
+    data.current_buffer = 1;
+  }
+  h.Store(data);
+  data = h.Kick();
+  CHECK(h.context.decode_failure_count() == 0);
+  CHECK(uint32_t(data.error_status) == 0);
+  CHECK(BlocksWritten(data) == 4 * kBlocksPerMonoFrame);
+  CHECK_FALSE(data.IsAnyInputBufferValid());
+  h.memory.SystemHeapFree(next);
+}
+
+TEST_CASE("XMA skip remainder survives a short delayed refill", "[audio][xma]") {
+  auto first = BuildStream(SilentFrames({1000, 1000}), 1);
+  first.bytes[3] = 3;  // Next stream packet lies three packets beyond this buffer.
+  Harness h(first);
+  auto data = h.Kick();
+  REQUIRE(uint32_t(data.current_buffer) == 1);
+  REQUIRE(uint32_t(data.input_buffer_read_offset) == 3 * kPacketBits + kHeaderBits);
+  // A single-packet refill contains only another stream. It must be skipped
+  // without reading it or losing the remaining distance to this stream.
+  data.input_buffer_1_ptr = data.input_buffer_0_ptr;
+  data.input_buffer_1_packet_count = 1;
+  data.input_buffer_1_valid = 1;
+  h.Store(data);
+  data = h.Kick();
+  CHECK(uint32_t(data.current_buffer) == 0);
+  CHECK(uint32_t(data.input_buffer_read_offset) == 2 * kPacketBits + kHeaderBits);
+  CHECK_FALSE(data.IsAnyInputBufferValid());
+  CHECK(h.context.decode_failure_count() == 0);
+  CHECK(uint32_t(data.error_status) == 0);
+}
+
+TEST_CASE("XMA diagnostic captures failure position and owns the previous input", "[audio][xma]") {
+  namespace fs = std::filesystem;
+  struct Capture {
+    fs::path root =
+        fs::temp_directory_path() /
+        ("rex-xma-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::string old = REXCVAR_GET(xma_dump_dir);
+    Capture() {
+      fs::create_directory(root);
+      REXCVAR_SET(xma_dump_dir, root.string());
+    }
+    ~Capture() {
+      REXCVAR_SET(xma_dump_dir, old);
+      std::error_code ec;
+      fs::remove_all(root, ec);
+    }
+  } capture;
+  auto first = BuildStream(SilentFrames({1000, 1000}), 1);
+  Harness h(first);
+  auto data = h.Kick();
+  REQUIRE_FALSE(data.IsAnyInputBufferValid());
+  // The guest reuses the released input for new content before failure.
+  auto bad =
+      BuildStream({SilentFrame(1000, false, true), SilentFrame(1000, false, false, true)}, 1);
+  std::memcpy(h.memory.TranslateVirtual(h.input_ptr), bad.bytes.data(), bad.bytes.size());
+  data.input_buffer_1_ptr = data.input_buffer_0_ptr;
+  data.input_buffer_1_packet_count = 1;
+  data.input_buffer_1_valid = 1;
+  h.Store(data);
+  h.Kick();
+  REQUIRE(h.context.decode_failure_count() == 1);
+  std::vector<fs::path> files;
+  for (const auto& file : fs::directory_iterator(capture.root))
+    files.push_back(file.path());
+  REQUIRE(files.size() == 1);
+  std::ifstream input(files.front(), std::ios::binary);
+  std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)), {});
+  REQUIRE(bytes.size() == 4 + sizeof(XMA_CONTEXT_DATA) + 12 + 2 * kPacketBytes);
+  REQUIRE(std::memcmp(bytes.data(), "XMAD", 4) == 0);
+  XMA_CONTEXT_DATA saved(bytes.data() + 4);
+  CHECK(uint32_t(saved.current_buffer) == 1);
+  CHECK(uint32_t(saved.input_buffer_read_offset) == kHeaderBits + 1000);
+  // The final payload is the original first buffer, not its reused memory.
+  CHECK(std::equal(first.bytes.begin(), first.bytes.end(), bytes.end() - kPacketBytes));
 }

@@ -6,7 +6,7 @@ Investigation date: 2026-09-28. Design: [ADR-010](adr/ADR-010-static-nonlocal-ju
 
 ## Trigger and ownership
 
-The user reports Quantum of Solace failed on save-and-exit. Opus configured the
+The user reports Quantum of Solace failed on save-and-exit. The investigation configured the
 existing native jump overrides on the title branch `RG-007-007`, then searched
 Blood Stone for the same CRT behavior. There is **no reported Blood Stone
 setjmp/longjmp gameplay failure**. Its matching routines warrant shared SDK
@@ -17,7 +17,7 @@ fixed. Title configs and interactive evidence belong in `furqanagwan/007`.
 
 | Title | setjmp | longjmp | Evidence |
 | --- | --- | --- | --- |
-| Quantum of Solace | `0x825ABAE0` | `0x825AB7C0` | Opus's explicit hints; matching generated instruction trace |
+| Quantum of Solace | `0x825ABAE0` | `0x825AB7C0` | explicit hints; matching generated instruction trace |
 | Blood Stone | `0x82B15EC0` | `0x82B16190` | Matching trace; unique automatic pair in private codegen |
 | 007 Legends | `0x828AB380` | `0x828AB650` | Matching generated instruction trace |
 
