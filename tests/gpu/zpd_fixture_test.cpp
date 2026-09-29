@@ -513,3 +513,203 @@ TEST_CASE("ROV MSAA queries count covered samples", "[gpu][zpd][rov]") {
   // The same host sample count as the host render target path.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 8u * 4u * 4u);
 }
+
+namespace {
+
+// Host render targets with occlusion_query_full_counters: queries around depth
+// or stencil tested draws without depth writes are hybrid, with ZPass from the
+// D3D12 query and Total counted in the pixel shaders (xenia-canary PR #1218).
+std::unique_ptr<GpuFixture> CreateHybridFixture(std::string* error) {
+  return GpuFixture::Create(error, {{"occlusion_query", "strict"},
+                                    {"async_shader_compilation", "false"},
+                                    {"render_target_path_d3d12", "rtv"},
+                                    {"occlusion_query_full_counters", "true"}});
+}
+
+struct Interval {
+  uint32_t zpass, zfail, stencil_fail, total;
+};
+
+Interval Between(GpuFixture& fixture, uint32_t begin, uint32_t end) {
+  return {Delta(ZPass(fixture, end), ZPass(fixture, begin)),
+          Delta(ZFail(fixture, end), ZFail(fixture, begin)),
+          Delta(StencilFail(fixture, end), StencilFail(fixture, begin)),
+          Delta(Total(fixture, end), Total(fixture, begin))};
+}
+
+// A 32x32 depth buffer at z 0.5, and options for tested draws without depth
+// writes.
+DrawOptions PrimeDepth(GpuFixture& fixture, const Surface& surface) {
+  DrawOptions options;
+  options.color_base_tiles = 16;
+  options.depth_control.z_enable = 1;
+  options.depth_control.z_write_enable = 1;
+  options.depth_control.zfunc = xenos::CompareFunction::kAlways;
+  options.z = 0.5f;
+  SetupDraw(fixture, surface, 32, 32, options);
+  DrawRect(fixture, 0, 0, 32, 32, 0xFF000000);
+  options.depth_control.z_write_enable = 0;
+  options.depth_control.zfunc = xenos::CompareFunction::kLess;
+  return options;
+}
+
+}  // namespace
+
+TEST_CASE("RTV full counters count rejected samples in Total", "[gpu][zpd][hybrid]") {
+  std::string error;
+  auto fixture = CreateHybridFixture(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options = PrimeDepth(*fixture, surface);
+
+  uint32_t reports[4];
+  for (uint32_t& report : reports) {
+    report = AllocReport(*fixture);
+  }
+  WriteZPD(*fixture, reports[0], false);
+  // Behind everywhere: every sample fails depth.
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
+  WriteZPD(*fixture, reports[1], false);
+  // Behind, and the stencil test never passes. Host render targets can't
+  // tell stencil from depth failures, so both are ZFail.
+  DrawOptions stencil = options;
+  stencil.depth_control.stencil_enable = 1;
+  stencil.depth_control.stencilfunc = xenos::CompareFunction::kNever;
+  SetupDraw(*fixture, surface, 32, 32, stencil);
+  DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
+  WriteZPD(*fixture, reports[2], false);
+  // In front: passes.
+  options.z = 0.25f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 4, 32, 0xFFFF0000);
+  WriteZPD(*fixture, reports[3], true);
+  REQUIRE(AwaitReport(*fixture, reports[3]));
+  INFO(fixture->Metadata());
+
+  Interval depth = Between(*fixture, reports[0], reports[1]);
+  CHECK(depth.zpass == 0u);
+  CHECK(depth.zfail == 32u * 32u);
+  CHECK(depth.stencil_fail == 0u);
+  CHECK(depth.total == 32u * 32u);
+  Interval stencil_failed = Between(*fixture, reports[1], reports[2]);
+  CHECK(stencil_failed.zpass == 0u);
+  CHECK(stencil_failed.zfail == 8u * 32u);
+  CHECK(stencil_failed.stencil_fail == 0u);
+  CHECK(stencil_failed.total == 8u * 32u);
+  Interval passed = Between(*fixture, reports[2], reports[3]);
+  CHECK(passed.zpass == 4u * 32u);
+  CHECK(passed.zfail == 0u);
+  CHECK(passed.total == 4u * 32u);
+}
+
+TEST_CASE("RTV full counters count a draw without a pixel shader", "[gpu][zpd][hybrid]") {
+  std::string error;
+  auto fixture = CreateHybridFixture(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options = PrimeDepth(*fixture, surface);
+  // No color writes: an occlusion-only proxy drawn without a pixel shader, so
+  // the counting depth-only shader stands in for it.
+  options.color_mask = 0;
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  WriteZPD(*fixture, begin, false);
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 16, 16, 0);
+  options.z = 0.25f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 16, 16, 24, 24, 0);
+  WriteZPD(*fixture, end, true);
+  REQUIRE(AwaitReport(*fixture, end));
+  INFO(fixture->Metadata());
+
+  Interval counts = Between(*fixture, begin, end);
+  CHECK(counts.zpass == 8u * 8u);
+  CHECK(counts.zfail == 16u * 16u);
+  CHECK(counts.total == 16u * 16u + 8u * 8u);
+}
+
+TEST_CASE("RTV full counters leave depth-writing draws to the native query", "[gpu][zpd][hybrid]") {
+  std::string error;
+  auto fixture = CreateHybridFixture(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options = PrimeDepth(*fixture, surface);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  WriteZPD(*fixture, begin, false);
+  // A depth-writing draw keeps early depth rejection and only counts ZPass:
+  // half of it is in front.
+  DrawOptions writing = options;
+  writing.depth_control.z_write_enable = 1;
+  writing.z = 0.25f;
+  SetupDraw(*fixture, surface, 32, 32, writing);
+  DrawRect(*fixture, 0, 0, 16, 32, 0xFF00FF00);
+  // Then, in the same interval, a hybrid draw behind the untouched half.
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 16, 0, 32, 32, 0xFF0000FF);
+  WriteZPD(*fixture, end, true);
+  REQUIRE(AwaitReport(*fixture, end));
+  INFO(fixture->Metadata());
+
+  Interval counts = Between(*fixture, begin, end);
+  CHECK(counts.zpass == 16u * 32u);
+  CHECK(counts.zfail == 16u * 32u);
+  CHECK(counts.total == 32u * 32u);
+}
+
+TEST_CASE("RTV hybrid counter slots are cleared when a query reuses them", "[gpu][zpd][hybrid]") {
+  std::string error;
+  auto fixture = CreateHybridFixture(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k1X, 64};
+  DrawOptions options = PrimeDepth(*fixture, surface);
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  for (uint32_t width = 1; width <= 16; ++width) {
+    WriteZPD(*fixture, begin, false);
+    DrawRect(*fixture, 0, 0, width, 2, 0xFFFFFFFF);
+    WriteZPD(*fixture, end, true);
+    REQUIRE(AwaitReport(*fixture, end));
+    INFO("width " << width);
+    REQUIRE(Between(*fixture, begin, end).zfail == width * 2);
+  }
+}
+
+TEST_CASE("RTV hybrid MSAA queries count covered samples", "[gpu][zpd][hybrid]") {
+  std::string error;
+  auto fixture = CreateHybridFixture(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  Surface surface = {xenos::MsaaSamples::k4X, 64};
+  DrawOptions options = PrimeDepth(*fixture, surface);
+  uint32_t begin = AllocReport(*fixture);
+  uint32_t end = AllocReport(*fixture);
+  WriteZPD(*fixture, begin, false);
+  options.z = 0.75f;
+  SetupDraw(*fixture, surface, 32, 32, options);
+  DrawRect(*fixture, 0, 0, 8, 4, 0xFFFFFFFF);
+  WriteZPD(*fixture, end, true);
+  REQUIRE(AwaitReport(*fixture, end));
+  INFO(fixture->Metadata());
+
+  Interval counts = Between(*fixture, begin, end);
+  CHECK(counts.zpass == 0u);
+  CHECK(counts.zfail == 8u * 4u * 4u);
+  CHECK(counts.total == 8u * 4u * 4u);
+}

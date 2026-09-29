@@ -111,7 +111,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
     // If anything in this is structure is changed in a way not compatible with
     // the previous layout, invalidate the pipeline storages by increasing this
     // version number (0xYYYYMMDD)!
-    static constexpr uint32_t kVersion = 0x20260928;
+    static constexpr uint32_t kVersion = 0x20260929;
 
     enum class DepthStencilMode : uint32_t {
       kNoModifiers,
@@ -176,6 +176,10 @@ class DxbcShaderTranslator : public ShaderTranslator {
       uint32_t dynamic_addressable_register_count : 8;
       // Non-ROV - depth / stencil output mode.
       DepthStencilMode depth_stencil_mode : 2;
+      // For draws inside a hybrid occlusion query
+      // (RTV + occlusion_query_full_counters): count the coverage before the
+      // depth / stencil test into the ZPD counter's Total.
+      uint32_t zpd_total : 1;
     } pixel;
 
     explicit Modification(uint64_t modification_value = 0) : value(modification_value) {
@@ -517,7 +521,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
 
   // Creates a special pixel shader without color outputs - this resets the
   // state of the translator.
-  std::vector<uint8_t> CreateDepthOnlyPixelShader();
+  std::vector<uint8_t> CreateDepthOnlyPixelShader(
+      bool zpd_total = false, Modification::DepthStencilMode depth_stencil_mode =
+                                  Modification::DepthStencilMode::kNoModifiers);
 
   // Common functions useful not only for the translator, but also for render
   // target reinterpretation.
@@ -655,7 +661,8 @@ class DxbcShaderTranslator : public ShaderTranslator {
     return is_pixel_shader() &&
            GetDxbcShaderModification().pixel.depth_stencil_mode ==
                Modification::DepthStencilMode::kEarlyHint &&
-           !edram_rov_used_ && current_shader().implicit_early_z_write_allowed();
+           !GetDxbcShaderModification().pixel.zpd_total && !edram_rov_used_ &&
+           current_shader().implicit_early_z_write_allowed();
   }
 
   uint32_t GetModificationInterpolatorMask() const {
@@ -734,6 +741,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // ZPD query's counter slot: ZPass from the surviving coverage, and, with
   // occlusion_query_full_counters, ZFail and StencilFail from bits 12:19.
   void ROV_AddMSAASamplesToZPD(bool count_passed, bool count_failed);
+  // Adds the coverage before the depth / stencil test to the Total counter of
+  // the active ZPD counter slot (RTV hybrid queries).
+  void RTV_AddMSAASamplesToZPDTotal(dxbc::Src coverage_src);
   // Unpacks a 32bpp or a 64bpp color in packed_temp.packed_temp_components to
   // color_temp, using 2 temporary VGPRs.
   void ROV_UnpackColor(uint32_t rt_index, uint32_t packed_temp, uint32_t packed_temp_components,
@@ -784,8 +794,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // Performs alpha to coverage if necessary, for RTV, writing to oMask, and for
   // ROV, updating the low (coverage) bits of system_temp_rov_params_.x. Done
   // manually even for RTV to maintain the guest dithering pattern and because
-  // alpha can be exponent-biased.
-  void CompletePixelShader_AlphaToMask();
+  // alpha can be exponent-biased. Also narrows the ZPD coverage temp by the
+  // alpha to coverage mask.
+  void CompletePixelShader_AlphaToMask(uint32_t zpd_coverage_temp = UINT32_MAX);
   void CompletePixelShader_WriteToRTVs();
   void CompletePixelShader_DSV_DepthTo24Bit();
   void CompletePixelShader_WriteToROV();

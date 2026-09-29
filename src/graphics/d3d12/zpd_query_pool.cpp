@@ -327,6 +327,15 @@ void D3D12ZPDQueryPool::FlushResolveBatch(DeferredCommandList& deferred_command_
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+XenosZPDReport D3D12ZPDQueryPool::GetHybridReadbackValue(uint32_t query_index) const {
+  assert_true(query_index < capacity_);
+  assert_not_null(readback_mapping_);
+  assert_not_null(counter_readback_mapping_);
+  return XenosZPDReport::FromNativeQueryAndTotal(
+      readback_mapping_[query_index],
+      counter_readback_mapping_[query_index * XenosZPDReport::kCount + XenosZPDReport::kTotal]);
+}
+
 XenosZPDReport D3D12ZPDQueryPool::GetQueryReadbackValue(uint32_t query_index, bool counter) const {
   assert_true(query_index < capacity_);
   if (counter) {

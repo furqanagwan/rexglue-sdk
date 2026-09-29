@@ -90,6 +90,16 @@ struct XenosZPDReport {
     return report;
   }
 
+  // Hybrid RTV query: ZPass from the native query, Total from the pixel
+  // shaders (coverage entering the depth / stencil test). The rejected rest
+  // is ZFail: host render targets cannot tell it from StencilFail.
+  static XenosZPDReport FromNativeQueryAndTotal(uint64_t passed, uint64_t coverage) {
+    XenosZPDReport report;
+    report.z_pass = passed;
+    report.z_fail = std::max(coverage, passed) - passed;
+    return report;
+  }
+
   static XenosZPDReport FromNativeQuery(uint64_t passed) {
     XenosZPDReport report;
     report.z_pass = passed;
