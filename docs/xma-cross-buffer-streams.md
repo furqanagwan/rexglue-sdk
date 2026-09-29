@@ -81,12 +81,17 @@ longer describe live guest memory. The parser accepts the original two-buffer ca
   oversized/misaligned lengths and extra buffers (`audio.xma_dump_format`).
 - Full Debug suite: 1,964 tests discovered, no failures, four pre-existing
   BitStream write tests skipped. GDK Release rebuilt/installed; Legends rebuilt
-  against that runtime. Full Release and title-run results are pending.
-  Private logs and probe results are retained under ignored `out/rg040`.
+  against that runtime. Full Release suite: 1,964 tests, no failures, the same
+  four skips. Private logs and probe results are retained under ignored `out/rg040`.
+- 007 Legends gameplay, 2026-09-29, GDK Release, NVIDIA RTX 5080 Laptop (private
+  log `legends_011.log`): 275 s through the scene that failed before, 24
+  multi-stream sounds started (first packet skip 1 or more), 0 frames without
+  audio, 0 FFmpeg errors, no dumps written, 58.5-60 fps. The three sessions
+  before the fix each failed 5-8 of these streams.
 
-The original issue reports errors after about two minutes of Legends gameplay.
-A boot/menu soak does not satisfy that scene's acceptance gate. Audible impact
-is unconfirmed. This is an audio change; no new GPU-vendor claim is made.
+The original issue reported errors after about two minutes of Legends gameplay;
+the gameplay run above covers that scene. Audible impact before the fix was
+not confirmed by the owner. This is an audio change; no new GPU-vendor claim is made.
 
 ## Upstream comparison
 
