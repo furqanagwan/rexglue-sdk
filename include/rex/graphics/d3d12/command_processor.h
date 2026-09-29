@@ -688,10 +688,19 @@ class D3D12CommandProcessor : public CommandProcessor {
     ReportHandle report_handle = kInvalidReportHandle;
     // Read from the ROV counter slot rather than the occlusion query.
     bool counter = false;
+    // Hybrid RTV query: the occlusion query for ZPass, the slot for Total.
+    bool hybrid = false;
   };
   std::deque<PendingQueryResolve> zpd_resolves_in_flight_;
   // The open query counts in the ROV shaders rather than a D3D12 query.
   bool zpd_active_query_is_rov_ = false;
+  // The open query is a hybrid one: a D3D12 occlusion query for ZPass, and
+  // the pixel shaders counting Total into its slot.
+  bool zpd_active_query_is_hybrid_ = false;
+  // Host render targets with occlusion_query_full_counters: queries around
+  // depth / stencil tested draws without depth writes also count Total
+  // (xenia-canary PR #1218).
+  bool zpd_hybrid_supported_ = false;
   struct VertexBufferState {
     uint32_t address = UINT32_MAX;
     uint32_t size = UINT32_MAX;

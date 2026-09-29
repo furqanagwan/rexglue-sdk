@@ -402,8 +402,20 @@ and stencil failures with full counters (a sample failing both counts once, as
 StencilFail), slot reuse (32 queries) and 4x MSAA. WARP skips, as its ROV draws
 don't complete. Mutations: restoring the fake fallback fails all five tests,
 skipping the slot clear fails the reuse test, and dropping stencil precedence
-fails the full-counter test. Not run: Intel and AMD ROV hardware, and the RTV
-hybrid Total count (#64).
+fails the full-counter test. Not run: Intel and AMD ROV hardware.
+
+RG-GDK-010a RTV hybrid Total (2026-09-29): with host render targets and
+`occlusion_query_full_counters`, queries around depth or stencil tested draws
+without depth writes take ZPass from the D3D12 query and Total from the pixel
+shaders; the rejected rest is ZFail (host render targets cannot separate
+StencilFail). `gpu_tests [zpd][hybrid]` on NVIDIA covers depth- and
+stencil-rejected draws, a draw without a guest pixel shader (the counting
+depth-only shader), a depth-writing draw sharing an interval with a hybrid one
+(segment split), slot reuse (16 queries) and 4x MSAA. Mutations: dropping the
+Total-counting segment split fails all five, and skipping the slot clear fails
+the reuse test. The first run also caught the root signature being built
+before hybrid support was known. Default settings are unchanged: the counter
+UAV is only bound when full counters are on. Not run: Intel and AMD.
 
 RG-GDK-004 heap ranges (2026-09-24, debug and release CTest): the AllocRange
 window cases in `unit_tests [memory]` pass; six of seven fail before the

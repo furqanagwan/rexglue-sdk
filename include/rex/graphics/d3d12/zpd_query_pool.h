@@ -86,6 +86,8 @@ class D3D12ZPDQueryPool {
                          bool submission_open);
 
   XenosZPDReport GetQueryReadbackValue(uint32_t query_index, bool counter = false) const;
+  // A hybrid query resolves both the native query and the counter slot.
+  XenosZPDReport GetHybridReadbackValue(uint32_t query_index) const;
 
  private:
   struct ResolveRange {

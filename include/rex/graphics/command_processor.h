@@ -241,6 +241,8 @@ class CommandProcessor {
   // Host query segment open for the report currently being measured.
   struct ActiveZPDSegment {
     uint32_t scale_area = 0;
+    // The segment's draws count Total in the pixel shaders (hybrid query).
+    bool count_total = false;
     bool segment_active = false;
     bool segment_pending_begin = false;
   };
@@ -273,9 +275,10 @@ class CommandProcessor {
     CloseQuerySegment();
     zpd_active_segment_.segment_pending_begin = false;
   }
-  // Splits the open segment when the draw scale changes so each segment
-  // normalizes with one scale. Also opens a pending segment, once per draw.
-  void UpdateZPDSegment(uint32_t scale_area);
+  // Splits the open segment when the draw scale or hybrid Total counting
+  // changes, so each segment normalizes with one scale and counts one way.
+  // Also opens a pending segment, once per draw.
+  void UpdateZPDSegment(uint32_t scale_area, bool count_total = false);
 
   // Called by backends when a host query resolve completes.
   // Accumulates the normalized sample counts into the report.

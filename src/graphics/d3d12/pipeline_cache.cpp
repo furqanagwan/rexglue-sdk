@@ -85,11 +85,12 @@ namespace shaders {
 PipelineCache::PipelineCache(D3D12CommandProcessor& command_processor,
                              const RegisterFile& register_file,
                              const D3D12RenderTargetCache& render_target_cache,
-                             bool bindless_resources_used)
+                             bool bindless_resources_used, bool zpd_hybrid_supported)
     : command_processor_(command_processor),
       register_file_(register_file),
       render_target_cache_(render_target_cache),
-      bindless_resources_used_(bindless_resources_used) {
+      bindless_resources_used_(bindless_resources_used),
+      zpd_hybrid_supported_(zpd_hybrid_supported) {
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
 
   bool edram_rov_used =
@@ -102,6 +103,18 @@ PipelineCache::PipelineCache(D3D12CommandProcessor& command_processor,
       render_target_cache_.draw_resolution_scale_y(), provider.GetGraphicsAnalysis() != nullptr);
 
   depth_only_pixel_shader_ = std::move(shader_translator_->CreateDepthOnlyPixelShader());
+  if (!edram_rov_used && zpd_hybrid_supported_) {
+    using DepthStencilMode = DxbcShaderTranslator::Modification::DepthStencilMode;
+    zpd_total_depth_only_pixel_shader_ =
+        std::move(shader_translator_->CreateDepthOnlyPixelShader(true));
+    if (render_target_cache_.depth_float24_convert_in_pixel_shader()) {
+      zpd_total_float24_truncate_pixel_shader_ =
+          std::move(shader_translator_->CreateDepthOnlyPixelShader(
+              true, DepthStencilMode::kFloat24Truncating));
+      zpd_total_float24_round_pixel_shader_ = std::move(
+          shader_translator_->CreateDepthOnlyPixelShader(true, DepthStencilMode::kFloat24Rounding));
+    }
+  }
 }
 
 PipelineCache::~PipelineCache() {
@@ -248,7 +261,9 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
   std::set<std::pair<uint64_t, uint64_t>> shader_translations_needed;
   auto pipeline_storage_file_path =
       shader_storage_shareable_root /
-      fmt::format("{:08X}.{}.d3d12.xpso", title_id, edram_rov_used ? "rov" : "rtv");
+      fmt::format("{:08X}.{}{}.d3d12.xpso", title_id, edram_rov_used ? "rov" : "rtv",
+                  // Full ZPD counters change every ROV pixel shader.
+                  edram_rov_used && REXCVAR_GET(occlusion_query_full_counters) ? "-fc" : "");
   pipeline_storage_file_ = rex::filesystem::OpenFile(pipeline_storage_file_path, "a+b");
   if (!pipeline_storage_file_) {
     REXGPU_ERROR(
@@ -926,7 +941,7 @@ DxbcShaderTranslator::Modification PipelineCache::GetCurrentPixelShaderModificat
 bool PipelineCache::ConfigurePipeline(
     D3D12Shader::D3D12Translation* vertex_shader, D3D12Shader::D3D12Translation* pixel_shader,
     const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
-    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask, bool zpd_total,
     uint32_t bound_depth_and_color_render_target_bits,
     const uint32_t* bound_depth_and_color_render_target_formats, void** pipeline_handle_out,
     ID3D12RootSignature** root_signature_out) {
@@ -1009,7 +1024,7 @@ bool PipelineCache::ConfigurePipeline(
   PipelineRuntimeDescription runtime_description;
   if (!GetCurrentStateDescription(
           vertex_shader, pixel_shader, primitive_processing_result, normalized_depth_control,
-          normalized_color_mask, bound_depth_and_color_render_target_bits,
+          normalized_color_mask, zpd_total, bound_depth_and_color_render_target_bits,
           bound_depth_and_color_render_target_formats, runtime_description, use_async)) {
     return false;
   }
@@ -1268,7 +1283,7 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
 bool PipelineCache::GetCurrentStateDescription(
     D3D12Shader::D3D12Translation* vertex_shader, D3D12Shader::D3D12Translation* pixel_shader,
     const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
-    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask, bool zpd_total,
     uint32_t bound_depth_and_color_render_target_bits,
     const uint32_t* bound_depth_and_color_render_target_formats,
     PipelineRuntimeDescription& runtime_description_out, bool for_placeholder) {
@@ -1458,6 +1473,7 @@ bool PipelineCache::GetCurrentStateDescription(
     description_out.depth_bias_slope_scaled =
         polygon_offset_scale * xenos::kPolygonOffsetScaleSubpixelUnit;
   }
+  description_out.zpd_total = uint32_t(zpd_total);
   if (tessellated && REXCVAR_GET(d3d12_tessellation_wireframe)) {
     description_out.fill_mode_wireframe = 1;
   }
@@ -2868,6 +2884,19 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     }
     state_desc.PS.pShaderBytecode = runtime_description.pixel_shader->translated_binary().data();
     state_desc.PS.BytecodeLength = runtime_description.pixel_shader->translated_binary().size();
+  } else if (description.zpd_total && !zpd_total_depth_only_pixel_shader_.empty()) {
+    // Hybrid occlusion query draw without a guest pixel shader: the coverage
+    // still has to be counted (xenia-canary PR #1218).
+    const std::vector<uint8_t>* zpd_total_pixel_shader = &zpd_total_depth_only_pixel_shader_;
+    if (render_target_cache_.depth_float24_convert_in_pixel_shader() &&
+        (description.depth_func != xenos::CompareFunction::kAlways || description.depth_write) &&
+        description.depth_format == xenos::DepthRenderTargetFormat::kD24FS8) {
+      zpd_total_pixel_shader = render_target_cache_.depth_float24_round()
+                                   ? &zpd_total_float24_round_pixel_shader_
+                                   : &zpd_total_float24_truncate_pixel_shader_;
+    }
+    state_desc.PS.pShaderBytecode = zpd_total_pixel_shader->data();
+    state_desc.PS.BytecodeLength = zpd_total_pixel_shader->size();
   } else if (edram_rov_used) {
     state_desc.PS.pShaderBytecode = depth_only_pixel_shader_.data();
     state_desc.PS.BytecodeLength = depth_only_pixel_shader_.size();

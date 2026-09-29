@@ -1783,18 +1783,20 @@ void CommandProcessor::CloseQuerySegment() {
   zpd_active_segment_.segment_pending_begin = true;
 }
 
-void CommandProcessor::UpdateZPDSegment(uint32_t scale_area) {
+void CommandProcessor::UpdateZPDSegment(uint32_t scale_area, bool count_total) {
   if (zpd_current_report_.handle == kInvalidReportHandle) {
     return;
   }
-  if (zpd_active_segment_.segment_active && zpd_active_segment_.scale_area &&
-      zpd_active_segment_.scale_area != scale_area) {
-    // Draw scale changed in the middle of a report, so close the segment and
-    // start a fresh one for this draw.
+  if (zpd_active_segment_.segment_active &&
+      ((zpd_active_segment_.scale_area && zpd_active_segment_.scale_area != scale_area) ||
+       zpd_active_segment_.count_total != count_total)) {
+    // Draw scale or hybrid Total counting changed in the middle of a report,
+    // so close the segment and start a fresh one for this draw.
     CloseQuerySegment();
   }
 
   zpd_active_segment_.scale_area = scale_area;
+  zpd_active_segment_.count_total = count_total;
 
   if (zpd_active_segment_.segment_pending_begin) {
     OpenQuerySegment(false);

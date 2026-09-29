@@ -81,13 +81,17 @@ DxbcShaderTranslator::DxbcShaderTranslator(ui::GraphicsProvider::GpuVendorID ven
 }
 DxbcShaderTranslator::~DxbcShaderTranslator() = default;
 
-std::vector<uint8_t> DxbcShaderTranslator::CreateDepthOnlyPixelShader() {
+std::vector<uint8_t> DxbcShaderTranslator::CreateDepthOnlyPixelShader(
+    bool zpd_total, Modification::DepthStencilMode depth_stencil_mode) {
   is_depth_only_pixel_shader_ = true;
   // TODO(Triang3l): Handle in a nicer way (is_depth_only_pixel_shader_ is a
   // leftover from when a Shader object wasn't used during translation).
   Shader shader(xenos::ShaderType::kPixel, 0, nullptr, 0);
   shader.AnalyzeUcode(instruction_disassembly_buffer_);
-  Shader::Translation& translation = *shader.GetOrCreateTranslation(0);
+  Modification modification(0);
+  modification.pixel.zpd_total = uint32_t(zpd_total);
+  modification.pixel.depth_stencil_mode = depth_stencil_mode;
+  Shader::Translation& translation = *shader.GetOrCreateTranslation(modification.value);
   TranslateAnalyzedShader(translation);
   is_depth_only_pixel_shader_ = false;
   return translation.translated_binary();
@@ -2657,11 +2661,12 @@ void DxbcShaderTranslator::WriteInputSignature() {
       is_front_face.always_reads_mask = in_front_face_used_ ? 0b0001 : 0b0000;
     }
 
-    // Sample index (SV_SampleIndex) for safe memexport with sample-rate
-    // shading.
+    // Sample index (SV_SampleIndex) for safe memexport and ZPD Total counting
+    // with sample-rate shading.
     size_t sample_index_position = SIZE_MAX;
-    if (current_shader().memexport_eM_written() && IsSampleRate()) {
-      size_t sample_index_position = shader_object_.size();
+    if ((current_shader().memexport_eM_written() || GetDxbcShaderModification().pixel.zpd_total) &&
+        IsSampleRate()) {
+      sample_index_position = shader_object_.size();
       shader_object_.resize(shader_object_.size() + kParameterDwords);
       ++parameter_count;
       {
@@ -3362,27 +3367,26 @@ void DxbcShaderTranslator::WriteShaderCode() {
                           dxbc::Dest::V1D(in_reg_ps_position_, in_position_used_),
                           dxbc::Name::kPosition);
     }
-    bool sample_rate_memexport = current_shader().memexport_eM_written() && IsSampleRate();
+    bool zpd_total = GetDxbcShaderModification().pixel.zpd_total;
+    bool sample_rate_sample_index =
+        (current_shader().memexport_eM_written() || zpd_total) && IsSampleRate();
     // Sample-rate shading can't be done with UAV-only rendering (sample-rate
     // shading is only needed for float24 depth conversion when using a float32
     // host depth buffer).
-    assert_false(sample_rate_memexport && edram_rov_used_);
+    assert_false(sample_rate_sample_index && edram_rov_used_);
     uint32_t front_face_and_sample_index_mask =
-        uint32_t(in_front_face_used_) | (uint32_t(sample_rate_memexport) << 1);
+        uint32_t(in_front_face_used_) | (uint32_t(sample_rate_sample_index) << 1);
     if (front_face_and_sample_index_mask) {
       // Is front face, sample index.
       ao_.OpDclInputPSSGV(
           dxbc::Dest::V1D(in_reg_ps_front_face_sample_index_, front_face_and_sample_index_mask),
           dxbc::Name::kIsFrontFace);
     }
-    if (edram_rov_used_) {
+    if (edram_rov_used_ || sample_rate_sample_index || zpd_total) {
       // Sample coverage input.
       ao_.OpDclInput(dxbc::Dest::VCoverage());
-    } else {
-      if (sample_rate_memexport) {
-        // Sample coverage input.
-        ao_.OpDclInput(dxbc::Dest::VCoverage());
-      }
+    }
+    if (!edram_rov_used_) {
       // Color output.
       uint32_t color_targets_written = current_shader().writes_color_targets();
       for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
