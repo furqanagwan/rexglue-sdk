@@ -22,6 +22,10 @@ REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio", "Audio output: xaudio2 
 // Applied by every output driver; defined here since the SDL driver that
 // held it was removed.
 REXCVAR_DEFINE_BOOL(audio_mute, false, "Audio", "Mute audio output");
+REXCVAR_DEFINE_INT32(audio_volume, 100, "Audio",
+                     "Master volume of the title's audio output, 0-100 (the title's own "
+                     "volume settings still apply first)")
+    .range(0, 100);
 
 namespace rex::audio {
 

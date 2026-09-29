@@ -62,4 +62,8 @@ SurroundMix GetSurroundMix();
 void SetOutputGain(float linear);
 float GetOutputGain();
 
+/// The gain the output stage applies: GetOutputGain() scaled by the
+/// `audio_volume` cvar (0-100, read on every call so changes apply at once).
+float MasterOutputGain();
+
 }  // namespace rex::audio

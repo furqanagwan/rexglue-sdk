@@ -4,6 +4,7 @@
 
 add_executable(kernel_tests
     content_test.cpp
+    xam_settings_test.cpp
     profile_test.cpp
     notify_test.cpp
     object_header_test.cpp

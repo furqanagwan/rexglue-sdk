@@ -219,7 +219,6 @@ REX_EXPORT_STUB(__imp__XGGetTextureDesc);
 REX_EXPORT_STUB(__imp__XGOffsetResourceAddress);
 REX_EXPORT_STUB(__imp__XGSetTextureHeader);
 REX_EXPORT_STUB(__imp__XGSetTextureHeaderEx);
-REX_EXPORT_STUB(__imp__XGetAudioFlags);
 REX_EXPORT_STUB(__imp__XGetDisplaySize);
 REX_EXPORT_STUB(__imp__XGetOverlappedExtendedError);
 REX_EXPORT_STUB(__imp__XGetOverlappedResult);

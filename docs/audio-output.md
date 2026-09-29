@@ -30,7 +30,9 @@ where Xenia hand-declares the 2.7 and 2.8 interfaces and loads
 - **Format.** Guest frames are 256 samples of six big-endian float channels
   (fl fr fc lf bl br) at 48 kHz, one channel after another. They are converted
   with the same functions, fold, surround mix, master gain and `audio_mute` as
-  the SDL output. A mono or stereo endpoint gets the stereo fold. A wider one
+  the SDL output. `audio_volume` (0-100, default 100, applies at once) scales
+  the master gain, like Edge's `volume`; the title's own volume settings apply
+  before it. A mono or stereo endpoint gets the stereo fold. A wider one
   gets 5.1 with the matching speaker mask, and XAudio2 maps it onto the
   endpoint.
 - **Device.** The mastering voice uses the default device, channel count and

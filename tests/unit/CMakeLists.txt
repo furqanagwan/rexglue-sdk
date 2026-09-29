@@ -30,6 +30,7 @@ add_executable(unit_tests
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp
+    audio/master_volume_test.cpp
     input/input_assignment_test.cpp
     input/input_system_test.cpp
     input/mnk_keystroke_test.cpp
