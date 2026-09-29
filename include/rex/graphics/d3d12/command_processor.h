@@ -221,8 +221,23 @@ class D3D12CommandProcessor : public CommandProcessor {
   bool IssueDraw(xenos::PrimitiveType primitive_type, uint32_t index_count,
                  IndexBufferInfo* index_buffer_info, bool major_mode_explicit) override;
   bool IssueCopy() override;
+  std::string TakeFrameTimingDetail() override;
 
  private:
+  // Host ticks spent this frame in the parts of command processing that can
+  // stall, for TakeFrameTimingDetail.
+  struct FrameTimings {
+    uint64_t render_targets = 0;
+    uint64_t pipelines = 0;
+    uint64_t textures = 0;
+    uint64_t copies = 0;
+    uint64_t fence_waits = 0;
+    // Whole calls; they contain the parts above and each other.
+    uint64_t draws = 0;
+    uint64_t submissions = 0;
+    uint64_t swaps = 0;
+  };
+  FrameTimings frame_timings_;
   static constexpr uint32_t kQueueFrames = 3;
 
   enum RootParameter : UINT {

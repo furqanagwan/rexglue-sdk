@@ -157,6 +157,9 @@ class CommandProcessor {
   bool Restore(::rex::stream::ByteStream* stream);
 
  protected:
+  // Backend detail for a long frame's log line (frame_stats_interval), covering
+  // the time since the last call. Empty when the backend does not measure.
+  virtual std::string TakeFrameTimingDetail() { return {}; }
   struct IndexBufferInfo {
     xenos::IndexFormat format = xenos::IndexFormat::kInt16;
     xenos::Endian endianness = xenos::Endian::kNone;
@@ -413,6 +416,10 @@ class CommandProcessor {
   // frame_stats_interval: time between guest swaps.
   FrameStats frame_stats_;
   uint64_t frame_stats_last_swap_tick_ = 0;
+  // Host ticks this frame spent waiting for guest commands, and in
+  // WAIT_REG_MEM, to attribute long frames to the guest or to this thread.
+  uint64_t frame_stats_idle_ticks_ = 0;
+  uint64_t frame_stats_wait_reg_ticks_ = 0;
 
   // The retired counter advances as intervals retire. The speculative counter
   // tracks the latest queued report so fast modes can monotonically write

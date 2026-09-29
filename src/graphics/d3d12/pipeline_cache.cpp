@@ -173,6 +173,11 @@ bool PipelineCache::Initialize() {
           rex::thread::Thread::Create({}, [this, i]() { CreationThread(i); });
       assert_not_null(creation_thread);
       creation_thread->set_name("D3D12 Pipelines");
+      // These compile during gameplay, three quarters of the cores at once; at
+      // normal priority they preempt the command processor and the guest,
+      // which the title sees as a long frame (RG-GDK-038). The draw is skipped
+      // or awaited either way, so creation losing the CPU costs nothing.
+      creation_thread->set_priority(rex::thread::ThreadPriority::kBelowNormal);
       creation_threads_.push_back(std::move(creation_thread));
     }
   }

@@ -80,6 +80,12 @@ run. The title is stopped even if the recorder hits an error.
 `--frame_stats_interval=N` makes the title log its frame pacing every N
 seconds: fps, average, p95, p99 and maximum frame time, and frames over one or
 two 60 Hz refreshes. It is off by default and works in every build type.
+It also logs each frame over 50 ms as `Long frame:`. That line splits the frame
+into time spent waiting for the game's next commands (the game's own CPU work,
+such as loading), time in `WAIT_REG_MEM`, and processing on the command
+processor thread. On Direct3D 12, processing is further broken down into draws,
+render targets, pipelines, textures, resolves, GPU fence waits, submissions and
+the swap.
 
 ```powershell
 python scripts/capture_baseline.py --output C:/private/runs/qos-soak-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --run-for 90 --screenshot-at 30 --screenshot-at 85 --collect-new C:/private/qos/build/logs -- C:/private/qos/build/quantumofsolace.exe --game_data_root=C:/private/qos/game --user_data_root=C:/private/qos/user-001 --log_dir=C:/private/qos/build/logs --gpu_plugin=xenos

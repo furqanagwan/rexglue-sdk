@@ -266,6 +266,7 @@ void CommandProcessor::WorkerThreadMain() {
       // We spin here waiting for new ones, as the overhead of waiting on our
       // event is too high.
       PrepareForWait();
+      const uint64_t idle_start = rex::chrono::Clock::QueryHostTickCount();
       uint32_t loop_count = 0;
       do {
         // If we spin around too much, revert to a "low-power" state.
@@ -285,6 +286,7 @@ void CommandProcessor::WorkerThreadMain() {
         write_ptr_index = write_ptr_index_.load();
       } while (worker_running_ && pending_fns_.empty() &&
                (write_ptr_index == 0xBAADF00D || read_ptr_index_ == write_ptr_index));
+      frame_stats_idle_ticks_ += rex::chrono::Clock::QueryHostTickCount() - idle_start;
       ReturnFromWait();
       if (!worker_running_ || !pending_fns_.empty()) {
         continue;
@@ -1039,12 +1041,29 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
     uint64_t now = rex::chrono::Clock::QueryHostTickCount();
     if (frame_stats_last_swap_tick_) {
       uint64_t freq = rex::chrono::Clock::QueryHostTickFrequency();
-      frame_stats_.Add(double(now - frame_stats_last_swap_tick_) * 1000.0 / double(freq));
+      const double frame_ms = double(now - frame_stats_last_swap_tick_) * 1000.0 / double(freq);
+      frame_stats_.Add(frame_ms);
+      // A long frame spent mostly waiting for guest commands was the game's own
+      // CPU work; one spent busy here was command processing (pipelines,
+      // uploads, resolves) or a guest wait on the GPU.
+      if (frame_ms > 50.0) {
+        const double idle_ms = double(frame_stats_idle_ticks_) * 1000.0 / double(freq);
+        const double wait_reg_ms = double(frame_stats_wait_reg_ticks_) * 1000.0 / double(freq);
+        REXGPU_INFO(
+            "Long frame: {:.1f} ms; waiting for guest commands {:.1f} ms, in WAIT_REG_MEM "
+            "{:.1f} ms, processing {:.1f} ms{}",
+            frame_ms, idle_ms, wait_reg_ms, std::max(0.0, frame_ms - idle_ms - wait_reg_ms),
+            TakeFrameTimingDetail());
+      } else {
+        TakeFrameTimingDetail();
+      }
       if (frame_stats_.window_seconds() >= double(interval)) {
         REXGPU_INFO("Frame pacing: {}", FrameStats::Format(frame_stats_.Take()));
       }
     }
     frame_stats_last_swap_tick_ = now;
+    frame_stats_idle_ticks_ = 0;
+    frame_stats_wait_reg_ticks_ = 0;
   }
 
   // Xenia-specific VdSwap hook.
@@ -1091,6 +1110,7 @@ bool CommandProcessor::ExecutePacketType3_WAIT_REG_MEM(memory::RingBuffer* reade
 
   bool is_memory = (wait_info & 0x10) != 0;
 
+  const uint64_t wait_start = rex::chrono::Clock::QueryHostTickCount();
   bool matched = false;
   do {
     uint32_t value = 0;
@@ -1153,6 +1173,7 @@ bool CommandProcessor::ExecutePacketType3_WAIT_REG_MEM(memory::RingBuffer* reade
       }
     }
   } while (!matched);
+  frame_stats_wait_reg_ticks_ += rex::chrono::Clock::QueryHostTickCount() - wait_start;
 
   return true;
 }
