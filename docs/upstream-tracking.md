@@ -1108,6 +1108,12 @@ Not implemented, with reasons:
 - Result: the same menu run holds 59-60 fps, p95 17.6-18.1 ms (was 45-59 fps, p95 about 31 ms). Test: `unit_tests [core][timer]` (a 1 ms sleep averaged 1.33 ms).
 - Known regressions: none; Windows 11 honours the request per process while the window is visible.
 
+### Resolve readback on by default (2026-09-29)
+
+- Sources: xenia-canary `src/xenia/gpu/command_processor.cc` (`UPDATE_from_string(readback_resolve, 2025, 12, 4, 21, "fast")`, `canary_experimental` at review time) and has207/xenia-edge `77f2cca80` (2026-09-25, `readback_resolve` a bool, on by default). Classification A, all titles.
+- Local evidence: Blood Stone's first level rendered almost white with the old default `none`; with `--readback_resolve=fast` it renders correctly and still holds 30 fps. Quantum of Solace holds 59-60 fps either way.
+- Change: default `readback_resolve` is now `fast`. Edge's on-demand copy redesign (`77f2cca80`, `935e03876`) is still watched separately.
+
 ## Upstream ReXGlue since v0.10.0
 
 The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk) `v0.10.0` (`c94f5eb`). Upstream `main` has not moved since. Its `development` branch had 15 commits by 2026-09-27 (head `5cf287f`), reviewed here and ported in groups with the original authors kept.
