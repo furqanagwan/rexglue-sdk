@@ -72,6 +72,9 @@ non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-val
 
 For quick start guide, full CLI reference, and config file options, see the [wiki](https://github.com/rexglue/rexglue-sdk/wiki).
 
+For XMA decode errors, optional private packet captures and the `xma_probe`
+diagnostic tool are described in the [XMA stream investigation](docs/xma-cross-buffer-streams.md).
+
 Codegen recognizes a verified CRT `setjmp`/`longjmp` pair without per-title
 addresses. Explicit overrides remain authoritative. Native jumps require guest
 register localization to be disabled; unsupported jump paths fail explicitly.

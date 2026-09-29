@@ -1,5 +1,9 @@
 # XMA packet/loop and audio callback lifetime audit (RG-GDK-018)
 
+For the subsequent 2026-09-29 Legends capture investigation and dedicated
+two-buffer tests, see [RG-GDK-040](xma-cross-buffer-streams.md). The workload
+limitations below describe the original 2026-09-25 audit.
+
 Audit date 2026-09-25, against `main` at `8186b9f`. It compares
 `src/audio/xma_context.cpp` (decode, consume, `StoreContextMerged`) and
 `src/audio/audio_system.cpp` with has207/xenia-edge `edge` at `5dd1cdbbf`,

@@ -10,11 +10,15 @@
 */
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 
 #include <rex/audio/xma/context.h>
 #include <rex/audio/xma/decoder.h>
 #include <rex/audio/xma/helpers.h>
+#include <rex/cvar.h>
 #include <rex/dbg.h>
 #include <rex/logging.h>
 #include <rex/memory/ring_buffer.h>
@@ -32,6 +36,10 @@ extern "C" {
 #pragma warning(pop)
 #endif
 }  // extern "C"
+
+REXCVAR_DEFINE_STRING(xma_dump_dir, "", "Audio",
+                      "Directory to save the context and input buffers of each XMA stream "
+                      "whose frames fail to decode (empty: off)");
 
 // Credits for most of this code goes to:
 // https://github.com/koolkdev/libertyv/blob/master/libav_wrapper/xma2dec.c
@@ -109,6 +117,23 @@ bool XmaContext::Work() {
   }
 
   memory::RingBuffer output_rb = PrepareOutputRingBuffer(&data);
+
+  if (!stream_start_logged_ && data.IsAnyInputBufferValid()) {
+    stream_start_logged_ = true;
+    const uint8_t buffer_index = data.IsCurrentInputBufferValid()
+                                     ? uint8_t(data.current_buffer)
+                                     : uint8_t(data.current_buffer ^ 1);
+    const uint32_t address = data.GetInputBufferAddress(buffer_index);
+    const uint8_t* start_packet = address ? memory()->TranslatePhysical(address) : nullptr;
+    REXAPU_DEBUG(
+        "XmaContext {}: stream start: {} Hz {}, current buffer {}, valid {}{}, packets {}/{}, "
+        "read offset {}, first packet skip {}",
+        id(), GetSampleRate(data.sample_rate), data.is_stereo ? "stereo" : "mono",
+        uint32_t(data.current_buffer), uint32_t(data.input_buffer_0_valid),
+        uint32_t(data.input_buffer_1_valid), uint32_t(data.input_buffer_0_packet_count),
+        uint32_t(data.input_buffer_1_packet_count), uint32_t(data.input_buffer_read_offset),
+        start_packet ? xma::GetPacketSkipCount(start_packet) : 0);
+  }
 
   // Consume-only context: no input, just drain remaining subframes.
   if (data.IsConsumeOnlyContext()) {
@@ -237,6 +262,9 @@ void XmaContext::ResetDecoderState() {
     av_context_->sample_rate = 0;
     av_context_->channels = 0;
   }
+  stream_failure_reported_ = false;
+  stream_start_logged_ = false;
+  previous_buffer_.clear();
   raw_frame_.fill(0);
   decoded_frame_.fill(0);
   carry_frame_.fill(0);
@@ -263,14 +291,20 @@ void XmaContext::Release() {
   std::memset(context_ptr, 0, sizeof(XMA_CONTEXT_DATA));
 }
 
-void XmaContext::SwapInputBuffer(XMA_CONTEXT_DATA* data) {
+void XmaContext::SwapInputBuffer(XMA_CONTEXT_DATA* data, uint32_t start_packet) {
+  if (!REXCVAR_GET(xma_dump_dir).empty() && data->IsCurrentInputBufferValid() &&
+      data->GetCurrentInputBufferAddress()) {
+    const auto* input = GetCurrentInputBuffer(data);
+    previous_buffer_.assign(input, input + GetCurrentInputBufferSize(data));
+  }
   if (data->current_buffer == 0) {
     data->input_buffer_0_valid = 0;
   } else {
     data->input_buffer_1_valid = 0;
   }
   data->current_buffer ^= 1;
-  data->input_buffer_read_offset = kBitsPerPacketHeader;
+  // Decode moves this on to the first frame that starts in the packet.
+  data->input_buffer_read_offset = start_packet * kBitsPerPacket + kBitsPerPacketHeader;
 }
 
 void XmaContext::UpdateLoopStatus(XMA_CONTEXT_DATA* data) {
@@ -341,11 +375,34 @@ const uint8_t* XmaContext::GetNextPacket(XMA_CONTEXT_DATA* data, uint32_t next_p
     return nullptr;
   }
 
-  return memory()->TranslatePhysical(next_buffer_address);
+  // The skip chain continues into the next buffer at the index by which it
+  // overruns this one (see FindStreamFrame).
+  const uint32_t next_buffer_packet = next_packet_index - current_input_packet_count;
+  const uint32_t next_buffer_packet_count = next_buffer_index == 0
+                                                ? uint32_t(data->input_buffer_0_packet_count)
+                                                : uint32_t(data->input_buffer_1_packet_count);
+  if (next_buffer_packet >= next_buffer_packet_count) {
+    return nullptr;
+  }
+  return memory()->TranslatePhysical(next_buffer_address) + next_buffer_packet * kBytesPerPacket;
 }
 
 uint32_t XmaContext::GetNextPacketReadOffset(const uint8_t* buffer, uint32_t next_packet_index,
-                                             uint32_t current_input_packet_count) {
+                                             uint32_t current_input_packet_count,
+                                             uint32_t* next_buffer_packet) {
+  uint32_t overrun = 0;
+  const uint32_t offset =
+      FindStreamFrame(buffer, next_packet_index, current_input_packet_count, &overrun);
+  if (next_buffer_packet) {
+    *next_buffer_packet = overrun;
+  }
+  return offset ? offset : kBitsPerPacketHeader;
+}
+
+uint32_t XmaContext::FindStreamFrame(const uint8_t* buffer, uint32_t next_packet_index,
+                                     uint32_t current_input_packet_count,
+                                     uint32_t* next_buffer_packet) {
+  *next_buffer_packet = 0;
   while (next_packet_index < current_input_packet_count) {
     const uint8_t* next_packet = buffer + (next_packet_index * kBytesPerPacket);
     const uint32_t packet_frame_offset = xma::GetPacketFrameOffset(next_packet);
@@ -360,12 +417,17 @@ uint32_t XmaContext::GetNextPacketReadOffset(const uint8_t* buffer, uint32_t nex
     // skip count to stay on this one (xenia-edge 9d8210b32).
     const uint8_t next_skip = xma::GetPacketSkipCount(next_packet);
     if (next_skip == 0xFF) {
-      break;
+      return 0;
     }
     next_packet_index += next_skip + 1;
   }
 
-  return kBitsPerPacketHeader;
+  // A multi-stream sound interleaves its sub-streams through every buffer, and
+  // a stream's first packet in the next buffer is where its skip chain overruns
+  // this one. In 007 Legends' 3-channel sounds the mono stream continues at
+  // packet 1 of the next buffer and the stereo stream at packet 0.
+  *next_buffer_packet = next_packet_index - current_input_packet_count;
+  return 0;
 }
 
 memory::RingBuffer XmaContext::PrepareOutputRingBuffer(XMA_CONTEXT_DATA* data) {
@@ -594,6 +656,69 @@ bool XmaContext::DecodePacket(AVCodecContext* av_context, const AVPacket* av_pac
   return true;
 }
 
+void XmaContext::ReportStreamFailure(const XMA_CONTEXT_DATA& data, const uint8_t* packet,
+                                     uint32_t packet_index) {
+  REXAPU_WARN(
+      "XmaContext {}: stream does not decode: {} Hz {}, buffer {} ({:08X}, {} packets, valid {}; "
+      "other {:08X}, {} packets, valid {}), read offset {}, packet {} header frames {} offset {} "
+      "metadata {} skip {}, loop {}..{} x{}, subframes {}",
+      id(), GetSampleRate(data.sample_rate), data.is_stereo ? "stereo" : "mono",
+      uint32_t(data.current_buffer), data.GetCurrentInputBufferAddress(),
+      data.GetCurrentInputBufferPacketCount(), data.IsCurrentInputBufferValid(),
+      data.GetInputBufferAddress(data.current_buffer ^ 1),
+      data.current_buffer ? uint32_t(data.input_buffer_0_packet_count)
+                          : uint32_t(data.input_buffer_1_packet_count),
+      data.IsInputBufferValid(data.current_buffer ^ 1), uint32_t(data.input_buffer_read_offset),
+      packet_index, xma::GetPacketFrameCount(packet), xma::GetPacketFrameOffset(packet),
+      xma::GetPacketMetadata(packet), xma::GetPacketSkipCount(packet), uint32_t(data.loop_start),
+      uint32_t(data.loop_end), uint32_t(data.loop_count), uint32_t(data.subframe_decode_count));
+
+  const auto& dump_dir = REXCVAR_GET(xma_dump_dir);
+  if (dump_dir.empty()) {
+    return;
+  }
+  // "XMAD", the guest context as stored (big endian), then each input buffer
+  // as a little-endian byte count and its bytes.
+  static std::atomic<uint32_t> dump_serial = 0;
+  std::error_code ec;
+  std::filesystem::create_directories(dump_dir, ec);
+  if (ec) {
+    REXAPU_WARN("XmaContext {}: cannot create dump directory: {}", id(), ec.message());
+    return;
+  }
+  const auto path =
+      std::filesystem::path(dump_dir) / fmt::format("xma_{:03}_ctx{:02}.bin", dump_serial++, id());
+  std::ofstream out(path, std::ios::binary);
+  out.write("XMAD", 4);
+  // Work has not committed its local context yet. Dump the actual failure
+  // position, rather than the stale guest copy from before this kick.
+  std::array<uint8_t, sizeof(XMA_CONTEXT_DATA)> context_bytes;
+  auto snapshot = data;
+  snapshot.Store(context_bytes.data());
+  out.write(reinterpret_cast<const char*>(context_bytes.data()), context_bytes.size());
+  // The third is the buffer the stream left last, if any.
+  for (uint8_t i = 0; i < 3; ++i) {
+    const bool valid = i < 2 && data.IsInputBufferValid(i) && data.GetInputBufferAddress(i);
+    const uint32_t packets = i == 0 ? uint32_t(data.input_buffer_0_packet_count)
+                                    : uint32_t(data.input_buffer_1_packet_count);
+    const uint32_t size =
+        i == 2 ? uint32_t(previous_buffer_.size()) : (valid ? packets * kBytesPerPacket : 0);
+    const uint8_t length[]{uint8_t(size), uint8_t(size >> 8), uint8_t(size >> 16),
+                           uint8_t(size >> 24)};
+    out.write(reinterpret_cast<const char*>(length), sizeof(length));
+    if (size) {
+      const auto* bytes = i == 2 ? previous_buffer_.data()
+                                 : memory()->TranslatePhysical(data.GetInputBufferAddress(i));
+      out.write(reinterpret_cast<const char*>(bytes), size);
+    }
+  }
+  out.close();
+  if (out)
+    REXAPU_WARN("XmaContext {}: saved the stream to {}", id(), path.string());
+  else
+    REXAPU_WARN("XmaContext {}: failed to write stream dump {}", id(), path.string());
+}
+
 void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   SCOPE_profile_cpu_f("apu");
 
@@ -636,6 +761,15 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   const uint32_t current_input_size = GetCurrentInputBufferSize(data);
   const uint32_t current_input_packet_count = current_input_size / kBytesPerPacket;
 
+  // A skip chain may pass over an entire short refill. Keep its remainder
+  // instead of asserting on the carried packet index when that refill arrives.
+  const uint32_t start_packet = data->input_buffer_read_offset / kBitsPerPacket;
+  if (start_packet >= current_input_packet_count &&
+      data->input_buffer_read_offset % kBitsPerPacket == kBitsPerPacketHeader) {
+    SwapInputBuffer(data, start_packet - current_input_packet_count);
+    return;
+  }
+
   const int16_t packet_index = GetPacketNumber(current_input_size, data->input_buffer_read_offset);
 
   if (packet_index == -1) {
@@ -657,10 +791,12 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
 
   // Full packet skip (0xFF) -- no new frames begin in this packet.
   if (skip_count == 0xFF) {
-    uint32_t next_input_offset =
-        GetNextPacketReadOffset(current_input_buffer, packet_index + 1, current_input_packet_count);
-    if (next_input_offset == kBitsPerPacketHeader) {
-      SwapInputBuffer(data);
+    uint32_t next_buffer_packet = 0;
+    const uint32_t next_input_offset = FindStreamFrame(
+        current_input_buffer, packet_index + 1, current_input_packet_count, &next_buffer_packet);
+    if (!next_input_offset) {
+      SwapInputBuffer(data, next_buffer_packet);
+      return;
     }
     data->input_buffer_read_offset = next_input_offset;
     return;
@@ -686,7 +822,9 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   if (packet_info.current_frame_size_ == 0) {
     const uint8_t* next_packet = GetNextPacket(data, next_packet_index, current_input_packet_count);
     if (!next_packet) {
-      SwapInputBuffer(data);
+      SwapInputBuffer(data, next_packet_index >= current_input_packet_count
+                                ? next_packet_index - current_input_packet_count
+                                : 0);
       return;
     }
     std::memcpy(input_buffer_.data(), packet + kBytesPerPacketHeader, kBytesPerPacketData);
@@ -789,6 +927,10 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     // two blocks that are not neighbors. The frame is not replaced with
     // silence: the failure stays visible in the output and in the count.
     carry_valid_ = false;
+    if (!stream_failure_reported_) {
+      stream_failure_reported_ = true;
+      ReportStreamFailure(*data, packet, packet_index);
+    }
     const uint32_t failures = ++decode_failure_count_;
     if ((failures & (failures - 1)) == 0) {
       REXAPU_WARN("XmaContext {}: frame at offset {} produced no audio ({} so far)", id(),
@@ -809,19 +951,23 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     return;
   }
 
-  uint32_t next_input_offset =
-      GetNextPacketReadOffset(current_input_buffer, next_packet_index, current_input_packet_count);
+  uint32_t next_buffer_packet = 0;
+  uint32_t next_input_offset = FindStreamFrame(current_input_buffer, next_packet_index,
+                                               current_input_packet_count, &next_buffer_packet);
 
-  if (next_input_offset == kBitsPerPacketHeader) {
-    SwapInputBuffer(data);
-    if (data->IsAnyInputBufferValid()) {
-      next_input_offset = xma::GetPacketFrameOffset(
-          memory()->TranslatePhysical(data->GetCurrentInputBufferAddress()));
-
-      if (next_input_offset > kMaxFrameSizeinBits) {
-        SwapInputBuffer(data);
-        return;
-      }
+  if (!next_input_offset) {
+    SwapInputBuffer(data, next_buffer_packet);
+    if (!data->IsCurrentInputBufferValid()) {
+      // Not filled yet; the read offset already names the packet to start at.
+      return;
+    }
+    next_input_offset =
+        FindStreamFrame(GetCurrentInputBuffer(data), next_buffer_packet,
+                        data->GetCurrentInputBufferPacketCount(), &next_buffer_packet);
+    if (!next_input_offset) {
+      // No frame of this stream starts in the new buffer either.
+      SwapInputBuffer(data, next_buffer_packet);
+      return;
     }
   }
   data->input_buffer_read_offset = next_input_offset;
