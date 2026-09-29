@@ -8,9 +8,11 @@
  * @license     BSD 3-Clause License
  *              See LICENSE file in the project root for full license text.
  */
+#include <algorithm>
 #include <mutex>
 
 #include <rex/audio/downmix.h>
+#include <rex/audio/flags.h>
 
 namespace rex::audio {
 namespace {
@@ -53,6 +55,11 @@ void SetOutputGain(float linear) {
 float GetOutputGain() {
   std::lock_guard<std::mutex> lock(g_mutex);
   return g_gain;
+}
+
+float MasterOutputGain() {
+  const int32_t volume = std::clamp<int32_t>(REXCVAR_GET(audio_volume), 0, 100);
+  return GetOutputGain() * (float(volume) / 100.0f);
 }
 
 }  // namespace rex::audio

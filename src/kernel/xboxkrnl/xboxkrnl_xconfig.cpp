@@ -14,6 +14,7 @@
 
 #include <rex/cvar.h>
 #include <rex/kernel/xboxkrnl/private.h>
+#include <rex/kernel/xboxkrnl/xconfig.h>
 #include <rex/logging.h>
 #include <rex/hook.h>
 #include <rex/types.h>
@@ -65,11 +66,11 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
           break;
         case 0x000A:  // XCONFIG_USER_VIDEO_FLAGS
           setting_size = 4;
-          memory::store_and_swap<uint32_t>(value, 0x00040000);
+          memory::store_and_swap<uint32_t>(value, kXConfigUserVideoFlags);
           break;
         case 0x000B:  // XCONFIG_USER_AUDIO_FLAGS
           setting_size = 4;
-          memory::store_and_swap<uint32_t>(value, 0x00010001);
+          memory::store_and_swap<uint32_t>(value, kXConfigUserAudioFlags);
           break;
         case 0x000C:  // XCONFIG_USER_RETAIL_FLAGS
           setting_size = 4;

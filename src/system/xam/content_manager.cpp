@@ -22,6 +22,7 @@
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/devices/stfs_container_device.h>
 #include <rex/string.h>
+#include <rex/system/flags.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_device.h>
 #include <rex/system/xam/content_manager.h>
@@ -349,6 +350,9 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
   package->LoadPackageLicenseMask(ResolvePackageHeaderPath(
       data.file_name(), xuid, kernel_state_->title_id(), data.content_type));
   content_license = package->GetPackageLicense();
+  // The license_mask cvar grants extra licenses to every package, as it does
+  // for XamContentGetLicenseMask (Edge aac25ad0c: any nonzero mask, not > 1).
+  content_license |= REXCVAR_GET(license_mask);
 
   {
     auto global_lock = global_critical_region_.Acquire();

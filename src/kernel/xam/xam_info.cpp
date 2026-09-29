@@ -11,6 +11,7 @@
 
 #include <rex/kernel/xam/module.h>
 #include <rex/kernel/xam/private.h>
+#include <rex/kernel/xboxkrnl/xconfig.h>
 #include <rex/logging.h>
 #include <rex/hook.h>
 #include <rex/types.h>
@@ -163,6 +164,11 @@ u32 XamGetSystemVersion_entry() {
 
 void XCustomRegisterDynamicActions_entry() {
   // ???
+}
+
+// Real XAM reads XCONFIG_USER_AUDIO_FLAGS; so does this (Edge xam_info.cc).
+u32 XGetAudioFlags_entry() {
+  return xboxkrnl::kXConfigUserAudioFlags;
 }
 
 u32 XGetAVPack_entry() {
@@ -356,6 +362,7 @@ REX_EXPORT(__imp__XamBuildXamResourceLocator, rex::kernel::xam::XamBuildXamResou
 REX_EXPORT(__imp__XamGetSystemVersion, rex::kernel::xam::XamGetSystemVersion_entry)
 REX_EXPORT(__imp__XCustomRegisterDynamicActions,
            rex::kernel::xam::XCustomRegisterDynamicActions_entry)
+REX_EXPORT(__imp__XGetAudioFlags, rex::kernel::xam::XGetAudioFlags_entry)
 REX_EXPORT(__imp__XGetAVPack, rex::kernel::xam::XGetAVPack_entry)
 REX_EXPORT(__imp__XGetGameRegion, rex::kernel::xam::XGetGameRegion_entry)
 REX_EXPORT(__imp__XGetLanguage, rex::kernel::xam::XGetLanguage_entry)

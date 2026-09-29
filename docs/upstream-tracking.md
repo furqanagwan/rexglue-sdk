@@ -1064,6 +1064,26 @@ No associated PR/issue is asserted unless linked in the notes. Commit messages a
 - [`12e3b4223`](https://github.com/has207/xenia-edge/commit/12e3b4223) "Keep the audio pump off the global lock and make up late pumps": it changes Edge's deadline-paced audio pump, which ReXGlue's semaphore-driven worker does not use. The ReXGlue worker takes the global lock only briefly per callback. **Not ported** without local stutter evidence.
 - [`13e380a1d`](https://github.com/has207/xenia-edge/commit/13e380a1d) "Fix loading aliased bool values": Edge's legacy cvar aliases and per-game configs. **Not applicable** (a different cvar system; ADR-009 instead).
 
+### has207/xenia-edge 2026-09-19 to 2026-09-23 commits (fork sync, reviewed 2026-09-29)
+
+Edge `edge` at `12e3b4223dd4c2e41d57ea4b4477546affe4ce10`, compared with
+ReXGlue `main` on 2026-09-29. Commits already recorded above (`de8e60601`,
+`887beea69`, the Canary PRs #1218/#1238/#1240/#1243) are not repeated.
+
+- [`aac25ad0c`](https://github.com/has207/xenia-edge/commit/aac25ad0c) "Actually apply license_mask to content packages when it is 1" (Herman S., 2026-09-22). Classification A. ReXGlue's `ContentManager::OpenContent` did not apply `license_mask` at all. **Ported:** every opened package gets the mask ORed in (a nonzero mask, as Edge now does). Default 0, so no title changes unless the cvar is set. Test: `kernel_tests` "license_mask grants licenses to opened content". Known regressions: none reported.
+- [`74c4e4acb`](https://github.com/has207/xenia-edge/commit/74c4e4acb) "Add missing exports, add missing param name, and more" (The-Little-Wolf, 2026-09-19). ReXGlue already has the export table entries and the `XamParty*` returns. `XamLoaderGetMediaInfo`/`Ex` and `XamLoaderRegisterLaunchRequestCallback` stay stubs: no investigated title calls them. **Watch.**
+- Edge `xam_info.cc` `XGetAudioFlags` (present at the pinned commit): returns XConfig's user audio flags, default `0x00010001`. ReXGlue's XConfig already reported that value while `XGetAudioFlags` was a stub. **Adapted:** both read `kXConfigUserAudioFlags`. Test: `kernel_tests` "XGetAudioFlags reports the console's XConfig audio flags". Edge's `avpack == 2` branch is not taken: ReXGlue's `XGetAVPack` is fixed at 6.
+- Edge `apu_flags.cc` `volume` (0-100, master volume of the XAudio2 and SDL drivers). **Adapted** as `audio_volume`, applied through `MasterOutputGain()`. Test: `unit_tests [audio][volume]`.
+- [`de6556b3c`](https://github.com/has207/xenia-edge/commit/de6556b3c) "Launch a relaunched title under the file's own name": Edge's game library. **Not applicable.**
+- [`4fc57ca43`](https://github.com/has207/xenia-edge/commit/4fc57ca43) "Log NtCreateFile paths and results": ReXGlue already logs them. **Already present.**
+- [`aebd98b62`](https://github.com/has207/xenia-edge/commit/aebd98b62), [`b7336b560`](https://github.com/has207/xenia-edge/commit/b7336b560), [`9afccb2c8`](https://github.com/has207/xenia-edge/commit/9afccb2c8), [`0c2da08dd`](https://github.com/has207/xenia-edge/commit/0c2da08dd): JIT and emulator debugging aids (user-mode trap logging, module image dumps, `log_lr_*`, launch-data logging). **Not ported**; the fault report (#106) covers ReXGlue's static case.
+- [`791440756`](https://github.com/has207/xenia-edge/commit/791440756) "Record stackpoints after the frame is allocated", [`1e640ba49`](https://github.com/has207/xenia-edge/commit/1e640ba49) "Port the backend half of user mode to a64": Edge's x64/a64 JIT backends. **Not applicable** (ADR-004).
+
+Not implemented, with reasons:
+
+- **`XamContentResolve`** (Canary `b8296a9bc`, Edge `2f6baa751`/`3ecd9d36b`): it returns the guest path of a content package, which 007 Legends passes straight to `NtOpenFile` as a file. ReXGlue (like Canary and Edge) stores packages as folders and has no guest path to the content root, so a resolved path could not open either. Legends handles the `X_ERROR_NOT_FOUND` and its autosave works. Revisit if a title needs the path itself.
+- **`XGetVideoFlags`**: neither Canary nor Edge implements it, and the meaning of XConfig's `0x00040000` video flags is not established. Left a stub rather than guessed.
+
 ## Upstream ReXGlue since v0.10.0
 
 The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk) `v0.10.0` (`c94f5eb`). Upstream `main` has not moved since. Its `development` branch had 15 commits by 2026-09-27 (head `5cf287f`), reviewed here and ported in groups with the original authors kept.

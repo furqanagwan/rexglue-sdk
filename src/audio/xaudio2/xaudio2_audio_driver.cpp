@@ -163,10 +163,10 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
     std::memset(out, 0, sizeof(float) * channels * kChannelSamples);
   } else if (channels == 2) {
     conversion::sequential_6_BE_to_interleaved_2_LE(out, frame, kChannelSamples, GetStereoFold(),
-                                                    GetOutputGain());
+                                                    MasterOutputGain());
   } else {
     conversion::sequential_6_BE_to_interleaved_6_LE(out, frame, kChannelSamples, GetSurroundMix(),
-                                                    GetOutputGain());
+                                                    MasterOutputGain());
   }
 
   std::lock_guard<std::mutex> lock(mutex_);

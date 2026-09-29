@@ -210,8 +210,18 @@ TEST_CASE("Repeated register, dispatch and unregister never reach a destroyed dr
 
   for (int i = 0; i < 300; ++i) {
     const size_t index = Register(f.audio, 0x1000 + i);
+    const int before = callbacks;
     live_index = index;
     std::this_thread::yield();
+    // Every tenth client waits until the worker has dispatched to it, so the
+    // unregister below races a worker that is really running, however the
+    // scheduler places the threads. The rest unregister as soon as possible.
+    if (i % 10 == 0) {
+      const auto deadline = std::chrono::steady_clock::now() + 5s;
+      while (callbacks == before && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+      }
+    }
     f.audio.UnregisterClient(index);
     live_index = SIZE_MAX;
   }
@@ -225,5 +235,5 @@ TEST_CASE("Repeated register, dispatch and unregister never reach a destroyed dr
     late += f.audio.driver(i)->use_after_destroy;
   }
   CHECK(late == 0);
-  CHECK(callbacks > 0);
+  CHECK(callbacks >= 30);  // at least the waited-for clients were dispatched
 }
