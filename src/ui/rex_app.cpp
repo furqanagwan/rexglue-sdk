@@ -40,6 +40,7 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/xdbf_utils.h>
 #include <rex/system/xthread.h>
+#include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/keybinds.h>
 #include <rex/version.h>
@@ -263,6 +264,9 @@ bool ReXApp::SetupEnvironment() {
   }
 
   REXLOG_INFO("{} starting, {}", GetName(), REXGLUE_BUILD_TITLE);
+  // Already raised by the entry point; asking again reports it for the log.
+  REXLOG_DEBUG("  Timer resolution: {:.1f} ms",
+               double(rex::thread::RequestHighTimerResolution()) / 10000.0);
   if (!game_data_root_.empty()) {
     REXLOG_DEBUG("  Game directory: {}", game_data_root_.string());
   }

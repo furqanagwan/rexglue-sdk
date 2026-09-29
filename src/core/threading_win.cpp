@@ -25,6 +25,27 @@ typedef HANDLE (*SetThreadDescriptionFn)(HANDLE hThread, PCWSTR lpThreadDescript
 
 namespace rex::thread {
 
+uint32_t RequestHighTimerResolution() {
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  if (!ntdll) {
+    return 0;
+  }
+  using QueryFn = LONG(NTAPI*)(PULONG minimum, PULONG maximum, PULONG current);
+  using SetFn = LONG(NTAPI*)(ULONG desired, BOOLEAN set, PULONG current);
+  auto query = reinterpret_cast<QueryFn>(GetProcAddress(ntdll, "NtQueryTimerResolution"));
+  auto set = reinterpret_cast<SetFn>(GetProcAddress(ntdll, "NtSetTimerResolution"));
+  if (!query || !set) {
+    return 0;
+  }
+  // "Minimum" and "maximum" name the coarsest and finest periods.
+  ULONG coarsest = 0, finest = 0, current = 0;
+  if (query(&coarsest, &finest, &current) < 0) {
+    return 0;
+  }
+  set(finest, TRUE, &current);
+  return uint32_t(current);
+}
+
 void EnableAffinityConfiguration() {
   HANDLE process_handle = GetCurrentProcess();
   DWORD_PTR process_affinity_mask;

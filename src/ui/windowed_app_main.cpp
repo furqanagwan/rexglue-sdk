@@ -20,6 +20,7 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/platform.h>
+#include <rex/thread.h>
 #include <rex/ui/windowed_app.h>
 #include <rex/ui/flags.h>
 
@@ -60,6 +61,8 @@ int RunWindowedApp(int argc, char** argv) {
   auto remaining = rex::cvar::Init(argc, argv);
   rex::cvar::ApplyEnvironment();
   rex::InitLoggingEarly();
+  // Guest vblanks, GPU waits and guest sleeps all rely on millisecond sleeps.
+  rex::thread::RequestHighTimerResolution();
 
   // Apartment-threaded COM for shell dialogs.
   if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
