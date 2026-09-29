@@ -22,6 +22,7 @@
 #include <rex/cvar.h>
 #include <rex/graphics/command_processor.h>
 #include <rex/graphics/flags.h>
+#include <rex/graphics/vblank_pacer.h>
 #include <rex/kernel/xboxkrnl/video.h>
 #include <rex/logging.h>
 #include <rex/stream.h>
@@ -157,16 +158,34 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
         uint64_t vsync_interval_ticks =
             std::max(uint64_t(1), uint64_t(double(guest_tick_frequency) / refresh_rate_hz));
         uint64_t no_vsync_interval_ticks = std::max(uint64_t(1), guest_tick_frequency / 1000);
-        uint64_t last_frame_time = chrono::Clock::QueryGuestTickCount();
+        // One vblank per interval, on time. Sleeping in whole milliseconds
+        // woke only every 15.6 ms (the default Windows timer), so vblanks came
+        // in bursts and gaps, and a title waiting for the next one often missed
+        // a refresh (Quantum of Solace ran at ~36 fps with its 60 fps patch).
+        // A high-resolution timer sleeps to just before the vblank and a short
+        // yield loop covers the rest.
+        constexpr uint64_t kSpinMicroseconds = 500;
+        bool vsync = REXCVAR_GET(vsync);
+        VblankPacer pacer(vsync ? vsync_interval_ticks : no_vsync_interval_ticks,
+                          chrono::Clock::QueryGuestTickCount());
         while (vsync_worker_running_) {
-          uint64_t current_time = chrono::Clock::QueryGuestTickCount();
-          uint64_t interval_ticks =
-              REXCVAR_GET(vsync) ? vsync_interval_ticks : no_vsync_interval_ticks;
-          while (current_time - last_frame_time >= interval_ticks) {
-            MarkVblank();
-            last_frame_time += interval_ticks;
+          if (REXCVAR_GET(vsync) != vsync) {
+            vsync = !vsync;
+            pacer = VblankPacer(vsync ? vsync_interval_ticks : no_vsync_interval_ticks,
+                                chrono::Clock::QueryGuestTickCount());
           }
-          rex::thread::Sleep(std::chrono::milliseconds(1));
+          uint64_t now = chrono::Clock::QueryGuestTickCount();
+          if (pacer.Due(now)) {
+            MarkVblank();
+            continue;
+          }
+          uint64_t wait_us = pacer.TicksUntilDue(now) * 1000000 / guest_tick_frequency;
+          if (wait_us > kSpinMicroseconds) {
+            rex::thread::PreciseSleep(std::chrono::microseconds(wait_us - kSpinMicroseconds), false,
+                                      nullptr);
+          } else {
+            rex::thread::MaybeYield();
+          }
         }
         return 0;
       }));

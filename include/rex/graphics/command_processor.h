@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <rex/graphics/frame_stats.h>
 #include <rex/graphics/register_file.h>
 #include <rex/graphics/registers.h>
 #include <rex/graphics/xenos.h>
@@ -408,6 +409,10 @@ class CommandProcessor {
   std::deque<ZPDReport> zpd_reports_;
   // Strict reports containing the D3D sentinel the guest polls.
   uint32_t zpd_awaited_report_count_ = 0;
+
+  // frame_stats_interval: time between guest swaps.
+  FrameStats frame_stats_;
+  uint64_t frame_stats_last_swap_tick_ = 0;
 
   // The retired counter advances as intervals retire. The speculative counter
   // tracks the latest queued report so fast modes can monotonically write

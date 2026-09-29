@@ -37,6 +37,11 @@
 
 REXCVAR_DEFINE_BOOL(vsync, true, "GPU", "Enable vertical sync");
 
+REXCVAR_DEFINE_INT32(frame_stats_interval, 0, "GPU",
+                     "Log guest frame pacing (fps and frame time percentiles between swaps) "
+                     "every this many seconds; 0 = off")
+    .range(0, 3600);
+
 REXCVAR_DEFINE_BOOL(clear_memory_page_state, true, "GPU",
                     "Refresh page-valid state from GPU-written memory at frame end. "
                     "Disable for minor CPU overhead reduction, but may break memory coherency.")
@@ -1026,6 +1031,18 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
   }
 #endif
   rex::perf::Profiler::Flip();
+
+  if (int32_t interval = REXCVAR_GET(frame_stats_interval); interval > 0) {
+    uint64_t now = rex::chrono::Clock::QueryHostTickCount();
+    if (frame_stats_last_swap_tick_) {
+      uint64_t freq = rex::chrono::Clock::QueryHostTickFrequency();
+      frame_stats_.Add(double(now - frame_stats_last_swap_tick_) * 1000.0 / double(freq));
+      if (frame_stats_.window_seconds() >= double(interval)) {
+        REXGPU_INFO("Frame pacing: {}", FrameStats::Format(frame_stats_.Take()));
+      }
+    }
+    frame_stats_last_swap_tick_ = now;
+  }
 
   // Xenia-specific VdSwap hook.
   // VdSwap will post this to tell us we need to swap the screen/fire an
