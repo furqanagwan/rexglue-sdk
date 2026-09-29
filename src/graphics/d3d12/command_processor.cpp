@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <optional>
 #include <chrono>
 #include <cstdarg>
 #include <cstring>
@@ -55,6 +56,24 @@ REXCVAR_DEFINE_INT32(d3d12_capture_frame, 0, "GPU/D3D12",
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 namespace rex::graphics::d3d12 {
+
+namespace {
+
+// Adds the host ticks of its lifetime to a frame timing counter.
+class TickAccumulator {
+ public:
+  explicit TickAccumulator(uint64_t& total)
+      : total_(total), start_(rex::chrono::Clock::QueryHostTickCount()) {}
+  ~TickAccumulator() { total_ += rex::chrono::Clock::QueryHostTickCount() - start_; }
+  TickAccumulator(const TickAccumulator&) = delete;
+  TickAccumulator& operator=(const TickAccumulator&) = delete;
+
+ private:
+  uint64_t& total_;
+  uint64_t start_;
+};
+
+}  // namespace
 
 // Generated with `xb buildshaders`.
 namespace shaders {
@@ -1932,6 +1951,7 @@ void D3D12CommandProcessor::OnGammaRampPWLValueWritten() {
 void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                                       uint32_t frontbuffer_height) {
   SCOPE_profile_cpu_f("gpu");
+  TickAccumulator swap_time(frame_timings_.swaps);
   // Counts the swap for d3d12_capture_frame on every return path, after the
   // frame's last submission.
   struct SwapCounter {
@@ -2328,6 +2348,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+  TickAccumulator draw_time(frame_timings_.draws);
 
   ID3D12Device* device = GetD3D12Provider().GetDevice();
   const RegisterFile& regs = *register_file_;
@@ -2441,9 +2462,12 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   uint32_t normalized_color_mask =
       pixel_shader ? draw_util::GetNormalizedColorMask(regs, pixel_shader->writes_color_targets())
                    : 0;
-  if (!render_target_cache_->Update(is_rasterization_done, normalized_depth_control,
-                                    normalized_color_mask, *vertex_shader)) {
-    return false;
+  {
+    TickAccumulator render_target_time(frame_timings_.render_targets);
+    if (!render_target_cache_->Update(is_rasterization_done, normalized_depth_control,
+                                      normalized_color_mask, *vertex_shader)) {
+      return false;
+    }
   }
 
   // Create the pipeline (for this, need the actually used render target formats
@@ -2469,6 +2493,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   }
   void* pipeline_handle;
   ID3D12RootSignature* root_signature;
+  std::optional<TickAccumulator> pipeline_time(std::in_place, frame_timings_.pipelines);
   if (!pipeline_cache_->ConfigurePipeline(
           vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
           normalized_depth_control, normalized_color_mask, zpd_hybrid,
@@ -2519,12 +2544,16 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
       return true;
     }
   }
+  pipeline_time.reset();
 
   // Update the textures - this may bind pipelines.
   uint32_t used_texture_mask =
       vertex_shader->GetUsedTextureMaskAfterTranslation() |
       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
-  texture_cache_->RequestTextures(used_texture_mask);
+  {
+    TickAccumulator texture_time(frame_timings_.textures);
+    texture_cache_->RequestTextures(used_texture_mask);
+  }
 
   // Bind the pipeline after configuring it and doing everything that may bind
   // other pipelines.
@@ -2991,10 +3020,25 @@ bool D3D12CommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_s
   return true;
 }
 
+std::string D3D12CommandProcessor::TakeFrameTimingDetail() {
+  const double ms_per_tick = 1000.0 / double(rex::chrono::Clock::QueryHostTickFrequency());
+  std::string detail = fmt::format(
+      " (draws {:.1f}: render targets {:.1f}, pipelines {:.1f}, textures {:.1f}; resolves "
+      "{:.1f}; GPU fence waits {:.1f}; submissions {:.1f}; swap {:.1f} ms)",
+      double(frame_timings_.draws) * ms_per_tick,
+      double(frame_timings_.render_targets) * ms_per_tick,
+      double(frame_timings_.pipelines) * ms_per_tick, double(frame_timings_.textures) * ms_per_tick,
+      double(frame_timings_.copies) * ms_per_tick, double(frame_timings_.fence_waits) * ms_per_tick,
+      double(frame_timings_.submissions) * ms_per_tick, double(frame_timings_.swaps) * ms_per_tick);
+  frame_timings_ = {};
+  return detail;
+}
+
 bool D3D12CommandProcessor::IssueCopy() {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+  TickAccumulator copy_time(frame_timings_.copies);
   if (!BeginSubmission(true)) {
     return false;
   }
@@ -3267,6 +3311,7 @@ void D3D12CommandProcessor::CheckSubmissionFence(uint64_t await_submission) {
                     SUCCEEDED(queue_operations_since_submission_fence_->SetEventOnCompletion(
                         fence_value, fence_completion_event_)))) {
         PROFILE_CMD_BUFFER_STALL();
+        TickAccumulator fence_time(frame_timings_.fence_waits);
         WaitForSingleObject(fence_completion_event_, INFINITE);
         queue_operations_done_since_submission_signal_ = false;
       } else {
@@ -3286,6 +3331,7 @@ void D3D12CommandProcessor::CheckSubmissionFence(uint64_t await_submission) {
     if (SUCCEEDED(
             submission_fence_->SetEventOnCompletion(await_submission, fence_completion_event_))) {
       PROFILE_CMD_BUFFER_STALL();
+      TickAccumulator fence_time(frame_timings_.fence_waits);
       WaitForSingleObject(fence_completion_event_, INFINITE);
       submission_completed_ = submission_fence_->GetCompletedValue();
     }
@@ -3530,6 +3576,7 @@ bool D3D12CommandProcessor::BeginSubmission(bool is_guest_command) {
 }
 
 bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
+  TickAccumulator submission_time(frame_timings_.submissions);
   const ui::d3d12::D3D12Provider& provider = GetD3D12Provider();
 
   // Make sure there is a command allocator to write commands to.
