@@ -43,6 +43,7 @@ add_executable(unit_tests
     codegen/jump_table_test.cpp
     codegen/indirect_discovery_test.cpp
     codegen/crt_jump_scanner_test.cpp
+    codegen/code_patch_test.cpp
     codegen/game_config_test.cpp
     rexglue/app_name_test.cpp
 )

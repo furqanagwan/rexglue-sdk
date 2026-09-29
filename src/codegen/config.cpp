@@ -221,6 +221,82 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
+  // [[patch]] -- keyed by "name"; a later entry replaces the writes it lists
+  // and the enabled flag it sets, so an override file can switch one on.
+  if (auto patchArray = toml["patch"].as_array()) {
+    for (auto& entry : *patchArray) {
+      auto* table = entry.as_table();
+      if (!table) {
+        REXCODEGEN_ERROR("Invalid [[patch]] entry in {}: expected table", filePath);
+        continue;
+      }
+      auto name = (*table)["name"].value<std::string>();
+      if (!name || name->empty()) {
+        REXCODEGEN_ERROR("[[patch]] entry in {} has no name", filePath);
+        continue;
+      }
+
+      CodePatch parsed;
+      parsed.name = *name;
+      bool hasWrites = false;
+      constexpr std::pair<const char*, size_t> kWidths[] = {
+          {"be8", 1}, {"be16", 2}, {"be32", 4}, {"be64", 8}};
+      for (const auto& [key, width] : kWidths) {
+        auto* writes = (*table)[key].as_array();
+        if (!writes) {
+          continue;
+        }
+        hasWrites = true;
+        for (auto& w : *writes) {
+          auto* wt = w.as_table();
+          auto address = wt ? (*wt)["address"].value<int64_t>() : std::nullopt;
+          auto value = wt ? (*wt)["value"].value<int64_t>() : std::nullopt;
+          if (!address || !value || *address < 0 || *address > 0xFFFFFFFFll) {
+            parsed.error = fmt::format("a {} entry needs an address and a value", key);
+            continue;
+          }
+          const uint64_t v = static_cast<uint64_t>(*value);
+          if (width < 8 && (v >> (width * 8)) != 0) {
+            parsed.error = fmt::format("{} value 0x{:X} at 0x{:08X} does not fit in {} bytes", key,
+                                       v, static_cast<uint32_t>(*address), width);
+            continue;
+          }
+          PatchWrite write{static_cast<uint32_t>(*address), {}};
+          for (size_t i = 0; i < width; ++i) {
+            write.bytes.push_back(uint8_t(v >> ((width - 1 - i) * 8)));
+          }
+          parsed.writes.push_back(std::move(write));
+        }
+      }
+      // Canary spells the switch is_enabled; accept both, enabled wins.
+      auto enabled = (*table)["enabled"].value<bool>();
+      if (!enabled) {
+        enabled = (*table)["is_enabled"].value<bool>();
+      }
+
+      auto it = std::find_if(cfg.patches.begin(), cfg.patches.end(),
+                             [&](const CodePatch& p) { return p.name == parsed.name; });
+      if (it == cfg.patches.end()) {
+        parsed.enabled = enabled.value_or(true);
+        parsed.source = filePath;
+        if (!hasWrites && parsed.error.empty()) {
+          parsed.error = "it has no be8, be16, be32 or be64 writes";
+        }
+        cfg.patches.push_back(std::move(parsed));
+        continue;
+      }
+      REXCODEGEN_DEBUG("[config]   [[patch]] \"{}\" updated from {}", parsed.name, filePath);
+      if (hasWrites) {
+        it->writes = std::move(parsed.writes);
+        it->error = std::move(parsed.error);
+        it->source = filePath;
+      }
+      if (enabled) {
+        it->enabled = *enabled;
+      }
+    }
+  }
+
   // --- Arrays of tables: deduplicated by primary key (address), last wins ---
 
   // [[invalid_instructions]] -- keyed by "data" address

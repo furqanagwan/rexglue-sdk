@@ -1,0 +1,239 @@
+/**
+ * @file        code_patch_test.cpp
+ * @brief       [[patch]] parsing and codegen-time guest code patches
+ *
+ * @copyright   Copyright (c) 2026 Tom Clay
+ * @license     BSD 3-Clause License
+ */
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include <rex/codegen/analyze.h>
+#include <rex/codegen/binary_view.h>
+#include <rex/codegen/code_patches.h>
+#include <rex/codegen/codegen_context.h>
+#include <rex/codegen/config.h>
+#include <rex/codegen/test_support.h>
+
+#include <toml++/toml.hpp>
+
+using namespace rex::codegen;  // NOLINT
+namespace fs = std::filesystem;
+
+namespace {
+
+constexpr uint32_t kBase = 0x82000000;
+
+RecompilerConfig Parse(std::string_view text) {
+  RecompilerConfig cfg;
+  REQUIRE(cfg.LoadFromTable(toml::parse(text), fs::temp_directory_path()));
+  return cfg;
+}
+
+const CodePatch& Named(const RecompilerConfig& cfg, std::string_view name) {
+  for (const auto& patch : cfg.patches) {
+    if (patch.name == name) {
+      return patch;
+    }
+  }
+  FAIL("no patch named " << name);
+  return cfg.patches.front();
+}
+
+// One executable section: li r3,1 ; blr ; then padding.
+class Image : public TestModule {
+ public:
+  std::vector<uint8_t> bytes;
+  explicit Image(bool executable = true) {
+    const uint32_t words[] = {0x38600001, 0x4E800020, 0, 0};
+    for (uint32_t w : words) {
+      for (int shift = 24; shift >= 0; shift -= 8) {
+        bytes.push_back(uint8_t(w >> shift));
+      }
+    }
+    Load(kBase, bytes.data(), bytes.size());
+    binary_sections_.front().executable = executable;
+  }
+};
+
+uint32_t WordAt(const BinaryView& binary, uint32_t address) {
+  const uint8_t* p = binary.translate(address);
+  REQUIRE(p);
+  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
+}
+
+CodePatch Patch(std::string name, uint32_t address, std::vector<uint8_t> bytes,
+                bool enabled = true) {
+  CodePatch patch;
+  patch.name = std::move(name);
+  patch.enabled = enabled;
+  patch.writes.push_back({address, std::move(bytes)});
+  return patch;
+}
+
+}  // namespace
+
+TEST_CASE("[[patch]] writes are big-endian at their width", "[codegen][patch]") {
+  auto cfg = Parse(R"(
+    file_path = "default.xex"
+    [[patch]]
+    name = "Widths"
+    [[patch.be8]]
+    address = 0x82000003
+    value = 0x02
+    [[patch.be16]]
+    address = 0x82000010
+    value = 0x1234
+    [[patch.be32]]
+    address = 0x82000020
+    value = 0x60000000
+    [[patch.be64]]
+    address = 0x82000030
+    value = 0x0102030405060708
+  )");
+  const auto& patch = Named(cfg, "Widths");
+  CHECK(patch.enabled);
+  CHECK(patch.error.empty());
+  REQUIRE(patch.writes.size() == 4);
+  CHECK(patch.writes[0].bytes == std::vector<uint8_t>{0x02});
+  CHECK(patch.writes[1].bytes == std::vector<uint8_t>{0x12, 0x34});
+  CHECK(patch.writes[2].bytes == std::vector<uint8_t>{0x60, 0x00, 0x00, 0x00});
+  CHECK(patch.writes[3].bytes == std::vector<uint8_t>{1, 2, 3, 4, 5, 6, 7, 8});
+  CHECK(patch.writes[2].address == 0x82000020);
+}
+
+TEST_CASE("[[patch]] accepts Canary's is_enabled and reports bad entries", "[codegen][patch]") {
+  auto cfg = Parse(R"(
+    file_path = "default.xex"
+    [[patch]]
+    name = "Copied from Canary"
+    is_enabled = false
+    [[patch.be32]]
+    address = 0x82000000
+    value = 0x60000000
+
+    [[patch]]
+    name = "Too wide"
+    [[patch.be8]]
+    address = 0x82000000
+    value = 0x100
+
+    [[patch]]
+    name = "No writes"
+  )");
+  CHECK_FALSE(Named(cfg, "Copied from Canary").enabled);
+  CHECK(Named(cfg, "Too wide").error.find("does not fit") != std::string::npos);
+  CHECK(Named(cfg, "No writes").error.find("no be8") != std::string::npos);
+}
+
+TEST_CASE("An including file can switch on a patch without repeating it", "[codegen][patch]") {
+  const auto dir = fs::temp_directory_path() / "rexglue_code_patch_test";
+  fs::create_directories(dir);
+  std::ofstream(dir / "title.toml") << R"(
+    [[patch]]
+    name = "Unlock FPS"
+    enabled = false
+    [[patch.be32]]
+    address = 0x82000000
+    value = 0x60000000
+  )";
+  std::ofstream(dir / "local.toml") << R"(
+    file_path = "default.xex"
+    includes = ["title.toml"]
+    [[patch]]
+    name = "Unlock FPS"
+    enabled = true
+  )";
+  RecompilerConfig cfg;
+  REQUIRE(cfg.Load((dir / "local.toml").string()));
+  REQUIRE(cfg.patches.size() == 1);
+  CHECK(cfg.patches[0].enabled);
+  CHECK(cfg.patches[0].error.empty());
+  REQUIRE(cfg.patches[0].writes.size() == 1);
+  CHECK(cfg.patches[0].writes[0].bytes == std::vector<uint8_t>{0x60, 0, 0, 0});
+  fs::remove_all(dir);
+}
+
+TEST_CASE("Enabled patches are written into the code, disabled ones are not", "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  std::vector<CodePatch> patches{Patch("on", kBase, {0x38, 0x60, 0x00, 0x02}),
+                                 Patch("off", kBase + 4, {0x60, 0, 0, 0}, false)};
+  auto applied = ApplyCodePatches(binary, patches);
+  REQUIRE(applied);
+  CHECK(*applied == std::vector<std::string>{"on"});
+  CHECK(WordAt(binary, kBase) == 0x38600002);
+  CHECK(WordAt(binary, kBase + 4) == 0x4E800020);
+  CHECK(image.bytes[3] == 0x01);  // the module's own image is untouched
+}
+
+TEST_CASE("Patches that cannot reach the running code are refused", "[codegen][patch]") {
+  SECTION("outside the image") {
+    Image image;
+    auto binary = BinaryView::fromModule(image);
+    auto result = ApplyCodePatches(binary, {Patch("far", kBase + 0x1000, {0})});
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message.find("outside the code sections") != std::string::npos);
+  }
+  SECTION("a data section") {
+    Image image(false);
+    auto binary = BinaryView::fromModule(image);
+    REQUIRE_FALSE(ApplyCodePatches(binary, {Patch("data", kBase, {0})}));
+  }
+  SECTION("past the end of the section") {
+    Image image;
+    auto binary = BinaryView::fromModule(image);
+    REQUIRE_FALSE(ApplyCodePatches(binary, {Patch("tail", kBase + 14, {1, 2, 3, 4})}));
+  }
+}
+
+TEST_CASE("Nothing is written when enabled patches overlap or one is malformed",
+          "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  auto overlap = ApplyCodePatches(
+      binary, {Patch("first", kBase, {0x60, 0, 0, 0}), Patch("second", kBase + 2, {0xAA})});
+  REQUIRE_FALSE(overlap);
+  CHECK(overlap.error().message.find("both write") != std::string::npos);
+  CHECK(WordAt(binary, kBase) == 0x38600001);
+
+  CodePatch broken = Patch("broken", kBase, {0});
+  broken.error = "a be8 entry needs an address and a value";
+  auto result = ApplyCodePatches(binary, {Patch("good", kBase + 4, {0x60, 0, 0, 0}), broken});
+  REQUIRE_FALSE(result);
+  CHECK(result.error().message.find("broken") != std::string::npos);
+  CHECK(WordAt(binary, kBase + 4) == 0x4E800020);
+
+  // A disabled overlapping or broken patch doesn't matter.
+  broken.enabled = false;
+  CHECK(ApplyCodePatches(binary, {Patch("good", kBase, {0x60, 0, 0, 0}), broken}));
+}
+
+TEST_CASE("Analysis patches the image before anything else", "[codegen][patch]") {
+  Image image;
+  RecompilerConfig config;
+  config.patches.push_back(Patch("li 2", kBase, {0x38, 0x60, 0x00, 0x02}));
+  auto ctx = CodegenContext::Create(BinaryView::fromModule(image), std::move(config));
+  // This synthetic image has no exception directory, so analysis stops in
+  // registration, after the patches were applied.
+  auto analyzed = Analyze(ctx);
+  REQUIRE_FALSE(analyzed);
+  CHECK(analyzed.error().message.find("Exception DataDirectory") != std::string::npos);
+  CHECK(ctx.appliedPatches() == std::vector<std::string>{"li 2"});
+  CHECK(WordAt(ctx.binary(), kBase) == 0x38600002);
+
+  // A refused patch stops analysis before it starts.
+  RecompilerConfig bad;
+  bad.patches.push_back(Patch("far", kBase + 0x1000, {0}));
+  auto badCtx = CodegenContext::Create(BinaryView::fromModule(image), std::move(bad));
+  auto refused = Analyze(badCtx);
+  REQUIRE_FALSE(refused);
+  CHECK(refused.error().message.find("\"far\"") != std::string::npos);
+  CHECK(badCtx.appliedPatches().empty());
+}

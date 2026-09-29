@@ -143,7 +143,8 @@ demotion is a PR that updates the catalog entry and `docs/upstream-tracking.md`.
 ### 7. Pre-codegen patches stay separate
 
 Guest code changes (mid-asm hooks, function overrides, instruction or data
-hints) stay in the codegen config. They are not in the profile, because a
+hints, and `[[patch]]` byte patches of code, see [code patches](../code-patches.md))
+stay in the codegen config. They are not in the profile, because a
 runtime layer cannot change compiled C++. The codegen fingerprint already binds
 them to the XEX. Runtime byte patches of guest code are not supported at all
 (ADR-004).

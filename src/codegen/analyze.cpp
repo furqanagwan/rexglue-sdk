@@ -16,6 +16,7 @@
 
 #include <rex/codegen/analysis_errors.h>
 #include <rex/codegen/analyze.h>
+#include <rex/codegen/code_patches.h>
 #include <rex/codegen/phases.h>
 #include <rex/logging.h>
 
@@ -25,6 +26,13 @@ namespace rex::codegen {
 
 Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
   REXCODEGEN_TRACE("Analyze: starting analysis...");
+
+  // Guest code patches go in before anything reads the instructions.
+  auto patched = ApplyCodePatches(ctx.binary(), ctx.Config().patches);
+  if (!patched) {
+    return Err(patched.error());
+  }
+  ctx.setAppliedPatches(std::move(*patched));
 
   ctx.initDecoded();
   REXCODEGEN_TRACE("Analyze: decoded {} instructions across {} code regions",

@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <inja/inja.hpp>
 
 #include <rex/codegen/function_graph.h>
@@ -34,6 +35,18 @@
 #include "template_registry_internal.h"
 
 namespace {
+
+// The text between the quotes of a C string literal holding `text`.
+std::string CStringBody(std::string_view text) {
+  std::string out;
+  for (char c : text) {
+    if (c == '"' || c == '\\') {
+      out.push_back('\\');
+    }
+    out.push_back(c);
+  }
+  return out;
+}
 
 nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
                                  const std::vector<const rex::codegen::FunctionNode*>& functions,
@@ -102,6 +115,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"has_dll_modules", ctx.hasDllModules()},
       {"is_dll", ctx.isDllModule()},
       {"config_flags", configFlags},
+      {"code_patches", CStringBody(fmt::format("{}", fmt::join(ctx.appliedPatches(), ", ")))},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };
