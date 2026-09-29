@@ -65,6 +65,11 @@ class BinaryView {
   bool isExecutable(uint32_t addr) const;
   const SectionView* findSection(uint32_t addr) const;
   const SectionView* findSectionByName(std::string_view name) const;
+
+  /// Overwrites `bytes` at `addr` in this view's copy of the image. Only a
+  /// range inside one executable section can be written; returns false (and
+  /// changes nothing) otherwise. Used for codegen-time guest code patches.
+  bool writeCode(uint32_t addr, std::span<const uint8_t> bytes);
   std::span<const SectionView> sections() const { return sections_; }
 
   // Metadata access

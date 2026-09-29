@@ -47,6 +47,8 @@ struct PPCImageInfo {
   bool rexcrt_heap = false;  ///< Set by codegen when [rexcrt] has heap functions
   RegisterModulesFunc register_modules = nullptr;  ///< Set by codegen for multi-binary projects
   PPCCodegenFlags codegen_flags{};                 ///< Set by codegen from the config flags
+  /// Guest code patches compiled in, comma-separated; empty when none.
+  const char* code_patches = "";
 };
 
 }  // namespace rex

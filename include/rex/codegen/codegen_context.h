@@ -163,6 +163,10 @@ class CodegenContext {
   void setHasDllModules(bool has) { has_dll_modules_ = has; }
   bool hasDllModules() const { return has_dll_modules_; }
 
+  /// Names of the guest code patches applied to this module's image.
+  const std::vector<std::string>& appliedPatches() const { return applied_patches_; }
+  void setAppliedPatches(std::vector<std::string> names) { applied_patches_ = std::move(names); }
+
  private:
   CodegenContext() = default;
 
@@ -174,6 +178,7 @@ class CodegenContext {
   std::filesystem::path configDir_;  ///< Directory containing config file (for relative paths)
   bool is_dll_module_ = false;       ///< True if this module is a DLL (shared library output)
   bool has_dll_modules_ = false;     ///< True if the project has DLL modules (multi-binary)
+  std::vector<std::string> applied_patches_;  ///< Code patches applied before analysis
 };
 
 }  // namespace rex::codegen

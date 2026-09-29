@@ -197,7 +197,9 @@ needs a GDK build). `rexglue init gameconfig` adds a `MicrosoftGame.config` for
 GDK packaging. This is not a
 promise that an arbitrary XEX recompiles without title-specific analysis.
 Additional guest DLLs must also be statically generated and registered; see
-`rexglue init module --help`. Recompile after CPU instruction patches.
+`rexglue init module --help`. Guest code patches (for example a Canary
+game-patches entry) go in the codegen config as `[[patch]]` tables and are
+compiled in ([code patches](docs/code-patches.md)); recompile after changing one.
 
 ## Repository structure
 

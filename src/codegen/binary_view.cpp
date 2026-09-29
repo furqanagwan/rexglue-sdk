@@ -113,6 +113,19 @@ const uint8_t* BinaryView::translate(uint32_t addr) const {
   return nullptr;
 }
 
+bool BinaryView::writeCode(uint32_t addr, std::span<const uint8_t> bytes) {
+  for (size_t i = 0; i < sections_.size(); ++i) {
+    const auto& section = sections_[i];
+    if (!section.executable || !section.contains(addr) ||
+        uint64_t(addr) + bytes.size() > uint64_t(section.end())) {
+      continue;
+    }
+    std::copy(bytes.begin(), bytes.end(), sectionData_[i].begin() + (addr - section.baseAddress));
+    return true;
+  }
+  return false;
+}
+
 bool BinaryView::isExecutable(uint32_t addr) const {
   if (auto* section = findSection(addr)) {
     return section->executable;

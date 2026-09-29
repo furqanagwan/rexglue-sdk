@@ -61,6 +61,24 @@ struct FunctionConfig {
   bool isChunk() const { return parent != 0; }
 };
 
+// One big-endian write of a code patch.
+struct PatchWrite {
+  uint32_t address = 0;
+  std::vector<uint8_t> bytes;  ///< Written in order starting at `address`
+};
+
+// A named guest code patch applied to the image before analysis (ADR-009
+// section 7). Written in the same shape as a Canary game-patches entry, so a
+// community patch copies over: [[patch]] with name, enabled and
+// [[patch.be8]] / be16 / be32 / be64 tables of address and value.
+struct CodePatch {
+  std::string name;
+  bool enabled = true;
+  std::vector<PatchWrite> writes;
+  std::string source;  ///< Config file that last defined the writes
+  std::string error;   ///< Why the entry is unusable; applying it fails
+};
+
 // Section info for analysis output
 struct SectionInfo {
   std::string name;
@@ -111,6 +129,9 @@ struct RecompilerConfig {
   std::unordered_map<uint32_t, FunctionConfig> functions;  ///< Function/chunk configuration
   std::unordered_map<uint32_t, JumpTable> switchTables;
   std::unordered_map<uint32_t, MidAsmHook> midAsmHooks;
+  /// Guest code patches in definition order, keyed by name: a later file with
+  /// the same name replaces the writes it lists and the enabled flag it sets.
+  std::vector<CodePatch> patches;
   uint32_t longJmpAddress = 0;
   uint32_t setJmpAddress = 0;
   // Analysis-only guard for the recognized CRT's optional setjmp hook.

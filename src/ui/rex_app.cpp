@@ -402,6 +402,10 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     return false;
   }
 
+  if (ppc_info_.code_patches && *ppc_info_.code_patches) {
+    REXLOG_INFO("Guest code patches compiled in: {}", ppc_info_.code_patches);
+  }
+
   OnPostLoadXexImage();
 
   if (ppc_info_.rexcrt_heap) {

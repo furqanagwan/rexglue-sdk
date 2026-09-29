@@ -27,6 +27,7 @@ const rex::PPCImageInfo PPCImageConfig = {
         .non_argument_as_local = {{ config_flags.non_argument_as_local }},
         .non_volatile_as_local = {{ config_flags.non_volatile_as_local }},
     },
+    .code_patches = "{{ code_patches }}",
 };
 
 PPCFuncMapping PPCFuncMappings[] = {
