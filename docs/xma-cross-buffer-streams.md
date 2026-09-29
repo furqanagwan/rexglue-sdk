@@ -10,7 +10,8 @@ sub-stream. A packet header's skip count identifies the next packet belonging
 to that sub-stream. Crossing an input-buffer boundary must retain the packet
 index remainder. Restarting at packet zero can switch channels mid-stream.
 
-The eight private XMAD captures left by Opus all show the same distinction:
+The eight private XMAD captures from the diagnostic sessions contain the same repeated audio
+segment, not eight distinct assets. They all show the same distinction:
 
 | Selected chain in input buffer 1 | Decode as mono | Decode as stereo |
 | --- | --- | --- |
@@ -20,7 +21,7 @@ The eight private XMAD captures left by Opus all show the same distinction:
 The preceding 15-packet buffer's mono skip chain continues at packet **1** of
 the next buffer. The failing contexts are mono but restart at bit offset 32,
 packet **0**. This explains both reserved-bit and coefficient-count errors with
-valid input bytes. These counts were reproduced with both Opus's original probe
+valid input bytes. These counts were reproduced with both the original investigation probe
 and the maintained `xma_probe` tool using the unchanged SDK FFmpeg pin
 `0604b464c7cb4ebc94940cf1f324a3b26b87717c`.
 
@@ -66,11 +67,11 @@ XMAD layout: four-byte `XMAD`, the 64-byte big-endian guest context, then two or
 three buffers, each prefixed by a four-byte little-endian byte length. Zero
 length means unavailable. Each nonempty buffer contains whole 2048-byte packets.
 The third buffer is an optional previous-input snapshot; its pointers may no
-longer describe live guest memory. The parser accepts Opus's original captures.
+longer describe live guest memory. The parser accepts the original two-buffer captures.
 
 ## Validation
 
-- Debug and Release `[xma]`: 20 cases, 214,122 assertions, passing. Tests use
+- Debug, Release and GDK Release `[xma]`: 20 cases, 214,122 assertions, passing. Tests use
   synthetic mono/stereo frames decoded by real FFmpeg over guest memory.
 - New cases cover immediate/delayed refill, split payloads and split headers in
   both buffer directions, short refills, and diagnostic snapshot ownership.
@@ -78,7 +79,9 @@ longer describe live guest memory. The parser accepts Opus's original captures.
   tests fail: 7 failed assertions. The source was restored and the suite passed.
 - Four synthetic XMAD parser tests cover legacy/current layouts, truncation,
   oversized/misaligned lengths and extra buffers (`audio.xma_dump_format`).
-- Full-suite, GDK/title rebuild and same-scene gameplay validation are pending.
+- Full Debug suite: 1,964 tests discovered, no failures, four pre-existing
+  BitStream write tests skipped. GDK Release rebuilt/installed; Legends rebuilt
+  against that runtime. Full Release and title-run results are pending.
   Private logs and probe results are retained under ignored `out/rg040`.
 
 The original issue reports errors after about two minutes of Legends gameplay.
