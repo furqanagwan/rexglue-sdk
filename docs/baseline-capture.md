@@ -77,6 +77,10 @@ DIR` copies files the title created or changed in DIR (its logs folder,
 `%LOCALAPPDATA%\<name>\logs` unless the title is given `--log_dir`) into the
 run. The title is stopped even if the recorder hits an error.
 
+`--frame_stats_interval=N` makes the title log its frame pacing every N
+seconds: fps, average, p95, p99 and maximum frame time, and frames over one or
+two 60 Hz refreshes. It is off by default and works in every build type.
+
 ```powershell
 python scripts/capture_baseline.py --output C:/private/runs/qos-soak-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --run-for 90 --screenshot-at 30 --screenshot-at 85 --collect-new C:/private/qos/build/logs -- C:/private/qos/build/quantumofsolace.exe --game_data_root=C:/private/qos/game --user_data_root=C:/private/qos/user-001 --log_dir=C:/private/qos/build/logs --gpu_plugin=xenos
 python scripts/capture_baseline.py --output C:/private/runs/qos-boot-001 --title QuantumOfSolace --material C:/private/qos/default.xex --metadata C:/private/qos/environment.json --artifact C:/private/qos/boot.png --timeout 120 -- C:/private/qos/QuantumOfSolace.exe

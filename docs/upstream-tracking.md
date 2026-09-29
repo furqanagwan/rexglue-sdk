@@ -1092,6 +1092,14 @@ Not implemented, with reasons:
 - **`XamContentResolve`** (Canary `b8296a9bc`, Edge `2f6baa751`/`3ecd9d36b`): it returns the guest path of a content package, which 007 Legends passes straight to `NtOpenFile` as a file. ReXGlue (like Canary and Edge) stores packages as folders and has no guest path to the content root, so a resolved path could not open either. Legends handles the `X_ERROR_NOT_FOUND` and its autosave works. Revisit if a title needs the path itself.
 - **`XGetVideoFlags`**: neither Canary nor Edge implements it, and the meaning of XConfig's `0x00040000` video flags is not established. Left a stub rather than guessed.
 
+### has207/xenia-edge frame limiter: guest vblank pacing (2026-09-29)
+
+- Source: Edge `src/xenia/gpu/graphics_system.cc` frame limiter thread at `12e3b4223dd4c2e41d57ea4b4477546affe4ce10` (Herman S.; history includes `9d9377322`, `ba5fd0f41`, `16fc37fed`). Classification A (correctness of guest vblank timing), all titles.
+- Local evidence: with `frame_stats_interval`, Quantum of Solace with its 60 fps patch ran at 33-38 fps with `vsync` on and 65-72 fps with it off. Late frames clustered at about 31 and 47 ms, two and three 15.6 ms Windows timer ticks: the vblank thread slept `Sleep(1 ms)`, which wakes every 15.6 ms, and then fired the missed vblanks in a burst.
+- Adaptation: `VblankPacer` fires one vblank per interval and starts a new cadence when more than two intervals late, as Edge does; the thread sleeps on the existing high-resolution waitable timer (`PreciseSleep`) to 0.5 ms before the vblank and yields the rest, instead of Edge's 90 % `NanoSleep`. Edge's `guest_display_refresh_cap` stays ReXGlue's `vsync`; `framerate_limit` and the synthesized `D1MODE_V_COUNTER` are not ported.
+- Result: the same menu run went to 56-58 fps, and 45-49 fps where frames take longer than one refresh (the vsync-off run shows p99 18-22 ms there). Tests: `unit_tests [graphics][vblank]`.
+- Known regressions: none reported upstream.
+
 ## Upstream ReXGlue since v0.10.0
 
 The fork's base is upstream [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk) `v0.10.0` (`c94f5eb`). Upstream `main` has not moved since. Its `development` branch had 15 commits by 2026-09-27 (head `5cf287f`), reviewed here and ported in groups with the original authors kept.
