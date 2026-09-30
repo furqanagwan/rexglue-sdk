@@ -34,6 +34,7 @@ add_executable(unit_tests
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp
     audio/master_volume_test.cpp
+    audio/ui_sound_test.cpp
     input/input_assignment_test.cpp
     input/input_system_test.cpp
     input/mnk_keystroke_test.cpp
@@ -42,6 +43,7 @@ add_executable(unit_tests
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
     ui/xui_format_test.cpp
+    ui/xui_runtime_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp

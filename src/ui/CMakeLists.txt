@@ -32,6 +32,8 @@ set(REXUI_OVERLAY_SOURCES
 # Native XUI: the console's own scene format (RG-GDK-041)
 set(REXUI_XUI_SOURCES
     xui/package.cpp
+    xui/renderer.cpp
+    xui/runtime.cpp
     xui/schema.cpp
     xui/system_update.cpp
     xui/xur_reader.cpp
