@@ -10,10 +10,10 @@ keyboard runs. An owner play session with a pad is still to do.
 
 ## Using it
 
-- Open or close it with Back and Start together, with the Guide button where the
-  input backend reports it (XInput with `--guide_button`, or the keyboard bind
-  `keybind_guide`), or with Home (`bind_xbox_guide`). GameInput does not expose
-  the Guide button, which Windows keeps for Game Bar.
+- Open or close it with View and Menu together (Back and Start on an Xbox 360
+  pad), as Xbox Series backward compatibility opens the 360 guide, or with Home
+  (`bind_xbox_guide`). The Xbox button is deliberately not a trigger: on PC it
+  opens Game Bar, and the guide leaves it to Windows.
 - The system update is looked for in the `xbox_guide_system_update` cvar, then in
   `$SystemUpdate` beside the executable, then in
   `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`. It loads in the background at startup;
@@ -45,8 +45,8 @@ focus, press and sounds come from the skin visuals' named frames.
   XamIsUIActive reports system UI, as for the Guide button on the console.
   Titles that pause for XN_SYS_UI pause.
 
-On the console the Guide button never reaches the title. Back+Start does, so a
-title may react to the Start press that completes the chord, for example by
+On the console the Guide button never reaches the title. View+Menu does, so a
+title may react to the Menu (Start) press that completes the chord, for example by
 opening its pause menu. The guide masks the buttons once it is open.
 
 ## Where the guide comes from

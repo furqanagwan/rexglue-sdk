@@ -13,9 +13,10 @@
 
 namespace rex::ui::guide {
 
-/// The guide chord: Back and Start held together, or the Guide button where
-/// the input backend reports it. Fires once per press; both must be let go
-/// before it fires again.
+/// The guide chord: View (Back) and Menu (Start) held together, as Xbox
+/// backward compatibility opens the Xbox 360 guide. The Xbox button is left
+/// to Windows, which opens Game Bar with it. Fires once per press; both must
+/// be let go before it fires again.
 class GuideChord {
  public:
   bool Update(uint16_t buttons);

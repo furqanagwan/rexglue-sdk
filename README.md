@@ -206,9 +206,9 @@ compiled in ([code patches](docs/code-patches.md)); recompile after changing one
 
 ### Xbox guide
 
-Press Back and Start together (or the Guide button where the input backend
-reports it, or Home on the keyboard) to open the Xbox 360 guide over the running
-title. The guide is the console's own: its scenes, animations and sounds are read
+Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
+the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward
+compatibility does. The Xbox button is left to Windows for Game Bar. The guide is the console's own: its scenes, animations and sounds are read
 at run time from your own dashboard 2.0.17559 system update, and nothing from it
 ships with the SDK. Put the `$SystemUpdate` folder beside the executable or in
 `%LOCALAPPDATA%\ReXGlue`, or name it with `--xbox_guide_system_update=<path>`.

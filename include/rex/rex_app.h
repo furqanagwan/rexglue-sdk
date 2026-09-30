@@ -309,7 +309,7 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   // WindowInputListener overrides
   void OnKeyDown(ui::KeyEvent& e) override;
 
-  // Xbox guide (RG-GDK-041): Back+Start, the Guide button or Home.
+  // Xbox guide (RG-GDK-041): View+Menu (Back+Start) or Home.
   void SetupGuide();
   void StartGuidePoller();
   void StopGuide();

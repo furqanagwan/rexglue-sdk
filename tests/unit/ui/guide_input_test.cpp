@@ -34,11 +34,12 @@ TEST_CASE("Back and Start together open the guide once per press", "[guide]") {
   CHECK(chord.Update(kStart | kBack));
 }
 
-TEST_CASE("The Guide button opens the guide", "[guide]") {
+TEST_CASE("The Xbox button does not open the guide (it is Game Bar's)", "[guide]") {
   GuideChord chord;
   chord.Update(0);
-  CHECK(chord.Update(X_INPUT_GAMEPAD_GUIDE));
   CHECK_FALSE(chord.Update(X_INPUT_GAMEPAD_GUIDE));
+  CHECK_FALSE(chord.Update(X_INPUT_GAMEPAD_GUIDE | kBack));
+  CHECK(chord.Update(X_INPUT_GAMEPAD_GUIDE | kBack | kStart));
 }
 
 TEST_CASE("A chord held when polling starts does not fire", "[guide]") {

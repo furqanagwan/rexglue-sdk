@@ -27,7 +27,7 @@
 #include <rex/ui/immediate_drawer.h>
 
 REXCVAR_DEFINE_BOOL(xbox_guide, true, "UI",
-                    "Back+Start, the Guide button or Home opens the Xbox guide (needs the "
+                    "View+Menu (Back+Start) or Home opens the Xbox guide (needs the "
                     "console's system update, see xbox_guide_system_update)");
 REXCVAR_DEFINE_STRING(xbox_guide_system_update, "", "UI",
                       "The console's $SystemUpdate folder (dashboard 2.0.17559) or its "

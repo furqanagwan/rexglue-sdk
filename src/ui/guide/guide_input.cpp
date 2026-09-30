@@ -20,9 +20,9 @@ constexpr uint16_t kChordButtons = X_INPUT_GAMEPAD_BACK | X_INPUT_GAMEPAD_START;
 }  // namespace
 
 bool GuideChord::Update(uint16_t buttons) {
-  const bool chord =
-      (buttons & kChordButtons) == kChordButtons || (buttons & X_INPUT_GAMEPAD_GUIDE) != 0;
-  if (!(buttons & (kChordButtons | X_INPUT_GAMEPAD_GUIDE))) {
+  // The Xbox button is not part of it: on PC it opens Game Bar.
+  const bool chord = (buttons & kChordButtons) == kChordButtons;
+  if (!(buttons & kChordButtons)) {
     latched_ = false;
   }
   if (chord && !latched_) {
