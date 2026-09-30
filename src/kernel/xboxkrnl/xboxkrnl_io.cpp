@@ -12,6 +12,8 @@
 // Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+#include <atomic>
+
 #include <rex/filesystem/device.h>
 #include <rex/kernel/xboxkrnl/private.h>
 #include <rex/logging.h>
@@ -32,6 +34,23 @@
 
 namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
+
+namespace {
+
+// Low bit probably means do not queue to IO ports.
+bool QueuesApc(uint32_t apc_routine, uint32_t apc_context) {
+  return (apc_routine & ~1u) && apc_context;
+}
+
+// Count first, then status: a caller polling the status for completion
+// must never read a stale count.
+void WriteIoStatus(X_IO_STATUS_BLOCK* status_block, X_STATUS status, uint32_t information) {
+  status_block->information = information;
+  std::atomic_thread_fence(std::memory_order_release);
+  status_block->status = status;
+}
+
+}  // namespace
 
 struct CreateOptions {
   // https://processhacker.sourceforge.io/doc/ntioapi_8h.html
@@ -171,8 +190,7 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
   }
 
   if (io_status_block) {
-    io_status_block->status = result;
-    io_status_block->information = (uint32_t)file_action;
+    WriteIoStatus(io_status_block, result, (uint32_t)file_action);
   }
 
   *handle_out = handle;
@@ -227,15 +245,17 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
                           byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
                           &bytes_read, apc_context.guest_address());
       if (io_status_block) {
-        io_status_block->status = result;
-        io_status_block->information = bytes_read;
+        WriteIoStatus(io_status_block, result, bytes_read);
       }
 
       // Queue the APC callback. It must be delivered via the APC mechanism even
-      // though were are completing immediately.
-      // Low bit probably means do not queue to IO ports.
+      // though were are completing immediately. A caller told PENDING (an
+      // asynchronous handle, short of end of file) always gets it, as on NT:
+      // it has no other way to learn the read finished, even when it failed.
+      const bool pending = !file->is_synchronous() && result != X_STATUS_END_OF_FILE;
       if ((uint32_t)apc_routine_ptr & ~1) {
-        if (apc_context && result == X_STATUS_SUCCESS) {
+        if (QueuesApc(apc_routine_ptr.guest_address(), apc_context.guest_address()) &&
+            (pending || result == X_STATUS_SUCCESS)) {
           auto thread = XThread::GetCurrentThread();
           uint32_t apc_routine = static_cast<uint32_t>(apc_routine_ptr) & ~1u;
           uint32_t apc_ctx = apc_context.guest_address();
@@ -251,7 +271,7 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
         }
       }
 
-      if (!file->is_synchronous() && result != X_STATUS_END_OF_FILE) {
+      if (pending) {
         result = X_STATUS_PENDING;
       }
 
@@ -272,8 +292,7 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
       // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
       //                     request);
       if (io_status_block) {
-        io_status_block->status = X_STATUS_PENDING;
-        io_status_block->information = 0;
+        WriteIoStatus(io_status_block, X_STATUS_PENDING, 0);
       }
 
       result = X_STATUS_PENDING;
@@ -281,8 +300,7 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
   }
 
   if (XFAILED(result) && io_status_block) {
-    io_status_block->status = result;
-    io_status_block->information = 0;
+    WriteIoStatus(io_status_block, result, 0);
   }
 
   if (ev && signal_event) {
@@ -330,15 +348,15 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
                                  byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
                                  &bytes_read, apc_context.guest_address());
       if (io_status_block) {
-        io_status_block->status = result;
-        io_status_block->information = bytes_read;
+        WriteIoStatus(io_status_block, result, bytes_read);
       }
 
       // Queue the APC callback. It must be delivered via the APC mechanism even
-      // though were are completing immediately.
-      // Low bit probably means do not queue to IO ports.
+      // though were are completing immediately. An asynchronous handle is
+      // always told PENDING, and then always gets its APC; a synchronous one
+      // only when the read succeeded, as for NtReadFile.
       if ((uint32_t)apc_routine_ptr & ~1) {
-        if (apc_context) {
+        if (apc_context && (!file->is_synchronous() || result == X_STATUS_SUCCESS)) {
           auto thread = XThread::GetCurrentThread();
           thread->EnqueueApc(static_cast<uint32_t>(apc_routine_ptr) & ~1u,
                              apc_context.guest_address(), io_status_block.guest_address(), 0);
@@ -369,8 +387,7 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
       // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
       //                     request);
       if (io_status_block) {
-        io_status_block->status = X_STATUS_PENDING;
-        io_status_block->information = 0;
+        WriteIoStatus(io_status_block, X_STATUS_PENDING, 0);
       }
 
       result = X_STATUS_PENDING;
@@ -378,8 +395,7 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
   }
 
   if (XFAILED(result) && io_status_block) {
-    io_status_block->status = result;
-    io_status_block->information = 0;
+    WriteIoStatus(io_status_block, result, 0);
   }
 
   if (ev && signal_event) {
@@ -418,8 +434,7 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
                            &bytes_written, apc_context.guest_address());
 
       if (io_status_block) {
-        io_status_block->status = result;
-        io_status_block->information = static_cast<uint32_t>(bytes_written);
+        WriteIoStatus(io_status_block, result, static_cast<uint32_t>(bytes_written));
       }
 
       // Queue the APC callback. It must be delivered via the APC mechanism even
@@ -445,15 +460,13 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
       result = X_STATUS_PENDING;
 
       if (io_status_block) {
-        io_status_block->status = X_STATUS_PENDING;
-        io_status_block->information = 0;
+        WriteIoStatus(io_status_block, X_STATUS_PENDING, 0);
       }
     }
   }
 
   if (XFAILED(result) && io_status_block) {
-    io_status_block->status = result;
-    io_status_block->information = 0;
+    WriteIoStatus(io_status_block, result, 0);
   }
 
   if (ev && signal_event) {
@@ -513,8 +526,7 @@ u32 NtRemoveIoCompletion_entry(u32 handle, mapped_u32 key_context, mapped_u32 ap
     }
 
     if (io_status_block) {
-      io_status_block->status = notification.status;
-      io_status_block->information = notification.num_bytes;
+      WriteIoStatus(io_status_block, notification.status, notification.num_bytes);
     }
   } else {
     status = X_STATUS_TIMEOUT;
@@ -600,8 +612,7 @@ u32 NtQueryDirectoryFile_entry(u32 file_handle, u32 event_handle, u32 apc_routin
   }
 
   if (io_status_block) {
-    io_status_block->status = result;
-    io_status_block->information = info;
+    WriteIoStatus(io_status_block, result, info);
   }
 
   return result;

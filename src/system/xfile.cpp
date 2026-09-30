@@ -25,12 +25,12 @@ namespace rex::system {
 
 XFile::XFile(KernelState* kernel_state, rex::filesystem::File* file, bool synchronous)
     : XObject(kernel_state, kObjectType), file_(file), is_synchronous_(synchronous) {
-  async_event_ = rex::thread::Event::CreateAutoResetEvent(false);
+  async_event_ = rex::thread::Event::CreateManualResetEvent(false);
   assert_not_null(async_event_);
 }
 
 XFile::XFile() : XObject(kObjectType) {
-  async_event_ = rex::thread::Event::CreateAutoResetEvent(false);
+  async_event_ = rex::thread::Event::CreateManualResetEvent(false);
   assert_not_null(async_event_);
 }
 
@@ -105,6 +105,10 @@ X_STATUS XFile::QueryDirectory(X_FILE_DIRECTORY_INFORMATION* out_info, size_t le
 X_STATUS XFile::Read(uint32_t buffer_guest_address, uint32_t buffer_length, uint64_t byte_offset,
                      uint32_t* out_bytes_read, uint32_t apc_context, bool notify_completion) {
   std::lock_guard<std::mutex> lock(file_lock_);
+  // A new request clears the file's event (NT notification event).
+  if (notify_completion) {
+    async_event_->Reset();
+  }
   return ReadInternal(buffer_guest_address, buffer_length, byte_offset, out_bytes_read, apc_context,
                       notify_completion);
 }
@@ -201,6 +205,7 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address, uint32_t buffer_leng
 X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length, uint64_t byte_offset,
                             uint32_t* out_bytes_read, uint32_t apc_context) {
   std::lock_guard<std::mutex> lock(file_lock_);
+  async_event_->Reset();
   X_STATUS result = X_STATUS_SUCCESS;
 
   // segments points to an array of buffer pointers of type
@@ -257,6 +262,7 @@ X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length, ui
 X_STATUS XFile::Write(uint32_t buffer_guest_address, uint32_t buffer_length, uint64_t byte_offset,
                       uint32_t* out_bytes_written, uint32_t apc_context) {
   std::lock_guard<std::mutex> lock(file_lock_);
+  async_event_->Reset();
   if (byte_offset == uint64_t(-1)) {
     // Write from current position.
     byte_offset = position_;
