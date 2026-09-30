@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <rex/ui/guide/guide_layout.h>
 #include <rex/ui/xui/document.h>
 #include <rex/ui/xui/runtime.h>
 #include <rex/ui/xui/system_update.h>
@@ -250,6 +251,54 @@ TEST_CASE("Navigation passes over hidden controls and focus plays the visual", "
   CHECK(c->frame() == Approx(5.0));
   CHECK(a->frame() == Approx(0.0));
   CHECK(f.sounds == std::vector<std::string>{"focus.xma"});
+}
+
+TEST_CASE("Seek poses an element at a frame without playing", "[xui]") {
+  Fixture f;
+  Element* a = f.Find("a");
+  a->Seek(16.0);
+  CHECK_FALSE(a->playing());
+  CHECK(a->FindById("hl")->GetCompound("Fill")->Find("FillColor")->get<Color>()->argb ==
+        0xFF1CB61C);
+  CHECK(f.sounds.empty());
+}
+
+TEST_CASE("Menu entries are removed and added with the list closed up", "[xui][guide]") {
+  // a, b, c stacked 20 apart, linked up and down.
+  Document skin = MakeSkin();
+  Document doc;
+  doc.root = MakeNode(
+      "XuiCanvas", {},
+      {MakeNode(
+          "XuiScene", {{"Id", Str("scene")}},
+          {Button("a", {{"NavDown", Str("b")}}),
+           Button("b", {{"Position", Value{Vec3{0.0f, 20.0f, 0.0f}}},
+                        {"NavUp", Str("a")},
+                        {"NavDown", Str("c")}}),
+           Button("c", {{"Position", Value{Vec3{0.0f, 40.0f, 0.0f}}}, {"NavUp", Str("b")}})})});
+  SceneContext context;
+  context.skin = &skin;
+  auto root = Element::Create(doc.root, context);
+  Element* scene = root->FindById("scene");
+  Element* a = scene->FindById("a");
+  Element* c = scene->FindById("c");
+
+  rex::ui::guide::RemoveEntry(scene, "b");
+  CHECK_FALSE(scene->FindById("b")->visible());
+  CHECK(c->GetVector("Position").y == Approx(20.0f));
+  CHECK(a->Navigate(NavDirection::kDown) == c);
+  CHECK(c->Navigate(NavDirection::kUp) == a);
+
+  Element* d = rex::ui::guide::AddEntry(scene, "a", "a", "d", "Dee");
+  REQUIRE(d);
+  CHECK(d->text() == "Dee");
+  CHECK(d->visible());
+  CHECK(d->GetVector("Position").y == Approx(20.0f));
+  CHECK(c->GetVector("Position").y == Approx(40.0f));
+  CHECK(a->Navigate(NavDirection::kDown) == d);
+  CHECK(d->Navigate(NavDirection::kDown) == c);
+  CHECK(c->Navigate(NavDirection::kUp) == d);
+  CHECK(d->FindById("hl"));  // the model's visual
 }
 
 TEST_CASE("The XUI ease curve", "[xui]") {

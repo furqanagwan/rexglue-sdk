@@ -23,7 +23,7 @@ Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
   // Check everything before writing anything.
   std::map<uint32_t, std::pair<uint32_t, const CodePatch*>> claimed;  // start -> end, owner
   for (const auto& patch : patches) {
-    if (!patch.enabled) {
+    if (!patch.enabled || patch.switchable) {
       continue;
     }
     if (!patch.error.empty()) {
@@ -57,6 +57,9 @@ Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
 
   std::vector<std::string> applied;
   for (const auto& patch : patches) {
+    if (patch.switchable) {
+      continue;  // PrepareSwitchablePatches
+    }
     if (!patch.enabled) {
       REXCODEGEN_INFO("Patch \"{}\" is disabled", patch.name);
       continue;
@@ -68,6 +71,94 @@ Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
     applied.push_back(patch.name);
   }
   return applied;
+}
+
+namespace {
+
+// Branches, calls, returns, traps and system calls: switching one would change
+// control flow that analysis discovered from the original code.
+bool ChangesControlFlow(uint32_t word) {
+  const uint32_t primary = word >> 26;
+  if (primary == 3 || primary == 16 || primary == 17 || primary == 18 || primary == 19) {
+    return true;  // twi, bc, sc, b/bl, bclr/bcctr and friends
+  }
+  return primary == 31 && ((word >> 1) & 0x3FF) == 4;  // tw
+}
+
+}  // namespace
+
+Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
+                                                   const std::vector<CodePatch>& patches) {
+  SwitchablePatches out;
+  for (const auto& patch : patches) {
+    if (!patch.switchable) {
+      continue;
+    }
+    if (!patch.error.empty()) {
+      return Err<SwitchablePatches>(
+          ErrorCategory::Config,
+          fmt::format("Patch \"{}\" ({}): {}", patch.name, patch.source, patch.error));
+    }
+    const uint32_t index = static_cast<uint32_t>(out.patches.size());
+    out.patches.push_back({patch.name, patch.enabled, patch.category});
+    for (const auto& write : patch.writes) {
+      const uint32_t start = write.address;
+      const auto* section = binary.findSection(start);
+      if (!section || !section->executable ||
+          start + static_cast<uint32_t>(write.bytes.size()) > section->end()) {
+        return Err<SwitchablePatches>(
+            ErrorCategory::Config,
+            fmt::format("Patch \"{}\" writes 0x{:08X}, outside the code sections.", patch.name,
+                        start));
+      }
+      for (size_t i = 0; i < write.bytes.size(); ++i) {
+        const uint32_t address = start + static_cast<uint32_t>(i);
+        const uint32_t word_address = address & ~3u;
+        auto it = out.words.find(word_address);
+        if (it == out.words.end()) {
+          const auto* host = reinterpret_cast<const uint8_t*>(binary.translate(word_address));
+          if (!host) {
+            return Err<SwitchablePatches>(
+                ErrorCategory::Config,
+                fmt::format("Patch \"{}\" writes 0x{:08X}, which is not mapped.", patch.name,
+                            address));
+          }
+          const uint32_t original =
+              uint32_t(host[0]) << 24 | uint32_t(host[1]) << 16 | uint32_t(host[2]) << 8 | host[3];
+          SwitchedWord word;
+          word.original = original;
+          word.patched = original;
+          word.patch_index = index;
+          word.patch_name = patch.name;
+          it = out.words.emplace(word_address, std::move(word)).first;
+        } else if (it->second.patch_index != index) {
+          return Err<SwitchablePatches>(ErrorCategory::Config,
+                                        fmt::format("Patches \"{}\" and \"{}\" both write 0x{:08X}",
+                                                    it->second.patch_name, patch.name, address));
+        }
+        const uint32_t shift = (3 - (address & 3)) * 8;
+        it->second.patched =
+            (it->second.patched & ~(0xFFu << shift)) | (uint32_t(write.bytes[i]) << shift);
+      }
+    }
+  }
+  // A write of the bytes already there (QoS's be8 0x01) switches nothing.
+  std::erase_if(out.words,
+                [](const auto& entry) { return entry.second.original == entry.second.patched; });
+  for (const auto& [address, word] : out.words) {
+    if (ChangesControlFlow(word.original) || ChangesControlFlow(word.patched)) {
+      return Err<SwitchablePatches>(
+          ErrorCategory::Config,
+          fmt::format("Patch \"{}\" changes the branch or call at 0x{:08X}; a switchable patch "
+                      "may only change other instructions. Make it a fixed patch instead.",
+                      word.patch_name, address));
+    }
+  }
+  for (const auto& patch : out.patches) {
+    REXCODEGEN_INFO("Patch \"{}\" is switchable ({} by default)", patch.name,
+                    patch.enabled ? "on" : "off");
+  }
+  return out;
 }
 
 }  // namespace rex::codegen

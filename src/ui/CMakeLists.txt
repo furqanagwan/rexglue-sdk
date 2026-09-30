@@ -33,6 +33,7 @@ set(REXUI_OVERLAY_SOURCES
 set(REXUI_GUIDE_SOURCES
     guide/guide_input.cpp
     guide/guide_notification.cpp
+    guide/guide_settings.cpp
     guide/xbox_guide.cpp
 )
 

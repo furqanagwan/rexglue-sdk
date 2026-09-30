@@ -18,6 +18,7 @@
 
 #include <rex/codegen/analysis_errors.h>
 #include <rex/codegen/binary_view.h>
+#include <rex/codegen/code_patches.h>
 #include <rex/codegen/code_region.h>
 #include <rex/codegen/config.h>
 #include <rex/codegen/function_graph.h>
@@ -167,6 +168,10 @@ class CodegenContext {
   const std::vector<std::string>& appliedPatches() const { return applied_patches_; }
   void setAppliedPatches(std::vector<std::string> names) { applied_patches_ = std::move(names); }
 
+  /// Patches compiled with both instruction versions, switched at run time.
+  const SwitchablePatches& switchablePatches() const { return switchable_patches_; }
+  void setSwitchablePatches(SwitchablePatches patches) { switchable_patches_ = std::move(patches); }
+
  private:
   CodegenContext() = default;
 
@@ -178,7 +183,8 @@ class CodegenContext {
   std::filesystem::path configDir_;  ///< Directory containing config file (for relative paths)
   bool is_dll_module_ = false;       ///< True if this module is a DLL (shared library output)
   bool has_dll_modules_ = false;     ///< True if the project has DLL modules (multi-binary)
-  std::vector<std::string> applied_patches_;  ///< Code patches applied before analysis
+  std::vector<std::string> applied_patches_;
+  SwitchablePatches switchable_patches_;  ///< Code patches applied before analysis
 };
 
 }  // namespace rex::codegen

@@ -237,3 +237,65 @@ TEST_CASE("Analysis patches the image before anything else", "[codegen][patch]")
   CHECK(refused.error().message.find("\"far\"") != std::string::npos);
   CHECK(badCtx.appliedPatches().empty());
 }
+
+TEST_CASE("[[patch]] switchable is parsed and can be set by an including file",
+          "[codegen][patch]") {
+  auto cfg = Parse(R"(
+file_path = "default.xex"
+[[patch]]
+name = "Unlock FPS"
+enabled = false
+switchable = true
+[[patch.be8]]
+address = 0x82000003
+value = 2
+)");
+  CHECK(Named(cfg, "Unlock FPS").switchable);
+  CHECK_FALSE(Named(cfg, "Unlock FPS").enabled);
+}
+
+TEST_CASE("Switchable patches keep the image original and list both words", "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  CodePatch patch = Patch("Two", kBase + 3, {0x02}, /*enabled=*/false);
+  patch.switchable = true;
+  std::vector<CodePatch> patches = {patch};
+  auto applied = ApplyCodePatches(binary, patches);
+  REQUIRE(applied);
+  CHECK(applied->empty());
+  CHECK(WordAt(binary, kBase) == 0x38600001);
+
+  auto switchable = PrepareSwitchablePatches(binary, patches);
+  REQUIRE(switchable);
+  REQUIRE(switchable->patches.size() == 1);
+  CHECK(switchable->patches[0].name == "Two");
+  CHECK_FALSE(switchable->patches[0].enabled);
+  REQUIRE(switchable->words.size() == 1);
+  const SwitchedWord& word = switchable->words.at(kBase);
+  CHECK(word.original == 0x38600001);
+  CHECK(word.patched == 0x38600002);
+  CHECK(word.patch_index == 0);
+
+  // Writing the byte already there switches nothing.
+  CodePatch same = Patch("Same", kBase + 3, {0x01});
+  same.switchable = true;
+  auto unchanged = PrepareSwitchablePatches(binary, {same});
+  REQUIRE(unchanged);
+  CHECK(unchanged->patches.size() == 1);
+  CHECK(unchanged->words.empty());
+}
+
+TEST_CASE("Switchable patches may not touch branches", "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  // The second word is blr.
+  CodePatch patch = Patch("Return", kBase + 4, {0x60, 0x00, 0x00, 0x00});
+  patch.switchable = true;
+  auto switchable = PrepareSwitchablePatches(binary, {patch});
+  REQUIRE_FALSE(switchable);
+  CHECK(switchable.error().message.find("branch") != std::string::npos);
+  // Nor turn another instruction into one.
+  CodePatch jump = Patch("Jump", kBase, {0x48, 0x00, 0x00, 0x08});
+  jump.switchable = true;
+  CHECK_FALSE(PrepareSwitchablePatches(binary, {jump}));
+}

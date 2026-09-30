@@ -213,8 +213,11 @@ at run time from your own dashboard 2.0.17559 system update, and nothing from it
 ships with the SDK. Put the `$SystemUpdate` folder beside the executable or in
 `%LOCALAPPDATA%\ReXGlue`, or name it with `--xbox_guide_system_update=<path>`.
 Games & Apps has the title's achievements (grid and details), and Xbox Home
-(Y, or the Home tab) ends the title after the console's confirmation. See
-[Xbox guide](docs/xbox-guide.md).
+(Y, or the Home tab) ends the title after the console's confirmation.
+Settings > Preferences sets notifications, game volume, vibration and the render
+resolution (by default the title draws at your display's resolution, 2160p on a
+4K display); Settings > Patches and Cheats turn a title's switchable code
+patches on and off while it runs. See [Xbox guide](docs/xbox-guide.md).
 
 ## Repository structure
 

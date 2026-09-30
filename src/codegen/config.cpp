@@ -268,6 +268,8 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
           parsed.writes.push_back(std::move(write));
         }
       }
+      auto switchable = (*table)["switchable"].value<bool>();
+      auto category = (*table)["category"].value<std::string>();
       // Canary spells the switch is_enabled; accept both, enabled wins.
       auto enabled = (*table)["enabled"].value<bool>();
       if (!enabled) {
@@ -278,6 +280,8 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
                              [&](const CodePatch& p) { return p.name == parsed.name; });
       if (it == cfg.patches.end()) {
         parsed.enabled = enabled.value_or(true);
+        parsed.switchable = switchable.value_or(false);
+        parsed.category = category.value_or("patch");
         parsed.source = filePath;
         if (!hasWrites && parsed.error.empty()) {
           parsed.error = "it has no be8, be16, be32 or be64 writes";
@@ -293,6 +297,12 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
       }
       if (enabled) {
         it->enabled = *enabled;
+      }
+      if (switchable) {
+        it->switchable = *switchable;
+      }
+      if (category) {
+        it->category = *category;
       }
     }
   }

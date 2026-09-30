@@ -9,6 +9,7 @@
 #include <rex/ui/guide/xbox_guide.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 
@@ -26,6 +27,8 @@
 #include <rex/ui/image_decode.h>
 #include <rex/ui/immediate_drawer.h>
 
+#include <rex/ui/guide/guide_layout.h>
+
 REXCVAR_DEFINE_BOOL(xbox_guide, true, "UI",
                     "View+Menu (Back+Start) or Home opens the Xbox guide (needs the "
                     "console's system update, see xbox_guide_system_update)");
@@ -33,8 +36,30 @@ REXCVAR_DEFINE_STRING(xbox_guide_system_update, "", "UI",
                       "The console's $SystemUpdate folder (dashboard 2.0.17559) or its "
                       "su*_00000000 package, for the Xbox guide's scenes and sounds");
 
+REXCVAR_DEFINE_BOOL(notifications_show, true, "UI",
+                    "Show notifications (achievement unlocks) over the title");
+REXCVAR_DEFINE_BOOL(notifications_sound, true, "UI", "Play the notification sound");
+REXCVAR_DEFINE_STRING(code_patch_states, "", "UI",
+                      "Switchable code patches the player turned on or off in the Xbox guide "
+                      "(Name=1;Name=0)");
+REXCVAR_DEFINE_BOOL(resolution_match_display, true, "GPU",
+                    "Render at the display's resolution: sets resolution_scale from the "
+                    "monitor at startup (the title's 720p times 3 on a 4K display)");
+
 namespace rex::ui::guide {
 namespace {
+
+// Entries taken out of the guide for recompiled titles; the scenes still
+// have them. Kept as a list so one can be put back by deleting its line.
+constexpr std::string_view kRemovedEntries[] = {
+    "btnFamilySettings",     // Settings > Family Settings
+    "btnAccountManagement",  // Settings > Account Management
+    "btnKinectTuner",        // Settings > Kinect Tuner
+    "btnShutdown",           // Settings > Turn Off Console
+};
+
+// The Media tab (Tab3) is left out: switching past it plays both shuffles.
+constexpr int kRemovedTab = 3;
 
 constexpr float kSceneWidth = 852.0f;
 constexpr float kSceneHeight = 480.0f;
@@ -44,11 +69,6 @@ constexpr std::string_view kAchievementScheme = "achievement://";
 constexpr uint32_t kAchievementShowUnachieved = 0x8;
 // The default gamer picture, in XAM's shared resources.
 constexpr std::string_view kDefaultGamerPicture = "sharedres://64_fffe07d10002000000010000.png";
-
-// The first child of a scene file's canvas: the scene itself.
-const xui::Node& SceneNode(const xui::Document& document) {
-  return document.root.children.empty() ? document.root : document.root.children.front();
-}
 
 const xui::Node* FindVisual(const xui::Document& skin, std::string_view id) {
   for (const xui::Node& visual : skin.root.children) {
@@ -79,6 +99,32 @@ void ForEach(xui::Element* root, const std::function<void(xui::Element*)>& fn) {
 }
 
 }  // namespace
+
+void ApplySavedCodePatches(const PPCSwitchablePatch* patches) {
+  const std::string& saved = REXCVAR_GET(code_patch_states);
+  for (const PPCSwitchablePatch* p = patches; p && p->name; ++p) {
+    const std::string key = std::string(p->name) + "=";
+    for (size_t at = 0; at < saved.size();) {
+      const size_t end = std::min(saved.find(';', at), saved.size());
+      const std::string_view item(saved.data() + at, end - at);
+      if (item.starts_with(key) && item.size() == key.size() + 1) {
+        __atomic_store_n(p->active, uint8_t(item.back() == '1'), __ATOMIC_RELAXED);
+      }
+      at = end + 1;
+    }
+  }
+}
+
+std::string SaveCodePatchStates(const PPCSwitchablePatch* patches) {
+  std::string out;
+  for (const PPCSwitchablePatch* p = patches; p && p->name; ++p) {
+    if (!out.empty()) {
+      out += ';';
+    }
+    out += fmt::format("{}={}", p->name, __atomic_load_n(p->active, __ATOMIC_RELAXED) ? 1 : 0);
+  }
+  return out;
+}
 
 std::vector<std::filesystem::path> SystemUpdateLocations() {
   std::vector<std::filesystem::path> locations;
@@ -155,6 +201,11 @@ std::unique_ptr<GuideAssets> GuideAssets::Load(const std::filesystem::path& path
     error->clear();
   }
   assets->has_notify = scene(assets->notify, "xam/xam", "notify.xur");
+  assets->has_options =
+      scene(assets->options, "hud/hud", "Options.xur") &&
+      scene(assets->options_vibration, "hud/hud", "OptionsController.xur") &&
+      scene(assets->options_notifications, "hud/hud", "OptionsNotifications.xur") &&
+      scene(assets->options_voice, "hud/hud", "OptionsVoice.xur");
   if (error) {
     error->clear();
   }
@@ -164,7 +215,7 @@ std::unique_ptr<GuideAssets> GuideAssets::Load(const std::filesystem::path& path
   return assets;
 }
 
-GuideFonts AddGuideFonts(ImFontAtlas* atlas) {
+GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height) {
   GuideFonts fonts;
   const char* windows = std::getenv("WINDIR");
   if (!windows) {
@@ -173,18 +224,22 @@ GuideFonts AddGuideFonts(ImFontAtlas* atlas) {
   // Latin, Latin Extended-A, punctuation, euro and trade mark.
   static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x2010, 0x2027,
                                     0x20AC, 0x20AC, 0x2122, 0x2122, 0};
+  // One size; the static atlas scales it to each XUI point size. Baked for
+  // the guide's larger text (20 pt) at the display's scale over the
+  // console's 480-line scenes: 64 px at 1080p, 120 px at 2160p.
+  const float guide_scale = float(std::max(display_height, 1080)) / 480.0f;
+  const float baked_size =
+      std::clamp(std::ceil(20.0f * 4.0f / 3.0f * guide_scale / 8.0f) * 8.0f, 48.0f, 128.0f);
   ImFontConfig config;
-  config.OversampleH = 2;
+  config.OversampleH = baked_size > 64.0f ? 1 : 2;
   config.OversampleV = 1;
-  // One size; the static atlas scales it to each XUI point size.
-  constexpr float kBakedSize = 48.0f;
   auto add = [&](const char* file) -> ImFont* {
     const std::filesystem::path path = std::filesystem::path(windows) / "Fonts" / file;
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec)) {
       return nullptr;
     }
-    return atlas->AddFontFromFileTTF(path.string().c_str(), kBakedSize, &config, kRanges);
+    return atlas->AddFontFromFileTTF(path.string().c_str(), baked_size, &config, kRanges);
   };
   fonts.regular = add("segoeui.ttf");
   fonts.bold = add("seguisb.ttf");
@@ -319,8 +374,29 @@ XboxGuide::~XboxGuide() {
 void XboxGuide::ConfigureMain() {
   // Controls the guide acts on; the rest stay in the menu, disabled, as
   // dashboard features a recompiled title cannot reach.
+  for (std::string_view id : kRemovedEntries) {
+    RemoveEntry(main_, id);
+  }
+  if (tab_scenes_[kRemovedTab]) {
+    tab_scenes_[kRemovedTab]->Suppress();
+  }
+  for (std::string_view id : {"txt_Media", "txt_MediaSel"}) {
+    if (xui::Element* label = main_->FindById(id)) {
+      label->Suppress();
+    }
+  }
+  // Settings gains Patches and Cheats, made from the Preferences entry.
+  if (xui::Element* preferences = main_->FindById("btnPersonalSettings")) {
+    xui::Element* settings = preferences->parent();
+    AddEntry(settings, "btnPersonalSettings", "btnSystemSettings", "btnPatches", "Patches");
+    AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnCheats", "Cheats");
+  }
   auto handled = [&](std::string_view id) {
-    return id == "btnDashboard" || id == "btnShutdown" ||
+    if (assets_->has_options &&
+        (id == "btnPersonalSettings" || id == "btnPatches" || id == "btnCheats")) {
+      return true;
+    }
+    return id == "btnDashboard" ||
            (id == "btnAchievements" && assets_->has_achievement_scenes && host_.achievements);
   };
   ForEach(main_, [&](xui::Element* e) {
@@ -432,7 +508,8 @@ void XboxGuide::BeginClose(bool exit_title) {
   exit_title_ = exit_title;
   if (screen_ == Screen::kConfirm) {
     hud_root_->Play("ErrorToClosed");
-  } else if (screen_ == Screen::kAchievements || screen_ == Screen::kAchievementDetail) {
+  } else if (screen_ == Screen::kAchievements || screen_ == Screen::kAchievementDetail ||
+             screen_ == Screen::kSettings) {
     hud_root_->Play("FullToClosed");
   } else {
     hud_root_->Play("HalfToClosed");
@@ -493,6 +570,15 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
 
   UpdateClock();
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
+  if (queued_tab_ && !tabs_->playing()) {
+    const int next = queued_tab_;
+    queued_tab_ = 0;
+    xui::Element* focus = focus_;
+    SwitchTab(next);
+    if (tab_ != next) {
+      focus_ = focus;
+    }
+  }
   if (!hud_root_->playing()) {
     for (xui::Element* element : pending_removal_) {
       element->parent()->RemoveChild(element);
@@ -527,6 +613,9 @@ void XboxGuide::Handle(GuideAction action) {
       break;
     case Screen::kConfirm:
       HandleConfirm(action);
+      break;
+    case Screen::kSettings:
+      HandleSettings(action);
       break;
   }
 }
@@ -563,9 +652,13 @@ void XboxGuide::HandleMain(GuideAction action) {
 }
 
 void XboxGuide::SwitchTab(int tab) {
-  // Tabs 1..4, no wrap; the blade shuffle plays between neighbours.
+  // Tabs 1..4, no wrap; the blade shuffle plays between neighbours. The
+  // removed tab is passed over: its shuffle plays, then the next one.
   if (tab < 1 || tab > 4 || tabs_->playing() || !tabs_->Play(fmt::format("{}To{}", tab_, tab))) {
     return;
+  }
+  if (tab == kRemovedTab) {
+    queued_tab_ = tab + (tab - tab_);
   }
   tab_focus_[tab_] = focus_;
   xui::Element::MoveFocus(focus_, nullptr);
@@ -589,10 +682,17 @@ void XboxGuide::Activate(xui::Element* control) {
   const std::string_view id = control->id();
   if (id == "btnDashboard") {
     OpenConfirm(Confirm::kXboxHome);
-  } else if (id == "btnShutdown") {
-    OpenConfirm(Confirm::kTurnOff);
+    // Turn Off Console is removed (kRemovedEntries).
+    // } else if (id == "btnShutdown") {
+    //   OpenConfirm(Confirm::kTurnOff);
   } else if (id == "btnAchievements") {
     OpenAchievements();
+  } else if (id == "btnPersonalSettings") {
+    OpenPreferences();
+  } else if (id == "btnPatches") {
+    OpenPatches("patch");
+  } else if (id == "btnCheats") {
+    OpenPatches("cheat");
   }
 }
 

@@ -36,8 +36,15 @@ focus, press and sounds come from the skin visuals' named frames.
   achievements. Unlocked ones show their XDBF icon, others the console's
   unearned or secret image. The header shows the focused achievement; A opens
   `828_AchievDetails`. The button shows the gamerscore earned.
-- Xbox Home (Y, or the Home tab) and Settings > Turn Off Console ask first. Yes
-  closes the guide and ends the title through the window's normal close path.
+- Xbox Home (Y, or the Home tab) asks first. Yes closes the guide and ends the
+  title through the window's normal close path.
+- Settings > Preferences, Patches and Cheats open settings pages built from
+  the console's own Options scenes (see [Settings pages](#settings-pages)).
+- Entries a recompiled title has no use for are taken out and the list closed
+  up: Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
+  Console, and the whole Media tab (tab changes pass over it). The code is kept
+  and commented or listed (`kRemovedEntries`, `kRemovedTab` in
+  `xbox_guide.cpp`), so each can be put back.
 - Everything else (Marketplace, My Games, media players, Live features) stays in
   the menu, disabled, as the console's disabled controls behave: they take focus,
   and pressing them plays the inactive sound.
@@ -61,6 +68,41 @@ remembered, not measured. Without a system update, the SDK's own toast shows the
 unlock. The console command `achievement_notify [id]` shows an achievement's
 popup without unlocking it.
 
+## Settings pages
+
+Each page is one of the dashboard's Options scenes, hosted like Achievements
+(`HalfToFull`, the blade goes out; B comes back with `FullToHalf`). Unused
+controls are hidden and the rest moved up; new entries are copies of the
+scene's own controls (`guide_layout.h`: `RemoveEntry`, `AddEntry`). Every change
+is saved to the title's config file straight away.
+
+| Page | Scene | Controls | Setting |
+| --- | --- | --- | --- |
+| Preferences | `Options` | Notifications, Volume (the Voice entry), Vibration, Resolution (a copy of Vibration). Online Status, Family Timer and Word Registration are removed. | |
+| Notifications | `OptionsNotifications` | Show Notifications; Play Sound (disabled while Show is off) | `notifications_show`, `notifications_sound`: the unlock popup and its sound |
+| Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; voice, Kinect and output hidden | `audio_volume`, applied live |
+| Vibration | `OptionsController` | Enable Vibration | `vibration`, applied live |
+| Resolution | `OptionsVoice`'s output radio list, one button added | Match Display (the display's p), 1280 x 720, 2560 x 1440, 3840 x 2160 | `resolution_match_display`, `resolution_scale`; next launch |
+| Patches, Cheats | `OptionsNotifications` checkboxes, one copy per patch | The title's switchable code patches of that category | `code_patch_states`, applied live |
+
+- **Resolution.** With `resolution_match_display` (the default) the title draws
+  at the display's resolution: at startup `resolution_scale` is set from the
+  window's monitor, the title's 720p times 1, 2 or 3 (2160p gives 3, 1440p and
+  1080p give 2). It is set as a one-run value, so a config file's
+  `resolution_scale` is kept, and `--resolution_scale` on the command line
+  still wins. The draw scale needs a restart, so a choice made in the guide
+  applies at the next launch; the page says so.
+- **Patches and Cheats** list the title's
+  [switchable code patches](code-patches.md#switchable-patches) by their
+  `category`. Turning one on or off takes effect at once and is kept in
+  `code_patch_states`. A title with none shows the page's "No cheats are
+  available for this game."
+- **4K.** The guide's figures, gradients and text are drawn at the display's
+  resolution; the fonts are baked for the display's height (120 px at 2160p),
+  so text and notifications are sharp at 4K. The console's images (PNG) and the
+  title's achievement icons (64 x 64) have no higher-resolution source and are
+  scaled up with linear filtering.
+
 ## Menu inventory
 
 All entries are from the 17559 scenes, in the order they appear. "Works" means
@@ -78,12 +120,14 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | Home | Xbox Home | quit prompt, then the dashboard | Works: prompt, then ends the title |
 | | Connect to Xbox Live (offline) or Friends, Party, Messages, Beacons & Activity, Chat (on Live) | Live features | Disabled (offline set shown) |
 | | Disc in Tray | title name; ejects | Shows the title, disabled |
-| Media | System Video Player, System Music Player, Picture Viewer, Windows Media Center | dashboard apps (dash 39, 6, 44, 8); mini player below | Disabled |
+| Media | System Video Player, System Music Player, Picture Viewer, Windows Media Center | dashboard apps (dash 39, 6, 44, 8); mini player below | Removed (the tab) |
 | Settings | Profile | gamer profile | Disabled |
-| | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Disabled |
-| | Family Settings, System Settings, Account Management | dashboard (dash 20, 47, 10) | Disabled |
-| | Kinect Tuner | Kinect troubleshooter | Disabled |
-| | Turn Off Console | turn-off prompt | Works: prompt, then ends the title |
+| | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Works: [settings pages](#settings-pages) |
+| | System Settings | dashboard (dash 47) | Disabled |
+| | Patches, Cheats (added) | | Works: switchable code patches |
+| | Family Settings, Account Management | dashboard (dash 20, 10) | Removed |
+| | Kinect Tuner | Kinect troubleshooter | Removed |
+| | Turn Off Console | turn-off prompt | Removed |
 | Y button | Xbox Home | as above | Works |
 
 ## Where the guide comes from
@@ -185,6 +229,14 @@ against the console.
   animation, navigation over hidden controls, focus, path resolution; and
   `[ui_sound]` covers XMA file decoding. With `REXGLUE_SYSTEM_UPDATE`, `[local]` also
   plays GuideMain's `2To3` shuffle and decodes every guide sound (all audible).
+- Quantum of Solace, 2026-09-30, 3840 x 2160 display: drew at 2160p
+  (`resolution_scale` 3 from the display); Settings tab reached over the removed
+  Media tab; Preferences, Notifications (both toggles, Play Sound disabled with
+  Show off), Volume (100 to 70, saved), Vibration, Resolution (1280 x 720
+  chosen, saved); Patches listed "Unlock FPS" on and turned it off; Cheats
+  showed none. Settings were saved to a throwaway config beside the exe.
+- `unit_tests [xui]`, `[guide]`: `Seek`, `RemoveEntry`/`AddEntry` (list closed
+  up, navigation relinked), saved patch states by name.
 - Quantum of Solace, 2026-09-30: opened with Home; Home tab, Games & Apps,
   Media; Achievements grid (50, 0 unlocked) and details; Xbox Home prompt with
   cancel and reopen through Y; close. No errors in the log.

@@ -8,10 +8,12 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
 #include <rex/codegen/config.h>
+#include <rex/codegen/function_types.h>
 #include <rex/result.h>
 
 namespace rex::codegen {
@@ -30,7 +32,29 @@ class BinaryView;
  *
  * @return The names of the applied patches, in definition order.
  */
+/// Writes the enabled, non-switchable patches into codegen's copy of the
+/// image. Returns their names.
 Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
                                                   const std::vector<CodePatch>& patches);
+
+/// A switchable patch as the title's patch table lists it.
+struct SwitchablePatch {
+  std::string name;
+  bool enabled = false;  ///< Its state when the title starts
+  std::string category = "patch";
+};
+
+struct SwitchablePatches {
+  std::vector<SwitchablePatch> patches;
+  std::map<uint32_t, SwitchedWord> words;  ///< By guest address
+};
+
+/// Checks the switchable patches and works out, per instruction word, the
+/// original and patched versions. They are not written into the image, so
+/// analysis sees the original code. Every write must stay in code, and
+/// neither version of a word may be a branch, call, trap or system call:
+/// switching one of those would change the control flow analysis found.
+Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
+                                                   const std::vector<CodePatch>& patches);
 
 }  // namespace rex::codegen

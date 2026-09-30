@@ -389,9 +389,11 @@ class Renderer {
     if (element.IsA("XuiText")) {
       text = element.text();
     } else if (const Element* control = OwningControl(element)) {
-      // text_Label2 carries a control's second label (a count or value).
-      text =
-          element.id() == "text_Label2" ? control->secondary_text() : std::string(control->text());
+      // text_Label2 and a slider's Text_Slider carry a control's second label
+      // (a count or a value).
+      text = element.id() == "text_Label2" || element.id() == "Text_Slider"
+                 ? control->secondary_text()
+                 : std::string(control->text());
     }
     if (text.empty()) {
       return;

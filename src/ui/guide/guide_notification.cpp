@@ -60,6 +60,10 @@ GuideNotificationDialog::GuideNotificationDialog(
 GuideNotificationDialog::~GuideNotificationDialog() = default;
 
 void GuideNotificationDialog::Push(const system::AchievementEvent& event) {
+  // Preferences > Notifications > Show Notifications.
+  if (!REXCVAR_GET(notifications_show)) {
+    return;
+  }
   std::lock_guard<std::mutex> lock(mutex_);
   queue_.push_back(event);
 }
@@ -70,7 +74,7 @@ void GuideNotificationDialog::Start(const system::AchievementEvent& event, const
   context_.skin = &assets_->skin;
   context_.package = "xam/xam";
   context_.play_sound = [this](std::string_view file, std::string_view package) {
-    if (media_) {
+    if (media_ && REXCVAR_GET(notifications_sound)) {
       media_->PlaySound(file, package);
     }
   };

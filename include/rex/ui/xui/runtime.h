@@ -97,8 +97,12 @@ class Element {
   /// A second label some visuals show (text_Label2: counts, values).
   void SetSecondaryText(std::string text) { secondary_text_ = std::move(text); }
   const std::string& secondary_text() const { return secondary_text_; }
-  bool visible() const { return GetBool("Show", true); }
+  /// Shown, and not suppressed.
+  bool visible() const { return !suppressed_ && GetBool("Show", true); }
   void SetVisible(bool show) { Set("Show", Value{show}); }
+  /// Hidden whatever its timelines say: for entries a host leaves out.
+  void Suppress() { suppressed_ = true; }
+  bool suppressed() const { return suppressed_; }
 
   /// Size after anchoring against the parent's current size.
   float width() const;
@@ -110,14 +114,20 @@ class Element {
   bool HasNamedFrame(std::string_view name) const;
   /// Jumps to the named frame and plays until a stop command. False when the
   /// element has no such frame.
-  bool Play(std::string_view name);
+  bool Play(std::string_view name, bool sounds = true);
   bool playing() const { return playing_; }
   double frame() const { return frame_; }
+  /// Shows frame `frame` of this element's timelines and stops there (a
+  /// slider's body is posed by its value this way).
+  void Seek(double frame);
   /// Advances this element's and all descendants' timelines.
   void Advance(double frames);
 
   /// Adds a scene built from `node` (a tab's content file) as a child.
   Element* AttachScene(const Node& node, const SceneContext& context);
+  /// A copy of `source` (a child of this element) built from the same scene
+  /// data, placed after it: new menu entries look exactly like the others.
+  Element* CloneChild(const Element& source, std::string id);
   void RemoveChild(Element* child);
 
   /// Fills a list with `count` copies of its visual's item template
@@ -129,12 +139,17 @@ class Element {
   // play their visual's Disable frames, as on the console.
   bool focusable() const;
   bool enabled() const { return GetBool("Enabled", true); }
-  /// Plays Press, or PressDisable for a disabled control.
+  /// Plays Press (PressCheck when checked), or PressDisable when disabled.
   void Press();
+  /// Checkboxes and radio buttons: plays the visual's Check (or plain)
+  /// state for the control's focus.
+  void SetChecked(bool checked);
+  bool checked() const { return checked_; }
+  bool focused() const { return focused_; }
   /// The control Nav<direction> names, searched in the enclosing scene.
   Element* Navigate(NavDirection direction);
   /// Plays the visual's KillFocus on `from` and Focus (or InitFocus when
-  /// `initial`) on `to`.
+  /// `initial`) on `to`, with the Check and Disable variants that apply.
   static void MoveFocus(Element* from, Element* to, bool initial = false);
 
  private:
@@ -151,6 +166,9 @@ class Element {
   void FireSounds(double from, double to, bool inclusive);
   const PropDef* FindDef(std::string_view name) const;
   void SetPath(std::span<const PropDef* const> path, int32_t index, const Value& value);
+  /// Plays `base` + "Check" when checked + "Disable" when disabled, falling
+  /// back to fewer suffixes when the visual lacks that frame.
+  bool PlayState(std::string_view base, bool sounds);
 
   Element* parent_ = nullptr;
   const Node* node_ = nullptr;
@@ -169,6 +187,9 @@ class Element {
   std::vector<TimelineSet> timeline_sets_;
   double frame_ = 0.0;
   bool playing_ = false;
+  bool suppressed_ = false;
+  bool checked_ = false;
+  bool focused_ = false;
 };
 
 }  // namespace rex::ui::xui

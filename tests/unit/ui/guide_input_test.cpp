@@ -11,7 +11,9 @@
 #include <vector>
 
 #include <rex/input/input.h>
+#include <rex/cvar.h>
 #include <rex/ui/guide/guide_input.h>
+#include <rex/ui/guide/code_patch_states.h>
 
 using namespace rex::ui::guide;
 using namespace rex::input;
@@ -76,4 +78,18 @@ TEST_CASE("Bumpers switch tabs", "[guide]") {
         std::vector<GuideAction>{GuideAction::kNextTab});
   CHECK(pad.Update(X_INPUT_GAMEPAD_LEFT_SHOULDER, 0, 0, 10) ==
         std::vector<GuideAction>{GuideAction::kPreviousTab});
+}
+
+TEST_CASE("Switchable patch states are saved and restored by name", "[guide]") {
+  uint8_t flags[2] = {0, 1};
+  const rex::PPCSwitchablePatch patches[] = {{"Unlock FPS", &flags[0], "patch"},
+                                             {"Ammo", &flags[1], "cheat"},
+                                             {nullptr, nullptr, nullptr}};
+  REQUIRE(rex::cvar::SetFlagByName("code_patch_states", "Unlock FPS=1;Gone=0"));
+  ApplySavedCodePatches(patches);
+  CHECK(flags[0] == 1);
+  CHECK(flags[1] == 1);  // not named: keeps its compiled-in default
+  flags[1] = 0;
+  CHECK(SaveCodePatchStates(patches) == "Unlock FPS=1;Ammo=0");
+  rex::cvar::SetFlagByName("code_patch_states", "");
 }

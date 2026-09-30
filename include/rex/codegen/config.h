@@ -74,6 +74,12 @@ struct PatchWrite {
 struct CodePatch {
   std::string name;
   bool enabled = true;
+  /// Compiled with both instruction versions behind a runtime flag, so the
+  /// player can switch it while the title runs; `enabled` is the default.
+  bool switchable = false;
+  /// How the guide lists a switchable patch: "patch" (fixes, frame rate) or
+  /// "cheat".
+  std::string category = "patch";
   std::vector<PatchWrite> writes;
   std::string source;  ///< Config file that last defined the writes
   std::string error;   ///< Why the entry is unusable; applying it fails

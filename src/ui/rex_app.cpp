@@ -45,6 +45,7 @@
 #include <rex/ui/guide/guide_notification.h>
 #include <rex/ui/guide/xbox_guide.h>
 #include <rex/ui/keybinds.h>
+#include <rex/ui/window_win.h>
 #include <rex/version.h>
 
 #include <fmt/format.h>
@@ -75,6 +76,28 @@ REXCVAR_DEFINE_INT32(gaming_runtime_timeout_ms, 10000, "GDK",
 namespace rex {
 
 namespace {
+
+// The height in pixels of the display the window is on, in its current
+// mode (not scaled by the desktop's DPI setting); 0 when unknown.
+int DisplayHeight(ui::Window* window) {
+  auto* win32 = static_cast<ui::Win32Window*>(window);
+  HMONITOR monitor = MonitorFromWindow(win32 ? win32->hwnd() : nullptr, MONITOR_DEFAULTTOPRIMARY);
+  MONITORINFOEXW info = {};
+  info.cbSize = sizeof(info);
+  DEVMODEW mode = {};
+  mode.dmSize = sizeof(mode);
+  if (!GetMonitorInfoW(monitor, &info) ||
+      !EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode)) {
+    return 0;
+  }
+  return int(mode.dmPelsHeight);
+}
+
+// The draw resolution scale that fills the display: titles draw at 720p,
+// so 3 for 2160p, 2 for 1440p and 1080p, 1 below.
+int DisplayScale(int display_height) {
+  return std::clamp((display_height + 360) / 720, 1, 3);
+}
 
 // Shows the title as the console would: its name from the XDBF string table,
 // in the user's language when it has one, and its dashboard icon. Leaves the
@@ -388,6 +411,16 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     runtime_->set_imgui_drawer(imgui_drawer_.get());
   }
 
+  // Draw at the display's resolution unless the player chose one in the
+  // guide (Preferences > Resolution) or on the command line. Not saved: it
+  // follows the display from run to run.
+  if (REXCVAR_GET(resolution_match_display) &&
+      rex::cvar::GetFlagSource("resolution_scale") < rex::cvar::Source::kCommandLine) {
+    const int scale = DisplayScale(DisplayHeight(window_.get()));
+    rex::cvar::SetFlagFromCommandLine("resolution_scale", std::to_string(scale));
+    REXLOG_INFO("Drawing at {}p to match the display (resolution_scale {})", 720 * scale, scale);
+  }
+
   auto status = runtime_->Setup(ppc_info_, std::move(config_));
   if (XFAILED(status)) {
     REXLOG_ERROR("Runtime setup failed: {:08X}", status);
@@ -447,6 +480,11 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
 
   if (ppc_info_.code_patches && *ppc_info_.code_patches) {
     REXLOG_INFO("Guest code patches compiled in: {}", ppc_info_.code_patches);
+  }
+  // Patches the player can switch in the guide: as they left them.
+  ui::guide::ApplySavedCodePatches(ppc_info_.switchable_patches);
+  for (const PPCSwitchablePatch* p = ppc_info_.switchable_patches; p && p->name; ++p) {
+    REXLOG_INFO("Switchable {} \"{}\": {}", p->category, p->name, *p->active ? "on" : "off");
   }
 
   OnPostLoadXexImage();
@@ -579,7 +617,8 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
       window_.get(), 64,
       [this](ImFontAtlas* atlas) {
         if (REXCVAR_GET(xbox_guide)) {
-          const ui::guide::GuideFonts fonts = ui::guide::AddGuideFonts(atlas);
+          const ui::guide::GuideFonts fonts =
+              ui::guide::AddGuideFonts(atlas, DisplayHeight(window_.get()));
           guide_font_regular_ = fonts.regular;
           guide_font_bold_ = fonts.bold;
         }
@@ -948,6 +987,9 @@ void ReXApp::ToggleGuide() {
   host.runtime = runtime_.get();
   host.immediate_drawer = immediate_drawer_.get();
   host.title_name = TitleName(*runtime_->kernel_state());
+  host.patches = ppc_info_.switchable_patches;
+  host.display_scale = DisplayScale(DisplayHeight(window_.get()));
+  host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
   host.on_closed = [this](bool exit_title) {
     guide_ = nullptr;
     if (exit_title) {

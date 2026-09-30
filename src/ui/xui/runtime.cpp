@@ -188,6 +188,12 @@ void Element::Build(const Node& node) {
   }
   AddTimelines(node);
   ApplyFrame(0.0);
+  // Controls rest in their visual's Normal state, as XUI starts them.
+  if (IsA("XuiControl") && HasNamedFrame("Normal")) {
+    Play("Normal", /*sounds=*/false);
+    Advance(1.0);
+    playing_ = false;
+  }
 }
 
 void Element::ApplyVisual(const Node& visual) {
@@ -221,6 +227,22 @@ Element* Element::AttachScene(const Node& node, const SceneContext& context) {
   child->Build(node);
   children_.push_back(std::move(child));
   return children_.back().get();
+}
+
+Element* Element::CloneChild(const Element& source, std::string id) {
+  auto at = std::find_if(children_.begin(), children_.end(),
+                         [&](const std::unique_ptr<Element>& c) { return c.get() == &source; });
+  if (at == children_.end()) {
+    return nullptr;
+  }
+  std::unique_ptr<Element> copy(new Element(*source.node_, this, source.context_));
+  copy->design_parent_width_ = source.design_parent_width_;
+  copy->design_parent_height_ = source.design_parent_height_;
+  copy->Build(*source.node_);
+  copy->Set("Id", Value{std::move(id)});
+  Element* raw = copy.get();
+  children_.insert(at + 1, std::move(copy));
+  return raw;
 }
 
 void Element::RemoveChild(Element* child) {
@@ -506,7 +528,7 @@ bool Element::HasNamedFrame(std::string_view name) const {
   return false;
 }
 
-bool Element::Play(std::string_view name) {
+bool Element::Play(std::string_view name, bool sounds) {
   for (const TimelineSet& set : timeline_sets_) {
     for (const NamedFrame& frame : *set.frames) {
       if (frame.name != name) {
@@ -516,11 +538,19 @@ bool Element::Play(std::string_view name) {
       playing_ =
           frame.command != FrameCommand::kStop && frame.command != FrameCommand::kGoToAndStop;
       ApplyFrame(frame_);
-      FireSounds(frame_, frame_, /*inclusive=*/true);
+      if (sounds) {
+        FireSounds(frame_, frame_, /*inclusive=*/true);
+      }
       return true;
     }
   }
   return false;
+}
+
+void Element::Seek(double frame) {
+  frame_ = frame;
+  playing_ = false;
+  ApplyFrame(frame_);
 }
 
 void Element::Advance(double frames) {
@@ -623,13 +653,30 @@ void Element::FireSounds(double from, double to, bool inclusive) {
 }
 
 bool Element::focusable() const {
-  return IsA("XuiControl") && !IsA("XuiScene") && visible();
+  // Labels are controls in the class tree but never take focus.
+  return IsA("XuiControl") && !IsA("XuiScene") && !IsA("XuiLabel") && visible();
 }
 
 void Element::Press() {
-  if (!(enabled() ? Play("Press") : Play("PressDisable"))) {
-    Play("Press");
+  PlayState("Press", /*sounds=*/true);
+}
+
+bool Element::PlayState(std::string_view base, bool sounds) {
+  const std::string name(base);
+  const std::string check = checked_ ? "Check" : "";
+  const std::string disable = enabled() ? "" : "Disable";
+  for (const std::string& candidate :
+       {name + check + disable, name + check, name + disable, name}) {
+    if (Play(candidate, sounds)) {
+      return true;
+    }
   }
+  return false;
+}
+
+void Element::SetChecked(bool checked) {
+  checked_ = checked;
+  PlayState(focused_ ? "Focus" : "Normal", /*sounds=*/false);
 }
 
 Element* Element::Navigate(NavDirection direction) {
@@ -662,16 +709,17 @@ Element* Element::Navigate(NavDirection direction) {
 
 void Element::MoveFocus(Element* from, Element* to, bool initial) {
   if (from && from != to) {
-    // No KillFocusDisable frame: a disabled control goes straight back.
-    if (!(from->enabled() ? from->Play("KillFocus") : from->Play("NormalDisable"))) {
-      from->Play("Normal");
+    from->focused_ = false;
+    // Checked or disabled controls have no KillFocus variant: they go
+    // straight back to their resting state.
+    if (from->checked_ || !from->enabled() || !from->Play("KillFocus")) {
+      from->PlayState("Normal", /*sounds=*/false);
     }
   }
   if (to) {
-    const std::string_view suffix = to->enabled() ? "" : "Disable";
-    const std::string focus = std::string(initial ? "InitFocus" : "Focus") + std::string(suffix);
-    if (!to->Play(focus) && !to->Play(initial ? "InitFocus" : "Focus")) {
-      to->Play("Focus");
+    to->focused_ = true;
+    if (!(initial && to->PlayState("InitFocus", /*sounds=*/true))) {
+      to->PlayState("Focus", /*sounds=*/true);
     }
   }
 }

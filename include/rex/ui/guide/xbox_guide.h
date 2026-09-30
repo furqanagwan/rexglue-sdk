@@ -21,6 +21,8 @@
 #include <imgui.h>
 
 #include <rex/cvar.h>
+#include <rex/image_info.h>
+#include <rex/ui/guide/code_patch_states.h>
 #include <rex/system/achievement_store.h>
 #include <rex/ui/guide/guide_input.h>
 #include <rex/ui/imgui_dialog.h>
@@ -52,6 +54,10 @@ class ImmediateTexture;
 
 REXCVAR_DECLARE(bool, xbox_guide);
 REXCVAR_DECLARE(std::string, xbox_guide_system_update);
+REXCVAR_DECLARE(bool, notifications_show);
+REXCVAR_DECLARE(bool, notifications_sound);
+REXCVAR_DECLARE(std::string, code_patch_states);
+REXCVAR_DECLARE(bool, resolution_match_display);
 
 namespace rex::ui::guide {
 
@@ -72,6 +78,9 @@ struct GuideAssets {
   bool has_achievement_scenes = false;
   xui::Document notify;  // xam: the notification popup
   bool has_notify = false;
+  // Preferences and the pages built on its scenes (hud).
+  xui::Document options, options_vibration, options_notifications, options_voice;
+  bool has_options = false;
   std::vector<std::string> hud_strings, xam_strings, profile_strings;
 
   static std::unique_ptr<GuideAssets> Load(const std::filesystem::path& path, std::string* error);
@@ -88,8 +97,9 @@ struct GuideFonts {
 };
 
 /// Adds Segoe UI (the host stand-in for Segoe Xbox) to the atlas. Call from
-/// the ImGui drawer's font setup, before the atlas is built.
-GuideFonts AddGuideFonts(ImFontAtlas* atlas);
+/// the ImGui drawer's font setup, before the atlas is built. The glyphs are
+/// baked for `display_height` (the guide's text is sharp at 4K too).
+GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height = 0);
 
 /// Textures and sounds from the system update, kept across openings.
 class GuideMedia {
@@ -120,8 +130,14 @@ struct GuideHost {
   Runtime* runtime = nullptr;  // the title's XDBF achievement icons
   ImmediateDrawer* immediate_drawer = nullptr;
   std::string title_name;
+  /// The title's switchable code patches (null name ends the list).
+  const PPCSwitchablePatch* patches = nullptr;
+  /// The draw resolution scale that matches the display (3 for 4K).
+  int display_scale = 1;
+  /// Writes changed settings to the title's config file.
+  std::function<void()> save_settings;
   /// After the guide has closed; `exit_title` when the owner confirmed Xbox
-  /// Home or Turn Off.
+  /// Home.
   std::function<void(bool exit_title)> on_closed;
 };
 
@@ -141,7 +157,7 @@ class XboxGuide final : public ImGuiDialog {
   void OnClose() override;
 
  private:
-  enum class Screen { kMain, kAchievements, kAchievementDetail, kConfirm };
+  enum class Screen { kMain, kAchievements, kAchievementDetail, kConfirm, kSettings };
   enum class Confirm { kXboxHome, kTurnOff };
 
   void Handle(GuideAction action);
@@ -164,6 +180,26 @@ class XboxGuide final : public ImGuiDialog {
 
   void OpenConfirm(Confirm confirm);
   void CloseConfirm();
+
+  // Settings pages (guide_settings.cpp): Preferences and what it opens,
+  // Patches and Cheats, each one of the console's own Options scenes.
+  struct SettingsPage {
+    xui::Element* scene = nullptr;
+    xui::Element* return_focus = nullptr;  // focus on the page below
+    std::function<void(xui::Element*)> on_select;
+    std::function<void()> on_focus;  // after focus moves on the page
+    std::function<void(xui::Element*, int)> on_adjust;
+  };
+  SettingsPage& PushPage(const xui::Document& scene, std::string heading);
+  void PopPage();
+  void HandleSettings(GuideAction action);
+  void OpenPreferences();
+  void OpenVibration();
+  void OpenVolume();
+  void OpenNotifications();
+  void OpenResolution();
+  void OpenPatches(std::string_view category);
+  void SetSlider(xui::Element* slider, int value);
 
   void BeginClose(bool exit_title);
   void UpdateClock();
@@ -202,6 +238,8 @@ class XboxGuide final : public ImGuiDialog {
   xui::Element* message_ = nullptr;
   xui::Element* return_focus_ = nullptr;
   std::vector<xui::Element*> pending_removal_;  // detached once the backdrop stops
+  std::vector<SettingsPage> pages_;
+  int queued_tab_ = 0;  // a tab switch that passes over a removed tab
 
   bool closing_ = false;
   bool exit_title_ = false;
