@@ -4,8 +4,50 @@ The Xbox 360 guide over a running title, built from the console's own scenes
 ([ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md),
 [RG-GDK-041](https://github.com/furqanagwan/rexglue-sdk/issues/127)).
 
-Status: the format layer is in (part 1). The XUI runtime (part 2) and the guide
-itself (part 3) are in progress.
+Status: implemented in three parts: format layer, XUI runtime, guide. Checked
+with Quantum of Solace (GDK Release, NVIDIA, 2026-09-30) through scripted
+keyboard runs. An owner play session with a pad is still to do.
+
+## Using it
+
+- Open or close it with Back and Start together, with the Guide button where the
+  input backend reports it (XInput with `--guide_button`, or the keyboard bind
+  `keybind_guide`), or with Home (`bind_xbox_guide`). GameInput does not expose
+  the Guide button, which Windows keeps for Game Bar.
+- The system update is looked for in the `xbox_guide_system_update` cvar, then in
+  `$SystemUpdate` beside the executable, then in
+  `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`. It loads in the background at startup;
+  if none is found, the first open says so. `--xbox_guide=false` turns the guide
+  off.
+- Navigation: D-pad or left stick; LB/RB or left/right switch tabs; A selects;
+  B goes back or closes; Y is Xbox Home. On the keyboard: arrows, Enter or Space,
+  Escape or Backspace, Y, and Page Up/Down.
+
+## What it does
+
+It runs the console's own flow. The HUD backdrop plays `ClosedToHalf` and hosts
+`GuideMain`, and the Home tab's blade comes in with `2Close`. Tabs change with
+the `iToj` blade shuffles. Launching something plays `<tab>Open` with the
+backdrop's `HalfToFull`. The Xbox Home and Turn Off prompts are the skin's
+`XuiMessageBox3`, hosted in the backdrop's error frame (`HalfToError`). Button
+focus, press and sounds come from the skin visuals' named frames.
+
+- Games & Apps > Achievements opens `802_Achievements` as a grid of the title's
+  achievements. Unlocked ones show their XDBF icon, others the console's
+  unearned or secret image. The header shows the focused achievement; A opens
+  `828_AchievDetails`. The button shows the gamerscore earned.
+- Xbox Home (Y, or the Home tab) and Settings > Turn Off Console ask first. Yes
+  closes the guide and ends the title through the window's normal close path.
+- Everything else (Marketplace, My Games, media players, Live features) stays in
+  the menu, disabled, as the console's disabled controls behave: they take focus,
+  and pressing them plays the inactive sound.
+- While it is open, the guest sees a neutral pad, XN_SYS_UI is true, and
+  XamIsUIActive reports system UI, as for the Guide button on the console.
+  Titles that pause for XN_SYS_UI pause.
+
+On the console the Guide button never reaches the title. Back+Start does, so a
+title may react to the Start press that completes the chord, for example by
+opening its pause menu. The guide masks the buttons once it is open.
 
 ## Where the guide comes from
 
@@ -75,15 +117,35 @@ against the console.
 - Ease: bytes are signed percentages. The guide's blades use in -100, out 100.
   The runtime's curve is a cubic Bezier fit, not XUI's own formula.
 - Text style bits come from the skin's named label visuals (`...Right`,
-  `...Center`, `...Ellipsis`, `...NoWrap`): 0x10 no wrap, 0x200 right,
-  0x400 centre, 0x4000 ellipsis, 0x100 probably vertical centre. 0x1, 0x1000,
-  0x4000000 and 0x8000000 are unknown.
+  `...Center`, `...Ellipsis`, `...NoWrap`, `..._V`): 0x10 no wrap, 0x200 right,
+  0x400 centre, 0x1000 vertical centre, 0x4000 ellipsis, 0x1 bold (button
+  labels and legend letters have it, the header does not). 0x4, 0x100,
+  0x4000000 and 0x8000000 are unknown and ignored. Message box bodies
+  (`XuiEdit`) wrap.
+- Anchor bits: 1 left, 2 top, 4 right, 8 bottom, 0x10/0x20 centre, 0x40/0x80
+  scale. They fit how the button visuals stretch.
+- A Fill without FillType is solid; a Stroke without StrokeWidth draws
+  nothing. The separators and focus tabs only look right that way.
+- GuideMain's `<tab>Open`/`<tab>Close` frames take a tab's blade out and bring
+  it in. The names read backwards until the keyframes are checked (Tab2's
+  opacity falls in `2Open`).
 - Fonts: the console's `.xtt` fonts are encrypted. Segoe UI stands in for
   Segoe Xbox, so the private-use gamerscore glyph in `btn_Count_achiev` has no
   equivalent.
 
 ## Validation
 
+- `unit_tests [guide]`: the chord (once per press, held-at-start, Guide
+  button), pad actions (buttons held at open ignored, direction repeat, stick,
+  bumpers).
+- `unit_tests [xui]` also covers the runtime: visuals and anchoring, frame 0 on
+  build, eased playback and stop frames, sound cues, per-element compound
+  animation, navigation over hidden controls, focus, path resolution; and
+  `[ui_sound]` covers XMA file decoding. With `REXGLUE_SYSTEM_UPDATE`, `[local]` also
+  plays GuideMain's `2To3` shuffle and decodes every guide sound (all audible).
+- Quantum of Solace, 2026-09-30: opened with Home; Home tab, Games & Apps,
+  Media; Achievements grid (50, 0 unlocked) and details; Xbox Home prompt with
+  cancel and reopen through Y; close. No errors in the log.
 - `unit_tests [xui]`: synthetic XUIZ, XUIS, XUR v8 (elements, shared and
   compound properties, gradient stops, timelines with compound paths, named
   frames, truncation, unknown classes, object count) and XEX2 resources (plain

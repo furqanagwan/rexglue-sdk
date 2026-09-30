@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string_view>
 #include <thread>
@@ -52,6 +53,11 @@ namespace ui {
 class AchievementNotificationDialog;
 class ConsoleDialog;
 class SettingsDialog;
+namespace guide {
+struct GuideAssets;
+class GuideMedia;
+class XboxGuide;
+}  // namespace guide
 }  // namespace ui
 
 /// Base class for recompiled Xbox 360 applications.
@@ -303,6 +309,12 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   // WindowInputListener overrides
   void OnKeyDown(ui::KeyEvent& e) override;
 
+  // Xbox guide (RG-GDK-041): Back+Start, the Guide button or Home.
+  void SetupGuide();
+  void StartGuidePoller();
+  void StopGuide();
+  void ToggleGuide();
+
   PPCImageInfo ppc_info_;
   PathConfig resolved_defaults_;
   RuntimeConfig config_;
@@ -331,6 +343,19 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   uint64_t achievement_notification_listener_ = 0;
   ui::DebugOverlayDialog::FrameStatsProvider frame_stats_provider_;
   std::filesystem::path config_path_;
+
+  // Xbox guide. The guide deletes itself after closing, clearing guide_.
+  std::mutex guide_mutex_;
+  std::shared_ptr<const ui::guide::GuideAssets> guide_assets_;  // guide_mutex_
+  std::string guide_error_;                                     // guide_mutex_
+  std::thread guide_loader_;
+  std::thread guide_poller_;
+  std::atomic<bool> guide_stop_{false};
+  std::unique_ptr<ui::guide::GuideMedia> guide_media_;
+  ImFont* guide_font_regular_ = nullptr;
+  ImFont* guide_font_bold_ = nullptr;
+  ui::guide::XboxGuide* guide_ = nullptr;
+  bool guide_unavailable_shown_ = false;
 };
 
 }  // namespace rex

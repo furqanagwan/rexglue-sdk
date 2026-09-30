@@ -97,6 +97,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"Quote", VirtualKey::kOem7},
     // Control
     {"Escape", VirtualKey::kEscape},
+    {"Home", VirtualKey::kHome},
     {"Return", VirtualKey::kReturn},
     {"Space", VirtualKey::kSpace},
     {"Tab", VirtualKey::kTab},

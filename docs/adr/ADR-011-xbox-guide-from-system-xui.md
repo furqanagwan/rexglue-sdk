@@ -1,6 +1,6 @@
 # ADR-011: The Xbox guide runs the console's own XUI scenes
 
-Date: 2026-09-30. Status: format layer implemented; runtime and guide in progress in
+Date: 2026-09-30. Status: implemented (format layer, runtime, guide); owner pad session pending in
 [RG-GDK-041](https://github.com/furqanagwan/rexglue-sdk/issues/127).
 
 ## Context

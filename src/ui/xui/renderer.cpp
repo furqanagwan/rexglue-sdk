@@ -411,7 +411,9 @@ class Renderer {
     // rasterized at their screen size), then map the vertices through `m`.
     const float size = element.GetFloat("PointSize", 14.0f) * kPointToSceneUnits * s;
     const float box_w = w * s, box_h = h * s;
-    const bool wrap = !(style & kTextNoWrap);
+    // Edit controls (message box bodies) wrap whatever their presenter says.
+    const Element* owner = element.IsA("XuiTextPresenter") ? OwningControl(element) : nullptr;
+    const bool wrap = !(style & kTextNoWrap) || (owner && owner->IsA("XuiEdit"));
     if (!wrap && (style & kTextEllipsis)) {
       if (font->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str()).x > box_w) {
         while (!text.empty() &&

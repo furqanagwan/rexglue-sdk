@@ -118,9 +118,19 @@ class Element {
 
   /// Adds a scene built from `node` (a tab's content file) as a child.
   Element* AttachScene(const Node& node, const SceneContext& context);
+  void RemoveChild(Element* child);
 
-  // Focus: controls (not scenes) that are shown and enabled.
+  /// Fills a list with `count` copies of its visual's item template
+  /// (control_ListItem), `columns` per row. Replaces earlier items.
+  std::vector<Element*> PopulateList(size_t count, int columns = 1);
+  const std::vector<Element*>& list_items() const { return list_items_; }
+
+  // Focus: shown controls (not scenes). Disabled ones take focus too, and
+  // play their visual's Disable frames, as on the console.
   bool focusable() const;
+  bool enabled() const { return GetBool("Enabled", true); }
+  /// Plays Press, or PressDisable for a disabled control.
+  void Press();
   /// The control Nav<direction> names, searched in the enclosing scene.
   Element* Navigate(NavDirection direction);
   /// Plays the visual's KillFocus on `from` and Focus (or InitFocus when
@@ -143,6 +153,7 @@ class Element {
   void SetPath(std::span<const PropDef* const> path, int32_t index, const Value& value);
 
   Element* parent_ = nullptr;
+  const Node* node_ = nullptr;
   const SceneContext* context_ = nullptr;
   std::unique_ptr<SceneContext> owned_context_;  // for AttachScene'd content
   const ClassDef* cls_ = nullptr;
@@ -150,6 +161,7 @@ class Element {
   PropertyBag props_;
   std::vector<std::unique_ptr<Element>> children_;
   std::string secondary_text_;
+  std::vector<Element*> list_items_;
   // Size the parent had when this element was laid out, for anchoring.
   float design_parent_width_ = 0.0f;
   float design_parent_height_ = 0.0f;

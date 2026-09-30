@@ -42,6 +42,7 @@
 #include <rex/system/xthread.h>
 #include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
+#include <rex/ui/guide/xbox_guide.h>
 #include <rex/ui/keybinds.h>
 #include <rex/version.h>
 
@@ -49,6 +50,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <string_view>
@@ -76,11 +78,11 @@ namespace {
 // Shows the title as the console would: its name from the XDBF string table,
 // in the user's language when it has one, and its dashboard icon. Leaves the
 // window as it is when the executable has no XDBF resource.
-void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_state) {
+// The title's own XDBF name, in the user's language when it has one.
+std::string TitleName(const system::KernelState& kernel_state) {
   const system::util::XdbfGameData db = kernel_state.title_xdbf();
   if (!db.is_valid()) {
-    REXLOG_WARN("Title has no XDBF resource; keeping the project name as the window title");
-    return;
+    return {};
   }
   const system::XLanguage language =
       db.GetExistingLanguage(static_cast<system::XLanguage>(REXCVAR_GET(user_language)));
@@ -88,6 +90,16 @@ void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_st
   if (name.empty()) {
     name = system::util::TitleDisplayName(db.title());
   }
+  return name;
+}
+
+void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_state) {
+  const system::util::XdbfGameData db = kernel_state.title_xdbf();
+  if (!db.is_valid()) {
+    REXLOG_WARN("Title has no XDBF resource; keeping the project name as the window title");
+    return;
+  }
+  const std::string name = TitleName(kernel_state);
   if (!name.empty()) {
     window.SetTitle(name);
     REXLOG_INFO("Title: {}", name);
@@ -102,7 +114,9 @@ void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_st
 
 // --- ReXApp ---
 
-ReXApp::~ReXApp() = default;
+ReXApp::~ReXApp() {
+  StopGuide();
+}
 
 ReXApp::ReXApp(ui::WindowedAppContext& ctx, std::string_view name, PPCImageInfo ppc_info,
                std::string_view usage)
@@ -537,7 +551,15 @@ bool ReXApp::SetupPresentation() {
 
 void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDrawer* drawer) {
   imgui_drawer_ = std::make_unique<rex::ui::ImGuiDrawer>(
-      window_.get(), 64, [this](ImFontAtlas* atlas) { OnConfigureFonts(atlas); },
+      window_.get(), 64,
+      [this](ImFontAtlas* atlas) {
+        if (REXCVAR_GET(xbox_guide)) {
+          const ui::guide::GuideFonts fonts = ui::guide::AddGuideFonts(atlas);
+          guide_font_regular_ = fonts.regular;
+          guide_font_bold_ = fonts.bold;
+        }
+        OnConfigureFonts(atlas);
+      },
       [this](ImGuiStyle& imgui_style, rex::ui::Style& ui_style) {
         OnConfigureStyle(imgui_style, ui_style);
       });
@@ -575,6 +597,7 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
     }
   });
 
+  SetupGuide();
   OnCreateDialogs(imgui_drawer_.get());
 }
 
@@ -621,6 +644,7 @@ void ReXApp::LaunchModule() {
     }
 
     OnPostLaunchModule(main_thread.get());
+    StartGuidePoller();
     main_thread->Resume();
 
     module_thread_ = std::thread([this, main_thread = std::move(main_thread)]() mutable {
@@ -712,6 +736,8 @@ void ReXApp::OnDestroy() {
   // Notify subclass before cleanup
   OnShutdown();
 
+  StopGuide();
+
   // Unregister overlay keybinds before destroying dialogs
   rex::ui::UnregisterBind("bind_debug_overlay");
   rex::ui::UnregisterBind("bind_console");
@@ -768,6 +794,145 @@ void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provi
   if (debug_overlay_) {
     debug_overlay_->SetStatsProvider(provider);
   }
+}
+
+// --- Xbox guide (RG-GDK-041) ---
+
+void ReXApp::SetupGuide() {
+  if (!REXCVAR_GET(xbox_guide) || guide_loader_.joinable()) {
+    return;
+  }
+  rex::ui::RegisterBind("bind_xbox_guide", "Home", "Open or close the Xbox guide",
+                        [this] { ToggleGuide(); });
+  // Reading the system update decompresses XAM; keep it off the UI thread.
+  guide_loader_ = std::thread([this] {
+    std::string errors;
+    for (const std::filesystem::path& location : ui::guide::SystemUpdateLocations()) {
+      std::error_code ec;
+      if (!std::filesystem::exists(location, ec)) {
+        continue;
+      }
+      std::string error;
+      std::shared_ptr<const ui::guide::GuideAssets> assets =
+          ui::guide::GuideAssets::Load(location, &error);
+      if (assets) {
+        REXLOG_INFO("Xbox guide: using the system update at {}", location.string());
+        std::lock_guard<std::mutex> lock(guide_mutex_);
+        guide_assets_ = std::move(assets);
+        return;
+      }
+      errors += fmt::format("{}: {}. ", location.string(), error);
+    }
+    if (errors.empty()) {
+      errors =
+          "No console system update found. Set xbox_guide_system_update to a "
+          "$SystemUpdate folder (dashboard 2.0.17559).";
+    }
+    REXLOG_INFO("Xbox guide unavailable: {}", errors);
+    std::lock_guard<std::mutex> lock(guide_mutex_);
+    guide_error_ = std::move(errors);
+  });
+}
+
+void ReXApp::StartGuidePoller() {
+  auto* input =
+      runtime_ ? static_cast<rex::input::InputSystem*>(runtime_->input_system()) : nullptr;
+  if (!REXCVAR_GET(xbox_guide) || !input || guide_poller_.joinable()) {
+    return;
+  }
+  guide_poller_ = std::thread([this, input] {
+    std::array<ui::guide::GuideChord, 4> chords;
+    while (!guide_stop_.load(std::memory_order_acquire)) {
+      const auto connected = input->GetConnectedUsers();
+      for (uint32_t user = 0; user < chords.size(); ++user) {
+        uint16_t buttons = 0;
+        // Polling a missing XInput pad is slow; only read connected users.
+        if (connected.test(user) || (user == 0 && connected.none())) {
+          rex::input::X_INPUT_STATE state = {};
+          if (input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
+            buttons = state.gamepad.buttons;
+          }
+        }
+        if (chords[user].Update(buttons)) {
+          app_context().CallInUIThread([this] { ToggleGuide(); });
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+  });
+}
+
+void ReXApp::StopGuide() {
+  guide_stop_.store(true, std::memory_order_release);
+  if (guide_poller_.joinable()) {
+    guide_poller_.join();
+  }
+  if (guide_loader_.joinable()) {
+    guide_loader_.join();
+  }
+  if (guide_) {
+    delete guide_;  // detaches from the ImGui drawer and releases guest input
+    guide_ = nullptr;
+  }
+  guide_media_.reset();
+  rex::ui::UnregisterBind("bind_xbox_guide");
+}
+
+void ReXApp::ToggleGuide() {
+  if (!REXCVAR_GET(xbox_guide) || !imgui_drawer_ || shutting_down_.load() || !runtime_ ||
+      !runtime_->kernel_state()) {
+    return;
+  }
+  if (guide_) {
+    guide_->Dismiss();
+    return;
+  }
+  std::shared_ptr<const ui::guide::GuideAssets> assets;
+  std::string error;
+  {
+    std::lock_guard<std::mutex> lock(guide_mutex_);
+    assets = guide_assets_;
+    error = guide_error_;
+  }
+  if (!assets) {
+    // Still loading, or no system update: say which, once.
+    if (!error.empty() && !guide_unavailable_shown_) {
+      guide_unavailable_shown_ = true;
+      ui::ImGuiDialog::ShowMessageBox(imgui_drawer_.get(), "Xbox Guide", error);
+    }
+    return;
+  }
+  if (!guide_media_) {
+    guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), assets);
+  }
+  auto* input = static_cast<rex::input::InputSystem*>(runtime_->input_system());
+  uint16_t held = 0;
+  if (input) {
+    rex::input::X_INPUT_STATE state = {};
+    if (input->GetStateForUI(input->GetLastUsedUser(), &state) == X_ERROR_SUCCESS) {
+      held = state.gamepad.buttons;
+    }
+  }
+  ui::guide::GuideHost host;
+  host.input = input;
+  host.kernel_state = runtime_->kernel_state();
+  host.achievements = &achievements();
+  host.runtime = runtime_.get();
+  host.immediate_drawer = immediate_drawer_.get();
+  host.title_name = TitleName(*runtime_->kernel_state());
+  host.on_closed = [this](bool exit_title) {
+    guide_ = nullptr;
+    if (exit_title) {
+      REXLOG_INFO("Xbox guide: exiting the title");
+      app_context().CallInUIThreadDeferred([this] {
+        if (window_) {
+          window_->RequestClose();
+        }
+      });
+    }
+  };
+  guide_ = new ui::guide::XboxGuide(imgui_drawer_.get(), std::move(assets), guide_media_.get(),
+                                    {guide_font_regular_, guide_font_bold_}, std::move(host), held);
 }
 
 }  // namespace rex

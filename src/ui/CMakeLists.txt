@@ -29,6 +29,12 @@ set(REXUI_OVERLAY_SOURCES
     overlay/settings_overlay.cpp
 )
 
+# The Xbox guide on the console's own scenes (RG-GDK-041)
+set(REXUI_GUIDE_SOURCES
+    guide/guide_input.cpp
+    guide/xbox_guide.cpp
+)
+
 # Native XUI: the console's own scene format (RG-GDK-041)
 set(REXUI_XUI_SOURCES
     xui/package.cpp
@@ -66,6 +72,7 @@ set(REXUI_SOURCES
     ${REXUI_CORE_SOURCES}
     ${REXUI_OVERLAY_SOURCES}
     ${REXUI_XUI_SOURCES}
+    ${REXUI_GUIDE_SOURCES}
     ${REXUI_PLATFORM_SOURCES}
 )
 

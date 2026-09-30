@@ -204,6 +204,18 @@ Additional guest DLLs must also be statically generated and registered; see
 game-patches entry) go in the codegen config as `[[patch]]` tables and are
 compiled in ([code patches](docs/code-patches.md)); recompile after changing one.
 
+### Xbox guide
+
+Press Back and Start together (or the Guide button where the input backend
+reports it, or Home on the keyboard) to open the Xbox 360 guide over the running
+title. The guide is the console's own: its scenes, animations and sounds are read
+at run time from your own dashboard 2.0.17559 system update, and nothing from it
+ships with the SDK. Put the `$SystemUpdate` folder beside the executable or in
+`%LOCALAPPDATA%\ReXGlue`, or name it with `--xbox_guide_system_update=<path>`.
+Games & Apps has the title's achievements (grid and details), and Xbox Home
+(Y, or the Home tab) ends the title after the console's confirmation. See
+[Xbox guide](docs/xbox-guide.md).
+
 ## Repository structure
 
 | Path | Responsibility |

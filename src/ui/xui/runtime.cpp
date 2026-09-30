@@ -142,7 +142,11 @@ float EaseProgress(float t, int8_t ease_in, int8_t ease_out) {
 }
 
 Element::Element(const Node& node, Element* parent, const SceneContext* context)
-    : parent_(parent), context_(context), cls_(node.cls), class_name_(node.class_name) {
+    : parent_(parent),
+      node_(&node),
+      context_(context),
+      cls_(node.cls),
+      class_name_(node.class_name) {
   if (node.props) {
     props_ = *node.props;
   }
@@ -217,6 +221,47 @@ Element* Element::AttachScene(const Node& node, const SceneContext& context) {
   child->Build(node);
   children_.push_back(std::move(child));
   return children_.back().get();
+}
+
+void Element::RemoveChild(Element* child) {
+  std::erase_if(list_items_, [child](Element* item) { return item == child; });
+  std::erase_if(children_, [child](const std::unique_ptr<Element>& c) { return c.get() == child; });
+}
+
+std::vector<Element*> Element::PopulateList(size_t count, int columns) {
+  for (Element* item : std::vector<Element*>(list_items_)) {
+    RemoveChild(item);
+  }
+  Element* item_template = nullptr;
+  for (auto& child : children_) {
+    if (child->id() == "control_ListItem") {
+      item_template = child.get();
+      break;
+    }
+  }
+  if (!item_template || count == 0) {
+    return list_items_;
+  }
+  item_template->SetVisible(false);
+  columns = std::max(columns, 1);
+  const Vec3 origin = item_template->position();
+  const float item_width = item_template->width();
+  const float item_height = item_template->height();
+  for (size_t i = 0; i < count; ++i) {
+    std::unique_ptr<Element> item(new Element(*item_template->node_, this, context_));
+    item->design_parent_width_ = item_template->design_parent_width_;
+    item->design_parent_height_ = item_template->design_parent_height_;
+    item->Build(*item_template->node_);
+    item->Set("Width", Value{item_width});
+    item->Set("Height", Value{item_height});
+    item->Set("Anchor", Value{uint32_t(0)});
+    item->Set("Position", Value{Vec3{origin.x + float(i % size_t(columns)) * item_width,
+                                     origin.y + float(i / size_t(columns)) * item_height, 0.0f}});
+    item->SetVisible(true);
+    list_items_.push_back(item.get());
+    children_.push_back(std::move(item));
+  }
+  return list_items_;
 }
 
 std::string_view Element::id() const {
@@ -578,7 +623,13 @@ void Element::FireSounds(double from, double to, bool inclusive) {
 }
 
 bool Element::focusable() const {
-  return IsA("XuiControl") && !IsA("XuiScene") && visible() && GetBool("Enabled", true);
+  return IsA("XuiControl") && !IsA("XuiScene") && visible();
+}
+
+void Element::Press() {
+  if (!(enabled() ? Play("Press") : Play("PressDisable"))) {
+    Play("Press");
+  }
 }
 
 Element* Element::Navigate(NavDirection direction) {
@@ -611,12 +662,15 @@ Element* Element::Navigate(NavDirection direction) {
 
 void Element::MoveFocus(Element* from, Element* to, bool initial) {
   if (from && from != to) {
-    if (!from->Play("KillFocus")) {
+    // No KillFocusDisable frame: a disabled control goes straight back.
+    if (!(from->enabled() ? from->Play("KillFocus") : from->Play("NormalDisable"))) {
       from->Play("Normal");
     }
   }
   if (to) {
-    if (!(initial && to->Play("InitFocus"))) {
+    const std::string_view suffix = to->enabled() ? "" : "Disable";
+    const std::string focus = std::string(initial ? "InitFocus" : "Focus") + std::string(suffix);
+    if (!to->Play(focus) && !to->Play(initial ? "InitFocus" : "Focus")) {
       to->Play("Focus");
     }
   }

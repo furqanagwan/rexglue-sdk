@@ -1,0 +1,903 @@
+/**
+ * @file        ui/guide/xbox_guide.cpp
+ * @brief       The Xbox 360 guide, run from the console's own scenes (RG-GDK-041)
+ *
+ * @copyright   Copyright (c) 2026 Tom Clay
+ * @license     BSD 3-Clause License
+ */
+
+#include <rex/ui/guide/xbox_guide.h>
+
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
+
+#include <fmt/format.h>
+
+#include <rex/audio/ui_sound.h>
+#include <rex/data_locations.h>
+#include <rex/filesystem.h>
+#include <rex/input/input.h>
+#include <rex/input/input_system.h>
+#include <rex/kernel/xam/module.h>
+#include <rex/logging.h>
+#include <rex/system/achievement_manager.h>
+#include <rex/system/kernel_state.h>
+#include <rex/ui/image_decode.h>
+#include <rex/ui/immediate_drawer.h>
+
+REXCVAR_DEFINE_BOOL(xbox_guide, true, "UI",
+                    "Back+Start, the Guide button or Home opens the Xbox guide (needs the "
+                    "console's system update, see xbox_guide_system_update)");
+REXCVAR_DEFINE_STRING(xbox_guide_system_update, "", "UI",
+                      "The console's $SystemUpdate folder (dashboard 2.0.17559) or its "
+                      "su*_00000000 package, for the Xbox guide's scenes and sounds");
+
+namespace rex::ui::guide {
+namespace {
+
+constexpr float kSceneWidth = 852.0f;
+constexpr float kSceneHeight = 480.0f;
+constexpr uint32_t kXnSysUi = 0x00000009;  // XN_SYS_UI
+constexpr std::string_view kAchievementScheme = "achievement://";
+// XDBF achievement flag: shown before it is earned. Without it, secret.
+constexpr uint32_t kAchievementShowUnachieved = 0x8;
+// The default gamer picture, in XAM's shared resources.
+constexpr std::string_view kDefaultGamerPicture = "sharedres://64_fffe07d10002000000010000.png";
+
+// The first child of a scene file's canvas: the scene itself.
+const xui::Node& SceneNode(const xui::Document& document) {
+  return document.root.children.empty() ? document.root : document.root.children.front();
+}
+
+const xui::Node* FindVisual(const xui::Document& skin, std::string_view id) {
+  for (const xui::Node& visual : skin.root.children) {
+    if (visual.id() == id) {
+      return &visual;
+    }
+  }
+  return nullptr;
+}
+
+std::string FormatCount(std::string format, uint32_t first, uint32_t second) {
+  // XUIS strings use FormatMessage inserts: %1!u! and %2!u!.
+  auto replace = [&](std::string_view token, uint32_t value) {
+    if (size_t at = format.find(token); at != std::string::npos) {
+      format.replace(at, token.size(), std::to_string(value));
+    }
+  };
+  replace("%1!u!", first);
+  replace("%2!u!", second);
+  return format;
+}
+
+void ForEach(xui::Element* root, const std::function<void(xui::Element*)>& fn) {
+  fn(root);
+  for (const auto& child : root->children()) {
+    ForEach(child.get(), fn);
+  }
+}
+
+}  // namespace
+
+std::vector<std::filesystem::path> SystemUpdateLocations() {
+  std::vector<std::filesystem::path> locations;
+  if (const std::string& configured = REXCVAR_GET(xbox_guide_system_update); !configured.empty()) {
+    locations.emplace_back(configured);
+  }
+  locations.push_back(rex::filesystem::GetExecutableFolder() / "$SystemUpdate");
+  locations.push_back(rex::filesystem::GetLocalAppDataFolder() / "ReXGlue" / "$SystemUpdate");
+  return locations;
+}
+
+std::string FindString(const std::vector<std::string>& strings, std::string_view prefix,
+                       std::string_view fallback) {
+  // An exact match first: "Yes" is also the start of "Yes, apply it".
+  for (const std::string& s : strings) {
+    if (s == prefix) {
+      return s;
+    }
+  }
+  for (const std::string& s : strings) {
+    if (s.starts_with(prefix)) {
+      return s;
+    }
+  }
+  return std::string(fallback);
+}
+
+std::unique_ptr<GuideAssets> GuideAssets::Load(const std::filesystem::path& path,
+                                               std::string* error) {
+  auto assets = std::make_unique<GuideAssets>();
+  std::string load_error;
+  assets->update = xui::SystemUpdate::Load(path, &load_error);
+  if (!assets->update) {
+    if (error) {
+      *error = load_error;
+    }
+    return nullptr;
+  }
+  auto scene = [&](xui::Document& out, std::string_view package, std::string_view name) {
+    const xui::Package* p = assets->update->Find(package);
+    std::string scene_error = "missing";
+    auto doc = p ? xui::ParseXur(p->Find(name), &scene_error) : std::nullopt;
+    if (!doc) {
+      if (error) {
+        *error = fmt::format("{} in {}: {}", name, package, scene_error);
+      }
+      return false;
+    }
+    out = std::move(*doc);
+    return true;
+  };
+  auto strings = [&](std::vector<std::string>& out, std::string_view package,
+                     std::string_view name) {
+    if (const xui::Package* p = assets->update->Find(package)) {
+      if (auto table = xui::ParseStringTable(p->Find(name), nullptr)) {
+        out = std::move(*table);
+      }
+    }
+  };
+  if (!scene(assets->skin, "huduiskin/skin", "skin.xur") ||
+      !scene(assets->backdrop, "xam/xam", "hudbkgnd.xur") ||
+      !scene(assets->main, "hud/hud", "GuideMain.xur") ||
+      !scene(assets->home_tab, "hud/hud", "HomeTabSignedIn.xur") ||
+      !scene(assets->games_tab, "hud/hud", "GamesTabSignedIn.xur") ||
+      !scene(assets->settings_tab, "hud/hud", "SettingsTabSignedIn.xur")) {
+    return nullptr;
+  }
+  std::string ignored;
+  assets->has_achievement_scenes =
+      scene(assets->achievements, "gamerprofile/gp", "802_Achievements.xur") &&
+      scene(assets->achievement_details, "gamerprofile/gp", "828_AchievDetails.xur");
+  if (!assets->has_achievement_scenes && error) {
+    REXLOG_WARN("Xbox guide: no achievement scenes ({}); Achievements stays disabled", *error);
+    error->clear();
+  }
+  strings(assets->hud_strings, "hud/hud", "Strings.xus");
+  strings(assets->xam_strings, "huduiskin/xam", "XamStrings.xus");
+  strings(assets->profile_strings, "gamerprofile/gp", "GamerProfile_Custom.xus");
+  return assets;
+}
+
+GuideFonts AddGuideFonts(ImFontAtlas* atlas) {
+  GuideFonts fonts;
+  const char* windows = std::getenv("WINDIR");
+  if (!windows) {
+    return fonts;
+  }
+  // Latin, Latin Extended-A, punctuation, euro and trade mark.
+  static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x2010, 0x2027,
+                                    0x20AC, 0x20AC, 0x2122, 0x2122, 0};
+  ImFontConfig config;
+  config.OversampleH = 2;
+  config.OversampleV = 1;
+  // One size; the static atlas scales it to each XUI point size.
+  constexpr float kBakedSize = 48.0f;
+  auto add = [&](const char* file) -> ImFont* {
+    const std::filesystem::path path = std::filesystem::path(windows) / "Fonts" / file;
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) {
+      return nullptr;
+    }
+    return atlas->AddFontFromFileTTF(path.string().c_str(), kBakedSize, &config, kRanges);
+  };
+  fonts.regular = add("segoeui.ttf");
+  fonts.bold = add("seguisb.ttf");
+  if (!fonts.bold) {
+    fonts.bold = fonts.regular;
+  }
+  return fonts;
+}
+
+GuideMedia::GuideMedia(ImmediateDrawer* immediate_drawer, std::shared_ptr<const GuideAssets> assets)
+    : immediate_drawer_(immediate_drawer),
+      assets_(std::move(assets)),
+      player_(audio::UiSoundPlayer::Create()) {}
+
+GuideMedia::~GuideMedia() = default;
+
+ImTextureID GuideMedia::Texture(std::string_view path, std::string_view package, int* width,
+                                int* height) {
+  const std::string key = fmt::format("{}|{}", package, path);
+  auto it = images_.find(key);
+  if (it == images_.end()) {
+    Image image;
+    std::span<const uint8_t> bytes = xui::ResolveFile(*assets_->update, path, package);
+    if (!bytes.empty() && immediate_drawer_) {
+      std::vector<uint8_t> rgba =
+          DecodeImageRGBA(bytes.data(), bytes.size(), image.width, image.height);
+      if (!rgba.empty()) {
+        image.texture =
+            immediate_drawer_->CreateTexture(uint32_t(image.width), uint32_t(image.height),
+                                             ImmediateTextureFilter::kLinear, false, rgba.data());
+      }
+    }
+    it = images_.emplace(key, std::move(image)).first;
+  }
+  *width = it->second.width;
+  *height = it->second.height;
+  return reinterpret_cast<ImTextureID>(it->second.texture.get());
+}
+
+void GuideMedia::PlaySound(std::string_view file, std::string_view package) {
+  if (!player_) {
+    return;
+  }
+  const std::string key = fmt::format("{}|{}", package, file);
+  auto it = sounds_.find(key);
+  if (it == sounds_.end()) {
+    std::shared_ptr<const audio::PcmSound> sound;
+    std::string error;
+    if (auto decoded =
+            audio::DecodeXmaFile(xui::ResolveFile(*assets_->update, file, package), &error)) {
+      sound = std::make_shared<audio::PcmSound>(std::move(*decoded));
+    } else {
+      REXLOG_WARN("Xbox guide: sound {} did not decode: {}", file, error);
+    }
+    it = sounds_.emplace(key, std::move(sound)).first;
+  }
+  if (it->second) {
+    player_->Play(it->second);
+  }
+}
+
+XboxGuide::XboxGuide(ImGuiDrawer* drawer, std::shared_ptr<const GuideAssets> assets,
+                     GuideMedia* media, GuideFonts fonts, GuideHost host, uint16_t held_buttons)
+    : ImGuiDialog(drawer),
+      assets_(std::move(assets)),
+      media_(media),
+      fonts_(fonts),
+      host_(std::move(host)),
+      pad_(held_buttons),
+      icons_(host_.immediate_drawer, host_.runtime) {
+  render_.regular_font = fonts_.regular;
+  render_.bold_font = fonts_.bold;
+  render_.texture = [this](std::string_view path, std::string_view package, int* w, int* h) {
+    return Texture(path, package, w, h);
+  };
+  auto sound = [this](std::string_view file, std::string_view package) {
+    media_->PlaySound(file, package);
+  };
+  auto context = [&](xui::SceneContext& c, std::string package) {
+    c.skin = &assets_->skin;
+    c.package = std::move(package);
+    c.play_sound = sound;
+  };
+  context(backdrop_context_, "xam/xam");
+  context(hud_context_, "hud/hud");
+  context(skin_context_, "huduiskin/skin");
+  context(profile_context_, "gamerprofile/gp");
+
+  // The HUD frame, with the guide as its hosted app.
+  backdrop_ = xui::Element::Create(assets_->backdrop.root, backdrop_context_);
+  hud_root_ = backdrop_->FindById("HUDRootScene");
+  app_host_ = backdrop_->FindById("AppHostElementId");
+  error_host_ = backdrop_->FindById("ErrorHostElement");
+  main_ = app_host_->AttachScene(SceneNode(assets_->main), hud_context_);
+  tabs_ = main_->FindById("Tabscene");
+  for (int tab = 1; tab <= 4; ++tab) {
+    tab_scenes_[tab] = main_->FindById(fmt::format("Tab{}", tab));
+  }
+  tab_scenes_[1]->AttachScene(SceneNode(assets_->games_tab), hud_context_);
+  tab_scenes_[2]->AttachScene(SceneNode(assets_->home_tab), hud_context_);
+  tab_scenes_[4]->AttachScene(SceneNode(assets_->settings_tab), hud_context_);
+  ConfigureMain();
+
+  // The title sees system UI, as for the Guide button on the console.
+  if (host_.input) {
+    host_.input->AddUIInputBlocker();
+  }
+  kernel::xam::xeXamAddSystemUI();
+  if (host_.kernel_state) {
+    host_.kernel_state->BroadcastNotification(kXnSysUi, 1);
+  }
+
+  // GuideMain's "<tab>Close" brings a tab's blade in (the guide opening, or
+  // an app launched from it closing); "<tab>Open" takes it out.
+  hud_root_->Play("ClosedToHalf");
+  main_->Play("2Close");
+  tabs_->Play("2Close");
+  SetFocus(FirstFocusable(tab_scenes_[2]), /*initial=*/true);
+  last_tick_ = opened_ = std::chrono::steady_clock::now();
+}
+
+XboxGuide::~XboxGuide() {
+  if (host_.input) {
+    host_.input->RemoveUIInputBlocker();
+  }
+  kernel::xam::xeXamRemoveSystemUI();
+  if (host_.kernel_state) {
+    host_.kernel_state->BroadcastNotification(kXnSysUi, 0);
+  }
+}
+
+void XboxGuide::ConfigureMain() {
+  // Controls the guide acts on; the rest stay in the menu, disabled, as
+  // dashboard features a recompiled title cannot reach.
+  auto handled = [&](std::string_view id) {
+    return id == "btnDashboard" || id == "btnShutdown" ||
+           (id == "btnAchievements" && assets_->has_achievement_scenes && host_.achievements);
+  };
+  ForEach(main_, [&](xui::Element* e) {
+    if (e->focusable() && !handled(e->id())) {
+      e->Set("Enabled", xui::Value{false});
+      e->Play("NormalDisable");
+    }
+  });
+  if (xui::Element* tray = main_->FindById("btnDiscInTray"); tray && !host_.title_name.empty()) {
+    tray->SetText(host_.title_name);
+  }
+  // Achievements shows the gamerscore earned; the console's gamerscore glyph
+  // is in the Segoe Xbox font, so a G stands in for it.
+  if (xui::Element* button = main_->FindById("btnAchievements"); button && host_.achievements) {
+    uint32_t earned = 0;
+    for (const auto& a : host_.achievements->ListAchievements()) {
+      if (host_.achievements->IsUnlocked(a.id)) {
+        earned += a.gamerscore;
+      }
+    }
+    button->SetSecondaryText(std::to_string(earned));
+    if (xui::Element* glyph = button->FindById("glyph_presenter")) {
+      glyph->SetText("G");
+    }
+  }
+  if (xui::Element* picture = backdrop_->FindById("GamerPic")) {
+    picture->Set("ImagePath", xui::Value{std::string(kDefaultGamerPicture)});
+  }
+  SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"), main_->GetString("LegendY"));
+  UpdateClock();
+}
+
+void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_view y) {
+  auto legend = [&](std::string_view button, std::string_view text_id, std::string_view text) {
+    xui::Element* glyph = backdrop_->FindById(button);
+    xui::Element* label = backdrop_->FindById(text_id);
+    if (!glyph || !label) {
+      return;
+    }
+    glyph->SetVisible(!text.empty());
+    label->SetVisible(!text.empty());
+    label->SetText(std::string(text));
+  };
+  legend("AButton", "AText", a);
+  legend("BButton", "BText", b);
+  legend("XButton", "XText", "");
+  legend("YButton", "YText", y);
+}
+
+void XboxGuide::UpdateClock() {
+  const std::time_t now = std::time(nullptr);
+  if (now / 60 == clock_minute_) {
+    return;
+  }
+  clock_minute_ = now / 60;
+  std::tm local = {};
+  localtime_s(&local, &now);
+  const int hour = local.tm_hour % 12 == 0 ? 12 : local.tm_hour % 12;
+  if (xui::Element* clock = backdrop_->FindById("DateTimeTextId")) {
+    clock->SetText(
+        fmt::format("{}:{:02} {}", hour, local.tm_min, local.tm_hour < 12 ? "AM" : "PM"));
+  }
+}
+
+ImTextureID XboxGuide::Texture(std::string_view path, std::string_view package, int* width,
+                               int* height) {
+  if (path.starts_with(kAchievementScheme) && host_.achievements) {
+    const uint32_t id = uint32_t(
+        std::strtoul(std::string(path.substr(kAchievementScheme.size())).c_str(), nullptr, 10));
+    if (auto info = host_.achievements->FindAchievement(id)) {
+      if (ImmediateTexture* icon = icons_.GetIcon(*info)) {
+        *width = int(icon->width);
+        *height = int(icon->height);
+        return reinterpret_cast<ImTextureID>(icon);
+      }
+    }
+    return ImTextureID{};
+  }
+  return media_->Texture(path, package, width, height);
+}
+
+xui::Element* XboxGuide::FirstFocusable(xui::Element* root) {
+  xui::Element* found = nullptr;
+  ForEach(root, [&](xui::Element* e) {
+    if (!found && e != root && e->focusable() && !e->IsA("XuiBackButton")) {
+      found = e;
+    }
+  });
+  return found;
+}
+
+void XboxGuide::SetFocus(xui::Element* control, bool initial) {
+  if (!control || control == focus_) {
+    return;
+  }
+  xui::Element::MoveFocus(focus_, control, initial);
+  focus_ = control;
+}
+
+void XboxGuide::Dismiss() {
+  BeginClose(/*exit_title=*/false);
+}
+
+void XboxGuide::BeginClose(bool exit_title) {
+  if (closing_) {
+    return;
+  }
+  closing_ = true;
+  exit_title_ = exit_title;
+  if (screen_ == Screen::kConfirm) {
+    hud_root_->Play("ErrorToClosed");
+  } else if (screen_ == Screen::kAchievements || screen_ == Screen::kAchievementDetail) {
+    hud_root_->Play("FullToClosed");
+  } else {
+    hud_root_->Play("HalfToClosed");
+    main_->Play(fmt::format("{}Open", tab_));
+    tabs_->Play(fmt::format("{}Open", tab_));
+  }
+}
+
+void XboxGuide::OnDraw(ImGuiIO& io) {
+  const auto now = std::chrono::steady_clock::now();
+  const double seconds = std::chrono::duration<double>(now - last_tick_).count();
+  last_tick_ = now;
+
+  if (!closing_) {
+    // Keyboard: arrows, Enter or Space for A, Escape or Backspace for B, Y.
+    struct Key {
+      ImGuiKey key;
+      GuideAction action;
+    };
+    constexpr Key kKeys[] = {
+        {ImGuiKey_UpArrow, GuideAction::kUp},
+        {ImGuiKey_DownArrow, GuideAction::kDown},
+        {ImGuiKey_LeftArrow, GuideAction::kLeft},
+        {ImGuiKey_RightArrow, GuideAction::kRight},
+        {ImGuiKey_Enter, GuideAction::kA},
+        {ImGuiKey_Space, GuideAction::kA},
+        {ImGuiKey_Escape, GuideAction::kB},
+        {ImGuiKey_Backspace, GuideAction::kB},
+        {ImGuiKey_Y, GuideAction::kY},
+        {ImGuiKey_PageUp, GuideAction::kPreviousTab},
+        {ImGuiKey_PageDown, GuideAction::kNextTab},
+    };
+    std::vector<GuideAction> actions;
+    for (const Key& key : kKeys) {
+      if (ImGui::IsKeyPressed(key.key, /*repeat=*/true)) {
+        actions.push_back(key.action);
+      }
+    }
+    if (host_.input) {
+      input::X_INPUT_STATE state = {};
+      const uint32_t user = host_.input->GetLastUsedUser();
+      if (host_.input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
+        const uint64_t now_ms =
+            uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(now - opened_).count());
+        for (GuideAction action : pad_.Update(state.gamepad.buttons, state.gamepad.thumb_lx,
+                                              state.gamepad.thumb_ly, now_ms)) {
+          actions.push_back(action);
+        }
+      }
+    }
+    for (GuideAction action : actions) {
+      Handle(action);
+      if (closing_) {
+        break;
+      }
+    }
+  }
+
+  UpdateClock();
+  backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
+  if (!hud_root_->playing()) {
+    for (xui::Element* element : pending_removal_) {
+      element->parent()->RemoveChild(element);
+    }
+    pending_removal_.clear();
+  }
+
+  const float scale = std::min(io.DisplaySize.x / kSceneWidth, io.DisplaySize.y / kSceneHeight);
+  const ImVec2 origin((io.DisplaySize.x - kSceneWidth * scale) / 2,
+                      (io.DisplaySize.y - kSceneHeight * scale) / 2);
+  xui::Render(ImGui::GetForegroundDrawList(), *backdrop_, origin, scale, 1.0f, render_);
+
+  if (closing_ && !hud_root_->playing() && !tabs_->playing()) {
+    Close();
+  }
+}
+
+void XboxGuide::OnClose() {
+  if (host_.on_closed) {
+    host_.on_closed(exit_title_);
+  }
+}
+
+void XboxGuide::Handle(GuideAction action) {
+  switch (screen_) {
+    case Screen::kMain:
+      HandleMain(action);
+      break;
+    case Screen::kAchievements:
+    case Screen::kAchievementDetail:
+      HandleAchievements(action);
+      break;
+    case Screen::kConfirm:
+      HandleConfirm(action);
+      break;
+  }
+}
+
+void XboxGuide::HandleMain(GuideAction action) {
+  switch (action) {
+    case GuideAction::kUp:
+    case GuideAction::kDown:
+      if (focus_) {
+        SetFocus(focus_->Navigate(action == GuideAction::kUp ? xui::NavDirection::kUp
+                                                             : xui::NavDirection::kDown));
+      }
+      break;
+    case GuideAction::kLeft:
+    case GuideAction::kPreviousTab:
+      SwitchTab(tab_ - 1);
+      break;
+    case GuideAction::kRight:
+    case GuideAction::kNextTab:
+      SwitchTab(tab_ + 1);
+      break;
+    case GuideAction::kA:
+      Activate(focus_);
+      break;
+    case GuideAction::kB:
+      BeginClose(false);
+      break;
+    case GuideAction::kY:
+      OpenConfirm(Confirm::kXboxHome);
+      break;
+    case GuideAction::kX:
+      break;
+  }
+}
+
+void XboxGuide::SwitchTab(int tab) {
+  // Tabs 1..4, no wrap; the blade shuffle plays between neighbours.
+  if (tab < 1 || tab > 4 || tabs_->playing() || !tabs_->Play(fmt::format("{}To{}", tab_, tab))) {
+    return;
+  }
+  tab_focus_[tab_] = focus_;
+  xui::Element::MoveFocus(focus_, nullptr);
+  focus_ = nullptr;
+  tab_ = tab;
+  xui::Element* target = tab_focus_[tab] ? tab_focus_[tab] : FirstFocusable(tab_scenes_[tab]);
+  if (target) {
+    xui::Element::MoveFocus(nullptr, target, /*initial=*/true);
+    focus_ = target;
+  }
+}
+
+void XboxGuide::Activate(xui::Element* control) {
+  if (!control) {
+    return;
+  }
+  control->Press();
+  if (!control->enabled()) {
+    return;
+  }
+  const std::string_view id = control->id();
+  if (id == "btnDashboard") {
+    OpenConfirm(Confirm::kXboxHome);
+  } else if (id == "btnShutdown") {
+    OpenConfirm(Confirm::kTurnOff);
+  } else if (id == "btnAchievements") {
+    OpenAchievements();
+  }
+}
+
+void XboxGuide::OpenAchievements() {
+  achievement_list_ = host_.achievements->ListAchievements();
+  // Unlocked first, then the rest in catalog order, as the console lists them.
+  std::stable_partition(
+      achievement_list_.begin(), achievement_list_.end(),
+      [&](const system::AchievementInfo& a) { return host_.achievements->IsUnlocked(a.id); });
+  return_focus_ = focus_;
+  hud_root_->Play("HalfToFull");
+  tabs_->Play(fmt::format("{}Open", tab_));
+  main_->SetVisible(false);
+  achievements_ = app_host_->AttachScene(SceneNode(assets_->achievements), profile_context_);
+  screen_ = Screen::kAchievements;
+
+  uint32_t unlocked = 0;
+  for (const auto& a : achievement_list_) {
+    unlocked += host_.achievements->IsUnlocked(a.id) ? 1 : 0;
+  }
+  auto set_text = [&](std::string_view id, std::string text) {
+    if (xui::Element* e = achievements_->FindById(id)) {
+      e->SetText(std::move(text));
+    }
+  };
+  set_text("labGameTitle", host_.title_name);
+  set_text("labCountText",
+           FormatCount(FindString(assets_->profile_strings, "%1!u! of %2!u! Achievements",
+                                  "%1!u! of %2!u! Achievements"),
+                       unlocked, uint32_t(achievement_list_.size())));
+  // The scene ships its loading state: spinner shown, header shading hidden.
+  if (xui::Element* loading = achievements_->FindById("ctlLoading")) {
+    loading->SetVisible(false);
+  }
+  if (xui::Element* header = achievements_->FindById("HeaderShader")) {
+    header->SetVisible(true);
+  }
+  xui::Element* list = achievements_->FindById("AchievementList");
+  if (achievement_list_.empty() || !list) {
+    if (xui::Element* empty = achievements_->FindById("labEmpty")) {
+      empty->SetVisible(true);
+    }
+    SetLegends("", achievements_->GetString("LegendB"), "");
+    return;
+  }
+  list->SetVisible(true);
+  list->Set("ClipChildren", xui::Value{true});
+  std::vector<xui::Element*> items = list->PopulateList(achievement_list_.size(), 1);
+  const float item_width = items.front()->width();
+  const float item_height = items.front()->height();
+  columns_ = std::max(1, int(list->width() / item_width));
+  visible_rows_ = std::max(1, int(list->height() / item_height));
+  items = list->PopulateList(achievement_list_.size(), columns_);
+  for (size_t i = 0; i < items.size(); ++i) {
+    const system::AchievementInfo& a = achievement_list_[i];
+    std::string image;
+    if (host_.achievements->IsUnlocked(a.id)) {
+      image = fmt::format("{}{}", kAchievementScheme, a.id);
+    } else if (a.flags & kAchievementShowUnachieved) {
+      image = "sharedres://unearnedAchievement.png";
+    } else {
+      image = "sharedres://secretAchievement.png";
+    }
+    items[i]->Set("ImagePath", xui::Value{std::move(image)});
+  }
+  selected_ = 0;
+  first_row_ = 0;
+  focus_ = nullptr;
+  ScrollAchievements();
+  SetFocus(items[0], /*initial=*/true);
+  ShowAchievement(0);
+  SetLegends(achievements_->GetString("LegendA"), achievements_->GetString("LegendB"), "");
+}
+
+void XboxGuide::ScrollAchievements() {
+  xui::Element* list = achievements_ ? achievements_->FindById("AchievementList") : nullptr;
+  if (!list) {
+    return;
+  }
+  const size_t row = selected_ / size_t(columns_);
+  if (row < first_row_) {
+    first_row_ = row;
+  } else if (row >= first_row_ + size_t(visible_rows_)) {
+    first_row_ = row - size_t(visible_rows_) + 1;
+  }
+  const auto& items = list->list_items();
+  for (size_t i = 0; i < items.size(); ++i) {
+    const size_t item_row = i / size_t(columns_);
+    const float height = items[i]->height();
+    const float width = items[i]->width();
+    items[i]->Set("Position",
+                  xui::Value{xui::Vec3{float(i % size_t(columns_)) * width,
+                                       (float(item_row) - float(first_row_)) * height, 0.0f}});
+    items[i]->SetVisible(item_row >= first_row_ && item_row < first_row_ + size_t(visible_rows_));
+  }
+}
+
+void XboxGuide::ShowAchievement(size_t index) {
+  if (index >= achievement_list_.size()) {
+    return;
+  }
+  const system::AchievementInfo& a = achievement_list_[index];
+  const bool unlocked = host_.achievements->IsUnlocked(a.id);
+  const bool secret = !unlocked && !(a.flags & kAchievementShowUnachieved);
+  auto set_text = [&](std::string_view id, std::string text) {
+    if (xui::Element* e = achievements_->FindById(id)) {
+      e->SetText(std::move(text));
+    }
+  };
+  set_text("labAchievementName", secret ? "Secret Achievement" : a.label);
+  set_text("labAchievementDescription",
+           secret ? "Continue playing to unlock this secret achievement."
+                  : (unlocked || a.unachieved_description.empty() ? a.description
+                                                                  : a.unachieved_description));
+  set_text("labPoints", fmt::format("{} G", a.gamerscore));
+  std::string date;
+  if (unlocked) {
+    // FILETIME: 100 ns since 1601.
+    const uint64_t filetime = host_.achievements->GetUnlockTime(a.id);
+    const std::time_t unix_time = std::time_t(filetime / 10000000ull - 11644473600ull);
+    std::tm local = {};
+    if (filetime && localtime_s(&local, &unix_time) == 0) {
+      date = fmt::format("{}/{}/{}", local.tm_mon + 1, local.tm_mday, local.tm_year + 1900);
+    }
+  }
+  set_text("labAcquiredDate", date);
+}
+
+void XboxGuide::OpenAchievementDetail() {
+  const system::AchievementInfo& a = achievement_list_[selected_];
+  const bool unlocked = host_.achievements->IsUnlocked(a.id);
+  const bool secret = !unlocked && !(a.flags & kAchievementShowUnachieved);
+  achievements_->SetVisible(false);
+  details_ = app_host_->AttachScene(SceneNode(assets_->achievement_details), profile_context_);
+  screen_ = Screen::kAchievementDetail;
+  auto set_text = [&](std::string_view id, std::string text) {
+    if (xui::Element* e = details_->FindById(id)) {
+      e->SetText(std::move(text));
+    }
+  };
+  set_text("headerText", host_.title_name);
+  set_text("achievementTitleText", secret ? "Secret Achievement" : a.label);
+  set_text("credText", fmt::format("{} G", a.gamerscore));
+  set_text("achievementDescriptionText",
+           secret ? "Continue playing to unlock this secret achievement."
+                  : (unlocked || a.unachieved_description.empty() ? a.description
+                                                                  : a.unachieved_description));
+  details_->Set("ImagePath",
+                xui::Value{unlocked ? fmt::format("{}{}", kAchievementScheme, a.id)
+                                    : std::string(secret ? "sharedres://secretAchievement.png"
+                                                         : "sharedres://unearnedAchievement.png")});
+  SetLegends("", details_->GetString("LegendB"), "");
+  media_->PlaySound("btn_selectG.xma", "xam/skin");
+}
+
+void XboxGuide::CloseAchievements() {
+  if (screen_ == Screen::kAchievementDetail) {
+    app_host_->RemoveChild(details_);
+    details_ = nullptr;
+    achievements_->SetVisible(true);
+    screen_ = Screen::kAchievements;
+    SetLegends(achievements_->GetString("LegendA"), achievements_->GetString("LegendB"), "");
+    media_->PlaySound("sharedres://btn_Back.xma", "");
+    return;
+  }
+  hud_root_->Play("FullToHalf");
+  app_host_->RemoveChild(achievements_);
+  achievements_ = nullptr;
+  focus_ = nullptr;
+  main_->SetVisible(true);
+  main_->Play(fmt::format("{}Close", tab_));
+  tabs_->Play(fmt::format("{}Close", tab_));
+  screen_ = Screen::kMain;
+  SetFocus(return_focus_, /*initial=*/true);
+  SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"), main_->GetString("LegendY"));
+  media_->PlaySound("sharedres://btn_Back.xma", "");
+}
+
+void XboxGuide::HandleAchievements(GuideAction action) {
+  if (screen_ == Screen::kAchievementDetail) {
+    if (action == GuideAction::kB) {
+      CloseAchievements();
+    }
+    return;
+  }
+  xui::Element* list = achievements_->FindById("AchievementList");
+  const auto& items = list ? list->list_items() : std::vector<xui::Element*>();
+  size_t next = selected_;
+  switch (action) {
+    case GuideAction::kLeft:
+      next = selected_ > 0 ? selected_ - 1 : selected_;
+      break;
+    case GuideAction::kRight:
+      next = selected_ + 1 < items.size() ? selected_ + 1 : selected_;
+      break;
+    case GuideAction::kUp:
+      next = selected_ >= size_t(columns_) ? selected_ - size_t(columns_) : selected_;
+      break;
+    case GuideAction::kDown:
+      next = std::min(selected_ + size_t(columns_), items.empty() ? 0 : items.size() - 1);
+      break;
+    case GuideAction::kA:
+      if (!items.empty()) {
+        items[selected_]->Press();
+        OpenAchievementDetail();
+      }
+      return;
+    case GuideAction::kB:
+      CloseAchievements();
+      return;
+    default:
+      return;
+  }
+  if (next != selected_ && next < items.size()) {
+    selected_ = next;
+    ScrollAchievements();
+    SetFocus(items[selected_]);
+    ShowAchievement(selected_);
+  }
+}
+
+void XboxGuide::OpenConfirm(Confirm confirm) {
+  const xui::Node* visual = FindVisual(assets_->skin, "XuiMessageBox3");
+  if (!visual || visual->children.empty()) {
+    return;
+  }
+  confirm_ = confirm;
+  return_focus_ = focus_;
+  hud_root_->Play(screen_ == Screen::kMain ? "HalfToError" : "FullToError");
+  message_ = error_host_->AttachScene(visual->children.front(), skin_context_);
+  screen_ = Screen::kConfirm;
+
+  // The title is what was chosen: "Xbox Home" (Y or the Home tab) or
+  // "Turn Off Console".
+  std::string title(main_->GetString("LegendY"));
+  if (focus_ && focus_->enabled() && !focus_->text().empty() &&
+      (confirm == Confirm::kTurnOff || focus_->id() == "btnDashboard")) {
+    title = focus_->text();
+  }
+  const std::string body =
+      confirm == Confirm::kXboxHome
+          ? FindString(assets_->xam_strings,
+                       "This will end your current session. If you're playing a game",
+                       "This will end your current session. If you're playing a game, you'll "
+                       "lose any unsaved progress.\r\n\r\nAre you sure you want to exit?")
+          : FindString(assets_->hud_strings, "Turning off the console",
+                       "Turning off the console will also turn off all controllers.");
+  message_->SetText(title);
+  auto set_text = [&](std::string_view id, std::string text) {
+    if (xui::Element* e = message_->FindById(id)) {
+      e->SetText(std::move(text));
+    }
+  };
+  set_text("MessageText", body);
+  set_text("Button0", FindString(assets_->xam_strings, "Yes", "Yes"));
+  set_text("Button1", FindString(assets_->xam_strings, "No", "No"));
+  set_text("btnA", std::string(main_->GetString("LegendA")));
+  set_text("btnB", std::string(main_->GetString("LegendB")));
+  for (std::string_view hidden : {"Icon", "ProgressAnimation"}) {
+    if (xui::Element* e = message_->FindById(hidden)) {
+      e->SetVisible(false);
+    }
+  }
+  SetLegends("", "", "");
+  focus_ = nullptr;
+  // Default to No, so a stray A does not end the session.
+  SetFocus(message_->FindById("Button1"), /*initial=*/true);
+}
+
+void XboxGuide::CloseConfirm() {
+  hud_root_->Play(achievements_ ? "ErrorToFull" : "ErrorToHalf");
+  pending_removal_.push_back(message_);
+  message_ = nullptr;
+  screen_ = achievements_ ? (details_ ? Screen::kAchievementDetail : Screen::kAchievements)
+                          : Screen::kMain;
+  focus_ = nullptr;
+  SetFocus(return_focus_, /*initial=*/true);
+  if (screen_ == Screen::kMain) {
+    SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"),
+               main_->GetString("LegendY"));
+  }
+  media_->PlaySound("sharedres://btn_Back.xma", "");
+}
+
+void XboxGuide::HandleConfirm(GuideAction action) {
+  switch (action) {
+    case GuideAction::kUp:
+    case GuideAction::kDown:
+      if (focus_) {
+        SetFocus(focus_->Navigate(action == GuideAction::kUp ? xui::NavDirection::kUp
+                                                             : xui::NavDirection::kDown));
+      }
+      break;
+    case GuideAction::kA:
+      if (focus_) {
+        focus_->Press();
+        if (focus_->id() == "Button0") {
+          BeginClose(/*exit_title=*/true);
+        } else {
+          CloseConfirm();
+        }
+      }
+      break;
+    case GuideAction::kB:
+      CloseConfirm();
+      break;
+    default:
+      break;
+  }
+}
+
+}  // namespace rex::ui::guide
