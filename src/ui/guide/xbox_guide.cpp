@@ -154,6 +154,10 @@ std::unique_ptr<GuideAssets> GuideAssets::Load(const std::filesystem::path& path
     REXLOG_WARN("Xbox guide: no achievement scenes ({}); Achievements stays disabled", *error);
     error->clear();
   }
+  assets->has_notify = scene(assets->notify, "xam/xam", "notify.xur");
+  if (error) {
+    error->clear();
+  }
   strings(assets->hud_strings, "hud/hud", "Strings.xus");
   strings(assets->xam_strings, "huduiskin/xam", "XamStrings.xus");
   strings(assets->profile_strings, "gamerprofile/gp", "GamerProfile_Custom.xus");

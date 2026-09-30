@@ -42,9 +42,13 @@ Affine Scale(float x, float y) {
   return {x, 0, 0, y, 0, 0};
 }
 
-Affine Rotate(float radians) {
-  const float cs = std::cos(radians), sn = std::sin(radians);
-  return {cs, sn, -sn, cs, 0, 0};
+// The quaternion's rotation seen from the front: its 3x3 matrix's x/y part.
+// A turn about Z rotates; a half turn about X or Y mirrors, as XUI's 3D
+// rotations look on the flat screen.
+Affine Rotate(const Quat& q) {
+  const float xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
+  const float xy = q.x * q.y, zw = q.z * q.w;
+  return {1 - 2 * (yy + zz), 2 * (xy + zw), 2 * (xy - zw), 1 - 2 * (xx + zz), 0, 0};
 }
 
 struct Stop {
@@ -81,6 +85,9 @@ uint32_t SampleStops(const std::vector<Stop>& stops, float t) {
   return stops.back().argb;
 }
 
+// Subdivisions per fan triangle side for multi-stop and radial gradients.
+constexpr int kGradientSteps = 10;
+
 template <typename T>
 const T* Member(const PropertyBag* bag, std::string_view name) {
   const Value* v = bag ? bag->Find(name) : nullptr;
@@ -104,8 +111,7 @@ class Renderer {
     const Vec3 pivot = element.GetVector("Pivot");
     const Vec3 scale = element.GetVector("Scale", Vec3{1.0f, 1.0f, 1.0f});
     const Quat rot = element.GetQuaternion("Rotation");
-    const float angle = 2.0f * std::atan2(rot.z, rot.w);
-    const Affine local = Translate(pos.x, pos.y) * Translate(pivot.x, pivot.y) * Rotate(angle) *
+    const Affine local = Translate(pos.x, pos.y) * Translate(pivot.x, pivot.y) * Rotate(rot) *
                          Scale(scale.x, scale.y) * Translate(-pivot.x, -pivot.y);
     const Affine m = parent * local;
     const float w = element.width();
@@ -195,7 +201,7 @@ class Renderer {
       if (fill_type == 1 || ((fill_type == 2 || fill_type == 3) && stops.empty())) {
         const Color* color = Member<Color>(fill, "FillColor");
         const uint32_t argb = color ? color->argb : 0xFF0F0F80;
-        FillPolygon(m, outline, [&](ImVec2) { return argb; }, opacity);
+        FillPolygon(m, outline, [&](ImVec2) { return argb; }, opacity, 1);
       } else if (fill_type == 2) {
         const float* rotation = Member<float>(fill, "Rotation");
         const float radians = (rotation ? *rotation : 0.0f) * 3.14159265f / 180.0f;
@@ -209,9 +215,31 @@ class Renderer {
                   extent > 0.0f ? ((p.x - w / 2) * dx + (p.y - h / 2) * dy) / extent + 0.5f : 0.0f;
               return SampleStops(stops, t);
             },
-            opacity);
+            opacity, stops.size() > 2 ? kGradientSteps : 1);
       } else if (fill_type == 3) {
-        FillRadial(m, outline, w, h, stops, opacity);
+        // The brush is the box's inscribed ellipse, moved by the fill's
+        // Translation (in box units, turned by its Rotation) and sized by its
+        // Scale: the ring of light's quarter arcs are centred past a corner.
+        const Vec3* translation = Member<Vec3>(fill, "Translation");
+        const Vec3* brush_scale = Member<Vec3>(fill, "Scale");
+        const float* rotation = Member<float>(fill, "Rotation");
+        const float radians = (rotation ? *rotation : 0.0f) * 3.14159265f / 180.0f;
+        const float tx = translation ? translation->x : 0.0f;
+        const float ty = translation ? translation->y : 0.0f;
+        // The translation moves the brush's texture, so the centre moves
+        // the other way, turned against the brush rotation.
+        const float cx = (0.5f - (tx * std::cos(radians) + ty * std::sin(radians))) * w;
+        const float cy = (0.5f - (-tx * std::sin(radians) + ty * std::cos(radians))) * h;
+        const float rx = 0.5f * w * (brush_scale && brush_scale->x != 0 ? brush_scale->x : 1.0f);
+        const float ry = 0.5f * h * (brush_scale && brush_scale->y != 0 ? brush_scale->y : 1.0f);
+        FillPolygon(
+            m, outline,
+            [&](ImVec2 p) {
+              const float dx = rx > 0 ? (p.x - cx) / rx : 0.0f;
+              const float dy = ry > 0 ? (p.y - cy) / ry : 0.0f;
+              return SampleStops(stops, std::sqrt(dx * dx + dy * dy));
+            },
+            opacity, kGradientSteps);
       }
     }
     if (const PropertyBag* stroke = element.GetCompound("Stroke")) {
@@ -230,9 +258,12 @@ class Renderer {
     }
   }
 
+  // Fans the outline from its centroid; gradients subdivide each fan triangle
+  // `steps` times per side so colour follows the gradient, not just the
+  // corners.
   template <typename ColorAt>
   void FillPolygon(const Affine& m, const std::vector<ImVec2>& outline, ColorAt color_at,
-                   float opacity) {
+                   float opacity, int steps) {
     const int n = int(outline.size());
     if (n < 3) {
       return;
@@ -243,66 +274,34 @@ class Renderer {
       center.y += p.y / float(n);
     }
     const ImVec2 uv = list_->_Data->TexUvWhitePixel;
-    list_->PrimReserve(n * 3, n + 1);
-    const ImDrawIdx base = ImDrawIdx(list_->_VtxCurrentIdx);
-    list_->PrimWriteVtx(m.Apply(center.x, center.y), uv, ToImColor(color_at(center), opacity));
-    for (ImVec2 p : outline) {
-      list_->PrimWriteVtx(m.Apply(p.x, p.y), uv, ToImColor(color_at(p), opacity));
-    }
-    for (int i = 0; i < n; ++i) {
-      list_->PrimWriteIdx(base);
-      list_->PrimWriteIdx(ImDrawIdx(base + 1 + i));
-      list_->PrimWriteIdx(ImDrawIdx(base + 1 + (i + 1) % n));
-    }
-  }
-
-  // Rings from the centre out, one per gradient stop.
-  void FillRadial(const Affine& m, const std::vector<ImVec2>& outline, float w, float h,
-                  const std::vector<Stop>& stops, float opacity) {
-    const int n = int(outline.size());
-    if (n < 3) {
-      return;
-    }
-    const ImVec2 center(w / 2, h / 2);
-    // Round outlines are what radial fills are for; sample a circle.
-    constexpr int kSegments = 32;
-    std::vector<ImVec2> edge;
-    for (int i = 0; i < kSegments; ++i) {
-      const float a = 2.0f * 3.14159265f * float(i) / kSegments;
-      edge.push_back(ImVec2(center.x + std::cos(a) * w / 2, center.y + std::sin(a) * h / 2));
-    }
-    std::vector<float> rings = {0.0f};
-    for (const Stop& stop : stops) {
-      if (stop.pos > rings.back()) {
-        rings.push_back(std::min(stop.pos, 1.0f));
-      }
-    }
-    if (rings.back() < 1.0f) {
-      rings.push_back(1.0f);
-    }
-    const ImVec2 uv = list_->_Data->TexUvWhitePixel;
-    for (size_t r = 1; r < rings.size(); ++r) {
-      const float r0 = rings[r - 1], r1 = rings[r];
-      const ImU32 c0 = ToImColor(SampleStops(stops, r0), opacity);
-      const ImU32 c1 = ToImColor(SampleStops(stops, r1), opacity);
-      list_->PrimReserve(kSegments * 6, kSegments * 2);
+    const int vertices_per_triangle = (steps + 1) * (steps + 2) / 2;
+    for (int e = 0; e < n; ++e) {
+      const ImVec2 a = outline[e];
+      const ImVec2 b = outline[(e + 1) % n];
+      list_->PrimReserve(steps * steps * 3, vertices_per_triangle);
       const ImDrawIdx base = ImDrawIdx(list_->_VtxCurrentIdx);
-      for (int i = 0; i < kSegments; ++i) {
-        const ImVec2 e = edge[i];
-        const ImVec2 inner(center.x + (e.x - center.x) * r0, center.y + (e.y - center.y) * r0);
-        const ImVec2 outer(center.x + (e.x - center.x) * r1, center.y + (e.y - center.y) * r1);
-        list_->PrimWriteVtx(m.Apply(inner.x, inner.y), uv, c0);
-        list_->PrimWriteVtx(m.Apply(outer.x, outer.y), uv, c1);
+      // Row i is i/steps of the way from the centre; it has i + 1 vertices.
+      for (int i = 0; i <= steps; ++i) {
+        const float f = float(i) / float(steps);
+        for (int j = 0; j <= i; ++j) {
+          const float g = i ? float(j) / float(i) : 0.0f;
+          const ImVec2 p(center.x + f * ((a.x - center.x) + g * (b.x - a.x)),
+                         center.y + f * ((a.y - center.y) + g * (b.y - a.y)));
+          list_->PrimWriteVtx(m.Apply(p.x, p.y), uv, ToImColor(color_at(p), opacity));
+        }
       }
-      for (int i = 0; i < kSegments; ++i) {
-        const ImDrawIdx a = ImDrawIdx(base + 2 * i),
-                        b = ImDrawIdx(base + 2 * ((i + 1) % kSegments));
-        list_->PrimWriteIdx(a);
-        list_->PrimWriteIdx(ImDrawIdx(a + 1));
-        list_->PrimWriteIdx(ImDrawIdx(b + 1));
-        list_->PrimWriteIdx(a);
-        list_->PrimWriteIdx(ImDrawIdx(b + 1));
-        list_->PrimWriteIdx(b);
+      auto index = [&](int i, int j) { return ImDrawIdx(base + i * (i + 1) / 2 + j); };
+      for (int i = 0; i < steps; ++i) {
+        for (int j = 0; j <= i; ++j) {
+          list_->PrimWriteIdx(index(i, j));
+          list_->PrimWriteIdx(index(i + 1, j));
+          list_->PrimWriteIdx(index(i + 1, j + 1));
+          if (j < i) {
+            list_->PrimWriteIdx(index(i, j));
+            list_->PrimWriteIdx(index(i + 1, j + 1));
+            list_->PrimWriteIdx(index(i, j + 1));
+          }
+        }
       }
     }
   }

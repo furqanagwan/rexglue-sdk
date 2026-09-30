@@ -49,6 +49,43 @@ On the console the Guide button never reaches the title. View+Menu does, so a
 title may react to the Menu (Start) press that completes the chord, for example by
 opening its pause menu. The guide masks the buttons once it is open.
 
+## Achievement notifications
+
+Unlocks play XAM's own popup, `xam/xam notify.xur` with the skin's
+`scr_Notification` visual. The Xbox sphere bursts in, the ring of light flashes
+green, the bar slides out with the trophy, and `NotifyPopup.xma` plays. The text
+is XAM's "Achievement unlocked\n%sG - %s". The popup sits at the bottom centre of
+the HUD space, one unlock at a time. The popup's TransTo ends in a go-to that can
+hold it, so it leaves with TransFrom after 4 s, which is the console's timing as
+remembered, not measured. Without a system update, the SDK's own toast shows the
+unlock. The console command `achievement_notify [id]` shows an achievement's
+popup without unlocking it.
+
+## Menu inventory
+
+All entries are from the 17559 scenes, in the order they appear. "Works" means
+the guide acts on it; everything else is shown disabled, as on the console.
+
+| Tab | Entry | Opens on the console | Here |
+| --- | --- | --- | --- |
+| Games & Apps | Achievements | `802_Achievements` grid, then `828_AchievDetails` | Works |
+| | Awards | `837_AvatarAwards` (avatar awards) | Disabled |
+| | Recent | `QuickLaunch`: Games & Apps, Downloads, All tabs | Disabled |
+| | My Games | dashboard (dash command 23) | Disabled |
+| | Active Downloads | download queue | Disabled |
+| | Redeem Code | code entry | Disabled |
+| | Activity Feed (hidden in 17559) | | Hidden |
+| Home | Xbox Home | quit prompt, then the dashboard | Works: prompt, then ends the title |
+| | Connect to Xbox Live (offline) or Friends, Party, Messages, Beacons & Activity, Chat (on Live) | Live features | Disabled (offline set shown) |
+| | Disc in Tray | title name; ejects | Shows the title, disabled |
+| Media | System Video Player, System Music Player, Picture Viewer, Windows Media Center | dashboard apps (dash 39, 6, 44, 8); mini player below | Disabled |
+| Settings | Profile | gamer profile | Disabled |
+| | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Disabled |
+| | Family Settings, System Settings, Account Management | dashboard (dash 20, 47, 10) | Disabled |
+| | Kinect Tuner | Kinect troubleshooter | Disabled |
+| | Turn Off Console | turn-off prompt | Works: prompt, then ends the title |
+| Y button | Xbox Home | as above | Works |
+
 ## Where the guide comes from
 
 Dashboard 2.0.17559's system update (`$SystemUpdate`, as a USB update or console
@@ -124,6 +161,11 @@ against the console.
   (`XuiEdit`) wrap.
 - Anchor bits: 1 left, 2 top, 4 right, 8 bottom, 0x10/0x20 centre, 0x40/0x80
   scale. They fit how the button visuals stretch.
+- Radial fills: the brush is the box's inscribed ellipse, moved against the
+  fill's Translation (box units, turned by the fill Rotation) and sized by its
+  Scale. That is what puts the notification's ring-of-light arcs round the logo
+  and the bar's rounded end in place; the opposite sign draws them outside.
+  3D rotations are drawn flat (a half turn about X or Y mirrors).
 - A Fill without FillType is solid; a Stroke without StrokeWidth draws
   nothing. The separators and focus tabs only look right that way.
 - GuideMain's `<tab>Open`/`<tab>Close` frames take a tab's blade out and bring

@@ -32,6 +32,7 @@ set(REXUI_OVERLAY_SOURCES
 # The Xbox guide on the console's own scenes (RG-GDK-041)
 set(REXUI_GUIDE_SOURCES
     guide/guide_input.cpp
+    guide/guide_notification.cpp
     guide/xbox_guide.cpp
 )
 

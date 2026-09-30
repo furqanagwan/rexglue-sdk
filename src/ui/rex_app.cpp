@@ -42,6 +42,7 @@
 #include <rex/system/xthread.h>
 #include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
+#include <rex/ui/guide/guide_notification.h>
 #include <rex/ui/guide/xbox_guide.h>
 #include <rex/ui/keybinds.h>
 #include <rex/version.h>
@@ -134,8 +135,32 @@ std::unique_ptr<ui::AchievementNotificationDialog> ReXApp::CreateAchievementNoti
   if (!imgui_drawer_ || !immediate_drawer_ || !runtime_) {
     return nullptr;
   }
-  return std::make_unique<ui::AchievementToastDialog>(imgui_drawer_.get(), immediate_drawer_.get(),
-                                                      runtime_.get());
+  auto toast = std::make_unique<ui::AchievementToastDialog>(
+      imgui_drawer_.get(), immediate_drawer_.get(), runtime_.get());
+  if (!REXCVAR_GET(xbox_guide)) {
+    return toast;
+  }
+  // The console's own popup (xam notify.xur) from the system update, with the
+  // SDK toast when there is none.
+  using Notification = ui::guide::GuideNotificationDialog;
+  auto source = [this]() {
+    Notification::Media media;
+    if (guide_stop_.load(std::memory_order_acquire)) {
+      media.unavailable = true;
+      return media;
+    }
+    std::lock_guard<std::mutex> lock(guide_mutex_);
+    media.assets = guide_assets_;
+    media.unavailable = !guide_assets_ && !guide_error_.empty();
+    if (media.assets && !guide_media_) {
+      guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), media.assets);
+    }
+    media.media = guide_media_.get();
+    return media;
+  };
+  return std::make_unique<Notification>(
+      imgui_drawer_.get(), std::move(source),
+      ui::guide::GuideFonts{guide_font_regular_, guide_font_bold_}, std::move(toast));
 }
 
 system::AchievementManager& ReXApp::achievements() const {
@@ -902,8 +927,11 @@ void ReXApp::ToggleGuide() {
     }
     return;
   }
-  if (!guide_media_) {
-    guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), assets);
+  {
+    std::lock_guard<std::mutex> lock(guide_mutex_);
+    if (!guide_media_) {
+      guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), assets);
+    }
   }
   auto* input = static_cast<rex::input::InputSystem*>(runtime_->input_system());
   uint16_t held = 0;

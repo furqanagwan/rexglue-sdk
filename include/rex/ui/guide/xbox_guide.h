@@ -70,6 +70,8 @@ struct GuideAssets {
   xui::Document home_tab, games_tab, settings_tab;
   xui::Document achievements, achievement_details;  // gamerprofile
   bool has_achievement_scenes = false;
+  xui::Document notify;  // xam: the notification popup
+  bool has_notify = false;
   std::vector<std::string> hud_strings, xam_strings, profile_strings;
 
   static std::unique_ptr<GuideAssets> Load(const std::filesystem::path& path, std::string* error);
