@@ -18,7 +18,11 @@ and fixes that help every title go to the SDK.
   original. A game's README may show its marketplace banner by linking to a
   public database that hosts it (such as
   [x360db](https://github.com/xenia-manager/x360db)), credited, never by
-  committing the image.
+  committing the image. One exception: each game's title icon (its XDBF
+  title image, the icon its window and taskbar button show) may be kept in
+  `assets/icons/` so the README can show the games side by side, since a
+  title's own icon is often not hosted anywhere; the README's Legal section
+  says so.
 - **Identify every release exactly**, from the disc and the XEX headers, never
   from memory: the Redump name of the image, region, languages, title ID, media
   ID, executable version, disc number and title updates. Record "not yet
@@ -59,7 +63,7 @@ how to play. Build steps go in a building page in the title repository's
 `docs/`.
 
 ````markdown
-<p align="center"><img src="assets/logo.svg" width="128" alt="<Series> logo"></p>
+<p align="center"><a href="<Title>/README.md"><img src="assets/icons/<title>.png" width="96" alt="<Title>"></a> ...one per game</p>
 
 # <Series or title> — Xbox 360 recompilation
 
