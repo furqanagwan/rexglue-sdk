@@ -28,6 +28,17 @@ if(WIN32 AND Python3_FOUND)
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/scripts/build_shaders.py --check)
 endif()
 
+if(WIN32)
+  add_test(NAME windows.title_artwork
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+      -File ${CMAKE_SOURCE_DIR}/scripts/test_title_artwork.ps1
+      -WorkDirectory ${CMAKE_CURRENT_BINARY_DIR}/title_artwork/$<CONFIG>
+      -Compiler ${CMAKE_CXX_COMPILER}
+      -ResourceCompiler ${CMAKE_RC_COMPILER}
+      -Configuration $<CONFIG>)
+  set_tests_properties(windows.title_artwork PROPERTIES LABELS "windows;packaging" TIMEOUT 120)
+endif()
+
 # `rexglue init gameconfig` output must satisfy the installed GDK's own
 # MicrosoftGame.config schema (RG-GDK-022). The schema ships beside the
 # edition directories, so only GDK builds can run this.

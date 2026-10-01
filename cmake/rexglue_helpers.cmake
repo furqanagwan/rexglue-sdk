@@ -1,12 +1,36 @@
 #==========================================================
 # rexglue_helpers.cmake
 #
-# Three helpers, each with a single responsibility:
+# Target helpers, each with a single responsibility:
+#   rexglue_add_title_icon(<target> ICON <path>)   - native Windows shell icon
 #   rexglue_apply_target_settings(<target>)        - common compile/platform flags
 #   rexglue_configure_target(<target>)             - host application
 #   rexglue_configure_module_target(<target> ...)  - guest DLL module
 #==========================================================
 include_guard(GLOBAL)
+
+# Native application icons are compiled by the Windows SDK resource compiler.
+if(WIN32)
+    enable_language(RC)
+endif()
+
+# rexglue_add_title_icon(<target> ICON <multi-size .ico>)
+# Resource ID 1 gives the Windows shell a default icon for a standalone EXE.
+function(rexglue_add_title_icon target_name)
+    cmake_parse_arguments(ARG "" "ICON" "" ${ARGN})
+    if(NOT ARG_ICON OR NOT EXISTS "${ARG_ICON}")
+        message(FATAL_ERROR "rexglue_add_title_icon: ICON must name an existing .ico file")
+    endif()
+    get_filename_component(_icon "${ARG_ICON}" ABSOLUTE)
+    file(TO_CMAKE_PATH "${_icon}" _icon)
+    set(_resource "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc")
+    # configure_file avoids touching the resource when its text is unchanged.
+    set(_resource_in "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc.in")
+    file(WRITE "${_resource_in}" "LANGUAGE 0, 0\n1 ICON \"${_icon}\"\n")
+    configure_file("${_resource_in}" "${_resource}" COPYONLY)
+    set_source_files_properties("${_resource}" PROPERTIES OBJECT_DEPENDS "${_icon}")
+    target_sources(${target_name} PRIVATE "${_resource}")
+endfunction()
 
 #==========================================================
 # rexglue_apply_target_settings(<target>) - Common flags
@@ -34,7 +58,13 @@ endfunction()
 #     so this single copy handles them transitively.
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "" "GPU_PLUGINS" ${ARGN})
+    cmake_parse_arguments(ARG "" "TITLE_ICON" "GPU_PLUGINS" ${ARGN})
+
+    if(ARG_TITLE_ICON)
+        rexglue_add_title_icon(${target_name} ICON "${ARG_TITLE_ICON}")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/title.ico")
+        rexglue_add_title_icon(${target_name} ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/title.ico")
+    endif()
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main.cpp

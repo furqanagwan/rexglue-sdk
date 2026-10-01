@@ -142,6 +142,10 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rexglue
 )
 
+# Caller-owned title artwork conversion for installed SDK consumers.
+install(FILES "${CMAKE_SOURCE_DIR}/scripts/BuildTitleArtwork.ps1"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/rexglue/tools")
+
 # Export targets with rex:: namespace
 install(EXPORT rexglueTargets
     FILE rexglueTargets.cmake

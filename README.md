@@ -163,6 +163,8 @@ GDK titles own the Gaming Runtime (`gaming_runtime = "auto"`, `"required"` or
 `"off"`), `rexglue init gameconfig` writes a PC `MicrosoftGame.config` from the
 title's own identity, and the pinned `makepkg`/`wdapp` commands register,
 package, install and remove a title: see [Gaming Runtime and PC packaging](docs/gdk-packaging.md).
+To embed a title icon in its EXE and generate GDK shell logos, follow the
+[title artwork workflow](docs/gdk-packaging.md#title-artwork-and-standalone-exe-icons).
 Do not put restricted SDK headers/docs or real service credentials in this repo.
 DXC, DirectStorage, XAudio2 and GameInput are evaluated at the host boundary;
 none replaces the corresponding guest semantics by itself.

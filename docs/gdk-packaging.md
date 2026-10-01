@@ -99,6 +99,64 @@ next to the built executable. The build output is then a loose PC layout.
 An unpackaged run reads `MicrosoftGame.config` beside the executable: a
 malformed one makes `XGameRuntimeInitialize` fail with `0x8924010B`.
 
+## Title artwork and standalone EXE icons
+
+Windows shell icons and GDK registration artwork use separate resources.
+An EXE needs a native `ICON` resource for Explorer and shortcuts to extract
+its icon before it runs. Setting the running window icon does not provide this.
+GDK `ShellVisuals` supplies the logos used during package registration; putting
+`MicrosoftGame.config` beside a loose EXE alone does not register those logos.
+See Microsoft's [ICON resource documentation](https://learn.microsoft.com/en-us/windows/win32/menurc/icon-resource)
+and [GDK ShellVisuals reference](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/system/microsoftgameconfig/elements/microsoftgameconfig-element-shellvisuals?view=gdk-2604).
+
+Keep the source artwork in the title repository. From the title project root,
+generate a multi-size ICO and all five GDK images from a PNG you supply:
+
+```powershell
+# Source checkout; installed SDKs ship this script in share/rexglue/tools.
+& C:\path\to\rexglue-sdk\scripts\BuildTitleArtwork.ps1 `
+  -InputPng assets\my-title.png -OutputDirectory assets
+New-Item -ItemType Directory -Force gdk | Out-Null
+Copy-Item assets\StoreLogo.png,assets\Square150x150Logo.png,`
+  assets\Square44x44Logo.png,assets\Square480x480Logo.png,`
+  assets\SplashScreen.png gdk
+# Run rexglue init gameconfig with your own identity as above.
+# Existing PNGs are preserved by that command.
+```
+
+The script overwrites its derived files. It fits the source without cropping
+or stretching, adding transparent margins where needed. The ICO includes
+16, 24, 32, 48, 64, 128 and 256 pixel frames. GDK PNGs are 32-bit ARGB
+at the required dimensions. A fitted icon is a starting point for the splash
+screen; a title can supply its own 1920 by 1080 artwork instead.
+
+On the next configure, `rexglue_configure_target` automatically embeds
+`assets/title.ico` into each host target, including title-update hosts.
+For another location, pass `TITLE_ICON <path>` to that call. A custom consumer
+can use `rexglue_add_title_icon(my_target ICON <path>)` directly after including
+`rexglue_helpers.cmake`. Rebuild before installing the EXE; embed resources
+before signing a release executable.
+
+Xbox PC's manual **Add game** supports custom artwork, but Microsoft's public
+documentation does not specify how it selects icons from a loose EXE or
+refreshes existing entries. Native shell extraction is verified here;
+automatic Xbox artwork selection remains unverified. If an existing entry
+keeps a placeholder after restarting Xbox, re-add it or use its artwork
+customization option. Do not treat GDK registration or a fabricated Store ID
+as a requirement for manually adding a standalone EXE.
+
+### Artwork validation (2026-10-01)
+
+`windows.title_artwork` builds a minimal external CMake consumer and verifies
+that Windows `ExtractIconEx` returns the supplied artwork, alongside ICO frame
+bounds and GDK PNG dimensions/formats. It passes in Debug and Release on the
+development machine. Installed local Quantum of Solace, its TU2 host, Blood
+Stone, Legends and NHL Legacy Edition received native title icons with original
+EXE backups; their native code sections are unchanged. Local artwork is not
+distributed in the SDK. All five local configs validate against GDK 260404's
+schema, and each updated EXE retains its manifest resource. Xbox PC's visible
+library result is still pending.
+
 ## Build, register, package, install, launch, remove
 
 Start in a GDK-configured project (`REXGLUE_USE_GDK`, see
