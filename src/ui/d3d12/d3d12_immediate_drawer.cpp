@@ -209,7 +209,10 @@ bool D3D12ImmediateDrawer::Initialize() {
   device->CreateSampler(&sampler_desc, sampler_handle);
 
   // Create pools for draws.
-  vertex_buffer_pool_ = std::make_unique<D3D12UploadBufferPool>(provider_);
+  // A draw list's vertices go up in one request, so pages hold a large list:
+  // 2 MiB (the default) is about 105,000 vertices, which the Xbox guide's
+  // gradients can pass.
+  vertex_buffer_pool_ = std::make_unique<D3D12UploadBufferPool>(provider_, 8 * 1024 * 1024);
   texture_descriptor_pool_ = std::make_unique<D3D12DescriptorHeapPool>(
       device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2048);
 

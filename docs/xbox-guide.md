@@ -107,17 +107,24 @@ is saved to the title's config file straight away.
 | Notifications | `OptionsNotifications` | Show Notifications; Play Sound (disabled while Show is off) | `notifications_show`, `notifications_sound`: the unlock popup and its sound |
 | Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; voice, Kinect and output hidden | `audio_volume`, applied live |
 | Vibration | `OptionsController` | Enable Vibration | `vibration`, applied live |
-| Resolution | `OptionsVoice`'s output radio list, one button added | Match Display (the display's p), 1280 x 720, 2560 x 1440, 3840 x 2160 | `resolution_match_display`, `resolution_scale`; next launch |
+| Resolution | `OptionsVoice`'s output radio list, one button added | Original (the default), 2x, 3x and Match Display, the last three marked Experimental | `resolution_scale`, `resolution_match_display`; next launch |
 | Patches, Mods | `OptionsNotifications` checkboxes, one copy per patch | The title's switchable code patches of that category (`patch`, `mod`) | `code_patch_states`, applied live |
 | Cheats | `OptionsNotifications` checkbox copies without the box, one per code | The title's own cheat codes (`[[cheat]]`): the panel shows the code, what it unlocks and where the game takes it | none; nothing is patched |
 
-- **Resolution.** With `resolution_match_display` (the default) the title draws
-  at the display's resolution: at startup `resolution_scale` is set from the
-  window's monitor, the title's 720p times 1, 2 or 3 (2160p gives 3, 1440p and
-  1080p give 2). It is set as a one-run value, so a config file's
+- **Resolution.** By default the title draws at its own resolution and is
+  scaled to the screen, as the console does (most titles drew at 720p or
+  less). 2x and 3x multiply that; they are marked Experimental because they
+  cost far more GPU time: Quantum of Solace's gameplay lost frames at 3x on a
+  4K display (RG-GDK-046), where the same save held 55 to 60 fps at 1x. Match
+  Display (`resolution_match_display`, now off by default) sets
+  `resolution_scale` at startup from the window's monitor (2160p gives 3,
+  1440p and 1080p give 2) as a one-run value, so a config file's
   `resolution_scale` is kept, and `--resolution_scale` on the command line
   still wins. The draw scale needs a restart, so a choice made in the guide
   applies at the next launch; the page says so.
+- **Controller battery.** The console's battery icons are 38 x 14 PNGs drawn
+  through `Controller_*.xur` scenes. The guide redraws them as shapes traced
+  from those PNGs (`RenderResources::vector_image`), so they are sharp at 4K.
 - **Patches and Mods** list the title's
   [switchable code patches](code-patches.md#switchable-patches) by their
   `category`: fixes such as the frame rate under Patches, changes to play

@@ -87,8 +87,12 @@ uint32_t SampleStops(const std::vector<Stop>& stops, float t) {
 
 // Subdivisions per fan triangle side for multi-stop and radial gradients.
 constexpr int kGradientSteps = 10;
-// Radial gradients make thin bands (the ring of light's arcs), so finer.
-constexpr int kRadialSteps = 32;
+// Radial gradients make thin bands (the ring of light's arcs), so they are
+// subdivided by their size on screen: one step per kRadialStepPixels, within
+// these limits. A fixed 32 put some pages past 160,000 vertices.
+constexpr float kRadialStepPixels = 2.0f;
+constexpr int kRadialMinSteps = 4;
+constexpr int kRadialMaxSteps = 32;
 
 template <typename T>
 const T* Member(const PropertyBag* bag, std::string_view name) {
@@ -178,6 +182,12 @@ class Renderer {
     return points;
   }
 
+  static int RadialSteps(const Affine& m, float w, float h) {
+    const ImVec2 o = m.Apply(0, 0), x = m.Apply(w, 0), y = m.Apply(0, h);
+    const float side = std::max(std::hypot(x.x - o.x, x.y - o.y), std::hypot(y.x - o.x, y.y - o.y));
+    return std::clamp(int(std::ceil(side / kRadialStepPixels)), kRadialMinSteps, kRadialMaxSteps);
+  }
+
   void DrawFigure(const Element& element, const Affine& m, float w, float h, float opacity) {
     const std::vector<ImVec2> outline = Outline(element, w, h);
     if (const PropertyBag* fill = element.GetCompound("Fill")) {
@@ -243,7 +253,7 @@ class Renderer {
               const float dy = ry > 0 ? (p.y - cy) / ry : 0.0f;
               return SampleStops(stops, std::sqrt(dx * dx + dy * dy));
             },
-            opacity, kRadialSteps);
+            opacity, RadialSteps(m, w, h));
       }
     }
     if (const PropertyBag* stroke = element.GetCompound("Stroke")) {
@@ -333,7 +343,12 @@ class Renderer {
       const Element* control = OwningControl(element);
       path = control ? control->GetString("ImagePath") : std::string_view();
     }
-    // Some images are scenes (battery levels); those are not drawn.
+    if (!path.empty() && resources_.vector_image &&
+        resources_.vector_image(
+            *list_, path, [&](ImVec2 p) { return m.Apply(p.x, p.y); }, opacity)) {
+      return;
+    }
+    // Other images that are scenes are not drawn.
     if (path.empty() || path.ends_with(".xur") || !resources_.texture) {
       return;
     }

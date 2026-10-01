@@ -288,10 +288,10 @@ void XboxGuide::OpenResolution() {
     int scale;  // 0: match the display
   };
   const std::vector<Choice> choices = {
-      {"radbtnPlayHeadset", fmt::format("Match Display ({}p)", 720 * display), 0},
-      {"radbtnPlayTV", "1280 x 720", 1},
-      {"radbtnPlayBoth", "2560 x 1440", 2},
-      {"radbtn4K", "3840 x 2160", 3},
+      {"radbtnPlayHeadset", "Original", 1},
+      {"radbtnPlayTV", "2x (Experimental)", 2},
+      {"radbtnPlayBoth", "3x (Experimental)", 3},
+      {"radbtn4K", fmt::format("Match Display, {}x (Experimental)", display), 0},
   };
   xui::Element* clone = group->CloneChild(*last, choices.back().id);
   clone->Set("Position", xui::Value{xui::Vec3{0.0f, 3 * kRowHeight, 0.0f}});
@@ -302,8 +302,10 @@ void XboxGuide::OpenResolution() {
   MoveTo(scene, "radgrpOutputLocation", at.y + 22.0f);
   SetText(scene, "LabelSubHeader2", "Render Resolution");
   SetText(scene, "LabelSubHeader1",
-          "Choose the resolution the game is drawn at. Match Display draws at your screen's "
-          "resolution.\r\n\r\nThe new resolution is used the next time you start the game.");
+          "Original draws the game at its own resolution, as the console does, and scales it "
+          "to your screen. 2x and 3x are sharper but much slower; Match Display picks the "
+          "multiple for your screen.\r\n\r\nThe new resolution is used the next time you start "
+          "the game.");
   xui::Element* chosen = nullptr;
   for (size_t i = 0; i < choices.size(); ++i) {
     xui::Element* button = group->FindById(choices[i].id);
