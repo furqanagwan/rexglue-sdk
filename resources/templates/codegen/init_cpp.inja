@@ -51,6 +51,7 @@ const rex::PPCImageInfo PPCImageConfig = {
     .switchable_patches = kSwitchablePatches,
     .title_cheats = kTitleCheats,
     .title_dlc = kTitleDlc,
+    .title_update = {{ title_update }},
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

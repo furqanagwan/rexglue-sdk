@@ -194,6 +194,10 @@ class KernelState {
   rex::filesystem::VirtualFileSystem* file_system() const { return file_system_; }
 
   uint32_t title_id() const;
+  /// The title update the running code was built for; 0 for the original.
+  /// Only then are modules patched, from that update's update:\<name>p.
+  uint32_t title_update_version() const { return title_update_version_; }
+  void set_title_update_version(uint32_t version) { title_update_version_ = version; }
   util::XdbfGameData title_xdbf() const;
   util::XdbfGameData module_xdbf(object_ref<UserModule> exec_module) const;
 
@@ -349,6 +353,7 @@ class KernelState {
                          uint32_t tls_raw_data_address);
   void LoadAchievementsData();
 
+  uint32_t title_update_version_ = 0;
   Runtime* emulator_;
   memory::Memory* memory_;
   runtime::FunctionDispatcher* function_dispatcher_;

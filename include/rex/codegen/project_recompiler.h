@@ -58,6 +58,18 @@ class ProjectRecompiler {
   const std::vector<std::string>& skippedModules() const { return skippedModules_; }
 
  private:
+  /// One executable's codegen: the original (with any DLL modules), or one
+  /// title update ([[title_update]]) with its package mounted as update:.
+  struct Pass {
+    BinaryConfig entrypoint;
+    std::vector<BinaryConfig> modules;
+    std::filesystem::path updatePackage;  ///< empty for the original
+    uint32_t titleUpdateVersion = 0;
+  };
+  Result<void> RunPass(const ProjectRecompilerOptions& opts, Pass pass,
+                       std::vector<std::filesystem::path>& allInputs,
+                       std::vector<std::string>& fingerprints);
+
   ManifestConfig manifest_;
   std::vector<std::string> deletedFiles_;
   std::vector<std::string> writtenFiles_;

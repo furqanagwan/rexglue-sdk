@@ -45,22 +45,37 @@ bool IsSourceExtension(const fs::path& p) {
 
 }  // namespace
 
+static nlohmann::json TitleUpdatesJson(const std::vector<TitleUpdateTarget>& title_updates) {
+  nlohmann::json list = nlohmann::json::array();
+  for (const auto& tu : title_updates) {
+    list.push_back(
+        {{"version", tu.version},
+         {"out_dir", tu.out_dir},
+         {"sources_var", "REXGLUE_TU" + std::to_string(tu.version) + "_GENERATED_SOURCES"}});
+  }
+  return list;
+}
+
 std::string RenderRexglueCmake(std::string_view project_name, std::string_view sdk_version,
-                               std::string_view entrypoint_out_dir) {
+                               std::string_view entrypoint_out_dir,
+                               const std::vector<TitleUpdateTarget>& title_updates) {
   rex::codegen::TemplateRegistry registry;
   auto names = parse_app_name(std::string(project_name));
   nlohmann::json data = {
       {"names", names_to_json(names)},
       {"sdk_version", std::string(sdk_version)},
       {"entrypoint_out_dir", std::string(entrypoint_out_dir)},
+      {"title_updates", TitleUpdatesJson(title_updates)},
   };
   return registry.render("init/rexglue_cmake", data.dump());
 }
 
 bool RefreshGeneratedGlue(const fs::path& project_root, std::string_view project_name,
-                          std::string_view sdk_version, std::string_view entrypoint_out_dir) {
+                          std::string_view sdk_version, std::string_view entrypoint_out_dir,
+                          const std::vector<TitleUpdateTarget>& title_updates) {
   fs::path target = project_root / "generated" / "rexglue.cmake";
-  std::string rendered = RenderRexglueCmake(project_name, sdk_version, entrypoint_out_dir);
+  std::string rendered =
+      RenderRexglueCmake(project_name, sdk_version, entrypoint_out_dir, title_updates);
 
   std::error_code ec;
   if (fs::exists(target, ec) && read_file(target) == rendered) {

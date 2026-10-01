@@ -144,6 +144,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"switchable_patches", switchablePatchesJson},
       {"title_cheats", titleCheatsJson},
       {"title_dlc", titleDlcJson},
+      {"title_update", cfg.titleUpdateVersion},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };

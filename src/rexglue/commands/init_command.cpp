@@ -186,6 +186,7 @@ Result<void> InitProject(const InitOptions& opts, const CliContext& ctx) {
       {"out_directory_path", outDir},
       {"entrypoint_out_dir", outDir},
       {"modules", modulesJson},
+      {"title_updates", nlohmann::json::array()},
   };
   std::string jsonStr = data.dump();
 

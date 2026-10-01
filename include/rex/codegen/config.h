@@ -165,6 +165,10 @@ struct RecompilerConfig {
   // from the module's position in the manifest (entrypoint = false, modules = true).
   std::optional<bool> isDll;
 
+  /// The title update this executable is built for (a manifest
+  /// [[title_update]]); 0 for the original. Compiled into PPCImageInfo.
+  uint32_t titleUpdateVersion = 0;
+
   // === Manual overrides ===
   std::unordered_map<uint32_t, FunctionConfig> functions;  ///< Function/chunk configuration
   std::unordered_map<uint32_t, JumpTable> switchTables;

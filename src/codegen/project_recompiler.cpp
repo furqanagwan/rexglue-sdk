@@ -129,12 +129,73 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   deletedFiles_.clear();
   writtenFiles_.clear();
   unchangedFiles_.clear();
+  skippedModules_.clear();
 
-  if (manifest_.modules.empty()) {
+  if (!manifest_.titleUpdates.empty() && !manifest_.modules.empty()) {
+    return Err<void>(ErrorCategory::Config,
+                     "[[title_update]] builds of a project with DLL [[modules]] are not "
+                     "supported yet");
+  }
+  std::unordered_map<std::string, uint32_t> outDirVersion{
+      {manifest_.entrypoint.recompiler.outDirectoryPath, 0}};
+  for (const auto& update : manifest_.titleUpdates) {
+    auto [it, inserted] =
+        outDirVersion.emplace(update.binary.recompiler.outDirectoryPath, update.version);
+    if (!inserted) {
+      return Err<void>(ErrorCategory::Validation,
+                       fmt::format("out_directory_path '{}' of title update {} is already used",
+                                   it->first, update.version));
+    }
+  }
+
+  // The build's codegen rule tracks one stamp and depfile, in the original's
+  // output, so every pass's inputs and fingerprints go into them.
+  const auto buildDir = manifest_.manifestDir / manifest_.entrypoint.recompiler.outDirectoryPath;
+  std::vector<fs::path> allInputs;
+  std::vector<std::string> fingerprints;
+
+  if (auto result =
+          RunPass(opts, Pass{std::move(manifest_.entrypoint), std::move(manifest_.modules)},
+                  allInputs, fingerprints);
+      !result) {
+    return result;
+  }
+  for (auto& update : manifest_.titleUpdates) {
+    REXCODEGEN_TRACE("Recompiling '{}' title update {}", manifest_.projectName, update.version);
+    if (auto result =
+            RunPass(opts, Pass{std::move(update.binary), {}, update.package, update.version},
+                    allInputs, fingerprints);
+        !result) {
+      return result;
+    }
+  }
+
+  std::sort(allInputs.begin(), allInputs.end());
+  allInputs.erase(std::unique(allInputs.begin(), allInputs.end()), allInputs.end());
+  auto buildStamp = fs::absolute(buildDir / kBuildStampFileName);
+  if (!WriteDepfile(buildDir / kDepfileName, buildStamp, allInputs)) {
+    return Err<void>(ErrorCategory::IO,
+                     fmt::format("Failed to write {}", (buildDir / kDepfileName).string()));
+  }
+  // Never WriteIfChanged: the build rule re-runs until this mtime passes its inputs.
+  if (!WriteFileBytes(buildStamp, fmt::format("{}\n", fmt::join(fingerprints, "\n")))) {
+    return Err<void>(ErrorCategory::IO, fmt::format("Failed to write {}", buildStamp.string()));
+  }
+
+  REXCODEGEN_TRACE("Project recompiler complete");
+  return Ok();
+}
+
+Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pass pass,
+                                        std::vector<std::filesystem::path>& allInputs,
+                                        std::vector<std::string>& passFingerprints) {
+  namespace fs = std::filesystem;
+
+  if (pass.modules.empty()) {
     REXCODEGEN_TRACE("Recompiling '{}' (entrypoint)", manifest_.projectName);
   } else {
     REXCODEGEN_TRACE("Recompiling '{}' (entrypoint + {} DLL{})", manifest_.projectName,
-                     manifest_.modules.size(), manifest_.modules.size() == 1 ? "" : "s");
+                     pass.modules.size(), pass.modules.size() == 1 ? "" : "s");
   }
 
   struct ModuleEntry {
@@ -145,9 +206,9 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   };
 
   std::vector<ModuleEntry> allModules;
-  allModules.push_back({DeriveTargetNameFromFilePath(manifest_.entrypoint.recompiler.filePath), "",
-                        false, std::move(manifest_.entrypoint.recompiler)});
-  for (auto& mod : manifest_.modules) {
+  allModules.push_back({DeriveTargetNameFromFilePath(pass.entrypoint.recompiler.filePath), "",
+                        false, std::move(pass.entrypoint.recompiler)});
+  for (auto& mod : pass.modules) {
     allModules.push_back({DeriveTargetNameFromFilePath(mod.recompiler.filePath), mod.guestPath,
                           true, std::move(mod.recompiler)});
   }
@@ -238,7 +299,7 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
                                  entryXexPath.string(), gameRoot.string()));
   }
 
-  auto runtime = std::make_unique<Runtime>(gameRoot.string());
+  auto runtime = std::make_unique<Runtime>(gameRoot.string(), fs::path{}, pass.updatePackage);
   auto rtStatus = runtime->Setup(rex::RuntimeConfig{
       .kernel_init = rex::kernel::InitializeKernel,
       .tool_mode = true,
@@ -251,6 +312,18 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   std::string entryRelStr = entryRel.string();
   std::replace(entryRelStr.begin(), entryRelStr.end(), '/', '\\');
   auto entryVfsPath = "game:\\" + entryRelStr;
+
+  // A title update build loads the executable patched by that update.
+  runtime->kernel_state()->set_title_update_version(pass.titleUpdateVersion);
+  if (pass.titleUpdateVersion) {
+    auto* vfs = runtime->kernel_state()->file_system();
+    if (!vfs->ResolvePath("update:\\" + entryRelStr + "p") &&
+        !vfs->ResolvePath("update:\\" + entryXexPath.filename().string() + "p")) {
+      return Err<void>(ErrorCategory::Validation,
+                       fmt::format("Title update {} ({}) has no {}p", pass.titleUpdateVersion,
+                                   pass.updatePackage.string(), entryRelStr));
+    }
+  }
   rtStatus = runtime->LoadXexImage(entryVfsPath);
   if (rtStatus != X_STATUS_SUCCESS) {
     return Err<void>(ErrorCategory::IO,
@@ -321,7 +394,7 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     ctx.analysisState().loadAddress = ctx.binary().baseAddress();
     ctx.analysisState().entryPoint = ctx.binary().entryPoint();
     ctx.analysisState().imageSize = ctx.binary().imageSize();
-    ctx.setHasDllModules(!manifest_.modules.empty());
+    ctx.setHasDllModules(!pass.modules.empty());
     if (ctx.Config().isDll.has_value())
       ctx.setDllModule(*ctx.Config().isDll);
 
@@ -350,16 +423,18 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     contexts.push_back({std::move(ctx), &targeted[i + 1], std::move(dll_display)});
   }
 
-  skippedModules_.clear();
   std::vector<std::string> fingerprints(contexts.size());
   std::vector<bool> skip(contexts.size(), false);
-  std::vector<fs::path> allInputs;
 
   for (size_t i = 0; i < contexts.size(); ++i) {
     auto& entry = contexts[i];
     auto outDir = entry.ctx.configDir() / entry.ctx.Config().outDirectoryPath;
     auto inputs =
         CollectModuleInputs(entry.ctx.Config(), entry.ctx.configDir(), manifest_.manifestPath);
+    if (i == 0 && !pass.updatePackage.empty()) {
+      inputs.push_back(pass.updatePackage);  // a changed update regenerates
+      std::sort(inputs.begin(), inputs.end());
+    }
     fingerprints[i] = FingerprintModule(entry.ctx.Config(), inputs, opts.sdkVersion);
     allInputs.insert(allInputs.end(), inputs.begin(), inputs.end());
 
@@ -453,24 +528,9 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     }
   }
 
-  if (!contexts.empty()) {
-    auto buildDir = contexts[0].ctx.configDir() / contexts[0].ctx.Config().outDirectoryPath;
-    std::sort(allInputs.begin(), allInputs.end());
-    allInputs.erase(std::unique(allInputs.begin(), allInputs.end()), allInputs.end());
+  passFingerprints.insert(passFingerprints.end(), fingerprints.begin(), fingerprints.end());
 
-    auto buildStamp = fs::absolute(buildDir / kBuildStampFileName);
-    if (!WriteDepfile(buildDir / kDepfileName, buildStamp, allInputs)) {
-      return Err<void>(ErrorCategory::IO,
-                       fmt::format("Failed to write {}", (buildDir / kDepfileName).string()));
-    }
-    // Never WriteIfChanged: the build rule re-runs until this mtime passes its inputs.
-    if (!WriteFileBytes(buildStamp, fmt::format("{}\n", fmt::join(fingerprints, "\n")))) {
-      return Err<void>(ErrorCategory::IO, fmt::format("Failed to write {}", buildStamp.string()));
-    }
-  }
-
-  if (manifest_.modules.empty()) {
-    REXCODEGEN_TRACE("Project recompiler complete");
+  if (pass.modules.empty()) {
     return Ok();
   }
 
@@ -558,7 +618,6 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   if (opts.reporter)
     opts.reporter->projectPhaseFinished();
 
-  REXCODEGEN_TRACE("Project recompiler complete");
   return Ok();
 }
 

@@ -13,6 +13,7 @@
 #include <rex/cvar.h>
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/devices/null_device.h>
+#include <rex/filesystem/devices/stfs_container_device.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
 #include <rex/perf/counter.h>
@@ -363,16 +364,27 @@ bool Runtime::SetupVfs() {
   file_system_->RegisterSymbolicLink("d:", mount_path);
   REXSYS_DEBUG("  Registered symbolic links: game:, d:");
 
-  // Mount update_data_root as update:\ if provided
+  // Mount update_data_root as update:\ if provided: a folder of the title
+  // update's files, or its LIVE/CON package as it was downloaded.
   if (!update_data_root_.empty()) {
     auto abs_update_root = std::filesystem::absolute(update_data_root_);
-    if (std::filesystem::exists(abs_update_root)) {
+    std::error_code ec;
+    if (std::filesystem::exists(abs_update_root, ec)) {
       auto update_mount = "\\Device\\Harddisk0\\PartitionUpdate";
-      auto update_device =
-          std::make_unique<rex::filesystem::HostPathDevice>(update_mount, abs_update_root, true);
+      std::unique_ptr<rex::filesystem::Device> update_device;
+      if (std::filesystem::is_regular_file(abs_update_root, ec)) {
+        update_device =
+            std::make_unique<rex::filesystem::StfsContainerDevice>(update_mount, abs_update_root);
+      } else {
+        update_device =
+            std::make_unique<rex::filesystem::HostPathDevice>(update_mount, abs_update_root, true);
+      }
       if (update_device->Initialize() && file_system_->RegisterDevice(std::move(update_device))) {
         file_system_->RegisterSymbolicLink("update:", update_mount);
         REXSYS_DEBUG("  Mounted {} at update:", abs_update_root.string());
+      } else {
+        REXSYS_ERROR("Runtime::SetupVfs: could not mount the title update {}",
+                     abs_update_root.string());
       }
     }
   }

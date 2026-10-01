@@ -96,6 +96,7 @@ struct ManifestSummary {
   std::string sdk_version;
   std::string entrypoint_out_dir;
   std::size_t module_count = 0;
+  std::vector<TitleUpdateTarget> title_updates;
 };
 
 rex::Result<ManifestSummary> LoadManifestSummary(const fs::path& manifest_path) {
@@ -103,11 +104,16 @@ rex::Result<ManifestSummary> LoadManifestSummary(const fs::path& manifest_path) 
   if (!manifest) {
     return Err<ManifestSummary>(rex::ErrorCategory::Config, "Failed to load manifest");
   }
+  std::vector<TitleUpdateTarget> title_updates;
+  for (const auto& tu : manifest->titleUpdates) {
+    title_updates.push_back({tu.version, tu.binary.recompiler.outDirectoryPath});
+  }
   return rex::Ok(ManifestSummary{
       .project_name = manifest->projectName,
       .sdk_version = manifest->sdkVersion.value_or(""),
       .entrypoint_out_dir = manifest->entrypoint.recompiler.outDirectoryPath,
       .module_count = manifest->modules.size(),
+      .title_updates = std::move(title_updates),
   });
 }
 
@@ -203,7 +209,7 @@ Result<void> CodegenFromConfig(const std::string& config_path, const CliContext&
   EmitProjectHeader(manifest_path, summary);
 
   if (RefreshGeneratedGlue(manifest_path.parent_path(), summary.project_name, current_version,
-                           summary.entrypoint_out_dir)) {
+                           summary.entrypoint_out_dir, summary.title_updates)) {
     REXLOG_INFO("Regenerated generated/rexglue.cmake for SDK v{}", current_version);
   }
 

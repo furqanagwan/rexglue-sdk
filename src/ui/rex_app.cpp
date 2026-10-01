@@ -470,6 +470,24 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     }
   }
 
+  // A title update build runs that update's code, so it loads the executable
+  // patched by the same update (update_data_root, mounted at update:).
+  runtime_->kernel_state()->set_title_update_version(ppc_info_.title_update);
+  if (ppc_info_.title_update) {
+    std::error_code ec;
+    if (paths.update_data_root.empty() || !std::filesystem::exists(paths.update_data_root, ec)) {
+      auto msg = fmt::format(
+          "This build runs title update {}, which isn't installed. Pass its package or "
+          "folder with --update_data_root.",
+          ppc_info_.title_update);
+      REXLOG_ERROR("{}", msg);
+      rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+      return false;
+    }
+    REXLOG_INFO("Title update {} build, update from {}", ppc_info_.title_update,
+                paths.update_data_root.string());
+  }
+
   status = runtime_->LoadXexImage(xex_image);
   if (XFAILED(status)) {
     auto msg = fmt::format("Failed to load XEX ({}): {:08X}", xex_image, status);
@@ -1006,6 +1024,7 @@ void ReXApp::ToggleGuide() {
   host.patches = ppc_info_.switchable_patches;
   host.cheats = ppc_info_.title_cheats;
   host.dlc = ppc_info_.title_dlc;
+  host.title_update = ppc_info_.title_update;
   host.display_scale = DisplayScale(DisplayHeight(window_.get()));
   host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
   host.on_closed = [this](bool exit_title) {

@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -28,13 +29,21 @@ struct SourceWarning {
   std::string hint;
 };
 
+/// A [[title_update]] build: its version and output directory.
+struct TitleUpdateTarget {
+  uint32_t version = 0;
+  std::string out_dir;
+};
+
 std::string RenderRexglueCmake(std::string_view project_name, std::string_view sdk_version,
-                               std::string_view entrypoint_out_dir);
+                               std::string_view entrypoint_out_dir,
+                               const std::vector<TitleUpdateTarget>& title_updates = {});
 
 /// Rewrite generated/rexglue.cmake when it differs from what the installed SDK
 /// renders. Returns true when the file was rewritten.
 bool RefreshGeneratedGlue(const std::filesystem::path& project_root, std::string_view project_name,
-                          std::string_view sdk_version, std::string_view entrypoint_out_dir);
+                          std::string_view sdk_version, std::string_view entrypoint_out_dir,
+                          const std::vector<TitleUpdateTarget>& title_updates = {});
 
 /// Source files still including headers this run no longer emits.
 std::vector<SourceWarning> ScanStaleIncludes(

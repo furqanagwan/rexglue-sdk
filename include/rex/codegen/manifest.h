@@ -32,6 +32,17 @@ struct BinaryConfig {
 };
 
 /**
+ * A title update to build as its own executable ([[title_update]]): the
+ * entrypoint again, with the update's XEX patches applied and its own config.
+ */
+struct TitleUpdateBuild {
+  uint32_t version = 0;           ///< The title update's version (its LIVE package's)
+  std::filesystem::path package;  ///< Its LIVE/CON package, or a folder of its files
+  BinaryConfig binary;            ///< The entrypoint's settings with this version's own
+                                  ///< out_directory_path and includes
+};
+
+/**
  * Canonicalize a module guest path: device-stripped, slashes/case normalized,
  * with `<project>/assets/` stripped when a matching project name is given.
  */
@@ -42,13 +53,14 @@ std::string CanonicalizeModuleGuestPath(std::string_view path, std::string_view 
  */
 struct ManifestConfig {
   std::string projectName;
-  std::optional<std::string> sdkVersion;  ///< Last SDK that ran codegen on this project
-  std::filesystem::path manifestPath;     ///< File this manifest was loaded from
-  std::optional<std::string> gameRoot;    ///< Game asset root, relative to manifestDir.
-                                          ///< Set by `rexglue init` to anchor DLL guest paths.
-  std::filesystem::path manifestDir;      ///< Directory containing the manifest
-  BinaryConfig entrypoint;                ///< Entrypoint codegen settings (inline)
-  std::vector<BinaryConfig> modules;      ///< DLL module codegen settings (inline)
+  std::optional<std::string> sdkVersion;       ///< Last SDK that ran codegen on this project
+  std::filesystem::path manifestPath;          ///< File this manifest was loaded from
+  std::optional<std::string> gameRoot;         ///< Game asset root, relative to manifestDir.
+                                               ///< Set by `rexglue init` to anchor DLL guest paths.
+  std::filesystem::path manifestDir;           ///< Directory containing the manifest
+  BinaryConfig entrypoint;                     ///< Entrypoint codegen settings (inline)
+  std::vector<BinaryConfig> modules;           ///< DLL module codegen settings (inline)
+  std::vector<TitleUpdateBuild> titleUpdates;  ///< Title updates, each its own executable
 
   /**
    * Load a manifest TOML file. Returns nullopt on parse failure.
