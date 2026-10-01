@@ -1215,6 +1215,22 @@ Closed-unmerged Edge #236's silence fallback remains rejected. Detailed source,
 review comments, limitations, tooling and validation: [RG-GDK-040 record](xma-cross-buffer-streams.md),
 [SDK issue #124](https://github.com/furqanagwan/rexglue-sdk/issues/124).
 
+## RG-GDK-041: Xbox guide from the console's XUI (2026-09-30)
+
+Classification A: an original implementation; no Xenia, Canary or Edge code is
+involved. Format reference only, with no code or definition files taken:
+[SGCSam/XUIHelper](https://github.com/SGCSam/XUIHelper) at
+`c0d083036c6b0e3cdec5a3df0abfca0e58973117` (GPL-3.0), for the XUR v8 layout. Behaviour
+reference only, for timing cross-checks:
+[ZivvoZ/dashx360](https://github.com/ZivvoZ/dashx360) at
+`9f58af56be53bba4ca12ba3dad1adb02b542ec21`. Scenes and media come at run time from the
+owner's dashboard 2.0.17559 system update, and nothing from it is committed. The
+package validated locally has SHA-256
+`8119312192ad3ac41345336c6302a97bc471af2ab6689f04ffe92e9e07bc7c45`
+(`su20076000_00000000`). Design: [ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md);
+record: [Xbox guide](xbox-guide.md); tracking:
+[SDK issue #127](https://github.com/furqanagwan/rexglue-sdk/issues/127).
+
 ### furqanagwan/xenia-edge fork sync of 2026-09-30 (reviewed 2026-09-30)
 
 Edge `edge` from `12e3b4223dd4c2e41d57ea4b4477546affe4ce10` to

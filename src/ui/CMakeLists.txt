@@ -29,6 +29,14 @@ set(REXUI_OVERLAY_SOURCES
     overlay/settings_overlay.cpp
 )
 
+# Native XUI: the console's own scene format (RG-GDK-041)
+set(REXUI_XUI_SOURCES
+    xui/package.cpp
+    xui/schema.cpp
+    xui/system_update.cpp
+    xui/xur_reader.cpp
+)
+
 # D3D12 UI backend
 if(REXGLUE_USE_D3D12)
     set(REXUI_D3D12_SOURCES
@@ -55,6 +63,7 @@ set(REXUI_PLATFORM_SOURCES
 set(REXUI_SOURCES
     ${REXUI_CORE_SOURCES}
     ${REXUI_OVERLAY_SOURCES}
+    ${REXUI_XUI_SOURCES}
     ${REXUI_PLATFORM_SOURCES}
 )
 

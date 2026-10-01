@@ -12,3 +12,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [Guest shader IR: DXBC now, Edge DXIL staged](ADR-008-shader-ir-dxbc-vs-dxil.md)
 - [Title compatibility profiles: fix catalog, no database](ADR-009-title-compatibility-profiles.md)
 - [CRT non-local jumps in static code](ADR-010-static-nonlocal-jumps.md)
+- [The Xbox guide runs the console's own XUI scenes](ADR-011-xbox-guide-from-system-xui.md)
