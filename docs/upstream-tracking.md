@@ -1230,3 +1230,36 @@ package validated locally has SHA-256
 (`su20076000_00000000`). Design: [ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md);
 record: [Xbox guide](xbox-guide.md); tracking:
 [SDK issue #127](https://github.com/furqanagwan/rexglue-sdk/issues/127).
+
+### furqanagwan/xenia-edge fork sync of 2026-09-30 (reviewed 2026-09-30)
+
+Edge `edge` from `12e3b4223dd4c2e41d57ea4b4477546affe4ce10` to
+`23e76712f` (35 commits, including a merge of Canary `canary_experimental`),
+compared with ReXGlue `main` at `52a9fb1`.
+
+**Ported (RG-GDK-042, #130):** NT file read completion. Classification A, all titles.
+
+- Sources: Edge `8a027ef4f` "Make the file wait event manual reset", `beb3230fe` "Complete posted NtReadFile requests like NT", `8c8c550ae` "Tighten overlapped and scatter read completion", `e60b90ac0` "Fix async NtReadFile regressions" (Split/Second startup crash, Cars loading livelock), `5aa0d3dea` "Ensure XamEnumerate item count is zero on failure"; Herman S., 2026-09-28/29.
+- Local evidence: the same code was here. The file event was auto-reset; a read on an asynchronous handle returned PENDING but queued its APC only on success, so a failed read never completed for the caller; status blocks and XAM overlapped results were written status first; `XamEnumerate` wrote an uninitialised count when it failed early.
+- Adaptation: ReXGlue completes reads inline (Edge posts them to a worker), so only the completion rules are ported: notification event cleared when a request starts; APC for every read reported PENDING; `NtReadFileScatter` APC only for asynchronous handles or success; count, fence, then status everywhere (`WriteIoStatus`, `CompleteOverlappedEx`). The `e60b90ac0` inline completion inside a user APC is not needed: `XThread::DeliverAPCs` keeps delivering until the queue is empty, so a completion routine that chains the next read gets its APC.
+- Tests: `kernel_tests [file_read]`; the failed-read APC and second-wait tests fail on the old code. Quantum of Solace (GDK Release) booted, reached the front end and streamed its attract movie, 0 errors.
+- Known regressions: none reported upstream after `e60b90ac0`.
+
+**Queued: Canary GPU PRs merged 2026-09-26 to 09-30**, all Classification A unless noted, not yet in ReXGlue:
+
+- xenia-canary #1111 "VIZ_QUERY predication" (merged 2026-09-29; Edge `692cd59cf`): unblocks RG-GDK-010b (#65).
+- #1248 `RB_COPY_SURFACE_SLICE` for volume resolve slice spacing (Edge `d8731edc9`).
+- #1249 "More guest texture layout bits" (Edge `ace153cb8` level 0 packed mip tails at the base address, `81e3deaee` rounded packed base slice strides, `c332733af` exact tiled 3D upper bounds, which replaces the closed form taken from the PR head in `19f5a08556`).
+- #1250 "idTech 5 virtual texturing fix; snap fetches to guest texel centers" (Edge `c3cd8617b`, point-sampled fetch snapping in the DXBC translator and texture cache).
+- #1252 "Clamp stacked-texture layer index for Inf/NaN coords" (Edge `04085efaa`, DXBC fetch).
+- #1245 "experimental round-toward-zero cvar for mulsc" (Edge `3390fc219`): opt-in, Classification D; beside RG-GDK-012's `gpu_scalar_approximation_rounding`.
+- #1242 XAM `X_MARKETPLACE_ENTRYPOINT` bounds check and `X_MODULE_FLAGS` logging (Edge `9a0474a2f`), #1139 `XMPGetMediaSource` stub (Edge `1c5059dcc`): low value, taken with the next XAM batch.
+
+**Not ported:**
+
+- Edge `a7c39fa7d`, `1222c23f7`, `16df25981`, `b83724656`, `34387b31f`, `78315ec19` (memexport await split, per-submission waits, resolve/memexport copy-back ordering, resolve output before file reads): all build on Edge's resolve read-watch and host-buffer memexport redesign (`77f2cca80`, `935e03876`), which ReXGlue does not have. **Watch** with that redesign.
+- Edge `98b6319c5` (skip re-arming fully armed watch blocks): a speed fix for Edge's read watches; ReXGlue's older `EnableAccessCallbacks` has only invalidation watches and no evidence of the cost. **Watch.**
+- Edge `aa3339970` (vblank pacing with `guest_time_scalar`): ReXGlue's `VblankPacer` already sleeps to the deadline, and the guest time scalar is fixed at 1.
+- Edge `50d999623`, `80d9a5c58` (guest scheduler timer waits, cooperative waiter boost): Edge's cooperative guest scheduler, which ReXGlue does not have.
+- Edge `a0d11bec9`, `f453ede2e`, `f2583e9de` (JIT code cache, JIT precompile of address-only functions, JIT scanner extents): CPU JIT, not applicable. Static codegen already finds data-referenced leaves (RG-FIX-002 work, PR #105).
+- Edge `89b7047dd` (SDL XInput pass-through), `26e1e0fee` (POSIX), `5f3e28236` (macOS CI), `3171a10aa` (Mesa DXIL bit): removed platforms, SDL and the unported DXIL pipeline.
