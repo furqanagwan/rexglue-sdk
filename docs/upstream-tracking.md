@@ -1248,11 +1248,8 @@ compared with ReXGlue `main` at `52a9fb1`.
 **Queued: Canary GPU PRs merged 2026-09-26 to 09-30**, all Classification A unless noted, not yet in ReXGlue:
 
 - xenia-canary #1111 "VIZ_QUERY predication" (merged 2026-09-29; Edge `692cd59cf`): unblocks RG-GDK-010b (#65).
-- #1248 `RB_COPY_SURFACE_SLICE` for volume resolve slice spacing (Edge `d8731edc9`).
-- #1249 "More guest texture layout bits" (Edge `ace153cb8` level 0 packed mip tails at the base address, `81e3deaee` rounded packed base slice strides, `c332733af` exact tiled 3D upper bounds, which replaces the closed form taken from the PR head in `19f5a08556`).
-- #1250 "idTech 5 virtual texturing fix; snap fetches to guest texel centers" (Edge `c3cd8617b`, point-sampled fetch snapping in the DXBC translator and texture cache).
-- #1252 "Clamp stacked-texture layer index for Inf/NaN coords" (Edge `04085efaa`, DXBC fetch).
-- #1245 "experimental round-toward-zero cvar for mulsc" (Edge `3390fc219`): opt-in, Classification D; beside RG-GDK-012's `gpu_scalar_approximation_rounding`.
+- #1248, #1249, #1252, #1245: ported in RG-GDK-044 (below).
+- #1250 "idTech 5 virtual texturing fix; snap fetches to guest texel centers" (Edge `c3cd8617b`): needs Canary #1072, #1137 and #1177 first; RG-GDK-045 (#135).
 - #1242 XAM `X_MARKETPLACE_ENTRYPOINT` bounds check and `X_MODULE_FLAGS` logging (Edge `9a0474a2f`), #1139 `XMPGetMediaSource` stub (Edge `1c5059dcc`): low value, taken with the next XAM batch.
 
 **Not ported:**
@@ -1263,3 +1260,23 @@ compared with ReXGlue `main` at `52a9fb1`.
 - Edge `50d999623`, `80d9a5c58` (guest scheduler timer waits, cooperative waiter boost): Edge's cooperative guest scheduler, which ReXGlue does not have.
 - Edge `a0d11bec9`, `f453ede2e`, `f2583e9de` (JIT code cache, JIT precompile of address-only functions, JIT scanner extents): CPU JIT, not applicable. Static codegen already finds data-referenced leaves (RG-FIX-002 work, PR #105).
 - Edge `89b7047dd` (SDL XInput pass-through), `26e1e0fee` (POSIX), `5f3e28236` (macOS CI), `3171a10aa` (Mesa DXIL bit): removed platforms, SDL and the unported DXIL pipeline.
+
+## RG-GDK-044: Canary GPU batch of 2026-09-26 to 09-29 (2026-10-01)
+
+xenia-canary `canary_experimental`, reviewed at `44f5b4a`; tracking
+[SDK issue #134](https://github.com/furqanagwan/rexglue-sdk/issues/134). All by
+goldislead (boma). No follow-up commits or regression reports against these
+four as of 2026-10-01. Ported by formatting Canary's before and after with our
+`.clang-format` and applying the difference, except where noted.
+
+| Canary PR | Commits (merged) | Class | Adaptation | Tests |
+| --- | --- | --- | --- | --- |
+| #1248 `RB_COPY_SURFACE_SLICE` for volume resolve slice spacing | `d8731edc99ecc438eb4cd1a8754341d7396a061e` (2026-09-26) | A | Hand port: our `GetResolveInfo` predates Canary's `texture_address` helpers, so the slice height (`RB_COPY_SURFACE_SLICE / copy_dest_pitch` for array destinations, else `copy_dest_height`) feeds `height_aligned_div_32` and the three 3D address calls. `xenos.h` comment updated. | Existing gpu resolve fixtures (2D unchanged). No local volume-resolve fixture or title. |
+| #1249 "More guest texture layout bits" | `ace153cb84704cea5634a056076585b570380a26`, `81e3deaee2dbd5d3125f87da2194a61e418851ce`, `c332733afd14ed3aeb08b38d0cabffa58d1c8c2f` (2026-09-27) | A | Hand port into `texture/util.cpp`: level 0 packed tails take mips from the base address; packed base slice strides use power-of-two height and depth; the 3D upper bound searches each 8-block run's last block instead of the closed form, which reached 0x880 and a page past the last block. | `unit_tests [texture_layout]`: packed level 0 mip page, volume slice stride (16 slices, not 12), and the 3D upper bound equal to the last block's end for boxes from the origin (bpp 1 to 16, pitch 32 to 128, widths past the pitch). |
+| #1252 "Clamp stacked-texture layer index for Inf/NaN coords" | `04085efaafcfb8907749f200514c21433db2ebeb` (2026-09-29) | B (584107FB black backdrop) | Applied as is to `dxbc_translator_fetch.cpp`. SPIR-V half not applicable. | Build and the gpu suite; no local stacked-texture title. |
+| #1245 "experimental round-toward-zero cvar for mulsc" | `3390fc219b32be4a87777ddd72217259b24dc09e` (2026-09-29) | D (opt-in; 5451080D, 4B4D07F6, 5451086D) | DXBC (Veltkamp/Dekker error) and interpreter as is; cvar `mulsc_round_toward_zero` (GPU/Shader, restart) beside `gpu_scalar_approximation_rounding`. SPIR-V half not applicable. | `gpu_tests [alu]` "MULSC rounds to nearest, or toward zero when asked": bit-exact against round-to-nearest with the option off and toward zero with it on (products of 1/3 that round away included). |
+
+Known regressions: none reported upstream. #1250 is split out to RG-GDK-045
+([#135](https://github.com/furqanagwan/rexglue-sdk/issues/135)): it builds on
+Canary #1072 (`d119505289`), #1137 (`6a45452087`) and #1177 (`0c843efb32`),
+and #1072 has an open D3D12 device-loss report (Canary #1134).

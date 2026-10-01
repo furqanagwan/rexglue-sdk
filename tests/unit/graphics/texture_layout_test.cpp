@@ -159,3 +159,78 @@ TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout
   }
   CHECK(failures == 0);
 }
+
+// xenia-canary #1249: when level 0 is the packed tail, D3D leaves the mip
+// address 0 and keeps the rest of the tail at the base address.
+TEST_CASE("A packed level 0 tail takes its mips from the base address",
+          "[graphics][texture_layout]") {
+  xenos::xe_gpu_texture_fetch_t fetch = {};
+  fetch.dimension = xenos::DataDimension::k2DOrStacked;
+  fetch.size_2d.width = 16 - 1;
+  fetch.size_2d.height = 16 - 1;
+  fetch.base_address = 0x1234;
+  fetch.mip_address = 0;
+  fetch.packed_mips = 1;
+  fetch.mip_max_level = 4;
+  uint32_t base_page, mip_page, mip_min_level, mip_max_level;
+  texture_util::GetSubresourcesFromFetchConstant(fetch, nullptr, nullptr, nullptr, &base_page,
+                                                 &mip_page, &mip_min_level, &mip_max_level);
+  CHECK(mip_page == base_page);
+  CHECK(mip_max_level == 4);
+  // A base level above the tail with no mips still has none.
+  fetch.size_2d.width = 64 - 1;
+  fetch.size_2d.height = 64 - 1;
+  texture_util::GetSubresourcesFromFetchConstant(fetch, nullptr, nullptr, nullptr, &base_page,
+                                                 &mip_page, &mip_min_level, &mip_max_level);
+  CHECK(mip_page == 0);
+  CHECK(mip_max_level == 0);
+}
+
+TEST_CASE("A packed level 0 volume uses its power-of-two depth for the slice stride",
+          "[graphics][texture_layout]") {
+  // 8x8x9 k_8_8_8_8: one 32x32 tile (4 KB) per slice; the tail's depth is
+  // next_pow2(9) = 16, not 9 rounded to 12.
+  auto packed = texture_util::GetGuestTextureLayout(xenos::DataDimension::k3D, 1, 8, 8, 9, true,
+                                                    xenos::TextureFormat::k_8_8_8_8, true, true, 0);
+  REQUIRE(packed.packed_level == 0);
+  CHECK(packed.base.array_slice_stride_bytes == 16 * 0x1000);
+  auto unpacked =
+      Layout(xenos::DataDimension::k3D, 64, 64, 9, true, xenos::TextureFormat::k_8_8_8_8);
+  CHECK(unpacked.base.array_slice_stride_bytes == 2 * 2 * 12 * 0x1000);
+}
+
+// xenia-canary #1249: the 3D upper bound is the last block's end exactly,
+// where the closed form it replaced reached up to a page further.
+TEST_CASE("The tiled 3D upper bound is exact for a box from the origin",
+          "[graphics][texture_layout]") {
+  int failures = 0;
+  for (uint32_t bpp_log2 = 0; bpp_log2 <= 4; ++bpp_log2) {
+    for (uint32_t pitch : {32u, 64u, 96u, 128u}) {
+      constexpr uint32_t kHeight = 64;
+      for (uint32_t right : {1u, 17u, 32u, 40u, 64u, pitch + 8}) {
+        for (uint32_t bottom : {1u, 31u, 64u}) {
+          for (uint32_t back : {1u, 3u, 4u, 6u, 8u}) {
+            int64_t max3d = INT64_MIN;
+            for (uint32_t z = 0; z < back; ++z) {
+              for (uint32_t y = 0; y < bottom; ++y) {
+                for (uint32_t x = 0; x < right; ++x) {
+                  max3d = std::max(
+                      max3d, int64_t(texture_util::GetTiledOffset3D(
+                                 int32_t(x), int32_t(y), int32_t(z), pitch, kHeight, bpp_log2)));
+                }
+              }
+            }
+            if (int64_t(texture_util::GetTiledAddressUpperBound3D(right, bottom, back, pitch,
+                                                                  kHeight, bpp_log2)) !=
+                max3d + (int64_t(1) << bpp_log2)) {
+              UNSCOPED_INFO("bpp_log2 " << bpp_log2 << " pitch " << pitch << " (" << right << ","
+                                        << bottom << "," << back << ")");
+              ++failures;
+            }
+          }
+        }
+      }
+    }
+  }
+  CHECK(failures == 0);
+}

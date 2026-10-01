@@ -71,6 +71,15 @@ void GetSubresourcesFromFetchConstant(const xenos::xe_gpu_texture_fetch_t& fetch
   uint32_t base_page = fetch.base_address & 0x1FFFF;
   uint32_t mip_page = fetch.mip_address & 0x1FFFF;
 
+  // If level 0 is already the packed tail, D3D leaves mip_address at 0.
+  // The rest of the tail is stored at the base address too.
+  // Source: xenia-canary #1249 (ace153cb84704cea5634a056076585b570380a26).
+  if (mip_page == 0 && base_page != 0 && fetch.packed_mips &&
+      fetch.dimension != xenos::DataDimension::k1D &&
+      GetPackedMipLevel(width_minus_1 + 1, height_minus_1 + 1) == 0) {
+    mip_page = base_page;
+  }
+
   uint32_t mip_min_level, mip_max_level;
   // Not taking mip_filter == kBaseMap into account for mip_max_level because
   // the mip filter may be overridden by shader fetch instructions.
@@ -306,7 +315,10 @@ TextureGuestLayout GetGuestTextureLayout(xenos::DataDimension dimension,
     uint32_t z_slice_stride_texel_rows_unaligned;
     if (is_base) {
       row_pitch_texels_unaligned = base_pitch_texels_div_32 << 5;
-      z_slice_stride_texel_rows_unaligned = height_texels;
+      // Level 0 packed tails use power-of-two dimensions like the other mips.
+      // Source: xenia-canary #1249 (81e3deaee2dbd5d3125f87da2194a61e418851ce).
+      z_slice_stride_texel_rows_unaligned =
+          layout.packed_level == 0 ? rex::next_pow2(height_texels) : height_texels;
     } else {
       row_pitch_texels_unaligned = std::max(rex::next_pow2(width_texels) >> level, uint32_t(1));
       z_slice_stride_texel_rows_unaligned =
@@ -333,7 +345,9 @@ TextureGuestLayout GetGuestTextureLayout(xenos::DataDimension dimension,
     uint32_t z_stride_bytes = level_layout.array_slice_stride_bytes;
     if (dimension == xenos::DataDimension::k3D) {
       level_layout.array_slice_stride_bytes *=
-          rex::align(is_base ? depth : std::max(rex::next_pow2(depth) >> level, uint32_t(1)),
+          rex::align(is_base && layout.packed_level != 0
+                         ? depth
+                         : std::max(rex::next_pow2(depth) >> level, uint32_t(1)),
                      xenos::kTextureTileDepth);
     }
     level_layout.array_slice_stride_bytes =
@@ -493,35 +507,39 @@ uint32_t GetTiledAddressUpperBound3D(uint32_t right, uint32_t bottom, uint32_t b
   if (!right || !bottom || !back) {
     return 0;
   }
-  // Get the origin of the 32x32x4 tile containing the last texel.
-  uint32_t upper_bound = uint32_t(GetTiledOffset3D(
-      int32_t((right - 1) & ~(xenos::kTextureTileWidthHeight - 1)),
-      int32_t((bottom - 1) & ~(xenos::kTextureTileWidthHeight - 1)),
-      int32_t((back - 1) & ~(xenos::kTextureTileDepth - 1)), pitch, height, bytes_per_block_log2));
+  // Find the highest block address within the last 32 row x 4 slice portion.
+  // Addresses increase within aligned runs of 8 blocks walking x, where only
+  // x[2:0] changes. Bank/pipe selection can place earlier runs at a higher
+  // address, so check every run's last block.
+  //
+  // For 1 byte per block, two 32x16x4 macro tiles share a page. The bank bit
+  // can place blocks from the earlier macro tile after later ones, so include
+  // both 32 row portion halves in the search.
+  //
+  // When width exceeds the pitch, a block's (x, y) becomes
+  // (x % pitch, y + 16 * (x / pitch)) so blocks from earlier rows can land in
+  // the last portion. Check all rows in this case.
+  // Source: xenia-canary #1249 (c332733afd14ed3aeb08b38d0cabffa58d1c8c2f); the
+  // closed form it replaces reached 0x880 past the last block and a page more.
   uint32_t pitch_aligned = rex::align(pitch, xenos::kTextureTileWidthHeight);
-  switch (bytes_per_block_log2) {
-    case 0:
-      // 64x32x8 portions have independent addressing.
-      // Extent relative to the 32x32x4 tile origin:
-      // - Pitch = 32, 96, 160...: (Pitch / 64) * 0x1000 + 0x1000
-      // - Pitch = 64, 128, 192...: (Pitch / 64) * 0x1000 + 0xC00
-      upper_bound +=
-          ((pitch_aligned >> 6) << 12) + 0xC00 + ((pitch_aligned & (1 << 5)) << (10 - 5));
-      // There's one extra case where the last bank sits 0x800 past the base
-      // extent: if pitch and X are both in the second, 32 wide half of their
-      // 64 block wide period, while Z is still in the first 4 slices.
-      if ((pitch_aligned & (1 << 5)) && ((right - 1) & (1 << 5)) && !((back - 1) & (1 << 2))) {
-        upper_bound += 0x800;
+  uint32_t y_first =
+      right > pitch_aligned ? 0 : (bottom - 1) & ~(xenos::kTextureTileWidthHeight - 1);
+  uint32_t z_first = (back - 1) & ~(xenos::kTextureTileDepth - 1);
+  int64_t upper_bound = 0;
+  for (uint32_t z = z_first; z < back; ++z) {
+    for (uint32_t y = y_first; y < bottom; ++y) {
+      for (uint32_t x = 7;; x += 8) {
+        uint32_t x_last = std::min(x, right - 1);
+        upper_bound =
+            std::max(upper_bound, int64_t(GetTiledOffset3D(int32_t(x_last), int32_t(y), int32_t(z),
+                                                           pitch, height, bytes_per_block_log2)));
+        if (x_last == right - 1) {
+          break;
+        }
       }
-      break;
-    default:
-      // 32x32x8 portions have independent addressing.
-      // Extent: ((Pitch / 32) * 0x1000 + 0x1000) * (BPB / 2)
-      // Or: ((Pitch / 32) * 0x1000 / 2 + 0x1000 / 2) * BPB
-      upper_bound += ((pitch_aligned << (12 - 5 - 1)) + (0x1000 >> 1)) << bytes_per_block_log2;
-      break;
+    }
   }
-  return upper_bound;
+  return uint32_t(upper_bound) + (uint32_t(1) << bytes_per_block_log2);
 }
 
 uint8_t SwizzleSigns(const xenos::xe_gpu_texture_fetch_t& fetch) {

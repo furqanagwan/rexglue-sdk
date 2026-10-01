@@ -1,6 +1,6 @@
 /**
  * @file        alu_fixture_test.cpp
- * @brief       Scalar approximation semantics of translated shaders (RG-GDK-012)
+ * @brief       Scalar approximation and MULSC rounding of translated shaders (RG-GDK-012, 044)
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License
@@ -80,9 +80,19 @@ std::vector<uint32_t> ScalarExport(Op op) {
           1u | (1u << 8) | (1u << 16) | (kAluMax << 24) | (7u << 29)};
 }
 
+// mulsc (MUL_CONST_1, so the temporary register's low bit is 1: r1) exported
+// to eM0.x: c3.w * r1.x. The constant operand is src3's W and the temporary
+// its X, so a zero swizzle selects both; src3 is the constant (sel 0).
+// Source of the rounding under test: xenia-canary #1245.
+std::vector<uint32_t> MulscExport() {
+  constexpr uint32_t kMulsc1 = 43;
+  return {33u | (1u << 15) | (0x1u << 20) | (kMulsc1 << 26), 0,
+          3u | (1u << 8) | (1u << 16) | (kAluMax << 24) | (6u << 29)};
+}
+
 // vfetch r1 (the input in X); oPos = r1; eA from c2 by the vertex index; eM0.x
-// = op(r1.x). One exported float per vertex.
-std::vector<uint32_t> ScalarOpVertexShader(Op op) {
+// = the scalar operation `data` on r1.x. One exported float per vertex.
+std::vector<uint32_t> ScalarVertexShader(const std::vector<uint32_t>& data) {
   std::vector<uint32_t> ucode;
   PackCf(ucode, Exec(3, 1, 1, false), Alloc(ucode::AllocType::kVsPosition));
   PackCf(ucode, Exec(4, 1, 0, false), Alloc(ucode::AllocType::kMemory));
@@ -92,7 +102,6 @@ std::vector<uint32_t> ScalarOpVertexShader(Op op) {
   ucode.insert(ucode.end(), pos.begin(), pos.end());
   auto address = AluExport(32, kAluMad, 0, 1, 2, kSwizzleXXXX, true, false, false);
   ucode.insert(ucode.end(), address.begin(), address.end());
-  auto data = ScalarExport(op);
   ucode.insert(ucode.end(), data.begin(), data.end());
   return ucode;
 }
@@ -109,15 +118,17 @@ const std::vector<float> kInputs = {
     -0.3f, F(0x3F812345), 7.0e-20f, FLT_MAX,   FLT_MIN,       1.5f,    100.0f,   -100.0f, 64.0f,
 };
 
-// Runs `op` on every input through a translated vertex shader and returns the
-// exported results, or an empty vector if the draw didn't complete.
-std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
-  uint32_t count = uint32_t(kInputs.size());
+// Runs the scalar operation `data` on every input through a translated vertex
+// shader, with c3.w = `c3_w`, and returns the exported results, or an empty
+// vector if the draw didn't complete.
+std::vector<float> RunScalar(GpuFixture& fixture, const std::vector<uint32_t>& data,
+                             const std::vector<float>& inputs, float c3_w = 0.0f) {
+  uint32_t count = uint32_t(inputs.size());
   // Triangle lists need a multiple of three vertices; pad with 1.0.
   uint32_t vertex_count = (count + 2) / 3 * 3;
   std::vector<uint32_t> vertices;
   for (uint32_t i = 0; i < vertex_count; ++i) {
-    float input = i < count ? kInputs[i] : 1.0f;
+    float input = i < count ? inputs[i] : 1.0f;
     vertices.insert(vertices.end(),
                     {std::bit_cast<uint32_t>(input), 0, 0, std::bit_cast<uint32_t>(1.0f)});
   }
@@ -129,7 +140,7 @@ std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
   DrawOptions options;
   options.color_mask = 0;
   SetupDraw(fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32, options);
-  fixture.Submit(LoadShader(xenos::ShaderType::kVertex, ScalarOpVertexShader(op)));
+  fixture.Submit(LoadShader(xenos::ShaderType::kVertex, ScalarVertexShader(data)));
   xenos::xe_gpu_vertex_fetch_t fetch = {};
   fetch.type = xenos::FetchConstantType::kVertex;
   fetch.address = vertex_buffer >> 2;
@@ -147,10 +158,10 @@ std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
   stream.const_0x4b0 = 0x4B0;
   stream.index_count = vertex_count;
   stream.const_0x96 = 0x96;
-  fixture.Submit(
-      GpuFixture::SetRegisters(XE_GPU_REG_SHADER_CONSTANT_000_X + 4,
-                               {std::bit_cast<uint32_t>(0.0f), std::bit_cast<uint32_t>(1.0f), 0, 0,
-                                stream.dword_0, stream.dword_1, stream.dword_2, stream.dword_3}));
+  fixture.Submit(GpuFixture::SetRegisters(
+      XE_GPU_REG_SHADER_CONSTANT_000_X + 4,
+      {std::bit_cast<uint32_t>(0.0f), std::bit_cast<uint32_t>(1.0f), 0, 0, stream.dword_0,
+       stream.dword_1, stream.dword_2, stream.dword_3, 0, 0, 0, std::bit_cast<uint32_t>(c3_w)}));
   reg::VGT_DRAW_INITIATOR initiator = {};
   initiator.prim_type = xenos::PrimitiveType::kTriangleList;
   initiator.source_select = xenos::SourceSelect::kAutoIndex;
@@ -164,6 +175,10 @@ std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
     out.push_back(F(fixture.ReadDword(results + i * 4)));
   }
   return out;
+}
+
+std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
+  return RunScalar(fixture, ScalarExport(op), kInputs);
 }
 
 // The documented special cases, and the double-precision value for finite
@@ -282,4 +297,43 @@ TEST_CASE("Scalar approximations follow the documented special cases and precisi
       }
     }
   }
+}
+
+// xenia-canary #1245: MULSC rounds to nearest even by default; the opt-in
+// mulsc_round_toward_zero steps a product that rounded away from zero back by
+// one ulp.
+TEST_CASE("MULSC rounds to nearest, or toward zero when asked", "[gpu][alu]") {
+  bool toward_zero = GENERATE(false, true);
+  std::string error;
+  auto fixture =
+      GpuFixture::Create(&error, {{"async_shader_compilation", "false"},
+                                  {"readback_memexport", "true"},
+                                  {"readback_memexport_fast", "false"},
+                                  {"mulsc_round_toward_zero", toward_zero ? "true" : "false"}});
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  INFO(fixture->Metadata());
+  INFO("mulsc_round_toward_zero " << toward_zero);
+  // Batch indices times 1/3 as the Volition titles split them, and other
+  // products whose float result rounds up, down or is exact.
+  const float multiplier = F(0x3EAAAAAB);  // 1/3 rounded up
+  const std::vector<float> inputs = {1.0f,   2.0f,    3.0f,   5.0f,     7.0f,    11.0f, 12.0f,
+                                     299.0f, 300.0f,  301.0f, 1000.0f,  -2.0f,   -5.0f, -7.0f,
+                                     0.1f,   1.0e10f, 0.75f,  123.456f, 65535.0f};
+  std::vector<float> results = RunScalar(*fixture, MulscExport(), inputs, multiplier);
+  REQUIRE(results.size() == inputs.size());
+  int rounded_away = 0;
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    float nearest = inputs[i] * multiplier;
+    double exact = double(inputs[i]) * double(multiplier);
+    bool away = std::abs(double(nearest)) > std::abs(exact);
+    rounded_away += away;
+    float expected = toward_zero && away ? std::nextafter(nearest, 0.0f) : nearest;
+    INFO(inputs[i] << " * 1/3 = 0x" << std::hex << std::bit_cast<uint32_t>(results[i])
+                   << ", expected 0x" << std::bit_cast<uint32_t>(expected) << std::dec);
+    CHECK(std::bit_cast<uint32_t>(results[i]) == std::bit_cast<uint32_t>(expected));
+  }
+  // The inputs must exercise the case the option changes.
+  CHECK(rounded_away > 0);
 }
