@@ -146,6 +146,11 @@ struct GuideHost {
   const PPCSwitchablePatch* patches = nullptr;
   /// The title's own cheat codes (null name ends the list).
   const PPCTitleCheat* cheats = nullptr;
+  /// The title's add-ons (null id ends the list), described by the built-in
+  /// catalogue (EmbeddedDlcCatalog).
+  const PPCTitleDlc* dlc = nullptr;
+  /// The title update version the title was built with; 0 for none.
+  uint32_t title_update = 0;
   /// The draw resolution scale that matches the display (3 for 4K).
   int display_scale = 1;
   /// Writes changed settings to the title's config file.
@@ -216,18 +221,23 @@ class XboxGuide final : public ImGuiDialog {
   void OpenCheats();
   void SetSlider(xui::Element* slider, int value);
 
-  // Games & Apps > Manage Game (guide_dlc.cpp): the title's downloadable
-  // content, installed from packages on this PC.
+  // Games & Apps > Manage Game (guide_dlc.cpp): the title's add-ons from its
+  // catalogue, installed from packages on this PC.
   struct DlcEntry {
-    std::filesystem::path package;  // empty when only installed
-    std::string file_name;
+    std::string id;                 // catalogue media ID; empty for content it lacks
+    std::filesystem::path package;  // a package on this PC for it, if found
+    std::string file_name;          // installed content's file name
     std::string name;
+    std::string package_name;  // the display name its package carries
+    std::string publisher;
     std::string description;
+    uint32_t requires_title_update = 0;
     bool installed = false;
   };
   struct DlcJob;  // an install or file pick running off the UI thread
   void OpenManageGame();
   void FillManageGame();
+  void StartDlcInstall(const DlcEntry& entry);
   void ShowDlc(xui::Element* row);
   void PollManageGame();
   std::vector<DlcEntry> FindDlc() const;
@@ -281,6 +291,9 @@ class XboxGuide final : public ImGuiDialog {
   std::vector<std::filesystem::path> picked_packages_;
   std::shared_ptr<DlcJob> dlc_job_;
   std::string dlc_status_;
+  // The right pane's banner: an XuiImage the Options scene does not have.
+  std::unique_ptr<xui::Node> dlc_banner_node_;
+  xui::Element* dlc_banner_ = nullptr;
 
   bool closing_ = false;
   bool exit_title_ = false;

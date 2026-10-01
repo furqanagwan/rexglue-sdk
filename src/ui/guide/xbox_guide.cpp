@@ -28,6 +28,7 @@
 #include <rex/ui/image_decode.h>
 #include <rex/ui/immediate_drawer.h>
 
+#include <rex/ui/guide/dlc_catalog.h>
 #include <rex/ui/guide/guide_layout.h>
 
 REXCVAR_DEFINE_BOOL(xbox_guide, true, "UI",
@@ -506,6 +507,17 @@ ImTextureID GuideMedia::Texture(std::string_view path, std::string_view package,
   if (it == images_.end()) {
     Image image;
     std::span<const uint8_t> bytes = xui::ResolveFile(*assets_->update, path, package);
+    // dlc://<media ID>/banner or /tile: art from the built-in add-on catalogue.
+    if (path.starts_with("dlc://")) {
+      const std::string_view rest = path.substr(6);
+      const size_t slash = rest.find('/');
+      if (const DlcCatalogEntry* entry = FindEmbeddedDlc(rest.substr(0, slash))) {
+        const std::string_view kind =
+            slash == std::string_view::npos ? std::string_view() : rest.substr(slash + 1);
+        const std::vector<uint8_t>& art = kind == "tile" ? entry->tile : entry->banner;
+        bytes = std::span<const uint8_t>(art.data(), art.size());
+      }
+    }
     if (path == xui::kGamerscoreImage && immediate_drawer_) {
       image.width = image.height = kGamerscoreImageSize;
       const std::vector<uint8_t> rgba = GamerscoreGlyphRGBA(kGamerscoreImageSize);

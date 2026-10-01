@@ -5,7 +5,9 @@ add_executable(rexglue
     ui/ui.cpp
     ui/progress.cpp
     commands/codegen_command.cpp
+    commands/dlc_command.cpp
     commands/guide_bundle_command.cpp
+    commands/http_client.cpp
     commands/init_command.cpp
     commands/test_recompiler.cpp
     commands/project_scan.cpp
@@ -24,6 +26,10 @@ target_link_libraries(rexglue
     PRIVATE
         rexcodegen
 )
+# HTTP for dlc-catalog and dlc-find (RG-GDK-050).
+if(WIN32)
+    target_link_libraries(rexglue PRIVATE winhttp)
+endif()
 
 rex_target_pch(rexglue <CLI/CLI.hpp>)
 

@@ -52,13 +52,24 @@ focus, press and sounds come from the skin visuals' named frames.
   a recompiled title has no dashboard) asks "Are you sure you want to close
   the game? Any unsaved progress will be lost." first, No focused. Yes closes
   the guide and ends the title through the window's normal close path.
-- Games & Apps > Manage Game lists the title's downloadable content: what is
-  installed, and the content packages (STFS, content type 2, this title's ID)
-  in the `DLC` folder beside the executable or picked with "Add Content from This
-  PC" (the Windows file picker). Installed content is ticked; A on a package
-  that is not installed installs it with `ContentManager::InstallContent`, in
-  the background. The page is the `OptionsNotifications` scene; a game may need
-  a restart to see new content.
+- Games & Apps > Manage Game lists every add-on the title had in the
+  marketplace (its config's `[[dlc]]` entries, described by the catalogue
+  built into it; see [code patches](code-patches.md#title-add-ons)), as the
+  console's in-game marketplace listed offers. Each row shows Install,
+  Installed or Needs Update where the console showed the price; the right
+  pane shows the add-on's banner, title, publisher, status and description.
+  Install takes the add-on's package (STFS, content type 2, this title's ID,
+  matched by display name) from the `DLC` folder beside the executable, or
+  asks for it with the Windows file picker, and installs it with
+  `ContentManager::InstallContent` in the background. An add-on whose
+  `requires_title_update` is above the build's title update is not installed
+  and says the title update is needed first. Installed or found content the
+  catalogue lacks is listed after it. The page is the `OptionsNotifications`
+  scene, its rows given the skin's `btn_Count` visual for the right-hand
+  column, with an `XuiImage` added for the banner. The 17559 update has no
+  in-game marketplace scenes (its dashboard's marketplace is Lua, in
+  `contapp.xzp`), so the console's own offer list cannot be used. A game may
+  need a restart to see new content.
 - Settings > Preferences, Patches, Mods and Cheats open settings pages built
   from the console's own Options scenes (see [Settings pages](#settings-pages)).
 - While the guide is open, the title behind it is darkened to a quarter of its
@@ -163,7 +174,7 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | Tab | Entry | Opens on the console | Here |
 | --- | --- | --- | --- |
 | Games & Apps | Achievements | `802_Achievements` grid, then `828_AchievDetails` | Works |
-| | Manage Game (added) | | Works: install DLC from this PC |
+| | Manage Game (added) | | Works: the title's add-ons from its catalogue, installed from this PC |
 | | Awards | `837_AvatarAwards` (avatar awards) | Disabled |
 | | Recent | `QuickLaunch`: Games & Apps, Downloads, All tabs | Disabled |
 | | My Games | dashboard (dash command 23) | Disabled |

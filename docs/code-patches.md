@@ -113,11 +113,47 @@ where = "Extras > Cheat Codes"
 earlier one. Codegen compiles them into `PPCImageInfo::title_cheats`. Record
 where each code came from next to it.
 
+## Title add-ons
+
+`[[dlc]]` lists an add-on the title had in the Xbox 360 marketplace, by its
+marketplace media ID. The Xbox guide's Games & Apps > Manage Game lists each one
+with its catalogue name, publisher, description and banner, and installs it
+from a package on this PC ([xbox-guide.md](xbox-guide.md#what-it-does)).
+
+```toml
+[[dlc]]
+id = "D4C83E1F-243B-4A68-AD70-ABF3C0FBF372"  # SKYFALL Content Pack
+# requires_title_update = 2       # the title update version it needs
+# package_name = "SKYFALL Pack"   # the display name in its package, if different
+```
+
+`id` is required and compared without case; a later entry with the same id
+replaces the earlier one. Set `requires_title_update` only when it is
+established: the guide then refuses to install the add-on until a build
+carries that title update. The guide matches installed and found packages to
+entries by display name (`package_name`, else the catalogue's title).
+
+`rexglue dlc-find <title ID>` prints a title's entries. The catalogue
+(`catalog.xboxlive.com`, `FindGames`, add-ons are media type 18) has no filter
+by game, so it pages through every add-on, about 28,600 in two to three
+seconds. At build time `rexglue dlc-catalog` (run by `rexglue_configure_target`
+from the `REXGLUE_TITLE_DLC_IDS` codegen writes) fetches only the listed IDs
+with their banner and tile in the builder's language (`REXGLUE_DLC_LOCALE`,
+default the PC's) and the executable embeds them. The file is kept until the
+list or locale changes. Offline, the catalogue holds the IDs only, the build
+goes on, and the guide names add-ons by their packages. Nothing fetched is
+committed.
+
 A patch is title-specific behavior (ADR-005). It belongs in the title's own
 repository and config, never in the SDK. Record where it came from, its author
 and any known problems next to it, as Canary does.
 
 ## Tests
+
+`unit_tests [guide][dlc]`: the add-on catalogue reads back what was written,
+including an entry with the ID only, and a truncated, mislabelled or
+over-counted one is refused. `[codegen][patch]` also covers `[[dlc]]` (ids
+compared without case, a later entry replacing an earlier one).
 
 `unit_tests [codegen][patch]`: widths and byte order, Canary's `is_enabled`,
 bad entries, an including file switching a patch on, writes into code only,

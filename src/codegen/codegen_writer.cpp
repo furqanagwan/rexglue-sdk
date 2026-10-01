@@ -122,6 +122,13 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
                                {"where", CStringBody(cheat.where)}});
   }
 
+  nlohmann::json titleDlcJson = nlohmann::json::array();
+  for (const auto& dlc : cfg.dlc) {
+    titleDlcJson.push_back({{"id", CStringBody(dlc.id)},
+                            {"package_name", CStringBody(dlc.package_name)},
+                            {"requires_title_update", dlc.requires_title_update}});
+  }
+
   return {
       {"project", cfg.projectName},
       {"image_base", fmt::format("0x{:X}", ctx.binary().baseAddress())},
@@ -136,6 +143,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"code_patches", CStringBody(fmt::format("{}", fmt::join(ctx.appliedPatches(), ", ")))},
       {"switchable_patches", switchablePatchesJson},
       {"title_cheats", titleCheatsJson},
+      {"title_dlc", titleDlcJson},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };

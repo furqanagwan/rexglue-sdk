@@ -13,6 +13,7 @@
 // TOML config file loading
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <set>
 
@@ -362,6 +363,30 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
                              [&](const TitleCheat& c) { return c.name == parsed.name; });
       if (it == cfg.cheats.end()) {
         cfg.cheats.push_back(std::move(parsed));
+      } else {
+        *it = std::move(parsed);
+      }
+    }
+  }
+
+  // [[dlc]] -- keyed by "id": the title's add-ons, for the guide.
+  if (auto dlcArray = toml["dlc"].as_array()) {
+    for (auto& entry : *dlcArray) {
+      auto* table = entry.as_table();
+      auto id = table ? (*table)["id"].value<std::string>() : std::nullopt;
+      if (!id || id->empty()) {
+        REXCODEGEN_ERROR("[[dlc]] entry in {} needs an id", filePath);
+        continue;
+      }
+      std::string upper = *id;
+      std::transform(upper.begin(), upper.end(), upper.begin(),
+                     [](unsigned char c) { return char(std::toupper(c)); });
+      TitleDlc parsed{upper, (*table)["package_name"].value_or(std::string()),
+                      uint32_t((*table)["requires_title_update"].value_or(int64_t(0)))};
+      auto it = std::find_if(cfg.dlc.begin(), cfg.dlc.end(),
+                             [&](const TitleDlc& d) { return d.id == parsed.id; });
+      if (it == cfg.dlc.end()) {
+        cfg.dlc.push_back(std::move(parsed));
       } else {
         *it = std::move(parsed);
       }
