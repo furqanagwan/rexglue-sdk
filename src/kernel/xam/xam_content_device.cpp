@@ -152,6 +152,8 @@ u32 XamContentCreateDeviceEnumerator_entry(u32 content_type, u32 content_flags, 
   }
 
   *handle_out = e->handle();
+  REXKRNL_DEBUG("XamContentCreateDeviceEnumerator({:08X}, {:08X}, {}): handle {:08X}, {} devices",
+                content_type, content_flags, max_count, e->handle(), e->item_count());
   return X_ERROR_SUCCESS;
 }
 

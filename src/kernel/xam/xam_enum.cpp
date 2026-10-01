@@ -41,7 +41,7 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
     return X_ERROR_INVALID_HANDLE;
   }
 
-  auto run = [e, buffer_ptr](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
+  auto run = [e, handle, buffer_ptr](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
     X_RESULT result;
     uint32_t item_count = 0;
     if (!buffer_ptr) {
@@ -49,6 +49,10 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
     } else {
       result = e->WriteItems(buffer_ptr.guest_address(), buffer_ptr.as<uint8_t*>(), &item_count);
     }
+    // The item size tells the enumerator kinds apart (content, devices,
+    // achievements) when a title polls one.
+    REXKRNL_DEBUG("XamEnumerate({:08X}): item size {}, {} written, result {:08X}", handle,
+                  e->item_size(), item_count, result);
     extended_error = X_HRESULT_FROM_WIN32(result);
     length = item_count;
     return result;

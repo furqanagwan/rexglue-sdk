@@ -524,22 +524,23 @@ class XStaticAchievementEnumerator : public XEnumerator {
     uint32_t flags;
   };
 
-  XStaticAchievementEnumerator(KernelState* kernel_state, size_t items_per_enumerate,
+  // Enumeration starts at the title's offset: titles page through their
+  // achievements with one enumerator per page (Canary 603355ae5b).
+  XStaticAchievementEnumerator(KernelState* kernel_state, size_t items_per_enumerate, size_t offset,
                                uint32_t flags)
       : XEnumerator(kernel_state, items_per_enumerate,
                     sizeof(X_ACHIEVEMENT_DETAILS) +
                         (!!(flags & 7) ? X_ACHIEVEMENT_DETAILS::kStringBufferSize : 0)),
-        flags_(flags) {}
+        flags_(flags),
+        current_item_(offset) {}
 
   void AppendItem(AchievementDetails item) { items_.push_back(std::move(item)); }
 
   uint32_t WriteItems(uint32_t buffer_ptr, uint8_t* buffer_data, uint32_t* written_count) override {
-    size_t count = std::min(items_.size() - current_item_, items_per_enumerate());
-    if (!count) {
+    if (current_item_ >= items_.size()) {
       return X_ERROR_NO_MORE_FILES;
     }
-
-    size_t size = count * item_size();
+    size_t count = std::min(items_.size() - current_item_, items_per_enumerate());
 
     auto details = reinterpret_cast<X_ACHIEVEMENT_DETAILS*>(buffer_data);
     size_t string_offset = items_per_enumerate() * sizeof(X_ACHIEVEMENT_DETAILS);
@@ -616,7 +617,7 @@ u32 XamUserCreateAchievementEnumerator_entry(u32 title_id, u32 user_index, u32 x
   }
 
   auto e = object_ref<XStaticAchievementEnumerator>(
-      new XStaticAchievementEnumerator(REX_KERNEL_STATE(), count, flags));
+      new XStaticAchievementEnumerator(REX_KERNEL_STATE(), count, offset, flags));
   auto result = e->Initialize(user_index, 0xFB, 0xB000A, 0xB000B, 0);
   if (XFAILED(result)) {
     return result;
