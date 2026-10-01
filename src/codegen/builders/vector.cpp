@@ -1212,6 +1212,25 @@ bool build_vpkswus(BuilderContext& ctx) {
   return true;
 }
 
+bool build_vpkpx(BuilderContext& ctx) {
+  // Guest pixels are ARGB8888 and the packed result is A1R5G5B5.
+  // Snapshot both inputs so vD may alias either source register.
+  ctx.println("\t{{");
+  for (size_t i = 0; i < 8; ++i) {
+    const auto source = ctx.v(ctx.insn.operands[i < 4 ? 2 : 1]);
+    ctx.println("\t\tconst uint32_t pixel{} = {}.u32[{}];", i, source, i & 3);
+  }
+  for (size_t i = 0; i < 8; ++i) {
+    ctx.println(
+        "\t\t{}.u16[{}] = uint16_t(((pixel{} >> 9) & 0xFC00) | "
+        "((pixel{} >> 6) & 0x3E0) | "
+        "((pixel{} >> 3) & 0x1F));",
+        ctx.v(ctx.insn.operands[0]), i, i, i, i);
+  }
+  ctx.println("\t}}");
+  return true;
+}
+
 bool build_vpkd3d128(BuilderContext& ctx) {
   // TODO(tomc): vectorize
   // NOTE: handling vector reversal here too

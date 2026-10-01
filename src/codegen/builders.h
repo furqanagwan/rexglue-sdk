@@ -603,6 +603,7 @@ bool build_vpkshus(BuilderContext& ctx);
 bool build_vpkswss(BuilderContext& ctx);
 bool build_vpkswus(BuilderContext& ctx);
 bool build_vpkd3d128(BuilderContext& ctx);
+bool build_vpkpx(BuilderContext& ctx);
 
 // Vector unpack
 bool build_vupkd3d128(BuilderContext& ctx);

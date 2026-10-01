@@ -640,6 +640,7 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       {PPC_INST_VPKUHUS, build_vpkuhus},
       {PPC_INST_VPKUHUS128, build_vpkuhus},
       {PPC_INST_VPKUWUM, build_vpkuwum},
+      {PPC_INST_VPKPX, build_vpkpx},
       {PPC_INST_VPKUWUM128, build_vpkuwum},
       {PPC_INST_VPKUWUS, build_vpkuwus},
       {PPC_INST_VPKUWUS128, build_vpkuwus},
