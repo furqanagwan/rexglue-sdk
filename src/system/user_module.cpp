@@ -102,8 +102,30 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
     return result;
   }
 
-  // Search for sibling XEX patch file
-  auto patch_entry = kernel_state_->file_system()->ResolvePath(path_ + "p");
+  // XEX patches come from the title update the code was built for, and only
+  // then: an original build must load the original image, whatever lies beside
+  // it. The update holds <name>p at the module's path relative to the game
+  // (data\webkit\EAWebkit.xexp), or at its root.
+  rex::filesystem::Entry* patch_entry = nullptr;
+  const std::string file_name(rex::string::utf8_find_name_from_guest_path(path_));
+  if (xex_module()->is_patch()) {
+    // A patch is not patched itself.
+  } else if (kernel_state_->title_update_version()) {
+    constexpr std::string_view kGameDevice = "\\Device\\Harddisk0\\Partition1\\";
+    auto* fs = kernel_state_->file_system();
+    if (std::string_view(path_).starts_with(kGameDevice)) {
+      patch_entry = fs->ResolvePath("update:\\" + path_.substr(kGameDevice.size()) + "p");
+    }
+    if (!patch_entry) {
+      patch_entry = fs->ResolvePath("update:\\" + file_name + "p");
+    }
+    if (!patch_entry) {
+      REXSYS_WARN("No XEX patch for {} in title update {}", file_name,
+                  kernel_state_->title_update_version());
+    }
+  } else if (kernel_state_->file_system()->ResolvePath(path_ + "p")) {
+    REXSYS_WARN("Ignoring {}p: this build is not a title update build", path_);
+  }
   if (patch_entry) {
     auto patch_path = patch_entry->absolute_path();
 

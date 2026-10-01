@@ -79,6 +79,9 @@ struct PPCImageInfo {
   const PPCTitleCheat* title_cheats = nullptr;
   /// The title's add-ons, ended by a null id; null when none.
   const PPCTitleDlc* title_dlc = nullptr;
+  /// The title update this executable was built for; 0 for the original. A
+  /// title update build applies that update's XEX patches (update:) at load.
+  u32 title_update = 0;
 };
 
 }  // namespace rex

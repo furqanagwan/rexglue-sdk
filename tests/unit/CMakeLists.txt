@@ -54,6 +54,7 @@ add_executable(unit_tests
     codegen/crt_jump_scanner_test.cpp
     codegen/code_patch_test.cpp
     codegen/game_config_test.cpp
+    codegen/title_update_manifest_test.cpp
     rexglue/app_name_test.cpp
 )
 
@@ -68,6 +69,7 @@ endif()
 target_sources(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/rexglue/ui/ui.cpp
     ${PROJECT_SOURCE_DIR}/src/rexglue/ui/progress.cpp
+    ${PROJECT_SOURCE_DIR}/src/rexglue/commands/project_scan.cpp
 )
 
 target_include_directories(unit_tests PRIVATE

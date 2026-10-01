@@ -63,7 +63,16 @@ if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/
     set_source_files_properties({{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }}
         PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
 endif()
-
+{% for tu in title_updates %}
+# Title update {{ tu.version }} ([[title_update]] in the manifest): the executable
+# again, patched by that update, built as <target>_tu{{ tu.version }}.
+if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ tu.out_dir }}/sources.cmake")
+    include({{ tu.out_dir }}/sources.cmake)
+    set({{ tu.sources_var }} {{ cmake_var("GENERATED_SOURCES") }})
+    set_source_files_properties({{ cmake_var(tu.sources_var) }}
+        PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
+endif()
+{% endfor %}
 # The options go on the target as well: CMake compiles the header from its own
 # cmake_pch.hxx.cxx, which carries none of the source properties above, and
 # clang rejects a PCH whose EH mode disagrees with the TU including it.
@@ -72,22 +81,20 @@ function(rexglue_apply_recomp_settings target_name pch_header)
     target_compile_options({{ cmake_var("target_name") }} PRIVATE {{ cmake_var("REXGLUE_RECOMP_OPTIONS") }})
 endfunction()
 
-# Configure a rexglue target with SDK libraries and platform settings.
-# Call after add_executable() in your CMakeLists.txt.
-# Usage: rexglue_setup_target(<target> [GPU_PLUGINS xenos])
-macro(rexglue_setup_target target_name)
-    if(REXGLUE_ENTRYPOINT_GENERATED_SOURCES)
-        add_library({{ cmake_var("target_name") }}_recomp OBJECT
-            {{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }})
+# Links one executable to its generated code: an object library built from
+# `sources`, with `include_dir` (that version's generated headers) on both.
+function(_rexglue_link_recomp target_name sources include_dir)
+    if(sources)
+        add_library({{ cmake_var("target_name") }}_recomp OBJECT {{ cmake_var("sources") }})
         target_include_directories({{ cmake_var("target_name") }}_recomp PRIVATE
             {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}
             {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/src
-            {{ cmake_var("REXGLUE_ENTRYPOINT_INCLUDE_DIR") }}
+            {{ cmake_var("include_dir") }}
         )
         target_link_libraries({{ cmake_var("target_name") }}_recomp PRIVATE rex::runtime)
         rexglue_apply_target_settings({{ cmake_var("target_name") }}_recomp)
         rexglue_apply_recomp_settings({{ cmake_var("target_name") }}_recomp
-            "{{ cmake_var("REXGLUE_ENTRYPOINT_INCLUDE_DIR") }}/{{ names.original }}_pch.h")
+            "{{ cmake_var("include_dir") }}/{{ names.original }}_pch.h")
         add_dependencies({{ cmake_var("target_name") }}_recomp {{ names.original }}_codegen)
         target_link_libraries({{ cmake_var("target_name") }} PRIVATE
             {{ cmake_var("target_name") }}_recomp)
@@ -97,7 +104,7 @@ macro(rexglue_setup_target target_name)
     target_include_directories({{ cmake_var("target_name") }} PRIVATE
         {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}
         {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/src
-        {{ cmake_var("REXGLUE_ENTRYPOINT_INCLUDE_DIR") }}
+        {{ cmake_var("include_dir") }}
     )
     target_link_libraries({{ cmake_var("target_name") }} PRIVATE rex::runtime)
     if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/metadata/icons")
@@ -105,11 +112,35 @@ macro(rexglue_setup_target target_name)
             DIRECTORY "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/metadata/icons"
             PREFIX "icons")
     endif()
+endfunction()
+
+# Configure a rexglue target with SDK libraries and platform settings.
+# Call after add_executable() in your CMakeLists.txt.
+# Usage: rexglue_setup_target(<target> [GPU_PLUGINS xenos])
+# Each [[title_update]] in the manifest also gets <target>_tu<version>, built
+# from the same host sources against that version's generated code.
+macro(rexglue_setup_target target_name)
+    get_target_property(_rexglue_host_sources {{ cmake_var("target_name") }} SOURCES)
+    get_target_property(_rexglue_host_win32 {{ cmake_var("target_name") }} WIN32_EXECUTABLE)
+    _rexglue_link_recomp({{ cmake_var("target_name") }}
+        "{{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }}"
+        "{{ cmake_var("REXGLUE_ENTRYPOINT_INCLUDE_DIR") }}")
     if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/gdk/MicrosoftGame.config")
         rexglue_add_game_config({{ cmake_var("target_name") }}
             DIRECTORY "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/gdk")
     endif()
     rexglue_configure_target({{ cmake_var("target_name") }} {{ cmake_var("ARGN") }})
+{% for tu in title_updates %}
+    if({{ tu.sources_var }})
+        add_executable({{ cmake_var("target_name") }}_tu{{ tu.version }} {{ cmake_var("_rexglue_host_sources") }})
+        set_target_properties({{ cmake_var("target_name") }}_tu{{ tu.version }} PROPERTIES
+            WIN32_EXECUTABLE "{{ cmake_var("_rexglue_host_win32") }}")
+        _rexglue_link_recomp({{ cmake_var("target_name") }}_tu{{ tu.version }}
+            "{{ cmake_var(tu.sources_var) }}"
+            "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ tu.out_dir }}")
+        rexglue_configure_target({{ cmake_var("target_name") }}_tu{{ tu.version }} {{ cmake_var("ARGN") }})
+    endif()
+{% endfor %}
 endmacro()
 
 # Codegen runs as part of the build, re-running only when an input in codegen.d
@@ -121,7 +152,8 @@ endmacro()
 add_custom_command(
     OUTPUT "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/codegen.build.stamp"
            {{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }}
-    COMMAND $<TARGET_FILE:rex::rexglue> codegen {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ names.original }}_manifest.toml
+{% for tu in title_updates %}           {{ cmake_var(tu.sources_var) }}
+{% endfor %}    COMMAND $<TARGET_FILE:rex::rexglue> codegen {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ names.original }}_manifest.toml
     DEPFILE "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/codegen.d"
     WORKING_DIRECTORY {{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}
     COMMENT "Generating recompiled code for {{ names.original }}"

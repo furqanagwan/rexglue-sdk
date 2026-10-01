@@ -205,6 +205,9 @@ Additional guest DLLs must also be statically generated and registered; see
 `rexglue init module --help`. Guest code patches (for example a Canary
 game-patches entry) go in the codegen config as `[[patch]]` tables and are
 compiled in ([code patches](docs/code-patches.md)); recompile after changing one.
+A title update is built as a second executable, `<title>_tu<version>`, from its
+package and its own config: a manifest `[[title_update]]` entry
+([title updates](docs/title-updates.md)).
 
 ### Xbox guide
 

@@ -147,6 +147,49 @@ std::optional<ManifestConfig> ManifestConfig::Load(const std::filesystem::path& 
     }
   }
 
+  // [[title_update]]: the entrypoint again, patched by that update's XEX
+  // patches, with its own output directory and includes (its own function
+  // entries, patches and mods: addresses differ between versions).
+  if (auto updates = tbl["title_update"].as_array()) {
+    size_t index = 0;
+    for (const auto& update : *updates) {
+      auto* updateTbl = update.as_table();
+      if (!updateTbl) {
+        REXLOG_ERROR("Manifest [[title_update]] entry #{} is not a table", index);
+        return std::nullopt;
+      }
+      TitleUpdateBuild build;
+      build.version = uint32_t((*updateTbl)["version"].value_or(int64_t(0)));
+      auto package = (*updateTbl)["package"].value_or<std::string>("");
+      auto outDir = (*updateTbl)["out_directory_path"].value_or<std::string>("");
+      if (build.version == 0 || package.empty() || outDir.empty() ||
+          !(*updateTbl)["includes"].as_array()) {
+        REXLOG_ERROR(
+            "Manifest [[title_update]] entry #{} needs version (above 0), package, "
+            "out_directory_path and includes",
+            index);
+        return std::nullopt;
+      }
+      build.package = manifest.manifestDir / package;
+      for (const auto& existing : manifest.titleUpdates) {
+        if (existing.version == build.version) {
+          REXLOG_ERROR("Manifest [[title_update]] version {} is listed twice", build.version);
+          return std::nullopt;
+        }
+      }
+      // The entrypoint's settings, with this version's output and includes.
+      toml::table binaryTbl = *entrypoint;
+      binaryTbl.insert_or_assign("out_directory_path", outDir);
+      binaryTbl.insert_or_assign("includes", *(*updateTbl)["includes"].as_array());
+      if (!LoadBinaryConfig(binaryTbl, manifest.manifestDir, manifest.projectName, build.binary)) {
+        return std::nullopt;
+      }
+      build.binary.recompiler.titleUpdateVersion = build.version;
+      manifest.titleUpdates.push_back(std::move(build));
+      ++index;
+    }
+  }
+
   return manifest;
 }
 
