@@ -39,9 +39,24 @@ class SystemUpdate {
   /// The system XEXs the guide reads, as they are named in the update package.
   static constexpr std::string_view kModules[] = {"hud", "huduiskin", "xam", "gamerprofile"};
 
+  /// The system XEXs by module name ("hud" -> `$flash_hud.xex` bytes).
+  using Modules = std::map<std::string, std::vector<uint8_t>>;
+
   /// `path` is a `$SystemUpdate` folder, the `su20076000_00000000` package in
   /// it, or a folder holding the `$flash_<module>.xex` files.
   static std::unique_ptr<SystemUpdate> Load(const std::filesystem::path& path, std::string* error);
+
+  /// Reads the system XEXs the guide needs from `path` (as for Load).
+  static std::optional<Modules> ReadModules(const std::filesystem::path& path, std::string* error);
+  /// Builds the update from system XEXs; fails when a package the guide needs
+  /// is missing.
+  static std::unique_ptr<SystemUpdate> FromModules(const Modules& modules, std::string* error);
+
+  /// The guide bundle: the system XEXs in one blob, which the title build
+  /// embeds into the executable (rexglue guide-bundle, rexglue_configure_target)
+  /// so the guide needs nothing at run time.
+  static std::vector<uint8_t> WriteBundle(const Modules& modules);
+  static std::optional<Modules> ReadBundle(std::span<const uint8_t> bundle, std::string* error);
 
   /// Adds the XUIZ resources of one system XEX. Used by Load and by tests.
   bool AddModule(std::string_view module, std::span<const uint8_t> xex, std::string* error);

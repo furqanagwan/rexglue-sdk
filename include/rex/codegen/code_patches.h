@@ -46,7 +46,8 @@ struct SwitchablePatch {
 
 struct SwitchablePatches {
   std::vector<SwitchablePatch> patches;
-  std::map<uint32_t, SwitchedWord> words;  ///< By guest address
+  std::map<uint32_t, SwitchedWord> words;     ///< By guest address
+  std::multimap<uint32_t, SwitchedSet> sets;  ///< By the guest address they run before
 };
 
 /// Checks the switchable patches and works out, per instruction word, the
@@ -54,7 +55,10 @@ struct SwitchablePatches {
 /// analysis sees the original code. Every write must stay in code, and
 /// neither version of a word may be a branch, call, trap or system call:
 /// switching one of those would change the control flow analysis found.
+/// A patch's register sets must be at word addresses in code, and one keyed
+/// on lr needs the link register kept (not skip_lr).
 Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
-                                                   const std::vector<CodePatch>& patches);
+                                                   const std::vector<CodePatch>& patches,
+                                                   bool keeps_lr = true);
 
 }  // namespace rex::codegen

@@ -272,6 +272,7 @@ bool CodegenWriter::write(bool force) {
   if (runtime_)
     emitCtx.resolver = runtime_->export_resolver();
   emitCtx.switched = &ctx_.switchablePatches().words;
+  emitCtx.switched_sets = &ctx_.switchablePatches().sets;
 
   REXCODEGEN_TRACE("Recompiling {} functions...", functions.size());
 

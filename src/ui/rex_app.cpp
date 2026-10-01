@@ -871,6 +871,22 @@ void ReXApp::SetupGuide() {
   // Reading the system update decompresses XAM; keep it off the UI thread.
   guide_loader_ = std::thread([this] {
     std::string errors;
+    // The guide the title build embedded comes first, unless a system update
+    // was named explicitly.
+    if (const auto bundle = ui::guide::EmbeddedGuide();
+        !bundle.empty() && REXCVAR_GET(xbox_guide_system_update).empty()) {
+      std::string error;
+      std::shared_ptr<const ui::guide::GuideAssets> assets =
+          ui::guide::GuideAssets::LoadBundle(bundle, &error);
+      if (assets) {
+        REXLOG_INFO("Xbox guide: using the guide built into the title ({} KiB)",
+                    bundle.size() / 1024);
+        std::lock_guard<std::mutex> lock(guide_mutex_);
+        guide_assets_ = std::move(assets);
+        return;
+      }
+      errors += fmt::format("built-in guide: {}. ", error);
+    }
     for (const std::filesystem::path& location : ui::guide::SystemUpdateLocations()) {
       std::error_code ec;
       if (!std::filesystem::exists(location, ec)) {
@@ -889,8 +905,8 @@ void ReXApp::SetupGuide() {
     }
     if (errors.empty()) {
       errors =
-          "No console system update found. Set xbox_guide_system_update to a "
-          "$SystemUpdate folder (dashboard 2.0.17559).";
+          "This build has no guide built in: build the title with REXGLUE_SYSTEM_UPDATE "
+          "set to a $SystemUpdate folder (dashboard 2.0.17559).";
     }
     REXLOG_INFO("Xbox guide unavailable: {}", errors);
     std::lock_guard<std::mutex> lock(guide_mutex_);

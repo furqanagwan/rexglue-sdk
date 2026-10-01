@@ -88,7 +88,8 @@ bool ChangesControlFlow(uint32_t word) {
 }  // namespace
 
 Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
-                                                   const std::vector<CodePatch>& patches) {
+                                                   const std::vector<CodePatch>& patches,
+                                                   bool keeps_lr) {
   SwitchablePatches out;
   for (const auto& patch : patches) {
     if (!patch.switchable) {
@@ -140,6 +141,22 @@ Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
         it->second.patched =
             (it->second.patched & ~(0xFFu << shift)) | (uint32_t(write.bytes[i]) << shift);
       }
+    }
+    for (const auto& set : patch.sets) {
+      const auto* section = binary.findSection(set.address);
+      if (!section || !section->executable || (set.address & 3)) {
+        return Err<SwitchablePatches>(
+            ErrorCategory::Config,
+            fmt::format("Patch \"{}\" sets r{} at 0x{:08X}, which is not an instruction in code.",
+                        patch.name, set.reg, set.address));
+      }
+      if (set.lr && !keeps_lr) {
+        return Err<SwitchablePatches>(
+            ErrorCategory::Config,
+            fmt::format("Patch \"{}\" tests lr at 0x{:08X}, but skip_lr drops the link register.",
+                        patch.name, set.address));
+      }
+      out.sets.emplace(set.address, SwitchedSet{set.reg, set.value, set.lr, index, patch.name});
     }
   }
   // A write of the bytes already there (QoS's be8 0x01) switches nothing.

@@ -14,11 +14,21 @@ keyboard runs. An owner play session with a pad is still to do.
   pad), as Xbox Series backward compatibility opens the 360 guide, or with Home
   (`bind_xbox_guide`). The Xbox button is deliberately not a trigger: on PC it
   opens Game Bar, and the guide leaves it to Windows.
-- The system update is looked for in the `xbox_guide_system_update` cvar, then in
-  `$SystemUpdate` beside the executable, then in
-  `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`. It loads in the background at startup;
-  if none is found, the first open says so. `--xbox_guide=false` turns the guide
-  off.
+- The guide is built into the title, so players need nothing for it and it
+  works offline. Whoever builds the title sets `REXGLUE_SYSTEM_UPDATE` (a CMake
+  cache variable, or the environment variable of that name) to their own
+  console's `$SystemUpdate` folder once, as they supply the game itself.
+  `rexglue_configure_target`, which every title calls, then runs
+  `rexglue guide-bundle` to take the four modules the guide reads (`hud`,
+  `huduiskin`, `xam`, `gamerprofile`, about 2.7 MB) and embeds them in the
+  executable with `.incbin`. Nothing from the update ships with the SDK. Note that
+  a title built this way carries those console files; anyone passing the
+  executable on passes them on.
+- A build without `REXGLUE_SYSTEM_UPDATE` logs "Xbox guide not built in" and,
+  at run time, falls back to the `xbox_guide_system_update` cvar, `$SystemUpdate`
+  beside the executable, then `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`. Naming
+  the cvar also overrides the built-in guide. `--xbox_guide=false` turns the
+  guide off.
 - Navigation: D-pad or left stick; LB/RB or left/right switch tabs; A selects;
   B goes back or closes; Y is Xbox Home. On the keyboard: arrows, Enter or Space,
   Escape or Backspace, Y, and Page Up/Down.

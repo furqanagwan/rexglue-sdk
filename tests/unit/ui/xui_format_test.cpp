@@ -390,6 +390,33 @@ TEST_CASE("SystemUpdate keeps a module's XUIZ resources by module/resource", "[x
   CHECK_FALSE(update.Find("xam/icon"));
 }
 
+TEST_CASE("The guide bundle carries the system modules a title embeds", "[xui]") {
+  SystemUpdate::Modules modules;
+  modules["hud"] = XexWithResource("hud", Xuiz({{"a.xur", "x"}}), 0);
+  modules["huduiskin"] = XexWithResource("skin", Xuiz({{"skin.xur", "s"}}), 0);
+  modules["xam"] = XexWithResource("skin", Xuiz({{"b.xur", "y"}}), 0);
+  const auto bundle = SystemUpdate::WriteBundle(modules);
+  std::string error;
+  auto read = SystemUpdate::ReadBundle(bundle, &error);
+  REQUIRE(read);
+  CHECK(*read == modules);
+  // The guide needs xam/shrdres too: a bundle without it is refused.
+  CHECK_FALSE(SystemUpdate::FromModules(*read, &error));
+  CHECK(error.find("xam/shrdres") != std::string::npos);
+  modules["xam"] = XexWithResource("shrdres", Xuiz({{"c.png", "z"}}), 0);
+  // One resource per module in this synthetic XEX, so xam/skin goes missing.
+  CHECK_FALSE(SystemUpdate::FromModules(modules, &error));
+
+  // Truncated or foreign data is refused, never read past its end.
+  for (size_t cut : {size_t(0), size_t(5), bundle.size() / 2, bundle.size() - 1}) {
+    INFO("cut " << cut);
+    CHECK_FALSE(SystemUpdate::ReadBundle(std::span(bundle).first(cut), &error));
+  }
+  Bytes foreign = bundle;
+  foreign[0] ^= 0xFF;
+  CHECK_FALSE(SystemUpdate::ReadBundle(foreign, &error));
+}
+
 TEST_CASE("Encrypted XEXs are refused", "[xui]") {
   std::string error;
   CHECK_FALSE(ReadXexResources(XexWithResource("hud", Bytes{}, 0, /*encryption=*/1), &error));
@@ -444,4 +471,22 @@ TEST_CASE("The console's own guide scenes decode", "[xui][local]") {
     }
   }
   CHECK(decoded >= 55);
+}
+
+TEST_CASE("The console's system update round-trips through a guide bundle", "[xui][local]") {
+  const char* path = std::getenv("REXGLUE_SYSTEM_UPDATE");
+  if (!path) {
+    SKIP("REXGLUE_SYSTEM_UPDATE is not set");
+  }
+  std::string error;
+  auto modules = SystemUpdate::ReadModules(path, &error);
+  REQUIRE(modules);
+  CHECK(modules->size() == 4);
+  const auto bundle = SystemUpdate::WriteBundle(*modules);
+  auto read = SystemUpdate::ReadBundle(bundle, &error);
+  REQUIRE(read);
+  auto update = SystemUpdate::FromModules(*read, &error);
+  INFO(error);
+  REQUIRE(update);
+  CHECK(update->Find("hud/hud")->Contains("GuideMain.xur"));
 }

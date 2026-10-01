@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,6 +67,12 @@ namespace rex::ui::guide {
 /// then %LOCALAPPDATA%\ReXGlue\$SystemUpdate.
 std::vector<std::filesystem::path> SystemUpdateLocations();
 
+/// The guide bundle the title build embedded (rexglue_configure_target), so
+/// players need nothing for the guide. Called by the generated registration
+/// at static initialisation; empty when the title was built without one.
+bool RegisterEmbeddedGuide(const uint8_t* data, size_t size);
+std::span<const uint8_t> EmbeddedGuide();
+
 /// The scenes and strings the guide uses, parsed once from the owner's system
 /// update.
 struct GuideAssets {
@@ -84,6 +91,11 @@ struct GuideAssets {
   std::vector<std::string> hud_strings, xam_strings, profile_strings;
 
   static std::unique_ptr<GuideAssets> Load(const std::filesystem::path& path, std::string* error);
+  /// From a guide bundle (see EmbeddedGuide).
+  static std::unique_ptr<GuideAssets> LoadBundle(std::span<const uint8_t> bundle,
+                                                 std::string* error);
+  static std::unique_ptr<GuideAssets> FromUpdate(std::unique_ptr<xui::SystemUpdate> update,
+                                                 std::string* error);
 };
 
 /// The first string in `strings` starting with `prefix` (tables are per

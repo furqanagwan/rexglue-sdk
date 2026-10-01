@@ -12,6 +12,8 @@
 #pragma once
 
 #include <bitset>
+#include <map>
+#include <optional>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -54,6 +56,15 @@ struct SwitchedWord {
   std::string patch_name;
 };
 
+/// A register a switchable patch sets before the instruction at its address.
+struct SwitchedSet {
+  uint32_t reg = 0;
+  uint64_t value = 0;
+  std::optional<uint32_t> lr;
+  uint32_t patch_index = 0;
+  std::string patch_name;
+};
+
 struct EmitContext {
   const BinaryView& binary;
   const RecompilerConfig& config;
@@ -67,6 +78,7 @@ struct EmitContext {
 
   /// Instruction words switchable patches change, by guest address.
   const std::map<uint32_t, SwitchedWord>* switched = nullptr;
+  const std::multimap<uint32_t, SwitchedSet>* switched_sets = nullptr;
 
   void reference(std::string_view name) const {
     if (referenced)

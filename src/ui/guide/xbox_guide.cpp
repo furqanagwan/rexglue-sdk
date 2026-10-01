@@ -152,17 +152,37 @@ std::string FindString(const std::vector<std::string>& strings, std::string_view
   return std::string(fallback);
 }
 
+namespace {
+std::span<const uint8_t> g_embedded_guide;
+}  // namespace
+
+bool RegisterEmbeddedGuide(const uint8_t* data, size_t size) {
+  g_embedded_guide = {data, size};
+  return true;
+}
+
+std::span<const uint8_t> EmbeddedGuide() {
+  return g_embedded_guide;
+}
+
 std::unique_ptr<GuideAssets> GuideAssets::Load(const std::filesystem::path& path,
                                                std::string* error) {
-  auto assets = std::make_unique<GuideAssets>();
-  std::string load_error;
-  assets->update = xui::SystemUpdate::Load(path, &load_error);
-  if (!assets->update) {
-    if (error) {
-      *error = load_error;
-    }
+  return FromUpdate(xui::SystemUpdate::Load(path, error), error);
+}
+
+std::unique_ptr<GuideAssets> GuideAssets::LoadBundle(std::span<const uint8_t> bundle,
+                                                     std::string* error) {
+  auto modules = xui::SystemUpdate::ReadBundle(bundle, error);
+  return modules ? FromUpdate(xui::SystemUpdate::FromModules(*modules, error), error) : nullptr;
+}
+
+std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::SystemUpdate> update,
+                                                     std::string* error) {
+  if (!update) {
     return nullptr;
   }
+  auto assets = std::make_unique<GuideAssets>();
+  assets->update = std::move(update);
   auto scene = [&](xui::Document& out, std::string_view package, std::string_view name) {
     const xui::Package* p = assets->update->Find(package);
     std::string scene_error = "missing";
