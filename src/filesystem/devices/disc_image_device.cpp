@@ -13,6 +13,7 @@
 #include <rex/filesystem/devices/disc_image_entry.h>
 
 #include <algorithm>
+#include <array>
 
 #include <rex/literals.h>
 #include <rex/logging.h>
@@ -56,6 +57,21 @@ bool DiscImageDevice::Initialize() {
   result = ReadAllEntries(&state);
   if (result != Error::kSuccess) {
     REXFS_ERROR("Failed to read all GDFX entries: {}", static_cast<int>(result));
+    return false;
+  }
+
+  // A readable XDVDFS tree alone is not a game source. Reject video-only and
+  // malformed images before they can be mounted as game:.
+  auto* xex = root_entry_->ResolvePath("default.xex");
+  if (!xex || (xex->attributes() & kFileAttributeDirectory) || xex->size() < 4) {
+    REXFS_ERROR("Disc image has no root default.xex: {}", host_path_.string());
+    return false;
+  }
+  std::array<uint8_t, 4> signature{};
+  const auto* xex_entry = static_cast<const DiscImageEntry*>(xex);
+  if (!ReadAt(xex_entry->data_offset(), signature) ||
+      std::memcmp(signature.data(), "XEX2", signature.size()) != 0) {
+    REXFS_ERROR("Disc image root default.xex is not a XEX2 executable: {}", host_path_.string());
     return false;
   }
 

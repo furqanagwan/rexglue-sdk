@@ -39,7 +39,7 @@ struct Image {
       ("rexglue_synthetic_disc_reader_" +
        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".iso");
 
-  explicit Image(bool valid = true) {
+  explicit Image(bool valid = true, bool has_xex = true, bool valid_xex = true) {
     std::vector<uint8_t> bytes(kFile + 4);
     constexpr char kMagic[] = "MICROSOFT*XBOX*MEDIA";
     std::copy_n(kMagic, 20, bytes.begin() + 32 * kSector);
@@ -50,7 +50,9 @@ struct Image {
     bytes[kRoot + 13] = 11;
     constexpr char kName[] = "default.xex";
     std::copy_n(kName, 11, bytes.begin() + kRoot + 14);
-    std::copy_n("XEX2", 4, bytes.begin() + kFile);
+    if (!has_xex)
+      bytes[kRoot + 14] = 'x';
+    std::copy_n(valid_xex ? "XEX2" : "BAD!", 4, bytes.begin() + kFile);
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
@@ -92,4 +94,14 @@ TEST_CASE("XDVDFS rejects an out-of-range root directory", "[filesystem][disc]")
   Image image(false);
   rex::filesystem::DiscImageDevice device("game:", image.path);
   CHECK_FALSE(device.Initialize());
+}
+
+TEST_CASE("XDVDFS requires a root XEX2 executable", "[filesystem][disc]") {
+  Image missing_xex(true, false);
+  rex::filesystem::DiscImageDevice missing("game:", missing_xex.path);
+  CHECK_FALSE(missing.Initialize());
+
+  Image invalid_xex(true, true, false);
+  rex::filesystem::DiscImageDevice invalid("game:", invalid_xex.path);
+  CHECK_FALSE(invalid.Initialize());
 }

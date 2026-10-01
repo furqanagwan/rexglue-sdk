@@ -154,9 +154,9 @@ class Win32FileHandle : public FileHandle {
   bool Read(size_t file_offset, void* buffer, size_t buffer_length,
             size_t* out_bytes_read) override {
     *out_bytes_read = 0;
-    OVERLAPPED overlapped;
-    overlapped.Pointer = (PVOID)file_offset;
-    overlapped.hEvent = NULL;
+    OVERLAPPED overlapped{};
+    overlapped.Offset = static_cast<DWORD>(file_offset);
+    overlapped.OffsetHigh = static_cast<DWORD>(uint64_t(file_offset) >> 32);
     DWORD bytes_read = 0;
     BOOL read = ReadFile(handle_, buffer, (DWORD)buffer_length, &bytes_read, &overlapped);
     if (read) {
@@ -175,9 +175,9 @@ class Win32FileHandle : public FileHandle {
   bool Write(size_t file_offset, const void* buffer, size_t buffer_length,
              size_t* out_bytes_written) override {
     *out_bytes_written = 0;
-    OVERLAPPED overlapped;
-    overlapped.Pointer = (PVOID)file_offset;
-    overlapped.hEvent = NULL;
+    OVERLAPPED overlapped{};
+    overlapped.Offset = static_cast<DWORD>(file_offset);
+    overlapped.OffsetHigh = static_cast<DWORD>(uint64_t(file_offset) >> 32);
     DWORD bytes_written = 0;
     BOOL wrote = WriteFile(handle_, buffer, (DWORD)buffer_length, &bytes_written, &overlapped);
     if (wrote) {
