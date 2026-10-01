@@ -34,6 +34,7 @@ set(REXUI_GUIDE_SOURCES
     guide/dlc_catalog.cpp
     guide/guide_dlc.cpp
     guide/guide_input.cpp
+    guide/guide_layout.cpp
     guide/guide_notification.cpp
     guide/guide_settings.cpp
     guide/xbox_guide.cpp

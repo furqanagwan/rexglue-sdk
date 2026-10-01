@@ -185,7 +185,9 @@ class XboxGuide final : public ImGuiDialog {
   void HandleConfirm(GuideAction action);
   void Activate(xui::Element* control);
 
-  void SwitchTab(int tab);
+  /// The next tab left (-1) or right (+1) of the current one: Games & Apps,
+  /// Home and Settings (tabs 1, 2 and 4; Media, 3, is removed).
+  void SwitchTab(int direction);
   xui::Element* FirstFocusable(xui::Element* root);
   void SetFocus(xui::Element* control, bool initial = false);
   void SetLegends(std::string_view a, std::string_view b, std::string_view y);
@@ -244,8 +246,9 @@ class XboxGuide final : public ImGuiDialog {
 
   void BeginClose(bool exit_title);
   void UpdateClock();
-  /// Closes up the blades around the removed Media tab (kRemovedTab).
-  void LayOutBlades();
+  /// The Achievements row's gamerscore glyph in its label's colour: the skin
+  /// draws it near white, unseen on an unfocused row.
+  void ColourGamerscoreGlyph();
   /// Shows player 1's battery, at most once a second.
   void UpdateControllerBattery();
   ImTextureID Texture(std::string_view path, std::string_view package, int* width, int* height);
@@ -284,7 +287,6 @@ class XboxGuide final : public ImGuiDialog {
   xui::Element* return_focus_ = nullptr;
   std::vector<xui::Element*> pending_removal_;  // detached once the backdrop stops
   std::vector<SettingsPage> pages_;
-  int queued_tab_ = 0;  // a tab switch that passes over a removed tab
   xui::Element* manage_scene_ = nullptr;
   std::vector<xui::Element*> manage_rows_;
   std::vector<DlcEntry> dlc_;

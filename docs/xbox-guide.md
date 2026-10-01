@@ -30,7 +30,7 @@ keyboard runs. An owner play session with a pad is still to do.
   the cvar also overrides the built-in guide. `--xbox_guide=false` turns the
   guide off.
 - Navigation: D-pad or left stick; LB/RB or left/right switch tabs; A selects;
-  B goes back or closes; Y is Close Game. On the keyboard: arrows, Enter or Space,
+  B goes back or closes; Y is Leave Game. On the keyboard: arrows, Enter or Space,
   Escape or Backspace, Y, and Page Up/Down.
 
 ## What it does
@@ -38,7 +38,7 @@ keyboard runs. An owner play session with a pad is still to do.
 It runs the console's own flow. The HUD backdrop plays `ClosedToHalf` and hosts
 `GuideMain`, and the Home tab's blade comes in with `2Close`. Tabs change with
 the `iToj` blade shuffles. Launching something plays `<tab>Open` with the
-backdrop's `HalfToFull`. The Close Game and Turn Off prompts are the skin's
+backdrop's `HalfToFull`. The Leave Game and Turn Off prompts are the skin's
 `XuiMessageBox3`, hosted in the backdrop's error frame (`HalfToError`). Button
 focus, press and sounds come from the skin visuals' named frames.
 
@@ -48,8 +48,11 @@ focus, press and sounds come from the skin visuals' named frames.
   `828_AchievDetails`. The button shows the gamerscore earned. As on the
   17559 guide, this opens the current title's grid directly: `gp.xzp` has a
   games list only for Awards (`837_AvatarAwardGamesMe`), not for achievements.
-- Close Game (Y, or the Home tab's one entry, the console's Xbox Home renamed:
-  a recompiled title has no dashboard) asks "Are you sure you want to close
+- Leave Game (Y, or the Home tab's one entry, the console's Xbox Home renamed:
+  a recompiled title has no dashboard) is worded as the Xbox One and Series
+  consoles' guide words it for 360 titles. That guide also titles the Home
+  tab with the gamertag, so the Home blade's labels show the profile's name
+  (the runtime's profile is named "User"). Leave Game asks "Are you sure you want to close
   the game? Any unsaved progress will be lost." first, No focused. Yes closes
   the guide and ends the title through the window's normal close path.
 - Games & Apps > Manage Game lists every add-on the title had in the
@@ -66,7 +69,8 @@ focus, press and sounds come from the skin visuals' named frames.
   and says the title update is needed first. Installed or found content the
   catalogue lacks is listed after it. The page is the `OptionsNotifications`
   scene, its rows given the skin's `btn_Count` visual for the right-hand
-  column, with an `XuiImage` added for the banner. The 17559 update has no
+  column, with an `XuiImage` added for the banner across the whole right
+  pane at its top, edge to edge, as the console's marketplace showed it. The 17559 update has no
   in-game marketplace scenes (its dashboard's marketplace is Lua, in
   `contapp.xzp`), so the console's own offer list cannot be used. A game may
   need a restart to see new content.
@@ -87,13 +91,19 @@ focus, press and sounds come from the skin visuals' named frames.
 - Entries a recompiled title has no use for are taken out and the list closed
   up: Home > Connect to Xbox Live and the disabled title entry (Disc in Tray),
   Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
-  Console, and the whole Media tab (tab changes pass over it). At rest, the
-  Media tab's blade slot is closed up: the outermost blade on its side is
-  hidden and the labels beyond it move in one slot (`kBladeLayouts`), the
-  layout GuideMain gives a side with one tab fewer. The shuffles between tabs
-  still play the scene's own four-tab frames. The code is kept
-  and commented or listed (`kRemovedEntries`, `kRemovedTab` in
-  `xbox_guide.cpp`), so each can be put back.
+  Console, and the whole Media tab. The guide has three tabs, Games & Apps,
+  Home and Settings, as on the Xbox One and Series consoles' guide for 360
+  titles. GuideMain's timelines are rewritten for them when the scenes load
+  (`UseThreeTabs`, `guide_layout.cpp`): every switch moves each blade one
+  slot, so a side with one tab fewer is the same motion with its outermost
+  blade hidden (Blade5 on the right for Games & Apps and Home, Blade6 on the
+  left for Settings) and each label on its inner neighbour's track. Home to
+  Settings plays the scene's Media-to-Settings frames (`3To4`, renamed
+  `2To4`), with Home's content and selected label fading as Media's did: one
+  shuffle, no pass over a removed tab. Settings > System Settings is renamed
+  Xbox Settings (the Series consoles' Xbox One X Settings) and stays disabled.
+  The code is kept and commented or listed (`kRemovedEntries`, `kRemovedTab`
+  in `xbox_guide.cpp`), so each can be put back.
 - Everything else (Marketplace, My Games, media players, Live features) stays in
   the menu, disabled, as the console's disabled controls behave: they take focus,
   and pressing them plays the inactive sound.
@@ -181,19 +191,19 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | | Active Downloads | download queue | Disabled |
 | | Redeem Code | code entry | Disabled |
 | | Activity Feed (hidden in 17559) | | Hidden |
-| Home | Xbox Home | quit prompt, then the dashboard | Renamed Close Game: prompt, then ends the title |
+| Home | Xbox Home | quit prompt, then the dashboard | Renamed Leave Game: prompt, then ends the title; the tab is titled with the gamertag |
 | | Connect to Xbox Live (offline) or Friends, Party, Messages, Beacons & Activity, Chat (on Live) | Live features | Removed |
 | | Disc in Tray | title name; ejects | Removed |
 | Media | System Video Player, System Music Player, Picture Viewer, Windows Media Center | dashboard apps (dash 39, 6, 44, 8); mini player below | Removed (the tab) |
 | Settings | Profile | gamer profile | Disabled |
 | | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Works: [settings pages](#settings-pages) |
-| | System Settings | dashboard (dash 47) | Disabled |
+| | System Settings | dashboard (dash 47) | Renamed Xbox Settings; disabled |
 | | Patches, Mods (added) | | Works: switchable code patches |
 | | Cheats (added) | | Works: the title's own cheat codes |
 | | Family Settings, Account Management | dashboard (dash 20, 10) | Removed |
 | | Kinect Tuner | Kinect troubleshooter | Removed |
 | | Turn Off Console | turn-off prompt | Removed |
-| Y button | Xbox Home | as above | Close Game, as above |
+| Y button | Xbox Home | as above | Leave Game, as above |
 
 ## Where the guide comes from
 
@@ -285,10 +295,26 @@ against the console.
   and in the points XAM puts beside achievements) is drawn as an image: the
   shape of sharedres `GScore_white.png` (a white disc with a G cut out, so the
   row's colour shows through) traced at 256 pixels, tinted with the text
-  colour (`xui::kGamerscoreGlyph`, `kGamerscoreImage`).
+  colour (`xui::kGamerscoreGlyph`, `kGamerscoreImage`). The skin draws the
+  Achievements row's glyph near white whatever the row's state, unseen on an
+  unfocused row, so the guide gives it the row's label colour.
+- Button glyphs: sharedres `A-Button.png` to `Y-Button.png` are 18-pixel discs
+  with the letter laid over by a separate text element placed for the
+  console's font, so they were soft at 4K and their letters off centre. The
+  guide draws each as a disc in the PNG's colour with its letter, bold, the
+  centre of its ink on the disc's centre (`DrawButtonGlyph`), and hides the
+  scenes' letter elements.
 
 ## Validation
 
+- 007 Legends, 2026-10-01, 3840 x 2160 (RG-GDK-051): three blades on Home
+  (Games & Apps, User, Settings), two on the left of Settings and two on the
+  right of Games & Apps, none hidden behind the panel; Home to Settings and
+  back play one shuffle each. A, B and Y are sharp discs with centred
+  letters. The Achievements row's G shows with Manage Game focused. Manage
+  Game's banner spans the right pane. The three-tab timelines are also
+  checked against the 17559 scene by a local unit test
+  (`REXGLUE_SYSTEM_UPDATE`).
 - Quantum of Solace and 007 Legends, 2026-10-01, 3840 x 2160, against two
   photos of the 17559 guide (Xbox Guide over a title, and Console Settings):
   text was a quarter too small (XUI point size to scene units 1.2, now 1.6;

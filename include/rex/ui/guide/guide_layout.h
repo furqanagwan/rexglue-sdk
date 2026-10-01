@@ -20,6 +20,21 @@ inline const xui::Node& SceneNode(const xui::Document& document) {
   return document.root.children.empty() ? document.root : document.root.children.front();
 }
 
+/// Rewrites GuideMain (its Tabscene's timelines) for three tabs, Games & Apps
+/// (1), Home (2) and Settings (4), without Media (3). Every switch moves each
+/// blade one slot, so a side with one tab fewer is the same motion with its
+/// outermost blade hidden and each label on its inner neighbour's track:
+/// - tabs 1 and 2 (1To2, 2To1, 1Open to 2Close): Blade5, the third blade on
+///   the right, is hidden and txt_Settings follows txt_Media;
+/// - tab 4: Home to Settings and back play 3To4 and 4To3, renamed 2To4 and
+///   4To2. Blade6, the third on the left, is hidden; txt_Games follows
+///   txt_home and txt_home txt_Media; Home's content (Tab2) and selected label
+///   (txt_homeSel) fade as Media's did. 4Open and 4Close keep Blade6 hidden
+///   and the labels moved.
+/// 2To3 and 3To2 are dropped. Returns false (scene untouched) when GuideMain
+/// is not the 17559 layout this expects.
+bool UseThreeTabs(xui::Node& guide_main);
+
 /// Hides `id` in `scene` for good and closes the gap: entries below it move
 /// up by its height, and the neighbours' NavUp/NavDown skip it.
 inline void RemoveEntry(xui::Element* scene, std::string_view id) {
