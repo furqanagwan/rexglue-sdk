@@ -42,7 +42,15 @@ struct PPCCodegenFlags {
 struct PPCSwitchablePatch {
   const char* name;
   uint8_t* active;
-  const char* category;  ///< "patch" or "cheat"
+  const char* category;  ///< "patch" or "mod"
+};
+
+/// A cheat code the title's developers built in, for the guide's Cheats page.
+struct PPCTitleCheat {
+  const char* name;
+  const char* code;
+  const char* description;  ///< What it unlocks
+  const char* where;        ///< Where the game takes the code
 };
 
 /// PPC image layout passed from the generated config header into ReXApp.
@@ -59,6 +67,8 @@ struct PPCImageInfo {
   const char* code_patches = "";
   /// Switchable patches, ended by a null name; null when codegen predates them.
   const PPCSwitchablePatch* switchable_patches = nullptr;
+  /// The title's own cheat codes, ended by a null name; null when none.
+  const PPCTitleCheat* title_cheats = nullptr;
 };
 
 }  // namespace rex

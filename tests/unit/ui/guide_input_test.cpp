@@ -82,9 +82,8 @@ TEST_CASE("Bumpers switch tabs", "[guide]") {
 
 TEST_CASE("Switchable patch states are saved and restored by name", "[guide]") {
   uint8_t flags[2] = {0, 1};
-  const rex::PPCSwitchablePatch patches[] = {{"Unlock FPS", &flags[0], "patch"},
-                                             {"Ammo", &flags[1], "cheat"},
-                                             {nullptr, nullptr, nullptr}};
+  const rex::PPCSwitchablePatch patches[] = {
+      {"Unlock FPS", &flags[0], "patch"}, {"Ammo", &flags[1], "mod"}, {nullptr, nullptr, nullptr}};
   REQUIRE(rex::cvar::SetFlagByName("code_patch_states", "Unlock FPS=1;Gone=0"));
   ApplySavedCodePatches(patches);
   CHECK(flags[0] == 1);

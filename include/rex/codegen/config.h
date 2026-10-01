@@ -89,12 +89,23 @@ struct CodePatch {
   /// player can switch it while the title runs; `enabled` is the default.
   bool switchable = false;
   /// How the guide lists a switchable patch: "patch" (fixes, frame rate) or
-  /// "cheat".
+  /// "mod" (changes to play, such as a trainer's infinite ammo). "cheat",
+  /// the earlier name for "mod", is read as "mod".
   std::string category = "patch";
   std::vector<PatchWrite> writes;
   std::vector<PatchRegisterSet> sets;  ///< Switchable patches only
   std::string source;                  ///< Config file that last defined the writes
   std::string error;                   ///< Why the entry is unusable; applying it fails
+};
+
+// A cheat the title's developers built in: a code the game's own menu takes.
+// Nothing is patched; the guide's Cheats page lists them so a player need not
+// look them up. [[cheat]] with name, code, description and where.
+struct TitleCheat {
+  std::string name;
+  std::string code;
+  std::string description;  ///< What it unlocks
+  std::string where;        ///< Where the game takes the code
 };
 
 // Section info for analysis output
@@ -150,6 +161,8 @@ struct RecompilerConfig {
   /// Guest code patches in definition order, keyed by name: a later file with
   /// the same name replaces the writes it lists and the enabled flag it sets.
   std::vector<CodePatch> patches;
+  /// The title's own cheat codes, in definition order, keyed by name.
+  std::vector<TitleCheat> cheats;
   uint32_t longJmpAddress = 0;
   uint32_t setJmpAddress = 0;
   // Analysis-only guard for the recognized CRT's optional setjmp hook.

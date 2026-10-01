@@ -1004,6 +1004,7 @@ void ReXApp::ToggleGuide() {
   host.immediate_drawer = immediate_drawer_.get();
   host.title_name = TitleName(*runtime_->kernel_state());
   host.patches = ppc_info_.switchable_patches;
+  host.cheats = ppc_info_.title_cheats;
   host.display_scale = DisplayScale(DisplayHeight(window_.get()));
   host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
   host.on_closed = [this](bool exit_title) {

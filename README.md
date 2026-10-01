@@ -217,8 +217,9 @@ Games & Apps has the title's achievements (grid and details), and Xbox Home
 (Y, or the Home tab) ends the title after the console's confirmation.
 Settings > Preferences sets notifications, game volume, vibration and the render
 resolution (by default the title draws at your display's resolution, 2160p on a
-4K display); Settings > Patches and Cheats turn a title's switchable code
-patches on and off while it runs. See [Xbox guide](docs/xbox-guide.md).
+4K display); Settings > Patches and Mods turn a title's switchable code
+patches on and off while it runs, and Settings > Cheats lists the codes the
+game itself takes. See [Xbox guide](docs/xbox-guide.md).
 
 ## Repository structure
 
