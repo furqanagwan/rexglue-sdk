@@ -207,14 +207,23 @@ bool DrawControllerBattery(ImDrawList& list, std::string_view path,
   return true;
 }
 
-// The status icons by the clock, which XAM sets in code: the controller's
-// battery and the ring of light with player 1's quadrant lit. The battery is
-// shown full: GuideMain poses it by frame (3 is Controller_Full.xur).
-void ShowControllerStatus(xui::Element* main) {
-  if (xui::Element* battery = main->FindById("imgControllerBattery")) {
-    battery->SetVisible(true);
-    battery->Seek(3);
+// The battery icon's frame for a charge: GuideMain names frames 0 to 3
+// Little, Low, Medium and High (Controller_OneFourth.xur to
+// Controller_Full.xur). XInput's four levels arrive as 5, 30, 60 and 100.
+int BatteryFrame(int percent) {
+  if (percent < 15) {
+    return 0;
   }
+  if (percent < 45) {
+    return 1;
+  }
+  return percent < 75 ? 2 : 3;
+}
+
+// The status icons by the clock, which XAM sets in code: the controller's
+// battery (XboxGuide::UpdateControllerBattery) and the ring of light with
+// player 1's quadrant lit.
+void ShowControllerStatus(xui::Element* main) {
   // The header's ring, a child of the scene; the Sign In button's visual
   // has another.
   xui::Element* ring = nullptr;
@@ -595,6 +604,8 @@ void XboxGuide::ConfigureMain() {
     picture->Set("ImagePath", xui::Value{std::string(kDefaultGamerPicture)});
   }
   ShowControllerStatus(main_);
+  battery_second_ = -1;
+  UpdateControllerBattery();
   SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"), main_->GetString("LegendY"));
   UpdateClock();
 }
@@ -614,6 +625,28 @@ void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_v
   legend("BButton", "BText", b);
   legend("XButton", "XText", "");
   legend("YButton", "YText", y);
+}
+
+void XboxGuide::UpdateControllerBattery() {
+  const std::time_t now = std::time(nullptr);
+  if (now == battery_second_) {
+    return;
+  }
+  battery_second_ = now;
+  xui::Element* icon = main_->FindById("imgControllerBattery");
+  if (!icon) {
+    return;
+  }
+  // Player 1's pad, whose quadrant the ring lights. As on the console, wired
+  // pads show no battery; so do wireless ones whose level the host cannot
+  // read (a USB dongle that presents its pad as wired, for one).
+  input::PadBattery battery;
+  const bool known = host_.input && host_.input->GetBattery(0, &battery) && battery.wireless &&
+                     battery.percent >= 0;
+  icon->SetVisible(known);
+  if (known) {
+    icon->Seek(BatteryFrame(battery.percent));
+  }
 }
 
 void XboxGuide::UpdateClock() {
@@ -739,6 +772,7 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
   }
 
   UpdateClock();
+  UpdateControllerBattery();
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
   PollManageGame();
   if (queued_tab_ && !tabs_->playing()) {

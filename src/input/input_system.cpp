@@ -251,6 +251,17 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
   return driver->GetDeviceCapabilities(chosen, flags, out_caps);
 }
 
+bool InputSystem::GetBattery(uint32_t user_index, PadBattery* out_battery) {
+  std::lock_guard lock(mutex_);
+  if (!out_battery || !assignment_) {
+    return false;
+  }
+  RefreshDevices();
+  DeviceId chosen = ChooseDeviceForUser(user_index);
+  auto* driver = DriverForDevice(chosen);
+  return driver && driver->GetDeviceBattery(chosen, out_battery);
+}
+
 bool InputSystem::UpdateConnectedUserLocked(uint32_t user_index, bool connected) {
   if (user_index >= kMaxGuestUsers) {
     return false;
@@ -564,7 +575,17 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 #if REX_HAS_GAMEINPUT
       auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
       if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
+        // GameInput does not list Bluetooth LE pads (xinputhid), so XInput
+        // adds the pads it does not serve. Both drivers live as long as input.
+        auto* gameinput = gameinput_driver.get();
         input->AddDriver(std::move(gameinput_driver));
+        auto supplement = std::make_unique<xinput::XinputInputDriver>(
+            nullptr, 0, [gameinput](uint16_t vendor_id, uint16_t product_id) {
+              return gameinput->CountDevices(vendor_id, product_id);
+            });
+        if (supplement->Setup() == X_STATUS_SUCCESS) {
+          input->AddDriver(std::move(supplement));
+        }
       } else {
         REXLOG_WARN("input_backend=gameinput: GameInput unavailable, using XInput instead");
         backend = "xinput";

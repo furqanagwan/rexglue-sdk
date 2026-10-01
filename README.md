@@ -148,6 +148,8 @@ pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
 GDK builds read pads through GameInput and other builds through XInput
 (`input_backend`): see [GameInput driver](docs/gameinput.md).
+Pads GameInput does not list, such as Bluetooth LE pads, come through
+XInput beside it, and the guide shows a wireless pad's battery level.
 Every input backend honours `vibration`, `left_stick_deadzone_percentage`
 and `right_stick_deadzone_percentage`, and `mnk_passthrough` presents the
 keyboard to titles that read one.

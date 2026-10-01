@@ -31,9 +31,11 @@ target_include_directories(rexinput PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_sources(rexinput PRIVATE xinput/xinput_input_driver.cpp)
+target_sources(rexinput PRIVATE xinput/xinput_input_driver.cpp ble_battery.cpp)
 
 target_link_libraries(rexinput PUBLIC rexcore rexui)
+# Bluetooth LE battery levels (ble_battery.cpp).
+target_link_libraries(rexinput PRIVATE setupapi BluetoothApis)
 
 # The GameInput driver needs the GDK headers (RG-GDK-020). GameInput.dll is
 # loaded at runtime, so nothing is linked.

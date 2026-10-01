@@ -53,6 +53,9 @@ class InputSystem : public system::IInputSystem {
   X_RESULT GetStateForUI(uint32_t user_index, X_INPUT_STATE* out_state);
   X_RESULT SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration);
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags, X_INPUT_KEYSTROKE* out_keystroke);
+  /// The power of the pad that speaks for the user. False when no pad is
+  /// connected or its driver cannot tell.
+  bool GetBattery(uint32_t user_index, PadBattery* out_battery);
 
   /// While any blocker is held the guest reads a neutral pad and no
   /// keystrokes. Buttons still held when a blocker drops stay masked until
