@@ -59,7 +59,15 @@ constexpr std::string_view kRemovedEntries[] = {
     "btnAccountManagement",  // Settings > Account Management
     "btnKinectTuner",        // Settings > Kinect Tuner
     "btnShutdown",           // Settings > Turn Off Console
+    "btnConnectToLive",      // Home > Connect to Xbox Live
+    "btnDiscInTray",         // Home > the title, shown disabled
 };
+
+// Home's Xbox Home entry and the Y button close the title: a recompiled title
+// has no dashboard to return to.
+constexpr std::string_view kCloseGame = "Close Game";
+constexpr std::string_view kCloseGameWarning =
+    "Are you sure you want to close the game? Any unsaved progress will be lost.";
 
 // The console darkens the title behind the guide to about a quarter of its
 // brightness (measured from a capture of dashboard 2.0.17559). XAM does that
@@ -71,6 +79,26 @@ constexpr double kDimOutSeconds = 16 / xui::kFramesPerSecond;
 
 // The Media tab (Tab3) is left out: switching past it plays both shuffles.
 constexpr int kRemovedTab = 3;
+
+// GuideMain's blades rest 30 units apart: tabs 1 and 2 have Media's blade on
+// the right, tab 4 on the left. Without it, the outermost blade on that side
+// is hidden and the labels beyond Media's move in one slot (30 units nearer
+// the panel), which is the layout the scene gives a side with one tab fewer.
+struct BladeLabel {
+  std::string_view id;
+  float x;  // at rest
+};
+struct BladeLayout {
+  std::string_view hidden_blade;
+  BladeLabel labels[2];
+};
+constexpr BladeLayout kBladeLayouts[5] = {
+    {},
+    {"Blade5", {{"txt_Settings", 668.0f}}},                     // Games & Apps
+    {"Blade5", {{"txt_Settings", 638.0f}}},                     // Home
+    {},                                                         // Media: never rests
+    {"Blade6", {{"txt_Games", 212.0f}, {"txt_home", 242.0f}}},  // Settings
+};
 
 constexpr float kSceneWidth = 852.0f;
 constexpr float kSceneHeight = 480.0f;
@@ -218,6 +246,50 @@ int BatteryFrame(int percent) {
     return 1;
   }
   return percent < 75 ? 2 : 3;
+}
+
+// The gamerscore glyph (sharedres GScore_white.png, 32 x 32) traced at a
+// larger size: a white disc of radius 14.5 with a G cut out of it. The G is a
+// ring gap (radius 7 to 9.3) open at the upper right, a crossbar and a stem
+// down to the ring. Units are the PNG's pixels, its centre at (16, 16).
+constexpr int kGamerscoreImageSize = 256;
+
+bool InGamerscoreGlyph(float x, float y) {
+  const float dx = x - 16.0f, dy = y - 16.0f;
+  const float r = std::sqrt(dx * dx + dy * dy);
+  if (r > 14.5f) {
+    return false;
+  }
+  // The crossbar and the stem.
+  if ((y >= 15.3f && y <= 17.3f && x >= 16.0f && x <= 22.7f) ||
+      (x >= 20.5f && x <= 22.7f && y >= 15.3f && y <= 24.5f)) {
+    return false;
+  }
+  // The ring gap, except the mouth from the crossbar up to 70 degrees.
+  if (r >= 7.0f && r <= 9.3f) {
+    const float angle = std::atan2(-dy, dx) * 180.0f / 3.14159265f;
+    return angle > 0.0f && angle < 70.0f && dx > 0.0f;
+  }
+  return true;
+}
+
+std::vector<uint8_t> GamerscoreGlyphRGBA(int size) {
+  constexpr int kSamples = 4;
+  std::vector<uint8_t> rgba(size_t(size) * size * 4, 0xFF);
+  for (int py = 0; py < size; ++py) {
+    for (int px = 0; px < size; ++px) {
+      int covered = 0;
+      for (int sy = 0; sy < kSamples; ++sy) {
+        for (int sx = 0; sx < kSamples; ++sx) {
+          const float x = (px + (sx + 0.5f) / kSamples) * 32.0f / size;
+          const float y = (py + (sy + 0.5f) / kSamples) * 32.0f / size;
+          covered += InGamerscoreGlyph(x, y) ? 1 : 0;
+        }
+      }
+      rgba[(size_t(py) * size + px) * 4 + 3] = uint8_t(covered * 255 / (kSamples * kSamples));
+    }
+  }
+  return rgba;
 }
 
 // The status icons by the clock, which XAM sets in code: the controller's
@@ -434,7 +506,13 @@ ImTextureID GuideMedia::Texture(std::string_view path, std::string_view package,
   if (it == images_.end()) {
     Image image;
     std::span<const uint8_t> bytes = xui::ResolveFile(*assets_->update, path, package);
-    if (!bytes.empty() && immediate_drawer_) {
+    if (path == xui::kGamerscoreImage && immediate_drawer_) {
+      image.width = image.height = kGamerscoreImageSize;
+      const std::vector<uint8_t> rgba = GamerscoreGlyphRGBA(kGamerscoreImageSize);
+      image.texture =
+          immediate_drawer_->CreateTexture(uint32_t(image.width), uint32_t(image.height),
+                                           ImmediateTextureFilter::kLinear, false, rgba.data());
+    } else if (!bytes.empty() && immediate_drawer_) {
       std::vector<uint8_t> rgba =
           DecodeImageRGBA(bytes.data(), bytes.size(), image.width, image.height);
       if (!rgba.empty()) {
@@ -569,6 +647,10 @@ void XboxGuide::ConfigureMain() {
     AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnMods", "Mods");
     AddEntry(settings, "btnPersonalSettings", "btnMods", "btnCheats", "Cheats");
   }
+  if (xui::Element* home = main_->FindById("btnDashboard")) {
+    home->SetText(std::string(kCloseGame));
+  }
+  main_->Set("LegendY", xui::Value{std::string(kCloseGame)});
   auto handled = [&](std::string_view id) {
     if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
                                  id == "btnMods" || id == "btnCheats" || id == "btnManageGame")) {
@@ -583,11 +665,8 @@ void XboxGuide::ConfigureMain() {
       e->Play("NormalDisable");
     }
   });
-  if (xui::Element* tray = main_->FindById("btnDiscInTray"); tray && !host_.title_name.empty()) {
-    tray->SetText(host_.title_name);
-  }
-  // Achievements shows the gamerscore earned; the console's gamerscore glyph
-  // is in the Segoe Xbox font, so a G stands in for it.
+  // Achievements shows the gamerscore earned, beside the visual's own
+  // gamerscore glyph (drawn as xui::kGamerscoreImage).
   if (xui::Element* button = main_->FindById("btnAchievements"); button && host_.achievements) {
     uint32_t earned = 0;
     for (const auto& a : host_.achievements->ListAchievements()) {
@@ -596,9 +675,6 @@ void XboxGuide::ConfigureMain() {
       }
     }
     button->SetSecondaryText(std::to_string(earned));
-    if (xui::Element* glyph = button->FindById("glyph_presenter")) {
-      glyph->SetText("G");
-    }
   }
   if (xui::Element* picture = backdrop_->FindById("GamerPic")) {
     picture->Set("ImagePath", xui::Value{std::string(kDefaultGamerPicture)});
@@ -625,6 +701,31 @@ void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_v
   legend("BButton", "BText", b);
   legend("XButton", "XText", "");
   legend("YButton", "YText", y);
+}
+
+void XboxGuide::LayOutBlades() {
+  // At rest only: the shuffles keep the scene's own frames.
+  if (tabs_->playing() || tab_ < 1 || tab_ > 4) {
+    return;
+  }
+  const BladeLayout& layout = kBladeLayouts[tab_];
+  if (layout.hidden_blade.empty()) {
+    return;
+  }
+  if (xui::Element* blade = main_->FindById(layout.hidden_blade)) {
+    blade->SetVisible(false);
+  }
+  for (const BladeLabel& moved : layout.labels) {
+    xui::Element* label = moved.id.empty() ? nullptr : main_->FindById(moved.id);
+    if (!label) {
+      continue;
+    }
+    xui::Vec3 p = label->GetVector("Position");
+    if (p.x != moved.x) {
+      p.x = moved.x;
+      label->Set("Position", xui::Value{p});
+    }
+  }
 }
 
 void XboxGuide::UpdateControllerBattery() {
@@ -774,6 +875,7 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
   UpdateClock();
   UpdateControllerBattery();
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
+  LayOutBlades();
   PollManageGame();
   if (queued_tab_ && !tabs_->playing()) {
     const int next = queued_tab_;
@@ -1021,7 +1123,7 @@ void XboxGuide::ShowAchievement(size_t index) {
            secret ? "Continue playing to unlock this secret achievement."
                   : (unlocked || a.unachieved_description.empty() ? a.description
                                                                   : a.unachieved_description));
-  set_text("labPoints", fmt::format("{} G", a.gamerscore));
+  set_text("labPoints", fmt::format("{} {}", a.gamerscore, xui::kGamerscoreGlyph));
   std::string date;
   if (unlocked) {
     // FILETIME: 100 ns since 1601.
@@ -1049,7 +1151,7 @@ void XboxGuide::OpenAchievementDetail() {
   };
   set_text("headerText", host_.title_name);
   set_text("achievementTitleText", secret ? "Secret Achievement" : a.label);
-  set_text("credText", fmt::format("{} G", a.gamerscore));
+  set_text("credText", fmt::format("{} {}", a.gamerscore, xui::kGamerscoreGlyph));
   set_text("achievementDescriptionText",
            secret ? "Continue playing to unlock this secret achievement."
                   : (unlocked || a.unachieved_description.empty() ? a.description
@@ -1139,7 +1241,7 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
   message_ = error_host_->AttachScene(visual->children.front(), skin_context_);
   screen_ = Screen::kConfirm;
 
-  // The title is what was chosen: "Xbox Home" (Y or the Home tab) or
+  // The title is what was chosen: "Close Game" (Y or the Home tab) or
   // "Turn Off Console".
   std::string title(main_->GetString("LegendY"));
   if (focus_ && focus_->enabled() && !focus_->text().empty() &&
@@ -1148,10 +1250,7 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
   }
   const std::string body =
       confirm == Confirm::kXboxHome
-          ? FindString(assets_->xam_strings,
-                       "This will end your current session. If you're playing a game",
-                       "This will end your current session. If you're playing a game, you'll "
-                       "lose any unsaved progress.\r\n\r\nAre you sure you want to exit?")
+          ? std::string(kCloseGameWarning)
           : FindString(assets_->hud_strings, "Turning off the console",
                        "Turning off the console will also turn off all controllers.");
   message_->SetText(title);

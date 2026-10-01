@@ -34,6 +34,13 @@ enum TextStyleFlags : uint32_t {
 /// drew text a quarter too small.
 constexpr float kPointToSceneUnits = 1.6f;
 
+/// The Segoe Xbox gamerscore glyph, private use U+E00A, in UTF-8 (the skin's
+/// btn_Count_achiev glyph_presenter). The console's XUI fonts are encrypted,
+/// so text drawing puts the image `kGamerscoreImage` (a white disc with a G
+/// cut out, from sharedres GScore_white.png) in its place.
+inline constexpr std::string_view kGamerscoreGlyph = "\xEE\x80\x8A";
+inline constexpr std::string_view kGamerscoreImage = "rex://gamerscore";
+
 struct RenderResources {
   /// Texture for a scene image path, resolved against `package`. Returns an
   /// empty ImTextureRef when missing and sets the image's pixel size.
