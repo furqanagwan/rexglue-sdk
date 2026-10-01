@@ -1280,3 +1280,26 @@ Known regressions: none reported upstream. #1250 is split out to RG-GDK-045
 ([#135](https://github.com/furqanagwan/rexglue-sdk/issues/135)): it builds on
 Canary #1072 (`d119505289`), #1137 (`6a45452087`) and #1177 (`0c843efb32`),
 and #1072 has an open D3D12 device-loss report (Canary #1134).
+
+## RG-GDK-048: achievement enumerator offset (2026-10-01)
+
+xenia-canary PR #861 "[XAM] Fixed enumeration of achievements once again",
+commit `603355ae5bf39bb08e5f2815bb37406af83ea6d8` (Gliniak, 2026-01-27, merged
+2026-01-29). Class B (007 Legends `415608D8`). No follow-up regressions found
+in Canary's later `xenumerator` history as of 2026-10-01.
+
+- Found running 007 Legends: it pages through its achievements with one
+  `XamUserCreateAchievementEnumerator` per page (offset 0, 25, 50). ReXGlue
+  ignored the offset, so every page was the first 25. The title kept paging
+  about every 130 ms after a save, appending each page to a list of 56-byte
+  entries, until its allocator returned null and it wrote through it
+  (`sub_826D7808`, after about 2,700 pages, twice).
+- Adaptation: `XStaticAchievementEnumerator` starts at the offset, as Canary's
+  `XAchievementEnumerator` does, and returns `X_ERROR_NO_MORE_FILES` for an
+  offset at or past the end (Canary subtracts first and would underflow).
+- Also added: debug logs for each `XamEnumerate` (handle, item size, items,
+  result) and `XamContentCreateDeviceEnumerator`.
+- Tests: `kernel_tests` "Achievement enumerators page from the title's offset"
+  (60 achievements: 25 from 1, 25 from 26, 10 from 51, then none, and none
+  past the end). 007 Legends after the fix: pages of 25, 25, then
+  `NO_MORE_FILES`.
