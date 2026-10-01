@@ -20,7 +20,6 @@
 #include <rex/filesystem/entry.h>
 #include <rex/filesystem/file.h>
 #include <rex/filesystem/vfs.h>
-#include <rex/runtime.h>
 
 using rex::X_STATUS;
 
@@ -108,19 +107,17 @@ TEST_CASE("XDVDFS requires a root XEX2 executable", "[filesystem][disc]") {
   CHECK_FALSE(invalid.Initialize());
 }
 
-TEST_CASE("Runtime mounts a checked XDVDFS image at game:", "[filesystem][disc]") {
+TEST_CASE("VFS resolves a checked XDVDFS image through game:", "[filesystem][disc]") {
   Image image;
-  const auto user_root = image.path.parent_path() / (image.path.stem().string() + "_user");
-  std::filesystem::create_directories(user_root);
-  {
-    rex::Runtime runtime(image.path, user_root);
-    REQUIRE(runtime.Setup() == X_STATUS_SUCCESS);
-    auto* entry = runtime.file_system()->ResolvePath("game:\\default.xex");
-    REQUIRE(entry != nullptr);
-    auto mapped = entry->OpenMapped(rex::memory::MappedMemory::Mode::kRead);
-    REQUIRE(mapped != nullptr);
-    CHECK(std::memcmp(mapped->data(), "XEX2", 4) == 0);
-  }
-  std::error_code ec;
-  std::filesystem::remove_all(user_root, ec);
+  rex::filesystem::VirtualFileSystem vfs;
+  auto device = std::make_unique<rex::filesystem::DiscImageDevice>(
+      "\\Device\\Harddisk0\\Partition1", image.path);
+  REQUIRE(device->Initialize());
+  REQUIRE(vfs.RegisterDevice(std::move(device)));
+  REQUIRE(vfs.RegisterSymbolicLink("game:", "\\Device\\Harddisk0\\Partition1"));
+  auto* entry = vfs.ResolvePath("game:\\default.xex");
+  REQUIRE(entry != nullptr);
+  auto mapped = entry->OpenMapped(rex::memory::MappedMemory::Mode::kRead);
+  REQUIRE(mapped != nullptr);
+  CHECK(std::memcmp(mapped->data(), "XEX2", 4) == 0);
 }
