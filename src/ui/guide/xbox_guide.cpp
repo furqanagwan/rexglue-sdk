@@ -25,6 +25,7 @@
 #include <rex/logging.h>
 #include <rex/system/achievement_manager.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/xam/user_profile.h>
 #include <rex/ui/image_decode.h>
 #include <rex/ui/immediate_drawer.h>
 
@@ -64,11 +65,39 @@ constexpr std::string_view kRemovedEntries[] = {
     "btnDiscInTray",         // Home > the title, shown disabled
 };
 
-// Home's Xbox Home entry and the Y button close the title: a recompiled title
+// Home's Xbox Home entry and the Y button end the title, worded as the Xbox
+// One and Series consoles' guide for 360 titles words them: a recompiled title
 // has no dashboard to return to.
-constexpr std::string_view kCloseGame = "Close Game";
-constexpr std::string_view kCloseGameWarning =
+constexpr std::string_view kLeaveGame = "Leave Game";
+constexpr std::string_view kLeaveGameWarning =
     "Are you sure you want to close the game? Any unsaved progress will be lost.";
+// Settings > System Settings opens the console's own settings; the Series
+// consoles' guide calls that entry Xbox One X Settings.
+constexpr std::string_view kXboxSettings = "Xbox Settings";
+
+// The Xbox One and Series consoles' guide titles the Home tab with the
+// player's gamertag.
+constexpr std::string_view kHomeTabLabels[] = {"txt_home", "txt_homeSel"};
+
+// The tabs left to right; Media (3) is removed and GuideMain's timelines are
+// rewritten to match (UseThreeTabs).
+constexpr int kTabs[] = {1, 2, 4};
+constexpr int kRemovedTab = 3;
+
+// The legend button glyphs (sharedres A-Button.png to Y-Button.png: 18 x 18,
+// a flat disc of radius 8 centred at (9, 9)) drawn as discs with their letter
+// centred, so they are sharp at 4K: the console's only copies are 18 pixels.
+struct ButtonGlyph {
+  std::string_view path;
+  const char* letter;
+  uint32_t rgb;
+};
+constexpr ButtonGlyph kButtonGlyphs[] = {
+    {"sharedres://A-Button.png", "A", 0x5BA929},
+    {"sharedres://B-Button.png", "B", 0xB73333},
+    {"sharedres://X-Button.png", "X", 0x2369A0},
+    {"sharedres://Y-Button.png", "Y", 0xE39402},
+};
 
 // The console darkens the title behind the guide to about a quarter of its
 // brightness (measured from a capture of dashboard 2.0.17559). XAM does that
@@ -77,29 +106,6 @@ constexpr std::string_view kCloseGameWarning =
 constexpr float kDimOpacity = 0.75f;
 constexpr double kDimInSeconds = 23 / xui::kFramesPerSecond;
 constexpr double kDimOutSeconds = 16 / xui::kFramesPerSecond;
-
-// The Media tab (Tab3) is left out: switching past it plays both shuffles.
-constexpr int kRemovedTab = 3;
-
-// GuideMain's blades rest 30 units apart: tabs 1 and 2 have Media's blade on
-// the right, tab 4 on the left. Without it, the outermost blade on that side
-// is hidden and the labels beyond Media's move in one slot (30 units nearer
-// the panel), which is the layout the scene gives a side with one tab fewer.
-struct BladeLabel {
-  std::string_view id;
-  float x;  // at rest
-};
-struct BladeLayout {
-  std::string_view hidden_blade;
-  BladeLabel labels[2];
-};
-constexpr BladeLayout kBladeLayouts[5] = {
-    {},
-    {"Blade5", {{"txt_Settings", 668.0f}}},                     // Games & Apps
-    {"Blade5", {{"txt_Settings", 638.0f}}},                     // Home
-    {},                                                         // Media: never rests
-    {"Blade6", {{"txt_Games", 212.0f}, {"txt_home", 242.0f}}},  // Settings
-};
 
 constexpr float kSceneWidth = 852.0f;
 constexpr float kSceneHeight = 480.0f;
@@ -234,6 +240,72 @@ bool DrawControllerBattery(ImDrawList& list, std::string_view path,
     rect(18.7f + 4.0f * float(i), 3.0f, 21.1f + 4.0f * float(i), 8.9f, 1.0f);
   }
   return true;
+}
+
+// A legend button glyph (kButtonGlyphs) as a disc with its letter, bold, the
+// centre of its ink on the disc's centre. Units are the PNG's pixels.
+bool DrawButtonGlyph(ImDrawList& list, std::string_view path,
+                     const std::function<ImVec2(ImVec2)>& to_screen, float opacity, ImFont* font) {
+  const auto glyph = std::find_if(std::begin(kButtonGlyphs), std::end(kButtonGlyphs),
+                                  [&](const ButtonGlyph& g) { return g.path == path; });
+  if (glyph == std::end(kButtonGlyphs)) {
+    return false;
+  }
+  const float alpha = std::clamp(opacity, 0.0f, 1.0f);
+  const ImVec2 centre = to_screen({9.0f, 9.0f});
+  const ImVec2 right = to_screen({10.0f, 9.0f});
+  const float scale = std::hypot(right.x - centre.x, right.y - centre.y);  // pixels per unit
+  constexpr float kRadius = 8.0f;
+  constexpr int kSegments = 96;
+  ImVec2 disc[kSegments];
+  for (int i = 0; i < kSegments; ++i) {
+    const float a = 2.0f * 3.14159265f * float(i) / float(kSegments);
+    disc[i] = to_screen({9.0f + kRadius * std::cos(a), 9.0f + kRadius * std::sin(a)});
+  }
+  const uint32_t rgb = glyph->rgb;
+  list.AddConvexPolyFilled(
+      disc, kSegments,
+      IM_COL32((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, int(alpha * 255.0f + 0.5f)));
+  if (!font || scale <= 0.0f) {
+    return true;
+  }
+  // Laid out in pixels around the origin, then mapped through `to_screen`.
+  const float size = 11.0f * scale;
+  ImFontBaked* baked = font->GetFontBaked(size);
+  const ImFontGlyph* g = baked ? baked->FindGlyph(ImWchar(glyph->letter[0])) : nullptr;
+  if (!g) {
+    return true;
+  }
+  const float k = size / baked->Size;
+  const ImVec2 at(-(g->X0 + g->X1) / 2.0f * k, -(g->Y0 + g->Y1) / 2.0f * k);
+  const int first_vertex = list.VtxBuffer.Size;
+  font->RenderText(&list, size, at, IM_COL32(0xF5, 0xF5, 0xF5, int(alpha * 255.0f + 0.5f)),
+                   ImVec4(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX), glyph->letter, nullptr);
+  for (int i = first_vertex; i < list.VtxBuffer.Size; ++i) {
+    ImDrawVert& v = list.VtxBuffer[i];
+    v.pos = to_screen({9.0f + v.pos.x / scale, 9.0f + v.pos.y / scale});
+  }
+  return true;
+}
+
+// The letters the legend groups and visuals lay over the button glyphs, for
+// the console's font; DrawButtonGlyph draws them instead.
+void HideButtonLetters(xui::Element* root) {
+  ForEach(root, [](xui::Element* e) {
+    const std::string_view path = e->GetString("ImagePath");
+    if (!e->IsA("XuiImage") || !e->parent() ||
+        std::none_of(std::begin(kButtonGlyphs), std::end(kButtonGlyphs),
+                     [&](const ButtonGlyph& g) { return g.path == path; })) {
+      return;
+    }
+    for (const auto& sibling : e->parent()->children()) {
+      const std::string_view text = sibling->text();
+      if (sibling->IsA("XuiText") && text.size() == 1 &&
+          std::string_view("ABXY").find(text) != std::string_view::npos) {
+        sibling->Suppress();
+      }
+    }
+  });
 }
 
 // The battery icon's frame for a charge: GuideMain names frames 0 to 3
@@ -436,6 +508,12 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
       !scene(assets->settings_tab, "hud/hud", "SettingsTabSignedIn.xur")) {
     return nullptr;
   }
+  if (!UseThreeTabs(assets->main.root)) {
+    if (error) {
+      *error = "GuideMain.xur in hud/hud: not the 2.0.17559 tab layout";
+    }
+    return nullptr;
+  }
   std::string ignored;
   assets->has_achievement_scenes =
       scene(assets->achievements, "gamerprofile/gp", "802_Achievements.xur") &&
@@ -576,7 +654,11 @@ XboxGuide::XboxGuide(ImGuiDrawer* drawer, std::shared_ptr<const GuideAssets> ass
   render_.texture = [this](std::string_view path, std::string_view package, int* w, int* h) {
     return Texture(path, package, w, h);
   };
-  render_.vector_image = DrawControllerBattery;
+  render_.vector_image = [this](ImDrawList& list, std::string_view path,
+                                const std::function<ImVec2(ImVec2)>& to_screen, float opacity) {
+    return DrawControllerBattery(list, path, to_screen, opacity) ||
+           DrawButtonGlyph(list, path, to_screen, opacity, fonts_.bold);
+  };
   auto sound = [this](std::string_view file, std::string_view package) {
     media_->PlaySound(file, package);
   };
@@ -660,9 +742,21 @@ void XboxGuide::ConfigureMain() {
     AddEntry(settings, "btnPersonalSettings", "btnMods", "btnCheats", "Cheats");
   }
   if (xui::Element* home = main_->FindById("btnDashboard")) {
-    home->SetText(std::string(kCloseGame));
+    home->SetText(std::string(kLeaveGame));
   }
-  main_->Set("LegendY", xui::Value{std::string(kCloseGame)});
+  main_->Set("LegendY", xui::Value{std::string(kLeaveGame)});
+  if (xui::Element* system = main_->FindById("btnSystemSettings")) {
+    system->SetText(std::string(kXboxSettings));
+  }
+  const auto* profile = host_.kernel_state ? host_.kernel_state->user_profile() : nullptr;
+  if (profile && !profile->name().empty()) {
+    for (std::string_view id : kHomeTabLabels) {
+      if (xui::Element* label = main_->FindById(id)) {
+        label->SetText(profile->name());
+      }
+    }
+  }
+  HideButtonLetters(backdrop_.get());
   auto handled = [&](std::string_view id) {
     if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
                                  id == "btnMods" || id == "btnCheats" || id == "btnManageGame")) {
@@ -715,28 +809,12 @@ void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_v
   legend("YButton", "YText", y);
 }
 
-void XboxGuide::LayOutBlades() {
-  // At rest only: the shuffles keep the scene's own frames.
-  if (tabs_->playing() || tab_ < 1 || tab_ > 4) {
-    return;
-  }
-  const BladeLayout& layout = kBladeLayouts[tab_];
-  if (layout.hidden_blade.empty()) {
-    return;
-  }
-  if (xui::Element* blade = main_->FindById(layout.hidden_blade)) {
-    blade->SetVisible(false);
-  }
-  for (const BladeLabel& moved : layout.labels) {
-    xui::Element* label = moved.id.empty() ? nullptr : main_->FindById(moved.id);
-    if (!label) {
-      continue;
-    }
-    xui::Vec3 p = label->GetVector("Position");
-    if (p.x != moved.x) {
-      p.x = moved.x;
-      label->Set("Position", xui::Value{p});
-    }
+void XboxGuide::ColourGamerscoreGlyph() {
+  xui::Element* button = main_->FindById("btnAchievements");
+  xui::Element* label = button ? button->FindById("text_Label2") : nullptr;
+  xui::Element* glyph = button ? button->FindById("glyph_presenter") : nullptr;
+  if (label && glyph) {
+    glyph->Set("TextColor", xui::Value{xui::Color{label->GetColor("TextColor", 0xFFEBEBEB)}});
   }
 }
 
@@ -887,17 +965,8 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
   UpdateClock();
   UpdateControllerBattery();
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
-  LayOutBlades();
+  ColourGamerscoreGlyph();
   PollManageGame();
-  if (queued_tab_ && !tabs_->playing()) {
-    const int next = queued_tab_;
-    queued_tab_ = 0;
-    xui::Element* focus = focus_;
-    SwitchTab(next);
-    if (tab_ != next) {
-      focus_ = focus;
-    }
-  }
   if (!hud_root_->playing()) {
     for (xui::Element* element : pending_removal_) {
       element->parent()->RemoveChild(element);
@@ -955,11 +1024,11 @@ void XboxGuide::HandleMain(GuideAction action) {
       break;
     case GuideAction::kLeft:
     case GuideAction::kPreviousTab:
-      SwitchTab(tab_ - 1);
+      SwitchTab(-1);
       break;
     case GuideAction::kRight:
     case GuideAction::kNextTab:
-      SwitchTab(tab_ + 1);
+      SwitchTab(+1);
       break;
     case GuideAction::kA:
       Activate(focus_);
@@ -975,14 +1044,16 @@ void XboxGuide::HandleMain(GuideAction action) {
   }
 }
 
-void XboxGuide::SwitchTab(int tab) {
-  // Tabs 1..4, no wrap; the blade shuffle plays between neighbours. The
-  // removed tab is passed over: its shuffle plays, then the next one.
-  if (tab < 1 || tab > 4 || tabs_->playing() || !tabs_->Play(fmt::format("{}To{}", tab_, tab))) {
+void XboxGuide::SwitchTab(int direction) {
+  // No wrap; the blade shuffle plays between neighbours.
+  const auto at = std::find(std::begin(kTabs), std::end(kTabs), tab_);
+  const ptrdiff_t next = (at - std::begin(kTabs)) + direction;
+  if (at == std::end(kTabs) || next < 0 || next >= ptrdiff_t(std::size(kTabs))) {
     return;
   }
-  if (tab == kRemovedTab) {
-    queued_tab_ = tab + (tab - tab_);
+  const int tab = kTabs[next];
+  if (tabs_->playing() || !tabs_->Play(fmt::format("{}To{}", tab_, tab))) {
+    return;
   }
   tab_focus_[tab_] = focus_;
   xui::Element::MoveFocus(focus_, nullptr);
@@ -1251,9 +1322,10 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
   return_focus_ = focus_;
   hud_root_->Play(screen_ == Screen::kMain ? "HalfToError" : "FullToError");
   message_ = error_host_->AttachScene(visual->children.front(), skin_context_);
+  HideButtonLetters(message_);
   screen_ = Screen::kConfirm;
 
-  // The title is what was chosen: "Close Game" (Y or the Home tab) or
+  // The title is what was chosen: "Leave Game" (Y or the Home tab) or
   // "Turn Off Console".
   std::string title(main_->GetString("LegendY"));
   if (focus_ && focus_->enabled() && !focus_->text().empty() &&
@@ -1262,7 +1334,7 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
   }
   const std::string body =
       confirm == Confirm::kXboxHome
-          ? std::string(kCloseGameWarning)
+          ? std::string(kLeaveGameWarning)
           : FindString(assets_->hud_strings, "Turning off the console",
                        "Turning off the console will also turn off all controllers.");
   message_->SetText(title);

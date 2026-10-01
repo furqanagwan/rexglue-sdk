@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -361,4 +362,162 @@ TEST_CASE("The console's guide scene plays its tab transitions", "[xui][local]")
   CHECK(tabs->frame() == Approx(36.0));
   CHECK(blade7->position().x != Approx(x_before));
   CHECK(sounds == std::vector<std::string>{"BladeSwitch_2.xma"});
+}
+
+namespace {
+
+// A GuideMain whose Tabscene tracks hold each label's (or blade's) number
+// plus the frame, at the frames the three-tab rewrite reads.
+Node MakeGuideMain(bool with_left_blade) {
+  const PropDef* position = Def("XuiElement", "Position");
+  const PropDef* show = Def("XuiElement", "Show");
+  constexpr int32_t kFrames[] = {1, 12, 13, 24, 25, 36, 49, 60, 61, 72, 73, 180, 232, 283};
+  Node tabs = MakeNode("XuiTabScene", {{"Id", Str("Tabscene")}});
+  const std::string_view ids[] = {"Blade5",      "Blade6",      "txt_Settings", "txt_Media",
+                                  "txt_home",    "txt_Games",   "Tab2",         "Tab3",
+                                  "txt_homeSel", "txt_MediaSel"};
+  for (size_t i = 0; i < std::size(ids); ++i) {
+    if (ids[i] == "Blade6" && !with_left_blade) {
+      continue;
+    }
+    Timeline t;
+    t.target_id = std::string(ids[i]);
+    t.props.push_back({{position}, -1});
+    t.props.push_back({{show}, -1});
+    for (int32_t frame : kFrames) {
+      Keyframe k;
+      k.frame = frame;
+      k.values = {Value{Vec3{float(i * 1000 + frame), 0.0f, 0.0f}}, Value{true}};
+      t.keyframes.push_back(std::move(k));
+    }
+    tabs.timelines.push_back(std::move(t));
+  }
+  for (std::string_view name : {"1To2", "2To1", "2To3", "2To3End", "3To2", "3To4", "3To4End",
+                                "4To3", "4To3End", "4Close"}) {
+    tabs.named_frames.push_back(Frame(std::string(name), 0));
+  }
+  Node main = MakeNode("XuiScene", {{"Id", Str("HUDScene")}}, {std::move(tabs)});
+  return MakeNode("XuiCanvas", {}, {std::move(main)});
+}
+
+const Timeline& TrackOf(const Node& main, std::string_view id) {
+  const Node* tabs = main.FindById("Tabscene");
+  REQUIRE(tabs);
+  for (const Timeline& t : tabs->timelines) {
+    if (t.target_id == id) {
+      return t;
+    }
+  }
+  FAIL("no track " << id);
+  return tabs->timelines.front();
+}
+
+// Label number (the track's index in MakeGuideMain) and Show at `frame`.
+std::pair<int, bool> At(const Node& main, std::string_view id, int32_t frame) {
+  for (const Keyframe& k : TrackOf(main, id).keyframes) {
+    if (k.frame == frame) {
+      return {int(k.values[0].get<Vec3>()->x - float(frame)) / 1000, *k.values[1].get<bool>()};
+    }
+  }
+  FAIL("no keyframe " << frame << " on " << id);
+  return {};
+}
+
+}  // namespace
+
+TEST_CASE("GuideMain's blades are rewritten for three tabs", "[xui][guide]") {
+  Node main = MakeGuideMain(true);
+  REQUIRE(rex::ui::guide::UseThreeTabs(main));
+  constexpr int kMedia = 3, kHome = 4, kMediaSel = 9;
+
+  // Tabs 1 and 2: Settings is where Media was; the third right blade is gone.
+  for (int32_t frame : {1, 12, 13, 24, 73, 180}) {
+    CHECK(At(main, "txt_Settings", frame).first == kMedia);
+    CHECK_FALSE(At(main, "Blade5", frame).second);
+    CHECK(At(main, "Blade6", frame).second);
+  }
+  // Tab 4: Games where Home was, Home where Media was; the third left blade
+  // is gone; Home's content and selected label leave as Media's did.
+  for (int32_t frame : {49, 60, 61, 72, 232, 283}) {
+    CHECK(At(main, "txt_Games", frame).first == kHome);
+    CHECK(At(main, "txt_home", frame).first == kMedia);
+    CHECK_FALSE(At(main, "Blade6", frame).second);
+    CHECK(At(main, "Blade5", frame).second);
+  }
+  CHECK(At(main, "Tab2", 49).first == kMedia + 4);  // Tab3
+  CHECK(At(main, "txt_homeSel", 60).first == kMediaSel);
+  CHECK(At(main, "Tab2", 232).first == 6);  // its own outside the switches
+  // Untouched outside the rewritten frames.
+  CHECK(At(main, "txt_Settings", 25).first == 2);
+  CHECK(At(main, "txt_home", 1).first == kHome);
+
+  std::vector<std::string> names;
+  for (const NamedFrame& f : main.FindById("Tabscene")->named_frames) {
+    names.push_back(f.name);
+  }
+  CHECK(names ==
+        std::vector<std::string>{"1To2", "2To1", "2To4", "2To4End", "4To2", "4To2End", "4Close"});
+}
+
+TEST_CASE("A GuideMain of another layout is left as it is", "[xui][guide]") {
+  Node main = MakeGuideMain(false);
+  CHECK_FALSE(rex::ui::guide::UseThreeTabs(main));
+  CHECK(At(main, "txt_Settings", 1).first == 2);
+  CHECK(main.FindById("Tabscene")->named_frames.size() == 10);
+}
+
+// Local only (REXGLUE_SYSTEM_UPDATE): the console's guide, rewritten for three
+// tabs, rests with its blades and labels where a three-tab guide has them.
+TEST_CASE("The console's guide scene switches between three tabs", "[xui][local]") {
+  const char* path = std::getenv("REXGLUE_SYSTEM_UPDATE");
+  if (!path || !*path) {
+    SKIP("REXGLUE_SYSTEM_UPDATE is not set");
+  }
+  std::string error;
+  auto update = SystemUpdate::Load(path, &error);
+  REQUIRE(update);
+  auto skin = ParseXur(update->Find("huduiskin/skin")->Find("skin.xur"), &error);
+  REQUIRE(skin);
+  auto guide = ParseXur(update->Find("hud/hud")->Find("GuideMain.xur"), &error);
+  REQUIRE(guide);
+  REQUIRE(rex::ui::guide::UseThreeTabs(guide->root));
+  SceneContext context;
+  context.skin = &*skin;
+  context.package = "hud/hud";
+  auto root = Element::Create(guide->root, context);
+  Element* tabs = root->FindById("Tabscene");
+  REQUIRE(tabs);
+  auto play = [&](std::string_view name) {
+    REQUIRE(tabs->Play(name, false));
+    tabs->Advance(60.0);
+    CHECK_FALSE(tabs->playing());
+  };
+  auto x = [&](std::string_view id) { return root->FindById(id)->position().x; };
+  auto shown = [&](std::string_view id) { return root->FindById(id)->visible(); };
+
+  play("2Close");  // the guide opening on Home
+  CHECK_FALSE(shown("Blade5"));
+  CHECK(x("txt_Settings") == Approx(638.0f));
+  CHECK(x("txt_Games") == Approx(242.0f));
+  CHECK(shown("Tab2"));
+
+  play("2To4");
+  CHECK_FALSE(shown("Blade6"));
+  CHECK(shown("Blade7"));
+  CHECK(shown("Blade8"));
+  CHECK(x("txt_Games") == Approx(212.0f));
+  CHECK(x("txt_home") == Approx(242.0f));
+  CHECK(root->FindById("Tab4")->GetFloat("Opacity") == Approx(1.0f));
+  CHECK(root->FindById("Tab2")->GetFloat("Opacity") == Approx(0.0f));
+
+  play("4To2");
+  CHECK(x("txt_Settings") == Approx(638.0f));
+  CHECK(x("txt_Games") == Approx(242.0f));
+  CHECK(root->FindById("Tab2")->GetFloat("Opacity") == Approx(1.0f));
+
+  play("2To1");
+  CHECK_FALSE(shown("Blade5"));
+  CHECK(x("txt_Settings") == Approx(668.0f));
+  CHECK(x("txt_home") == Approx(638.0f));
+  CHECK_FALSE(tabs->Play("2To3"));
 }

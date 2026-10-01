@@ -45,12 +45,13 @@ namespace {
 
 constexpr float kRowHeight = 28.0f;
 constexpr size_t kMaxRows = 11;  // the list area of the Options scene
-// The right pane (the scene's graphic_metapane, x 425 to 712): the banner
-// (420 x 95 in the catalogue) across the text column, the add-on's details
-// below it to the pane's foot.
-constexpr float kPaneX = 443.0f;
-constexpr float kPaneWidth = 249.0f;
-constexpr float kBannerY = 70.0f;
+// The right pane (the scene's graphic_metapane, x 425 to 712 from y 61): the
+// banner (420 x 95 in the catalogue) across the whole pane at its top, edge to
+// edge as the console's marketplace showed it, and the add-on's details below
+// it in the pane's text column to its foot.
+constexpr float kPaneX = 425.0f;
+constexpr float kPaneWidth = 287.0f;
+constexpr float kBannerY = 61.0f;
 constexpr float kBannerHeight = kPaneWidth * 95.0f / 420.0f;
 constexpr float kDetailsY = kBannerY + kBannerHeight + 8.0f;
 constexpr float kPaneBottom = 405.0f;
