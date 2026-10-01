@@ -219,7 +219,7 @@ Games & Apps has the title's achievements (grid and details) and Manage Game,
 which lists the title's marketplace add-ons (its config's `[[dlc]]`; the build
 fetches their names, descriptions and art) and installs them from packages on
 this PC. Leave Game (Y, or the Home tab) ends the title after a confirmation.
-The guide has three tabs, Games & Apps, Home (titled with the gamertag) and
+The guide has three tabs, Games & Apps, Home (titled with the gamertag of the Xbox account signed in to Windows) and
 Settings, as the Xbox One and Series consoles' guide has for 360 titles.
 Settings > Preferences sets notifications, game volume, vibration and the render
 resolution (by default the title's own, as on the console; 2x, 3x and Match
