@@ -12,6 +12,8 @@
 #pragma once
 
 #include <bitset>
+#include <map>
+#include <optional>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -45,6 +47,24 @@ struct RecompilerConfig;
 
 /// Lightweight context passed to FunctionNode::emitCpp() and BuilderContext.
 /// Non-owning references -- caller must ensure lifetimes.
+/// An instruction word a switchable patch changes: codegen emits both
+/// versions, chosen at run time by the patch's flag.
+struct SwitchedWord {
+  uint32_t original = 0;
+  uint32_t patched = 0;
+  uint32_t patch_index = 0;  ///< Index into the title's switchable patch table
+  std::string patch_name;
+};
+
+/// A register a switchable patch sets before the instruction at its address.
+struct SwitchedSet {
+  uint32_t reg = 0;
+  uint64_t value = 0;
+  std::optional<uint32_t> lr;
+  uint32_t patch_index = 0;
+  std::string patch_name;
+};
+
 struct EmitContext {
   const BinaryView& binary;
   const RecompilerConfig& config;
@@ -55,6 +75,10 @@ struct EmitContext {
   /// Every function name emitted as a call. The writer turns this into the
   /// per-file declaration header, so a missed name is a compile error.
   std::unordered_set<std::string>* referenced = nullptr;
+
+  /// Instruction words switchable patches change, by guest address.
+  const std::map<uint32_t, SwitchedWord>* switched = nullptr;
+  const std::multimap<uint32_t, SwitchedSet>* switched_sets = nullptr;
 
   void reference(std::string_view name) const {
     if (referenced)

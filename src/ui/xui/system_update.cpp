@@ -238,21 +238,120 @@ const Package* SystemUpdate::Find(std::string_view module_resource) const {
 
 std::unique_ptr<SystemUpdate> SystemUpdate::Load(const std::filesystem::path& path,
                                                  std::string* error) {
-  auto fail = [&](std::string message) -> std::unique_ptr<SystemUpdate> {
+  auto modules = ReadModules(path, error);
+  return modules ? FromModules(*modules, error) : nullptr;
+}
+
+std::unique_ptr<SystemUpdate> SystemUpdate::FromModules(const Modules& modules,
+                                                        std::string* error) {
+  auto update = std::make_unique<SystemUpdate>();
+  std::string first_error;
+  for (const auto& [module, bytes] : modules) {
+    std::string add_error;
+    if (!update->AddModule(module, bytes, &add_error) && first_error.empty()) {
+      first_error = add_error;
+    }
+  }
+  for (std::string_view required : {"hud/hud", "huduiskin/skin", "xam/skin", "xam/shrdres"}) {
+    if (!update->Find(required)) {
+      if (error) {
+        *error = fmt::format("the system update has no {} package{}", required,
+                             first_error.empty() ? "" : fmt::format(" ({})", first_error));
+      }
+      return nullptr;
+    }
+  }
+  return update;
+}
+
+namespace {
+constexpr uint32_t kBundleMagic = 0x55475852;  // "RXGU", little-endian
+constexpr uint32_t kBundleVersion = 1;
+
+void PutU32(std::vector<uint8_t>& out, uint32_t v) {
+  for (int i = 0; i < 4; ++i) {
+    out.push_back(uint8_t(v >> (i * 8)));
+  }
+}
+}  // namespace
+
+std::vector<uint8_t> SystemUpdate::WriteBundle(const Modules& modules) {
+  std::vector<uint8_t> out;
+  PutU32(out, kBundleMagic);
+  PutU32(out, kBundleVersion);
+  PutU32(out, uint32_t(modules.size()));
+  for (const auto& [module, bytes] : modules) {
+    PutU32(out, uint32_t(module.size()));
+    out.insert(out.end(), module.begin(), module.end());
+    PutU32(out, uint32_t(bytes.size()));
+    out.insert(out.end(), bytes.begin(), bytes.end());
+  }
+  return out;
+}
+
+std::optional<SystemUpdate::Modules> SystemUpdate::ReadBundle(std::span<const uint8_t> bundle,
+                                                              std::string* error) {
+  size_t at = 0;
+  bool ok = true;
+  auto u32 = [&]() -> uint32_t {
+    if (at + 4 > bundle.size()) {
+      ok = false;
+      return 0;
+    }
+    uint32_t v = 0;
+    for (int i = 0; i < 4; ++i) {
+      v |= uint32_t(bundle[at + i]) << (i * 8);
+    }
+    at += 4;
+    return v;
+  };
+  auto bytes = [&](uint32_t size) -> std::span<const uint8_t> {
+    if (!ok || size > bundle.size() - at) {
+      ok = false;
+      return {};
+    }
+    auto s = bundle.subspan(at, size);
+    at += size;
+    return s;
+  };
+  if (u32() != kBundleMagic || u32() != kBundleVersion) {
+    if (error) {
+      *error = "not a guide bundle (or from another SDK version)";
+    }
+    return std::nullopt;
+  }
+  Modules modules;
+  const uint32_t count = u32();
+  for (uint32_t i = 0; ok && i < count; ++i) {
+    auto name = bytes(u32());
+    auto data = bytes(u32());
+    if (ok) {
+      modules.emplace(std::string(name.begin(), name.end()),
+                      std::vector<uint8_t>(data.begin(), data.end()));
+    }
+  }
+  if (!ok) {
+    if (error) {
+      *error = "the guide bundle is truncated";
+    }
+    return std::nullopt;
+  }
+  return modules;
+}
+
+std::optional<SystemUpdate::Modules> SystemUpdate::ReadModules(const std::filesystem::path& path,
+                                                               std::string* error) {
+  auto fail = [&](std::string message) -> std::optional<Modules> {
     if (error) {
       *error = std::move(message);
     }
-    return nullptr;
+    return std::nullopt;
   };
   std::error_code ec;
-  auto update = std::make_unique<SystemUpdate>();
+  Modules modules;
   auto add = [&](std::string_view module, std::optional<std::vector<uint8_t>> bytes) {
-    if (!bytes) {
-      return;
-    }
-    std::string add_error;
-    if (!update->AddModule(module, *bytes, &add_error) && error && error->empty()) {
-      *error = add_error;
+    if (bytes) {
+      modules.emplace(std::string(module), std::move(*bytes));
     }
   };
 
@@ -291,13 +390,10 @@ std::unique_ptr<SystemUpdate> SystemUpdate::Load(const std::filesystem::path& pa
     }
   }
 
-  for (std::string_view required : {"hud/hud", "huduiskin/skin", "xam/skin", "xam/shrdres"}) {
-    if (!update->Find(required)) {
-      return fail(fmt::format("the system update has no {} package{}", required,
-                              error && !error->empty() ? fmt::format(" ({})", *error) : ""));
-    }
+  if (modules.empty()) {
+    return fail(fmt::format("{} holds none of the system modules", path.string()));
   }
-  return update;
+  return modules;
 }
 
 }  // namespace rex::ui::xui

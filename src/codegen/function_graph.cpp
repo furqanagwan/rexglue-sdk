@@ -346,6 +346,13 @@ void emit_print(std::string& out, fmt::format_string<Args...> fmt, Args&&... arg
 
 }  // namespace
 
+namespace {
+// Disassemble reads guest-order (big-endian) words from memory.
+uint32_t ByteSwapWord(uint32_t v) {
+  return (v >> 24) | ((v >> 8) & 0xFF00) | ((v << 8) & 0xFF0000) | (v << 24);
+}
+}  // namespace
+
 std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
   if (authority() == FunctionAuthority::IMPORT) {
     return "";
@@ -536,6 +543,61 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
         auto lateIt = lateJumpTables.find(blockBase);
         if (lateIt != lateJumpTables.end()) {
           activeJt = &lateIt->second;
+        }
+      }
+
+      // A switchable patch's register sets run before this instruction.
+      if (ctx.switched_sets) {
+        auto [first, last] = ctx.switched_sets->equal_range(static_cast<uint32_t>(blockBase));
+        for (auto it = first; it != last; ++it) {
+          const SwitchedSet& set = it->second;
+          BuilderContext setCtx{body,           ctx,      *this,  insn, blockBase, data,
+                                localVariables, csrState, nullptr};
+          emit_println(body, "	// switchable patch \"{}\": set r{}", set.patch_name, set.reg);
+          if (set.lr) {
+            emit_println(body, "	if (REX_PATCH_ACTIVE({}) && uint32_t(ctx.lr) == 0x{:08X}u) {{",
+                         set.patch_index, *set.lr);
+          } else {
+            emit_println(body, "	if (REX_PATCH_ACTIVE({})) {{", set.patch_index);
+          }
+          emit_println(body, "		{}.u64 = 0x{:X}ull;", setCtx.r(set.reg), set.value);
+          emit_println(body, "	}}");
+        }
+      }
+
+      // A switchable patch's word: both versions, chosen by its flag.
+      if (ctx.switched) {
+        if (auto sw = ctx.switched->find(static_cast<uint32_t>(blockBase));
+            sw != ctx.switched->end()) {
+          emit_println(body, "\t// switchable patch \"{}\"", sw->second.patch_name);
+          emit_println(body, "\tif (REX_PATCH_ACTIVE({})) {{", sw->second.patch_index);
+          for (int version = 0; version < 2; ++version) {
+            const uint32_t word = version == 0 ? sw->second.patched : sw->second.original;
+            const uint32_t word_be = ByteSwapWord(word);
+            Disassemble(&word_be, 4, blockBase, insn);
+            if (insn.opcode == nullptr) {
+              emit_println(body, "\t// {}", insn.op_str);
+            } else {
+              emit_println(body, "\t// {} {}", insn.opcode->name, insn.op_str);
+              BuilderContext switchedCtx{
+                  body, ctx, *this, insn, blockBase, &word_be, localVariables, csrState, nullptr};
+              if (!DispatchInstruction(insn.opcode->id, switchedCtx)) {
+                REXCODEGEN_WARN("Unrecognized instruction at 0x{:X}: {}", blockBase,
+                                insn.opcode->name);
+                allRecompiled = false;
+              }
+            }
+            if (version == 0) {
+              emit_println(body, "\t}} else {{");
+            } else {
+              emit_println(body, "\t}}");
+            }
+          }
+          // Either version may have run: forget what is known of the CSR.
+          csrState = CSRState::Unknown;
+          blockBase += 4;
+          ++data;
+          continue;
         }
       }
 

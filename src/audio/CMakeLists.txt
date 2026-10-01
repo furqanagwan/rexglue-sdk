@@ -7,6 +7,7 @@ add_library(rexaudio OBJECT
     audio_driver.cpp
     audio_system.cpp
     downmix.cpp
+    ui_sound.cpp
     xma_context.cpp
     xma_decoder.cpp
     xma_register_file.cpp
@@ -43,6 +44,7 @@ if(WIN32)
     target_sources(rexaudio PRIVATE
         xaudio2/xaudio2_audio_driver.cpp
         xaudio2/xaudio2_audio_system.cpp
+        xaudio2/ui_sound_player.cpp
     )
     target_link_libraries(rexaudio PUBLIC xaudio2 ole32)
 endif()

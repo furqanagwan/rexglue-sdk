@@ -7,6 +7,16 @@
 void RegisterRecompiledModules(rex::system::KernelState*);
 {% endif %}
 
+// Switchable code patches: the recompiled code reads these flags.
+uint8_t g_rex_patch_active[{% if length(switchable_patches) > 0 %}{{ length(switchable_patches) }}{% else %}1{% endif %}] = {
+{% for p in switchable_patches %}    {{ p.enabled }},
+{% endfor %}};
+
+static const rex::PPCSwitchablePatch kSwitchablePatches[] = {
+{% for p in switchable_patches %}    { "{{ p.name }}", &g_rex_patch_active[{{ loop.index }}], "{{ p.category }}" },
+{% endfor %}    { nullptr, nullptr, nullptr },
+};
+
 const rex::PPCImageInfo PPCImageConfig = {
     .code_base = REX_CODE_BASE,
     .code_size = REX_CODE_SIZE,
@@ -28,6 +38,7 @@ const rex::PPCImageInfo PPCImageConfig = {
         .non_volatile_as_local = {{ config_flags.non_volatile_as_local }},
     },
     .code_patches = "{{ code_patches }}",
+    .switchable_patches = kSwitchablePatches,
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

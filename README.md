@@ -204,6 +204,22 @@ Additional guest DLLs must also be statically generated and registered; see
 game-patches entry) go in the codegen config as `[[patch]]` tables and are
 compiled in ([code patches](docs/code-patches.md)); recompile after changing one.
 
+### Xbox guide
+
+Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
+the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward
+compatibility does. The Xbox button is left to Windows for Game Bar. The guide is the console's own: its scenes, animations and sounds are read
+from your own dashboard 2.0.17559 system update, and nothing from it ships with
+the SDK. Set `REXGLUE_SYSTEM_UPDATE` to that `$SystemUpdate` folder when you
+build a title (CMake variable or environment variable) and the guide is built into
+the executable: players need nothing and it works offline.
+Games & Apps has the title's achievements (grid and details), and Xbox Home
+(Y, or the Home tab) ends the title after the console's confirmation.
+Settings > Preferences sets notifications, game volume, vibration and the render
+resolution (by default the title draws at your display's resolution, 2160p on a
+4K display); Settings > Patches and Cheats turn a title's switchable code
+patches on and off while it runs. See [Xbox guide](docs/xbox-guide.md).
+
 ## Repository structure
 
 | Path | Responsibility |

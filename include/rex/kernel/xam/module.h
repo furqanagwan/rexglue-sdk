@@ -23,6 +23,11 @@ namespace xam {
 
 bool xeXamIsUIActive();
 
+/// Counts host system UI (the Xbox guide) as on screen for XamIsUIActive,
+/// as XAM's own dialogs are counted.
+void xeXamAddSystemUI();
+void xeXamRemoveSystemUI();
+
 class XamModule : public system::KernelModule {
  public:
   XamModule(Runtime* emulator, system::KernelState* kernel_state);

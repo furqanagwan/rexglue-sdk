@@ -52,6 +52,11 @@
 extern const rex::PPCImageInfo PPCImageConfig;
 extern PPCFuncMapping PPCFuncMappings[];
 
+// Switchable code patches (rexglue [[patch]] switchable = true).
+extern uint8_t g_rex_patch_active[];
+#define REX_PATCH_ACTIVE(index) \
+  (__atomic_load_n(&g_rex_patch_active[(index)], __ATOMIC_RELAXED) != 0)
+
 //=============================================================================
 // Function Definition Macros
 //=============================================================================

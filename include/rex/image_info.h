@@ -37,6 +37,14 @@ struct PPCCodegenFlags {
   bool non_volatile_as_local = false;
 };
 
+/// A code patch compiled with both instruction versions. `active` is the
+/// flag the recompiled code reads; setting it switches the patch live.
+struct PPCSwitchablePatch {
+  const char* name;
+  uint8_t* active;
+  const char* category;  ///< "patch" or "cheat"
+};
+
 /// PPC image layout passed from the generated config header into ReXApp.
 struct PPCImageInfo {
   u32 code_base;
@@ -49,6 +57,8 @@ struct PPCImageInfo {
   PPCCodegenFlags codegen_flags{};                 ///< Set by codegen from the config flags
   /// Guest code patches compiled in, comma-separated; empty when none.
   const char* code_patches = "";
+  /// Switchable patches, ended by a null name; null when codegen predates them.
+  const PPCSwitchablePatch* switchable_patches = nullptr;
 };
 
 }  // namespace rex

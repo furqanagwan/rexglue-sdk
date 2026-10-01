@@ -104,6 +104,13 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"non_volatile_as_local", cfg.nonVolatileRegistersAsLocalVariables},
   };
 
+  nlohmann::json switchablePatchesJson = nlohmann::json::array();
+  for (const auto& patch : ctx.switchablePatches().patches) {
+    switchablePatchesJson.push_back({{"name", CStringBody(patch.name)},
+                                     {"enabled", patch.enabled ? 1 : 0},
+                                     {"category", CStringBody(patch.category)}});
+  }
+
   return {
       {"project", cfg.projectName},
       {"image_base", fmt::format("0x{:X}", ctx.binary().baseAddress())},
@@ -116,6 +123,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"is_dll", ctx.isDllModule()},
       {"config_flags", configFlags},
       {"code_patches", CStringBody(fmt::format("{}", fmt::join(ctx.appliedPatches(), ", ")))},
+      {"switchable_patches", switchablePatchesJson},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };
@@ -263,6 +271,8 @@ bool CodegenWriter::write(bool force) {
                       static_cast<uint32_t>(analysisState().entryPoint), nullptr};
   if (runtime_)
     emitCtx.resolver = runtime_->export_resolver();
+  emitCtx.switched = &ctx_.switchablePatches().words;
+  emitCtx.switched_sets = &ctx_.switchablePatches().sets;
 
   REXCODEGEN_TRACE("Recompiling {} functions...", functions.size());
 

@@ -237,3 +237,125 @@ TEST_CASE("Analysis patches the image before anything else", "[codegen][patch]")
   CHECK(refused.error().message.find("\"far\"") != std::string::npos);
   CHECK(badCtx.appliedPatches().empty());
 }
+
+TEST_CASE("[[patch]] switchable is parsed and can be set by an including file",
+          "[codegen][patch]") {
+  auto cfg = Parse(R"(
+file_path = "default.xex"
+[[patch]]
+name = "Unlock FPS"
+enabled = false
+switchable = true
+[[patch.be8]]
+address = 0x82000003
+value = 2
+)");
+  CHECK(Named(cfg, "Unlock FPS").switchable);
+  CHECK_FALSE(Named(cfg, "Unlock FPS").enabled);
+}
+
+TEST_CASE("Switchable patches keep the image original and list both words", "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  CodePatch patch = Patch("Two", kBase + 3, {0x02}, /*enabled=*/false);
+  patch.switchable = true;
+  std::vector<CodePatch> patches = {patch};
+  auto applied = ApplyCodePatches(binary, patches);
+  REQUIRE(applied);
+  CHECK(applied->empty());
+  CHECK(WordAt(binary, kBase) == 0x38600001);
+
+  auto switchable = PrepareSwitchablePatches(binary, patches);
+  REQUIRE(switchable);
+  REQUIRE(switchable->patches.size() == 1);
+  CHECK(switchable->patches[0].name == "Two");
+  CHECK_FALSE(switchable->patches[0].enabled);
+  REQUIRE(switchable->words.size() == 1);
+  const SwitchedWord& word = switchable->words.at(kBase);
+  CHECK(word.original == 0x38600001);
+  CHECK(word.patched == 0x38600002);
+  CHECK(word.patch_index == 0);
+
+  // Writing the byte already there switches nothing.
+  CodePatch same = Patch("Same", kBase + 3, {0x01});
+  same.switchable = true;
+  auto unchanged = PrepareSwitchablePatches(binary, {same});
+  REQUIRE(unchanged);
+  CHECK(unchanged->patches.size() == 1);
+  CHECK(unchanged->words.empty());
+}
+
+TEST_CASE("Switchable patches may not touch branches", "[codegen][patch]") {
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  // The second word is blr.
+  CodePatch patch = Patch("Return", kBase + 4, {0x60, 0x00, 0x00, 0x00});
+  patch.switchable = true;
+  auto switchable = PrepareSwitchablePatches(binary, {patch});
+  REQUIRE_FALSE(switchable);
+  CHECK(switchable.error().message.find("branch") != std::string::npos);
+  // Nor turn another instruction into one.
+  CodePatch jump = Patch("Jump", kBase, {0x48, 0x00, 0x00, 0x08});
+  jump.switchable = true;
+  CHECK_FALSE(PrepareSwitchablePatches(binary, {jump}));
+}
+
+TEST_CASE("Switchable patches set registers, optionally keyed on lr", "[codegen][patch]") {
+  auto cfg = Parse(R"(
+file_path = "default.xex"
+[[patch]]
+name = "God Mode"
+category = "cheat"
+switchable = true
+enabled = false
+[[patch.set]]
+address = 0x82000004
+register = "r11"
+value = 30000
+lr = 0x82000000
+[[patch]]
+name = "Flag only"
+switchable = true
+[[patch]]
+name = "Fixed set"
+[[patch.set]]
+address = 0x82000004
+register = "r3"
+value = 1
+[[patch]]
+name = "Bad register"
+switchable = true
+[[patch.set]]
+address = 0x82000004
+register = "r40"
+value = 1
+)");
+  const CodePatch& god = Named(cfg, "God Mode");
+  REQUIRE(god.sets.size() == 1);
+  CHECK(god.sets[0].address == kBase + 4);
+  CHECK(god.sets[0].reg == 11);
+  CHECK(god.sets[0].value == 30000);
+  CHECK(god.sets[0].lr == kBase);
+  CHECK(god.category == "cheat");
+  // A switchable patch may be a flag alone; a fixed one may not set registers.
+  CHECK(Named(cfg, "Flag only").error.empty());
+  CHECK_FALSE(Named(cfg, "Fixed set").error.empty());
+  CHECK_FALSE(Named(cfg, "Bad register").error.empty());
+
+  Image image;
+  auto binary = BinaryView::fromModule(image);
+  std::vector<CodePatch> usable = {god, Named(cfg, "Flag only")};
+  auto prepared = PrepareSwitchablePatches(binary, usable);
+  REQUIRE(prepared);
+  CHECK(prepared->patches.size() == 2);
+  CHECK(prepared->words.empty());
+  REQUIRE(prepared->sets.count(kBase + 4) == 1);
+  CHECK(prepared->sets.find(kBase + 4)->second.patch_index == 0);
+
+  // An lr test needs the link register, which skip_lr drops.
+  CHECK_FALSE(PrepareSwitchablePatches(binary, usable, /*keeps_lr=*/false));
+  // Sets go on instructions in code.
+  CodePatch far = god;
+  far.sets[0].address = kBase + 0x1000;
+  CHECK_FALSE(PrepareSwitchablePatches(binary, {far}));
+}

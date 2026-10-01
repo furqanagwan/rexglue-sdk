@@ -268,6 +268,36 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
           parsed.writes.push_back(std::move(write));
         }
       }
+      bool hasSets = false;
+      if (auto* sets = (*table)["set"].as_array()) {
+        hasSets = true;
+        for (auto& s : *sets) {
+          auto* st = s.as_table();
+          auto address = st ? (*st)["address"].value<int64_t>() : std::nullopt;
+          auto reg = st ? (*st)["register"].value<std::string>() : std::nullopt;
+          auto value = st ? (*st)["value"].value<int64_t>() : std::nullopt;
+          auto lr = st ? (*st)["lr"].value<int64_t>() : std::nullopt;
+          uint32_t reg_index = 32;
+          if (reg && reg->size() >= 2 && (*reg)[0] == 'r') {
+            reg_index = uint32_t(std::strtoul(reg->c_str() + 1, nullptr, 10));
+            if (reg->find_first_not_of("0123456789", 1) != std::string::npos) {
+              reg_index = 32;
+            }
+          }
+          if (!address || !value || *address < 0 || *address > 0xFFFFFFFFll || (*address & 3) ||
+              reg_index > 31 || (lr && (*lr < 0 || *lr > 0xFFFFFFFFll))) {
+            parsed.error =
+                "a set entry needs a word address, a register r0 to r31, a value and an "
+                "optional lr";
+            continue;
+          }
+          parsed.sets.push_back({static_cast<uint32_t>(*address), reg_index,
+                                 static_cast<uint64_t>(*value),
+                                 lr ? std::optional<uint32_t>(uint32_t(*lr)) : std::nullopt});
+        }
+      }
+      auto switchable = (*table)["switchable"].value<bool>();
+      auto category = (*table)["category"].value<std::string>();
       // Canary spells the switch is_enabled; accept both, enabled wins.
       auto enabled = (*table)["enabled"].value<bool>();
       if (!enabled) {
@@ -278,21 +308,37 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
                              [&](const CodePatch& p) { return p.name == parsed.name; });
       if (it == cfg.patches.end()) {
         parsed.enabled = enabled.value_or(true);
+        parsed.switchable = switchable.value_or(false);
+        parsed.category = category.value_or("patch");
         parsed.source = filePath;
-        if (!hasWrites && parsed.error.empty()) {
+        if (!hasWrites && !hasSets && !parsed.switchable && parsed.error.empty()) {
           parsed.error = "it has no be8, be16, be32 or be64 writes";
+        }
+        if (hasSets && !parsed.switchable && parsed.error.empty()) {
+          parsed.error = "set entries need switchable = true";
         }
         cfg.patches.push_back(std::move(parsed));
         continue;
       }
       REXCODEGEN_DEBUG("[config]   [[patch]] \"{}\" updated from {}", parsed.name, filePath);
-      if (hasWrites) {
-        it->writes = std::move(parsed.writes);
+      if (hasWrites || hasSets) {
+        if (hasWrites) {
+          it->writes = std::move(parsed.writes);
+        }
+        if (hasSets) {
+          it->sets = std::move(parsed.sets);
+        }
         it->error = std::move(parsed.error);
         it->source = filePath;
       }
       if (enabled) {
         it->enabled = *enabled;
+      }
+      if (switchable) {
+        it->switchable = *switchable;
+      }
+      if (category) {
+        it->category = *category;
       }
     }
   }

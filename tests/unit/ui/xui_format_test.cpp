@@ -18,74 +18,12 @@
 #include <rex/ui/xui/package.h>
 #include <rex/ui/xui/system_update.h>
 
+#include "xui_test_data.h"
+
 using namespace rex::ui::xui;
+using namespace xui_test;
 
 namespace {
-
-using Bytes = std::vector<uint8_t>;
-
-void Be16(Bytes& out, uint16_t v) {
-  out.push_back(uint8_t(v >> 8));
-  out.push_back(uint8_t(v));
-}
-
-void Be32(Bytes& out, uint32_t v) {
-  for (int shift = 24; shift >= 0; shift -= 8) {
-    out.push_back(uint8_t(v >> shift));
-  }
-}
-
-void Packed(Bytes& out, uint32_t v) {
-  if (v < 0xF0) {
-    out.push_back(uint8_t(v));
-  } else if (v <= 0xFFF) {
-    out.push_back(uint8_t(0xF0 | (v >> 8)));
-    out.push_back(uint8_t(v));
-  } else {
-    out.push_back(0xFF);
-    Be32(out, v);
-  }
-}
-
-void Append(Bytes& out, const Bytes& more) {
-  out.insert(out.end(), more.begin(), more.end());
-}
-
-Bytes Xuiz(const std::vector<std::pair<std::string, std::string>>& files) {
-  Bytes table, data;
-  for (const auto& [name, contents] : files) {
-    Be32(table, uint32_t(contents.size()));
-    Be32(table, uint32_t(data.size()));
-    table.push_back(uint8_t(name.size()));
-    table.insert(table.end(), name.begin(), name.end());
-    data.insert(data.end(), contents.begin(), contents.end());
-  }
-  Bytes out;
-  Be32(out, 0x5855495A);
-  Be32(out, 3);
-  Be32(out, uint32_t(0x16 + table.size() + data.size()));
-  Be32(out, 0);
-  Be32(out, uint32_t(table.size()));
-  Be16(out, uint16_t(files.size()));
-  Append(out, table);
-  Append(out, data);
-  return out;
-}
-
-Bytes Xuis(const std::vector<std::string>& strings) {
-  Bytes body;
-  for (const std::string& s : strings) {
-    body.insert(body.end(), s.begin(), s.end());
-    body.push_back(0);
-  }
-  Bytes out;
-  Be32(out, 0x58554953);
-  Be16(out, 0x0202);
-  Be32(out, uint32_t(12 + body.size()));
-  Be16(out, uint16_t(strings.size()));
-  Append(out, body);
-  return out;
-}
 
 // Writes XUR v8 the way the console's files are laid out: pools, then an
 // element tree referring into them.
@@ -427,63 +365,6 @@ TEST_CASE("XUR v8 reading checks the declared object count", "[xui]") {
   CHECK(error.find("declares 2 objects") != std::string::npos);
 }
 
-namespace {
-
-// An XEX2 whose image holds `resource` at load address + 0x100.
-Bytes XexWithResource(const std::string& resource_name, const Bytes& resource, uint16_t compression,
-                      uint16_t encryption = 0) {
-  const uint32_t load = 0x82000000;
-  Bytes image(0x100, 0xCC);
-  Append(image, resource);
-  image.resize(image.size() + 0x10, 0);  // the zero run basic compression leaves out
-
-  Bytes out;
-  const uint32_t header_size = 0x400;
-  Be32(out, 0x58455832);
-  Be32(out, 0);
-  Be32(out, header_size);
-  Be32(out, 0);
-  Be32(out, 0x200);  // security info
-  Be32(out, 2);
-  Be32(out, 0x2FF);
-  Be32(out, 0x100);
-  Be32(out, 0x3FF);
-  Be32(out, 0x180);
-  out.resize(0x100, 0);
-  Be32(out, 4 + 16);  // resource info
-  std::string name = resource_name;
-  name.resize(8, '\0');
-  out.insert(out.end(), name.begin(), name.end());
-  Be32(out, load + 0x100);
-  Be32(out, uint32_t(resource.size()));
-  out.resize(0x180, 0);
-  if (compression == 1) {
-    Be32(out, 16);  // file format info: one (data, zero) block
-    Be16(out, encryption);
-    Be16(out, 1);
-    Be32(out, uint32_t(image.size() - 0x10));
-    Be32(out, 0x10);
-  } else {
-    Be32(out, 8);
-    Be16(out, encryption);
-    Be16(out, 0);
-  }
-  out.resize(0x200, 0);
-  Be32(out, 0);
-  Be32(out, uint32_t(image.size()));
-  out.resize(0x200 + 0x110, 0);
-  Be32(out, load);
-  out.resize(header_size, 0);
-  if (compression == 1) {
-    out.insert(out.end(), image.begin(), image.end() - 0x10);
-  } else {
-    Append(out, image);
-  }
-  return out;
-}
-
-}  // namespace
-
 TEST_CASE("System XEX resources are extracted from plain and basic-compressed images", "[xui]") {
   const Bytes package = Xuiz({{"GuideMain.xur", "scene"}});
   for (uint16_t compression : {uint16_t(0), uint16_t(1)}) {
@@ -507,6 +388,33 @@ TEST_CASE("SystemUpdate keeps a module's XUIZ resources by module/resource", "[x
   // Non-XUIZ resources (icons, XDBF) are not packages.
   REQUIRE(update.AddModule("xam", XexWithResource("icon", Bytes{1, 2, 3, 4}, 0), &error));
   CHECK_FALSE(update.Find("xam/icon"));
+}
+
+TEST_CASE("The guide bundle carries the system modules a title embeds", "[xui]") {
+  SystemUpdate::Modules modules;
+  modules["hud"] = XexWithResource("hud", Xuiz({{"a.xur", "x"}}), 0);
+  modules["huduiskin"] = XexWithResource("skin", Xuiz({{"skin.xur", "s"}}), 0);
+  modules["xam"] = XexWithResource("skin", Xuiz({{"b.xur", "y"}}), 0);
+  const auto bundle = SystemUpdate::WriteBundle(modules);
+  std::string error;
+  auto read = SystemUpdate::ReadBundle(bundle, &error);
+  REQUIRE(read);
+  CHECK(*read == modules);
+  // The guide needs xam/shrdres too: a bundle without it is refused.
+  CHECK_FALSE(SystemUpdate::FromModules(*read, &error));
+  CHECK(error.find("xam/shrdres") != std::string::npos);
+  modules["xam"] = XexWithResource("shrdres", Xuiz({{"c.png", "z"}}), 0);
+  // One resource per module in this synthetic XEX, so xam/skin goes missing.
+  CHECK_FALSE(SystemUpdate::FromModules(modules, &error));
+
+  // Truncated or foreign data is refused, never read past its end.
+  for (size_t cut : {size_t(0), size_t(5), bundle.size() / 2, bundle.size() - 1}) {
+    INFO("cut " << cut);
+    CHECK_FALSE(SystemUpdate::ReadBundle(std::span(bundle).first(cut), &error));
+  }
+  Bytes foreign = bundle;
+  foreign[0] ^= 0xFF;
+  CHECK_FALSE(SystemUpdate::ReadBundle(foreign, &error));
 }
 
 TEST_CASE("Encrypted XEXs are refused", "[xui]") {
@@ -563,4 +471,22 @@ TEST_CASE("The console's own guide scenes decode", "[xui][local]") {
     }
   }
   CHECK(decoded >= 55);
+}
+
+TEST_CASE("The console's system update round-trips through a guide bundle", "[xui][local]") {
+  const char* path = std::getenv("REXGLUE_SYSTEM_UPDATE");
+  if (!path) {
+    SKIP("REXGLUE_SYSTEM_UPDATE is not set");
+  }
+  std::string error;
+  auto modules = SystemUpdate::ReadModules(path, &error);
+  REQUIRE(modules);
+  CHECK(modules->size() == 4);
+  const auto bundle = SystemUpdate::WriteBundle(*modules);
+  auto read = SystemUpdate::ReadBundle(bundle, &error);
+  REQUIRE(read);
+  auto update = SystemUpdate::FromModules(*read, &error);
+  INFO(error);
+  REQUIRE(update);
+  CHECK(update->Find("hud/hud")->Contains("GuideMain.xur"));
 }

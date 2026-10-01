@@ -67,6 +67,17 @@ struct PatchWrite {
   std::vector<uint8_t> bytes;  ///< Written in order starting at `address`
 };
 
+// A register a switchable patch sets just before the instruction at
+// `address` runs, as a trainer's detour does: [[patch.set]] with address,
+// register ("r0".."r31"), value and, optionally, lr (only when the link
+// register holds that return address, i.e. that call was the last made).
+struct PatchRegisterSet {
+  uint32_t address = 0;
+  uint32_t reg = 0;
+  uint64_t value = 0;
+  std::optional<uint32_t> lr;
+};
+
 // A named guest code patch applied to the image before analysis (ADR-009
 // section 7). Written in the same shape as a Canary game-patches entry, so a
 // community patch copies over: [[patch]] with name, enabled and
@@ -74,9 +85,16 @@ struct PatchWrite {
 struct CodePatch {
   std::string name;
   bool enabled = true;
+  /// Compiled with both instruction versions behind a runtime flag, so the
+  /// player can switch it while the title runs; `enabled` is the default.
+  bool switchable = false;
+  /// How the guide lists a switchable patch: "patch" (fixes, frame rate) or
+  /// "cheat".
+  std::string category = "patch";
   std::vector<PatchWrite> writes;
-  std::string source;  ///< Config file that last defined the writes
-  std::string error;   ///< Why the entry is unusable; applying it fails
+  std::vector<PatchRegisterSet> sets;  ///< Switchable patches only
+  std::string source;                  ///< Config file that last defined the writes
+  std::string error;                   ///< Why the entry is unusable; applying it fails
 };
 
 // Section info for analysis output

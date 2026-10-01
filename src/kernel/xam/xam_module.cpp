@@ -29,6 +29,14 @@ bool xeXamIsUIActive() {
   return xam_dialogs_shown_ > 0;
 }
 
+void xeXamAddSystemUI() {
+  ++xam_dialogs_shown_;
+}
+
+void xeXamRemoveSystemUI() {
+  --xam_dialogs_shown_;
+}
+
 XamModule::XamModule(Runtime* emulator, KernelState* kernel_state)
     : KernelModule(kernel_state, "xe:\\xam.xex"), loader_data_() {
   RegisterExportTable(export_resolver_);

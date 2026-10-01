@@ -33,6 +33,12 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return Err(patched.error());
   }
   ctx.setAppliedPatches(std::move(*patched));
+  auto switchable =
+      PrepareSwitchablePatches(ctx.binary(), ctx.Config().patches, !ctx.Config().skipLr);
+  if (!switchable) {
+    return Err(switchable.error());
+  }
+  ctx.setSwitchablePatches(std::move(*switchable));
 
   ctx.initDecoded();
   REXCODEGEN_TRACE("Analyze: decoded {} instructions across {} code regions",

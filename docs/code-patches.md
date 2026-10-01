@@ -52,6 +52,48 @@ value = 0x01
   as `Guest code patches compiled in: ...`. Changing a patch changes the config,
   which regenerates the code.
 
+## Switchable patches
+
+`switchable = true` compiles both versions in, so the player can turn the
+patch on and off while the title runs (the Xbox guide's Settings > Patches or
+Cheats, [xbox-guide.md](xbox-guide.md#settings-pages)):
+
+```toml
+[[patch]]
+name = "Unlock FPS"
+enabled = false            # the state at first start
+switchable = true
+category = "patch"         # or "cheat": which guide page lists it
+```
+
+- The image is left original. Each word the patch changes is emitted as
+  `if (REX_PATCH_ACTIVE(i)) { patched } else { original }`, reading a flag in
+  `g_rex_patch_active[]`. The patches are listed in
+  `PPCImageInfo::switchable_patches` (name, flag, category). A write of the
+  bytes already there switches nothing and emits no branch.
+- **Register sets.** A switchable patch can also set a register just before an
+  instruction runs, as a trainer's detour does, and may test the link register
+  so it applies only after one call:
+
+  ```toml
+  [[patch.set]]
+  address = 0x82233698     # before stw r11,380(r31): the new health
+  register = "r11"
+  value = 30000
+  lr = 0x82233674          # only when that call was the last one made
+  ```
+
+  Codegen emits `if (REX_PATCH_ACTIVE(i) && ctx.lr == lr) r11 = value;` there.
+  `lr` needs the link register kept (not `skip_lr`). Sets are for switchable
+  patches only, and a switchable patch may consist of sets alone.
+- **No control flow.** Analysis sees only the original code, so a switchable
+  patch may not change or introduce a branch, call, return, trap or `sc`
+  (primary opcodes 3, 16, 17, 18, 19 and `tw`); codegen refuses it. Make such a
+  patch fixed instead.
+- The player's choices are saved by name in the `code_patch_states` cvar
+  (`Name=1;Name=0`) and applied at startup; a patch it does not name starts
+  in its `enabled` state.
+
 A patch is title-specific behavior (ADR-005). It belongs in the title's own
 repository and config, never in the SDK. Record where it came from, its author
 and any known problems next to it, as Canary does.
@@ -61,4 +103,5 @@ and any known problems next to it, as Canary does.
 `unit_tests [codegen][patch]`: widths and byte order, Canary's `is_enabled`,
 bad entries, an including file switching a patch on, writes into code only,
 refusals for data, out-of-image and past-the-section writes, overlaps, and
-patching before decoding.
+patching before decoding; switchable patches keeping the image original,
+listing both words, skipping unchanged words and refusing branches.
