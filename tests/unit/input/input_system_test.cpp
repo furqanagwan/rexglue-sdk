@@ -28,6 +28,7 @@ using rex::input::DeviceId;
 using rex::input::DeviceInfo;
 using rex::input::InputDriver;
 using rex::input::InputSystem;
+using rex::input::PadBattery;
 using rex::input::SlotAssignment;
 using rex::input::StickRange;
 using rex::input::X_INPUT_CAPABILITIES;
@@ -109,7 +110,17 @@ class PadDriver : public InputDriver {
     return X_ERROR_SUCCESS;
   }
 
+  bool GetDeviceBattery(DeviceId id, PadBattery* out) override {
+    auto it = batteries.find(id);
+    if (it == batteries.end()) {
+      return false;
+    }
+    *out = it->second;
+    return true;
+  }
+
   X_INPUT_VIBRATION last_vibration = {};
+  std::map<DeviceId, PadBattery> batteries;
 
  private:
   std::vector<DeviceInfo> devices_;
@@ -289,4 +300,23 @@ TEST_CASE("Connected users follow pads coming and going", "[input][hotplug]") {
   h.driver->Remove(1);
   CHECK(h.system->GetState(0, &state) == X_ERROR_DEVICE_NOT_CONNECTED);
   CHECK(h.system->GetConnectedUsers().to_ulong() == 0b10);
+}
+
+TEST_CASE("GetBattery reports the power of the user's pad", "[input]") {
+  Harness h;
+  PadBattery battery;
+  // The driver cannot tell.
+  CHECK_FALSE(h.system->GetBattery(0, &battery));
+
+  h.driver->batteries[static_cast<DeviceId>(1)] = {.wireless = true, .percent = 83};
+  REQUIRE(h.system->GetBattery(0, &battery));
+  CHECK(battery.wireless);
+  CHECK(battery.percent == 83);
+  CHECK_FALSE(battery.charging);
+
+  // No pad for user 1, and none for user 0 once it is unplugged.
+  CHECK_FALSE(h.system->GetBattery(1, &battery));
+  h.driver->Remove(1);
+  CHECK_FALSE(h.system->GetBattery(0, &battery));
+  CHECK_FALSE(h.system->GetBattery(0, nullptr));
 }

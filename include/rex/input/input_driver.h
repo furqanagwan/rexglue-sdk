@@ -44,6 +44,9 @@ class InputDriver {
   virtual X_RESULT GetDeviceKeystroke(DeviceId id, uint32_t flags,
                                       X_INPUT_KEYSTROKE* out_keystroke) = 0;
 
+  /// The device's power source and charge. False when the driver cannot tell.
+  virtual bool GetDeviceBattery(DeviceId /*id*/, PadBattery* /*out*/) { return false; }
+
   virtual void OnWindowAvailable(rex::ui::Window* /*window*/) {}
 
   void set_is_active_callback(std::function<bool()> is_active_callback) {

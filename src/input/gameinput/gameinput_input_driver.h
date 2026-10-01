@@ -8,11 +8,14 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
 #include <rex/input/gameinput/gamepad_devices.h>
 #include <rex/input/input_driver.h>
+
+#include "../ble_battery.h"
 
 // The GDK headers need the Windows headers first.
 #include <windows.h>
@@ -38,6 +41,11 @@ class GameInputDriver final : public InputDriver {
   X_RESULT SetDeviceVibration(DeviceId id, X_INPUT_VIBRATION* vibration) override;
   X_RESULT GetDeviceKeystroke(DeviceId id, uint32_t flags,
                               X_INPUT_KEYSTROKE* out_keystroke) override;
+  bool GetDeviceBattery(DeviceId id, PadBattery* out) override;
+
+  /// Connected pads with this USB vendor and product ID, for the XInput
+  /// supplement to skip.
+  size_t CountDevices(uint16_t vendor_id, uint16_t product_id);
 
  private:
   static void CALLBACK OnDeviceStatus(GameInputCallbackToken token, void* context,
@@ -58,6 +66,7 @@ class GameInputDriver final : public InputDriver {
   GamepadDevices devices_;
   // Connected devices, each holding one reference; keyed like devices_.
   std::unordered_map<const void*, IGameInputDevice*> host_devices_;
+  BleBatteryMonitor ble_battery_;
 };
 
 }  // namespace rex::input::gameinput

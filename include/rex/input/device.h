@@ -31,4 +31,12 @@ struct DeviceInfo {
   bool synthetic = false;  // keyboard/mouse emulation or the NOP stand-in
 };
 
+/// How a host pad is powered, as far as the host APIs say. The guide shows a
+/// battery only for wireless pads with a known level, as the console does.
+struct PadBattery {
+  bool wireless = false;
+  int percent = -1;  // 0 to 100, or -1 when the level is not reported
+  bool charging = false;
+};
+
 }  // namespace rex::input

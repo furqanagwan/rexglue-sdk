@@ -234,6 +234,8 @@ class XboxGuide final : public ImGuiDialog {
 
   void BeginClose(bool exit_title);
   void UpdateClock();
+  /// Shows player 1's battery, at most once a second.
+  void UpdateControllerBattery();
   ImTextureID Texture(std::string_view path, std::string_view package, int* width, int* height);
 
   std::shared_ptr<const GuideAssets> assets_;
@@ -284,6 +286,7 @@ class XboxGuide final : public ImGuiDialog {
   std::chrono::steady_clock::time_point last_tick_;
   std::chrono::steady_clock::time_point opened_;
   int64_t clock_minute_ = -1;
+  int64_t battery_second_ = -1;
 };
 
 }  // namespace rex::ui::guide

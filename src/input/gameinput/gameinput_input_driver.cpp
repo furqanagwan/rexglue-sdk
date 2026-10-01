@@ -8,6 +8,8 @@
 
 #include "gameinput_input_driver.h"
 
+#include <algorithm>
+
 #include <fmt/format.h>
 
 #include <rex/chrono/clock.h>
@@ -252,6 +254,51 @@ X_RESULT GameInputDriver::GetDeviceKeystroke(DeviceId id, uint32_t,
   }
   return devices_.GetKeystroke(id, active, rex::chrono::Clock::QueryGuestUptimeMillis(),
                                out_keystroke);
+}
+
+bool GameInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
+  if (!out) {
+    return false;
+  }
+  std::lock_guard lock(mutex_);
+  auto it = host_devices_.find(devices_.HostDevice(id));
+  if (it == host_devices_.end()) {
+    return false;
+  }
+  GameInputBatteryState battery = {};
+  battery.status = GameInputBatteryUnknown;
+  it->second->GetBatteryState(&battery);
+  *out = {};
+  out->wireless = (it->second->GetDeviceStatus() & GameInputDeviceWireless) != 0;
+  out->charging = battery.status == GameInputBatteryCharging;
+  if (battery.status != GameInputBatteryUnknown && battery.status != GameInputBatteryNotPresent &&
+      battery.fullChargeCapacity > 0.0f) {
+    out->percent = std::clamp(
+        int(battery.remainingCapacity / battery.fullChargeCapacity * 100.0f + 0.5f), 0, 100);
+  }
+  if (out->percent < 0) {
+    // GameInput reports a Bluetooth LE pad wired, with no battery; a battery
+    // service under the pad's IDs says otherwise.
+    const GameInputDeviceInfo* info = it->second->GetDeviceInfo();
+    const int percent = ble_battery_.Percent(info->vendorId, info->productId);
+    if (percent >= 0) {
+      out->wireless = true;
+      out->percent = percent;
+    }
+  }
+  return true;
+}
+
+size_t GameInputDriver::CountDevices(uint16_t vendor_id, uint16_t product_id) {
+  std::lock_guard lock(mutex_);
+  size_t count = 0;
+  for (const auto& [key, device] : host_devices_) {
+    const GameInputDeviceInfo* info = device->GetDeviceInfo();
+    if (info->vendorId == vendor_id && info->productId == product_id) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 }  // namespace rex::input::gameinput

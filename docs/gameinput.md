@@ -38,12 +38,35 @@ The guest-facing state lives in `GamepadDevices` (`include/rex/input/gameinput/g
 * **Dialogs:** while a XAM dialog (message box, keyboard, device selector) is open, the guest reads an untouched pad and no keystrokes. Buttons held as it closes stay hidden until released, and keystrokes made during it are discarded, so the press that dismissed it does not also act in the game.
 * **Hot-plug:** a guest user connecting or disconnecting sends `XN_SYS_INPUTDEVICESCHANGED` (0x12), which titles use to re-read capabilities. The first poll after startup sends it once.
 
+## Bluetooth pads and battery (RG-GDK-047)
+
+Measured on 2026-10-01 with an ASUS ROG Raikiri II, which has three modes:
+
+| Mode | IDs | GameInput | XInput | Battery source |
+| --- | --- | --- | --- | --- |
+| 2.4 GHz dongle | 0B05:1C92 | Xbox 360 family, wired, battery not present | wired, full | none: the dongle presents the pad as a wired 360 pad |
+| Bluetooth LE | 0B05:1C93 | absent from the blocking enumeration; arrives about 3 to 12 s later as an Xbox One pad, reported **wired**, battery not present | wireless (`xinputhid`), battery type disconnected | GATT Battery Service, 82 to 83% (matches the pad) |
+| USB cable | not tested | | | |
+
+Windows.Gaming.Input reported the Bluetooth pad's battery as 100 of 1000 mWh (10%) while its Battery Service said 83%, so it is not used.
+
+* **XInput supplement:** beside GameInput, an XInput driver lists only the pads GameInput does not serve. It matches pads by USB vendor and product ID, read with `XInputGetCapabilitiesEx` (`xinput1_4.dll` ordinal 108). This covers the Bluetooth pad's first seconds. When GameInput then connects it, the XInput slot drops out and the guest user keeps its pad. In dongle mode one pad is listed, not two. Without ordinal 108 the supplement lists nothing.
+* **Battery:** `InputDriver::GetDeviceBattery` and `InputSystem::GetBattery` report whether the pad is wireless, its level (0 to 100, or unknown) and whether it is charging.
+  * GameInput uses `IGameInputDevice::GetBatteryState`.
+  * XInput uses `XInputGetBatteryInformation`, with its four levels reported as 5, 30, 60 and 100.
+  * When neither has a level, `BleBatteryMonitor` (`src/input/ble_battery.cpp`) reads the Battery Level characteristic (0x2A19) of a connected Bluetooth LE device with the same IDs. A pad found that way is wireless.
+  * Reads from the device run on a detached worker thread, refreshed every 60 s. A sleeping device's read took 15 s to time out, and a connected one's took 49 ms. Callers get the last value.
+* **Guide:** shows player 1's battery as the console's Little, Low, Medium and High frames, and hides it for wired pads or an unknown level (see [Xbox guide](xbox-guide.md)).
+
+Not established: the Raikiri's level in dongle or cable mode. ASUS's vendor HID collections (usage pages FF13, FF03 and FFC3 on interface 4) send nothing unprompted, and their request format is not public. Guessed commands are not sent to the pad. Charging state over Bluetooth is not reported either: the Battery Service carries only the level. An Xbox Wireless Adapter pad and a 360 wireless receiver pad were not available to test GameInput's and XInput's own battery paths.
+
 ## Tests
 
 * `unit_tests [input][gameinput]` (all builds): four pads to four users; unplug keeps the others; same and different pad reconnecting; no phantom input; packet numbers; unfocused pad; rumble hold, focus stop and resume; no rumble after reconnect; keystroke release on focus loss; capabilities.
 * `unit_tests [keystroke]` (all builds): edge order, repeat timing, analog thresholds, inactive release.
 * `unit_tests [gdk][gameinput]` (GDK builds): stick, trigger and button mapping edges including NaN and clamping, rumble conversion, device kinds to subtypes, motors to vibration capability, and driver setup against the installed runtime. That test enumerated and read the one pad connected on the development machine and checked its capabilities carry the identified subtype.
 * `unit_tests [deadzone],[vibration],[ui_block],[hotplug]` (all builds): the shared layer every backend goes through.
+* `unit_tests [input]` "GetBattery reports the power of the user's pad" (all builds): battery routed to the user's pad, and none for an absent pad or a driver that cannot tell.
 * The existing `[input]` assignment and merge tests pass unchanged.
 
 ## Not established

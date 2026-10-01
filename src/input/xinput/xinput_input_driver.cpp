@@ -11,6 +11,9 @@
 
 #include <array>
 #include <filesystem>
+#include <map>
+
+#include <fmt/format.h>
 
 #include <rex/assert.h>
 #include <rex/chrono/clock.h>
@@ -20,6 +23,8 @@
 #include <rex/logging.h>
 #include <rex/ui/virtual_key.h>
 #include <xinput.h>  // NOLINT(build/include_order)
+
+#include "../ble_battery.h"
 
 namespace {
 
@@ -61,6 +66,32 @@ void set_skip(uint32_t user_index) {
   last_invalid_time[user_index] = rex::chrono::Clock::QueryHostUptimeMillis();
 }
 
+// xinput1_4.dll ordinal 108: the capabilities with the pad's USB IDs.
+struct XInputCapabilitiesEx {
+  XINPUT_CAPABILITIES capabilities;
+  WORD vendor_id;
+  WORD product_id;
+  WORD product_version;
+  WORD reserved0;
+  DWORD reserved1;
+};
+using XInputGetCapabilitiesExFn = DWORD(WINAPI*)(DWORD, DWORD, DWORD, XInputCapabilitiesEx*);
+
+// XInput's four battery levels as percentages, matching the guide's four
+// icons (rex::ui::XboxGuide maps them back).
+int PercentForLevel(BYTE level) {
+  switch (level) {
+    case BATTERY_LEVEL_EMPTY:
+      return 5;
+    case BATTERY_LEVEL_LOW:
+      return 30;
+    case BATTERY_LEVEL_MEDIUM:
+      return 60;
+    default:
+      return 100;
+  }
+}
+
 }  // namespace
 
 namespace rex::input::xinput {
@@ -74,6 +105,12 @@ XinputInputDriver::XinputInputDriver(rex::ui::Window* window, size_t window_z_or
       XInputGetKeystroke_(nullptr),
       XInputSetState_(nullptr),
       XInputEnable_(nullptr) {}
+
+XinputInputDriver::XinputInputDriver(rex::ui::Window* window, size_t window_z_order,
+                                     ClaimedCount claimed)
+    : XinputInputDriver(window, window_z_order) {
+  claimed_ = std::move(claimed);
+}
 
 XinputInputDriver::~XinputInputDriver() {
   if (module_) {
@@ -107,6 +144,8 @@ X_STATUS XinputInputDriver::Setup() {
 
   // Not required.
   auto xie = GetProcAddress(module, "XInputEnable");
+  auto xigb = GetProcAddress(module, "XInputGetBatteryInformation");
+  auto xigcEx = GetProcAddress(module, (LPCSTR)108);
 
   // Only fail when we don't have the bare essentials;
   if (!xigc || !xigs || !xigk || !xiss) {
@@ -121,8 +160,25 @@ X_STATUS XinputInputDriver::Setup() {
   XInputGetKeystroke_ = xigk;
   XInputSetState_ = xiss;
   XInputEnable_ = xie;
+  XInputGetBatteryInformation_ = xigb;
+  XInputGetCapabilitiesEx_ = xigcEx;
+  ble_battery_ = std::make_unique<BleBatteryMonitor>();
 
+  if (claimed_ && !xigcEx) {
+    REXLOG_WARN("XInput: no XInputGetCapabilitiesEx, so pads GameInput does not see are not added");
+  }
   return X_STATUS_SUCCESS;
+}
+
+bool XinputInputDriver::SlotIds(uint32_t slot, uint16_t* vendor_id, uint16_t* product_id) {
+  auto xigcEx = reinterpret_cast<XInputGetCapabilitiesExFn>(XInputGetCapabilitiesEx_);
+  XInputCapabilitiesEx caps = {};
+  if (!xigcEx || xigcEx(1, slot, 0, &caps) != ERROR_SUCCESS) {
+    return false;
+  }
+  *vendor_id = caps.vendor_id;
+  *product_id = caps.product_id;
+  return true;
 }
 
 void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
@@ -130,6 +186,8 @@ void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
   if (!xigc) {
     return;
   }
+  // In supplement mode, per USB ID, the slots the other driver already serves.
+  std::map<uint32_t, size_t> skipped;
   for (uint32_t slot = 0; slot < kXinputSlotCount; slot++) {
     if (should_skip(slot)) {
       continue;
@@ -145,6 +203,22 @@ void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
     DeviceInfo info;
     info.id = DeviceForSlot(slot);
     info.name = "XInput Controller";
+    uint16_t vendor_id = 0;
+    uint16_t product_id = 0;
+    const bool has_ids = SlotIds(slot, &vendor_id, &product_id);
+    if (has_ids) {
+      info.name = fmt::format("XInput Controller {:04X}:{:04X}", vendor_id, product_id);
+    }
+    if (claimed_) {
+      if (!has_ids) {
+        continue;
+      }
+      size_t& count = skipped[(uint32_t(vendor_id) << 16) | product_id];
+      if (count < claimed_(vendor_id, product_id)) {
+        ++count;
+        continue;
+      }
+    }
     info.subtype = static_cast<uint8_t>(native_caps.SubType);
     info.synthetic = false;
     out.push_back(info);
@@ -287,4 +361,42 @@ X_RESULT XinputInputDriver::GetDeviceKeystroke(DeviceId id, uint32_t flags,
   // X_ERROR_SUCCESS if key
   return result;
 }
+bool XinputInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
+  uint32_t user_index = 0;
+  auto xigb = (decltype(&XInputGetBatteryInformation))XInputGetBatteryInformation_;
+  if (!out || !xigb || !SlotForDevice(id, &user_index) || should_skip(user_index)) {
+    return false;
+  }
+  XINPUT_CAPABILITIES caps;
+  auto xigc = (decltype(&XInputGetCapabilities))XInputGetCapabilities_;
+  if (xigc(user_index, 0, &caps) != ERROR_SUCCESS) {
+    return false;
+  }
+  XINPUT_BATTERY_INFORMATION battery = {};
+  if (xigb(user_index, BATTERY_DEVTYPE_GAMEPAD, &battery) != ERROR_SUCCESS) {
+    battery.BatteryType = BATTERY_TYPE_UNKNOWN;
+  }
+  *out = {};
+  out->wireless = (caps.Flags & XINPUT_CAPS_WIRELESS) != 0;
+  switch (battery.BatteryType) {
+    case BATTERY_TYPE_WIRED:
+      out->wireless = false;
+      break;
+    case BATTERY_TYPE_ALKALINE:
+    case BATTERY_TYPE_NIMH:
+      out->percent = PercentForLevel(battery.BatteryLevel);
+      break;
+    default: {
+      // xinputhid (Bluetooth) reports no battery; the pad's GATT service does.
+      uint16_t vendor_id = 0;
+      uint16_t product_id = 0;
+      if (out->wireless && SlotIds(user_index, &vendor_id, &product_id)) {
+        out->percent = ble_battery_->Percent(vendor_id, product_id);
+      }
+      break;
+    }
+  }
+  return true;
+}
+
 }  // namespace rex::input::xinput

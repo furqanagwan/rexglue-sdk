@@ -61,10 +61,14 @@ focus, press and sounds come from the skin visuals' named frames.
   brightness, fading in and out with the HUD's ClosedToFull and FullToClosed
   animations. XAM does this in code (`hudbkgnd` has no such element); the
   amount is measured from a capture of the 17559 guide over a title.
-- Beside the clock, the controller's battery (shown full: GuideMain poses
-  `imgControllerBattery` at frame 3, and the `Controller_Full.xur` it draws is
-  one image, `ico_32x_Ctrl-Battery4.png`, drawn directly) and the ring of
-  light with player 1's quadrant lit green, as XAM sets them.
+- Beside the clock, player 1's controller battery and the ring of light with
+  player 1's quadrant lit green, as XAM sets them. The battery comes from
+  `InputSystem::GetBattery`, read at most once a second. GuideMain names
+  `imgControllerBattery`'s frames Little, Low, Medium and High (0 to 3); the
+  guide shows frame 0 below 15%, 1 below 45%, 2 below 75% and 3 above. As on
+  the console, a wired pad shows no battery. Neither does a wireless pad
+  whose level the host cannot read. See
+  [GameInput: Bluetooth pads and battery](gameinput.md#bluetooth-pads-and-battery-rg-gdk-047).
 - Entries a recompiled title has no use for are taken out and the list closed
   up: Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
   Console, and the whole Media tab (tab changes pass over it). The code is kept
