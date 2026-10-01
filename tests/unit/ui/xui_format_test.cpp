@@ -1,0 +1,566 @@
+/**
+ * @file        tests/unit/ui/xui_format_test.cpp
+ * @brief       XUIZ, XUIS, XUR v8 and system-XEX resource reading (RG-GDK-041)
+ *
+ * @copyright   Copyright (c) 2026 Tom Clay
+ * @license     BSD 3-Clause License
+ */
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <bit>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#include <rex/ui/xui/document.h>
+#include <rex/ui/xui/package.h>
+#include <rex/ui/xui/system_update.h>
+
+using namespace rex::ui::xui;
+
+namespace {
+
+using Bytes = std::vector<uint8_t>;
+
+void Be16(Bytes& out, uint16_t v) {
+  out.push_back(uint8_t(v >> 8));
+  out.push_back(uint8_t(v));
+}
+
+void Be32(Bytes& out, uint32_t v) {
+  for (int shift = 24; shift >= 0; shift -= 8) {
+    out.push_back(uint8_t(v >> shift));
+  }
+}
+
+void Packed(Bytes& out, uint32_t v) {
+  if (v < 0xF0) {
+    out.push_back(uint8_t(v));
+  } else if (v <= 0xFFF) {
+    out.push_back(uint8_t(0xF0 | (v >> 8)));
+    out.push_back(uint8_t(v));
+  } else {
+    out.push_back(0xFF);
+    Be32(out, v);
+  }
+}
+
+void Append(Bytes& out, const Bytes& more) {
+  out.insert(out.end(), more.begin(), more.end());
+}
+
+Bytes Xuiz(const std::vector<std::pair<std::string, std::string>>& files) {
+  Bytes table, data;
+  for (const auto& [name, contents] : files) {
+    Be32(table, uint32_t(contents.size()));
+    Be32(table, uint32_t(data.size()));
+    table.push_back(uint8_t(name.size()));
+    table.insert(table.end(), name.begin(), name.end());
+    data.insert(data.end(), contents.begin(), contents.end());
+  }
+  Bytes out;
+  Be32(out, 0x5855495A);
+  Be32(out, 3);
+  Be32(out, uint32_t(0x16 + table.size() + data.size()));
+  Be32(out, 0);
+  Be32(out, uint32_t(table.size()));
+  Be16(out, uint16_t(files.size()));
+  Append(out, table);
+  Append(out, data);
+  return out;
+}
+
+Bytes Xuis(const std::vector<std::string>& strings) {
+  Bytes body;
+  for (const std::string& s : strings) {
+    body.insert(body.end(), s.begin(), s.end());
+    body.push_back(0);
+  }
+  Bytes out;
+  Be32(out, 0x58554953);
+  Be16(out, 0x0202);
+  Be32(out, uint32_t(12 + body.size()));
+  Be16(out, uint16_t(strings.size()));
+  Append(out, body);
+  return out;
+}
+
+// Writes XUR v8 the way the console's files are laid out: pools, then an
+// element tree referring into them.
+struct XurWriter {
+  std::vector<std::string> strings;
+  std::vector<float> floats;
+  std::vector<uint32_t> colors;
+  Bytes keyp, keyd, name, data;
+  uint32_t objects = 0;
+
+  uint32_t Str(const std::string& s) {
+    for (size_t i = 0; i < strings.size(); ++i) {
+      if (strings[i] == s) {
+        return uint32_t(i + 1);
+      }
+    }
+    strings.push_back(s);
+    return uint32_t(strings.size());
+  }
+  uint32_t Flt(float f) {
+    floats.push_back(f);
+    return uint32_t(floats.size() - 1);
+  }
+  uint32_t Col(uint32_t c) {
+    colors.push_back(c);
+    return uint32_t(colors.size() - 1);
+  }
+  void Object(const std::string& cls, uint8_t flags) {
+    ++objects;
+    Packed(data, Str(cls));
+    data.push_back(flags);
+  }
+
+  Bytes Build() const {
+    struct Section {
+      const char* magic;
+      Bytes bytes;
+    };
+    std::vector<Section> sections;
+    Bytes strn;
+    Be32(strn, 0);
+    Be16(strn, uint16_t(strings.size()));
+    for (const std::string& s : strings) {
+      strn.insert(strn.end(), s.begin(), s.end());
+      strn.push_back(0);
+    }
+    sections.push_back({"STRN", strn});
+    Bytes flot, colr;
+    for (float f : floats) {
+      Be32(flot, std::bit_cast<uint32_t>(f));
+    }
+    for (uint32_t c : colors) {
+      Be32(colr, c);
+    }
+    sections.push_back({"FLOT", flot});
+    sections.push_back({"COLR", colr});
+    if (!keyp.empty()) {
+      sections.push_back({"KEYP", keyp});
+      sections.push_back({"KEYD", keyd});
+    }
+    if (!name.empty()) {
+      sections.push_back({"NAME", name});
+    }
+    sections.push_back({"DATA", data});
+
+    Bytes counts;
+    Packed(counts, objects);
+    for (int i = 1; i < 12; ++i) {
+      Packed(counts, 0);
+    }
+    const size_t header_size = 20 + counts.size() + sections.size() * 12;
+    Bytes out;
+    Be32(out, 0x58554942);
+    Be32(out, 8);
+    Be32(out, 0);
+    Be16(out, 0x0E);
+    size_t total = header_size;
+    for (const Section& s : sections) {
+      total += s.bytes.size();
+    }
+    Be32(out, uint32_t(total));
+    Be16(out, uint16_t(sections.size()));
+    Append(out, counts);
+    size_t offset = header_size;
+    for (const Section& s : sections) {
+      out.insert(out.end(), s.magic, s.magic + 4);
+      Be32(out, uint32_t(offset));
+      Be32(out, uint32_t(s.bytes.size()));
+      offset += s.bytes.size();
+    }
+    for (const Section& s : sections) {
+      Append(out, s.bytes);
+    }
+    return out;
+  }
+};
+
+// A canvas holding a text, a gradient-filled figure and a second text that
+// shares the first's properties, with a timeline for each of the first two.
+Bytes SampleScene() {
+  XurWriter w;
+  // Canvas: Width, Height (XuiElement bits 1 and 2), children, timelines.
+  w.Object("XuiCanvas", 0x1 | 0x2 | 0x4);
+  Packed(w.data, 2);
+  Packed(w.data, 0b110);  // XuiElement
+  Packed(w.data, w.Flt(852.0f));
+  Packed(w.data, w.Flt(480.0f));
+  Packed(w.data, 0);  // XuiCanvas
+  Packed(w.data, 3);  // children
+
+  w.Object("XuiText", 0x1);
+  Packed(w.data, 4);
+  Packed(w.data, 0b1);  // XuiElement: Id
+  Packed(w.data, w.Str("label"));
+  Packed(w.data, 0b1011);  // XuiText: Text, TextColor, PointSize
+  Packed(w.data, w.Str("Xbox Guide"));
+  Packed(w.data, w.Col(0xFFEBEBEB));
+  Packed(w.data, w.Flt(12.0f));
+
+  w.Object("XuiFigure", 0x1);
+  Packed(w.data, 2);
+  Packed(w.data, 0b1);
+  Packed(w.data, w.Str("fig"));
+  Packed(w.data, 0b10);  // XuiFigure: Fill
+  Packed(w.data, 0);     // a new compound
+  Packed(w.data, 3);
+  Packed(w.data, 0b1011);  // FillType, FillColor, Gradient
+  Packed(w.data, 2);
+  Packed(w.data, w.Col(0xFF008A00));
+  Packed(w.data, 0);  // a new compound
+  Packed(w.data, 5);  // NumStops + two StopColor + two StopPos
+  Packed(w.data, 0b1110);
+  Packed(w.data, 2);
+  w.data.push_back(2);
+  Packed(w.data, w.Col(0xFF51860F));
+  Packed(w.data, w.Col(0xFF77BA0F));
+  w.data.push_back(2);
+  Packed(w.data, w.Flt(0.0f));
+  Packed(w.data, w.Flt(1.0f));
+
+  w.Object("XuiText", 0x8);
+  Packed(w.data, 1);  // the label's properties (bag 0 is the canvas's)
+
+  // Named frames and timelines of the canvas.
+  Packed(w.name, w.Str("Show"));
+  Packed(w.name, 0);
+  w.name.push_back(1);  // stop
+  Packed(w.name, w.Str("Hide"));
+  Packed(w.name, 10);
+  w.name.push_back(4);  // go to and stop
+  Packed(w.name, w.Str("Show"));
+  Packed(w.data, 2);  // named frames
+  Packed(w.data, 0);
+  Packed(w.data, 2);  // timelines
+
+  // label.Opacity: XuiElement is class 1 of [XuiText, XuiElement].
+  Packed(w.data, w.Str("label"));
+  Packed(w.data, 1);
+  w.data.push_back(1);  // depth 1
+  w.data.push_back(1);
+  w.data.push_back(6);  // Opacity
+  Packed(w.data, 2);
+  Packed(w.data, 0);
+  // fig.Fill.FillColor.
+  Packed(w.data, w.Str("fig"));
+  Packed(w.data, 1);
+  w.data.push_back(2);  // depth 2
+  w.data.push_back(0);  // XuiFigure
+  w.data.push_back(1);  // Fill
+  w.data.push_back(1);  // FillColor
+  Packed(w.data, 1);
+  Packed(w.data, 2);
+
+  Packed(w.keyp, w.Flt(0.0f));
+  Packed(w.keyp, w.Flt(1.0f));
+  Packed(w.keyp, w.Col(0xFF1CB61C));
+  Packed(w.keyd, 0);
+  w.keyd.push_back(0);  // linear
+  Packed(w.keyd, 0);
+  Packed(w.keyd, 10);
+  w.keyd.push_back(2);  // ease
+  w.keyd.push_back(uint8_t(-100));
+  w.keyd.push_back(100);
+  w.keyd.push_back(0);
+  Packed(w.keyd, 1);
+  Packed(w.keyd, 5);
+  w.keyd.push_back(1);  // none
+  Packed(w.keyd, 2);
+  return w.Build();
+}
+
+float FloatOf(const Value* v) {
+  REQUIRE(v);
+  REQUIRE(v->get<float>());
+  return *v->get<float>();
+}
+
+}  // namespace
+
+TEST_CASE("XUIZ packages find files by path, ignoring case and separator", "[xui]") {
+  std::string error;
+  auto package =
+      Package::Parse(Xuiz({{"Strings.xus", "abc"}, {"de-de\\Strings.xus", "defg"}}), &error);
+  REQUIRE(package);
+  CHECK(package->entries().size() == 2);
+  auto a = package->Find("strings.XUS");
+  CHECK(std::string(a.begin(), a.end()) == "abc");
+  auto b = package->Find("de-de/strings.xus");
+  CHECK(std::string(b.begin(), b.end()) == "defg");
+  CHECK(package->Find("missing.png").empty());
+}
+
+TEST_CASE("XUIZ packages reject truncated tables and data", "[xui]") {
+  Bytes good = Xuiz({{"a.png", "12345"}});
+  std::string error;
+  CHECK_FALSE(Package::Parse(Bytes(good.begin(), good.end() - 2), &error));
+  CHECK(error.find("past the end") != std::string::npos);
+  CHECK_FALSE(Package::Parse(Bytes{'X', 'U', 'I', 'S'}, &error));
+}
+
+TEST_CASE("XUIS string tables read UTF-8 strings in order", "[xui]") {
+  std::string error;
+  auto strings = ParseStringTable(Xuis({"%d hours",
+                                        "M\xC3\xB6"
+                                        "chten",
+                                        ""}),
+                                  &error);
+  REQUIRE(strings);
+  REQUIRE(strings->size() == 3);
+  CHECK((*strings)[0] == "%d hours");
+  CHECK((*strings)[1] ==
+        "M\xC3\xB6"
+        "chten");
+  Bytes cut = Xuis({"unterminated"});
+  cut.pop_back();
+  CHECK_FALSE(ParseStringTable(cut, &error));
+}
+
+TEST_CASE("XUR v8 scenes decode elements, compounds and shared properties", "[xui]") {
+  std::string error;
+  auto doc = ParseXur(SampleScene(), &error);
+  INFO(error);
+  REQUIRE(doc);
+  const Node& root = doc->root;
+  CHECK(root.class_name == "XuiCanvas");
+  CHECK(FloatOf(root.Find("Width")) == 852.0f);
+  REQUIRE(root.children.size() == 3);
+
+  const Node& label = root.children[0];
+  CHECK(label.id() == "label");
+  CHECK(*label.Find("Text")->get<std::string>() == "Xbox Guide");
+  CHECK(label.Find("TextColor")->get<Color>()->argb == 0xFFEBEBEB);
+  CHECK(root.FindById("fig") == &root.children[1]);
+
+  const auto* fill = root.children[1].Find("Fill")->get<std::shared_ptr<const PropertyBag>>();
+  REQUIRE(fill);
+  CHECK(*(*fill)->Find("FillType")->get<uint32_t>() == 2);
+  const auto* gradient = (*fill)->Find("Gradient")->get<std::shared_ptr<const PropertyBag>>();
+  REQUIRE(gradient);
+  const auto* stops =
+      (*gradient)->Find("StopColor")->get<std::shared_ptr<const std::vector<Value>>>();
+  REQUIRE(stops);
+  REQUIRE((*stops)->size() == 2);
+  CHECK((*stops)->at(1).get<Color>()->argb == 0xFF77BA0F);
+
+  // Shared properties are the same bag, not a copy.
+  CHECK(root.children[2].props == label.props);
+}
+
+TEST_CASE("XUR v8 timelines resolve property paths and keyframe values", "[xui]") {
+  std::string error;
+  auto doc = ParseXur(SampleScene(), &error);
+  REQUIRE(doc);
+  const Node& root = doc->root;
+  REQUIRE(root.named_frames.size() == 2);
+  CHECK(root.named_frames[1].name == "Hide");
+  CHECK(root.named_frames[1].command == FrameCommand::kGoToAndStop);
+  CHECK(root.named_frames[1].target == "Show");
+
+  REQUIRE(root.timelines.size() == 2);
+  const Timeline& opacity = root.timelines[0];
+  CHECK(opacity.target_id == "label");
+  REQUIRE(opacity.props.size() == 1);
+  REQUIRE(opacity.props[0].path.size() == 1);
+  CHECK(opacity.props[0].path[0]->name == "Opacity");
+  REQUIRE(opacity.keyframes.size() == 2);
+  CHECK(FloatOf(&opacity.keyframes[1].values[0]) == 1.0f);
+  CHECK(opacity.keyframes[1].frame == 10);
+  CHECK(opacity.keyframes[1].interpolation == Interpolation::kEase);
+  CHECK(opacity.keyframes[1].ease_in == -100);
+  CHECK(opacity.keyframes[1].ease_out == 100);
+
+  const Timeline& color = root.timelines[1];
+  REQUIRE(color.props[0].path.size() == 2);
+  CHECK(color.props[0].path[0]->name == "Fill");
+  CHECK(color.props[0].path[1]->name == "FillColor");
+  REQUIRE(color.keyframes.size() == 1);
+  CHECK(color.keyframes[0].interpolation == Interpolation::kNone);
+  CHECK(color.keyframes[0].values[0].get<Color>()->argb == 0xFF1CB61C);
+}
+
+TEST_CASE("XUR v8 reading fails on truncation and on classes the schema lacks", "[xui]") {
+  Bytes scene = SampleScene();
+  std::string error;
+  CHECK_FALSE(ParseXur(Bytes(scene.begin(), scene.begin() + 30), &error));
+  CHECK_FALSE(error.empty());
+
+  XurWriter w;
+  w.Object("XuiMysteryWidget", 0);
+  error.clear();
+  CHECK_FALSE(ParseXur(w.Build(), &error));
+  CHECK(error.find("XuiMysteryWidget") != std::string::npos);
+}
+
+TEST_CASE("XUR v8 skips properties past a class's known list", "[xui]") {
+  // A property bit past XuiGroup's (empty) list.
+  XurWriter w;
+  w.Object("XuiGroup", 0x1);
+  Packed(w.data, 2);
+  Packed(w.data, 0b1);  // XuiElement: Id
+  Packed(w.data, w.Str("btn"));
+  Packed(w.data, 0b1);
+  Packed(w.data, 0x123);  // the unknown property
+  std::string error;
+  auto doc = ParseXur(w.Build(), &error);
+  INFO(error);
+  REQUIRE(doc);
+  CHECK(doc->root.id() == "btn");
+  REQUIRE(doc->root.props->entries.size() == 2);
+  CHECK(doc->root.props->entries[1].def == nullptr);
+}
+
+TEST_CASE("XUR v8 reading checks the declared object count", "[xui]") {
+  XurWriter w;
+  w.Object("XuiGroup", 0);
+  w.objects = 2;
+  std::string error;
+  CHECK_FALSE(ParseXur(w.Build(), &error));
+  CHECK(error.find("declares 2 objects") != std::string::npos);
+}
+
+namespace {
+
+// An XEX2 whose image holds `resource` at load address + 0x100.
+Bytes XexWithResource(const std::string& resource_name, const Bytes& resource, uint16_t compression,
+                      uint16_t encryption = 0) {
+  const uint32_t load = 0x82000000;
+  Bytes image(0x100, 0xCC);
+  Append(image, resource);
+  image.resize(image.size() + 0x10, 0);  // the zero run basic compression leaves out
+
+  Bytes out;
+  const uint32_t header_size = 0x400;
+  Be32(out, 0x58455832);
+  Be32(out, 0);
+  Be32(out, header_size);
+  Be32(out, 0);
+  Be32(out, 0x200);  // security info
+  Be32(out, 2);
+  Be32(out, 0x2FF);
+  Be32(out, 0x100);
+  Be32(out, 0x3FF);
+  Be32(out, 0x180);
+  out.resize(0x100, 0);
+  Be32(out, 4 + 16);  // resource info
+  std::string name = resource_name;
+  name.resize(8, '\0');
+  out.insert(out.end(), name.begin(), name.end());
+  Be32(out, load + 0x100);
+  Be32(out, uint32_t(resource.size()));
+  out.resize(0x180, 0);
+  if (compression == 1) {
+    Be32(out, 16);  // file format info: one (data, zero) block
+    Be16(out, encryption);
+    Be16(out, 1);
+    Be32(out, uint32_t(image.size() - 0x10));
+    Be32(out, 0x10);
+  } else {
+    Be32(out, 8);
+    Be16(out, encryption);
+    Be16(out, 0);
+  }
+  out.resize(0x200, 0);
+  Be32(out, 0);
+  Be32(out, uint32_t(image.size()));
+  out.resize(0x200 + 0x110, 0);
+  Be32(out, load);
+  out.resize(header_size, 0);
+  if (compression == 1) {
+    out.insert(out.end(), image.begin(), image.end() - 0x10);
+  } else {
+    Append(out, image);
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST_CASE("System XEX resources are extracted from plain and basic-compressed images", "[xui]") {
+  const Bytes package = Xuiz({{"GuideMain.xur", "scene"}});
+  for (uint16_t compression : {uint16_t(0), uint16_t(1)}) {
+    CAPTURE(compression);
+    std::string error;
+    auto resources = ReadXexResources(XexWithResource("hud", package, compression), &error);
+    INFO(error);
+    REQUIRE(resources);
+    REQUIRE(resources->size() == 1);
+    CHECK((*resources)[0].name == "hud");
+    CHECK((*resources)[0].bytes == package);
+  }
+}
+
+TEST_CASE("SystemUpdate keeps a module's XUIZ resources by module/resource", "[xui]") {
+  SystemUpdate update;
+  std::string error;
+  REQUIRE(update.AddModule("hud", XexWithResource("hud", Xuiz({{"a.xur", "x"}}), 0), &error));
+  REQUIRE(update.Find("HUD/hud"));
+  CHECK(update.Find("hud/hud")->Contains("A.XUR"));
+  // Non-XUIZ resources (icons, XDBF) are not packages.
+  REQUIRE(update.AddModule("xam", XexWithResource("icon", Bytes{1, 2, 3, 4}, 0), &error));
+  CHECK_FALSE(update.Find("xam/icon"));
+}
+
+TEST_CASE("Encrypted XEXs are refused", "[xui]") {
+  std::string error;
+  CHECK_FALSE(ReadXexResources(XexWithResource("hud", Bytes{}, 0, /*encryption=*/1), &error));
+  CHECK(error.find("encrypted") != std::string::npos);
+}
+
+// Local only: REXGLUE_SYSTEM_UPDATE names the owner's $SystemUpdate folder
+// (dashboard 2.0.17559). Decodes every scene the guide uses.
+TEST_CASE("The console's own guide scenes decode", "[xui][local]") {
+  const char* path = std::getenv("REXGLUE_SYSTEM_UPDATE");
+  if (!path || !*path) {
+    SKIP("REXGLUE_SYSTEM_UPDATE is not set");
+  }
+  std::string error;
+  auto update = SystemUpdate::Load(path, &error);
+  INFO(error);
+  REQUIRE(update);
+  const std::pair<const char*, const char*> scenes[] = {
+      {"hud/hud", "GuideMain.xur"},
+      {"hud/hud", "HomeTabSignedIn.xur"},
+      {"hud/hud", "GamesTabSignedIn.xur"},
+      {"hud/hud", "SettingsTabSignedIn.xur"},
+      {"hud/hud", "SettingsTabSignedOut.xur"},
+      {"hud/hud", "InfoMessage.xur"},
+      {"huduiskin/skin", "skin.xur"},
+      {"xam/xam", "hudbkgnd.xur"},
+      {"xam/xam", "notify.xur"},
+      {"gamerprofile/gp", "802_Achievements.xur"},
+      {"gamerprofile/gp", "828_AchievDetails.xur"},
+  };
+  for (const auto& [package_name, scene] : scenes) {
+    CAPTURE(package_name, scene);
+    const Package* package = update->Find(package_name);
+    REQUIRE(package);
+    REQUIRE(package->Contains(scene));
+  }
+  // Every scene in those packages except the Kinect ones (nuihud, Nui*),
+  // whose ControlPack classes the guide does not use.
+  int decoded = 0;
+  for (const char* package_name : {"hud/hud", "huduiskin/skin", "xam/xam", "gamerprofile/gp"}) {
+    for (const Package::Entry& entry : update->Find(package_name)->entries()) {
+      if (!entry.name.ends_with(".xur") || entry.name.starts_with("Nui") ||
+          entry.name == "nuihud.xur") {
+        continue;
+      }
+      CAPTURE(package_name, entry.name);
+      std::string scene_error;
+      auto doc = ParseXur(update->Find(package_name)->Find(entry.name), &scene_error);
+      INFO(scene_error);
+      CHECK(doc);
+      decoded += doc ? 1 : 0;
+    }
+  }
+  CHECK(decoded >= 55);
+}
