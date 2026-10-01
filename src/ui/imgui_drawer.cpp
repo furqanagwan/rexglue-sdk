@@ -167,6 +167,9 @@ void ImGuiDrawer::Initialize() {
   // imgui assumes paths are char* so we can't throw a good path at it on
   // Windows.
   io.IniFilename = nullptr;
+  // Draws honour each command's VtxOffset, so a draw list may pass 65536
+  // vertices with 16-bit indices (the Xbox guide's gradients do).
+  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
   // Setup the font glyphs.
   ImFontConfig font_config;
@@ -467,6 +470,7 @@ void ImGuiDrawer::RenderDrawLists(ImDrawData* data, UIDrawContext& ui_draw_conte
       draw.primitive_type = ImmediatePrimitiveType::kTriangles;
       draw.count = cmd.ElemCount;
       draw.index_offset = cmd.IdxOffset;
+      draw.base_vertex = int(cmd.VtxOffset);
       draw.texture = reinterpret_cast<ImmediateTexture*>(cmd.GetTexID());
       draw.scissor = true;
       draw.scissor_left = cmd.ClipRect.x;

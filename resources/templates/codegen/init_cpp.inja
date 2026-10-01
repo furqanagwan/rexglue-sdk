@@ -17,6 +17,11 @@ static const rex::PPCSwitchablePatch kSwitchablePatches[] = {
 {% endfor %}    { nullptr, nullptr, nullptr },
 };
 
+static const rex::PPCTitleCheat kTitleCheats[] = {
+{% for c in title_cheats %}    { "{{ c.name }}", "{{ c.code }}", "{{ c.description }}", "{{ c.where }}" },
+{% endfor %}    { nullptr, nullptr, nullptr, nullptr },
+};
+
 const rex::PPCImageInfo PPCImageConfig = {
     .code_base = REX_CODE_BASE,
     .code_size = REX_CODE_SIZE,
@@ -39,6 +44,7 @@ const rex::PPCImageInfo PPCImageConfig = {
     },
     .code_patches = "{{ code_patches }}",
     .switchable_patches = kSwitchablePatches,
+    .title_cheats = kTitleCheats,
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

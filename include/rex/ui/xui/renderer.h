@@ -28,8 +28,11 @@ enum TextStyleFlags : uint32_t {
   kTextEllipsis = 0x4000,
 };
 
-/// XUI point sizes to scene units. Inferred from the guide's proportions.
-constexpr float kPointToSceneUnits = 1.2f;
+/// XUI point sizes to scene units. Measured against a 1080p capture of the
+/// dashboard 2.0.17559 guide, where "Xbox Home" stands 24 of its row's 61
+/// pixels (RG-GDK-043); the earlier 1.2, from the scenes' proportions alone,
+/// drew text a quarter too small.
+constexpr float kPointToSceneUnits = 1.6f;
 
 struct RenderResources {
   /// Texture for a scene image path, resolved against `package`. Returns an

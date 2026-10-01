@@ -58,6 +58,14 @@ constexpr std::string_view kRemovedEntries[] = {
     "btnShutdown",           // Settings > Turn Off Console
 };
 
+// The console darkens the title behind the guide to about a quarter of its
+// brightness (measured from a capture of dashboard 2.0.17559). XAM does that
+// in code: no scene draws it. It fades over the backdrop's ClosedToFull
+// (frames 99 to 122) and FullToClosed (123 to 139) animations.
+constexpr float kDimOpacity = 0.75f;
+constexpr double kDimInSeconds = 23 / xui::kFramesPerSecond;
+constexpr double kDimOutSeconds = 16 / xui::kFramesPerSecond;
+
 // The Media tab (Tab3) is left out: switching past it plays both shuffles.
 constexpr int kRemovedTab = 3;
 
@@ -95,6 +103,80 @@ void ForEach(xui::Element* root, const std::function<void(xui::Element*)>& fn) {
   fn(root);
   for (const auto& child : root->children()) {
     ForEach(child.get(), fn);
+  }
+}
+
+// The ring of light's lit quadrant, as the console draws player 1's
+// (measured from a capture of dashboard 2.0.17559).
+constexpr uint32_t kRingOfLightGreen = 0x00ACF124;
+
+// A copy of `figure`'s fill with every gradient stop recoloured to `rgb`,
+// keeping each stop's alpha.
+void TintGradient(xui::Element* figure, uint32_t rgb) {
+  const xui::PropertyBag* fill = figure->GetCompound("Fill");
+  if (!fill) {
+    return;
+  }
+  auto tinted = std::make_shared<xui::PropertyBag>(*fill);
+  for (xui::PropertyBag::Entry& entry : tinted->entries) {
+    const auto* gradient = entry.value.get<std::shared_ptr<const xui::PropertyBag>>();
+    if (!entry.def || entry.def->name != "Gradient" || !gradient || !*gradient) {
+      continue;
+    }
+    auto stops = std::make_shared<xui::PropertyBag>(**gradient);
+    for (xui::PropertyBag::Entry& stop : stops->entries) {
+      const auto* colors = stop.value.get<std::shared_ptr<const std::vector<xui::Value>>>();
+      if (!stop.def || stop.def->name != "StopColor" || !colors || !*colors) {
+        continue;
+      }
+      auto recoloured = std::make_shared<std::vector<xui::Value>>(**colors);
+      for (xui::Value& value : *recoloured) {
+        if (const xui::Color* c = value.get<xui::Color>()) {
+          value = xui::Value{xui::Color{(c->argb & 0xFF000000u) | rgb}};
+        }
+      }
+      stop.value = xui::Value{std::shared_ptr<const std::vector<xui::Value>>(recoloured)};
+    }
+    entry.value = xui::Value{std::shared_ptr<const xui::PropertyBag>(stops)};
+  }
+  figure->Set("Fill", xui::Value{std::shared_ptr<const xui::PropertyBag>(tinted)});
+}
+
+// The status icons by the clock, which XAM sets in code: the controller's
+// battery and the ring of light with player 1's quadrant lit. The battery is
+// shown full: GuideMain poses it by frame (3 is full) and draws
+// Controller_Full.xur, a scene of one image, so that image is drawn instead.
+void ShowControllerStatus(xui::Element* main) {
+  if (xui::Element* battery = main->FindById("imgControllerBattery")) {
+    battery->SetVisible(true);
+    battery->Seek(3);
+    if (xui::Element* full = battery->FindById("XuiImage4")) {
+      full->Set("ImagePath", xui::Value{std::string("ico_32x_Ctrl-Battery4.png")});
+      full->Set("Width", xui::Value{38.0f});
+    }
+  }
+  // The header's ring, a child of the scene; the Sign In button's visual
+  // has another.
+  xui::Element* ring = nullptr;
+  for (const auto& child : main->children()) {
+    if (child->id() == "ROL") {
+      ring = child.get();
+    }
+  }
+  if (!ring) {
+    return;
+  }
+  // The visual's own light1 to light4 are the lit quadrants, over the dim
+  // ROL_Off ring.
+  for (const auto& light : ring->children()) {
+    const std::string_view id = light->id();
+    if (id == "light1") {
+      for (const auto& figure : light->children()) {
+        TintGradient(figure.get(), kRingOfLightGreen);
+      }
+    } else if (id == "light2" || id == "light3" || id == "light4") {
+      light->SetVisible(false);
+    }
   }
 }
 
@@ -410,15 +492,16 @@ void XboxGuide::ConfigureMain() {
   if (xui::Element* recent = main_->FindById("btnQuickLaunch")) {
     AddEntry(recent->parent(), "btnQuickLaunch", "btnAchievements", "btnManageGame", "Manage Game");
   }
-  // Settings gains Patches and Cheats, made from the Preferences entry.
+  // Settings gains Patches, Mods and Cheats, made from the Preferences entry.
   if (xui::Element* preferences = main_->FindById("btnPersonalSettings")) {
     xui::Element* settings = preferences->parent();
     AddEntry(settings, "btnPersonalSettings", "btnSystemSettings", "btnPatches", "Patches");
-    AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnCheats", "Cheats");
+    AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnMods", "Mods");
+    AddEntry(settings, "btnPersonalSettings", "btnMods", "btnCheats", "Cheats");
   }
   auto handled = [&](std::string_view id) {
     if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
-                                 id == "btnCheats" || id == "btnManageGame")) {
+                                 id == "btnMods" || id == "btnCheats" || id == "btnManageGame")) {
       return true;
     }
     return id == "btnDashboard" ||
@@ -450,6 +533,7 @@ void XboxGuide::ConfigureMain() {
   if (xui::Element* picture = backdrop_->FindById("GamerPic")) {
     picture->Set("ImagePath", xui::Value{std::string(kDefaultGamerPicture)});
   }
+  ShowControllerStatus(main_);
   SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"), main_->GetString("LegendY"));
   UpdateClock();
 }
@@ -612,12 +696,17 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
     pending_removal_.clear();
   }
 
+  dim_ = closing_ ? std::max(0.0f, dim_ - float(seconds / kDimOutSeconds))
+                  : std::min(1.0f, dim_ + float(seconds / kDimInSeconds));
+  ImGui::GetForegroundDrawList()->AddRectFilled(
+      ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, int(kDimOpacity * dim_ * 255.0f + 0.5f)));
+
   const float scale = std::min(io.DisplaySize.x / kSceneWidth, io.DisplaySize.y / kSceneHeight);
   const ImVec2 origin((io.DisplaySize.x - kSceneWidth * scale) / 2,
                       (io.DisplaySize.y - kSceneHeight * scale) / 2);
   xui::Render(ImGui::GetForegroundDrawList(), *backdrop_, origin, scale, 1.0f, render_);
 
-  if (closing_ && !hud_root_->playing() && !tabs_->playing()) {
+  if (closing_ && !hud_root_->playing() && !tabs_->playing() && dim_ == 0.0f) {
     Close();
   }
 }
@@ -717,8 +806,10 @@ void XboxGuide::Activate(xui::Element* control) {
     OpenPreferences();
   } else if (id == "btnPatches") {
     OpenPatches("patch");
+  } else if (id == "btnMods") {
+    OpenPatches("mod");
   } else if (id == "btnCheats") {
-    OpenPatches("cheat");
+    OpenCheats();
   } else if (id == "btnManageGame") {
     OpenManageGame();
   }

@@ -55,8 +55,16 @@ focus, press and sounds come from the skin visuals' named frames.
   that is not installed installs it with `ContentManager::InstallContent`, in
   the background. The page is the `OptionsNotifications` scene; a game may need
   a restart to see new content.
-- Settings > Preferences, Patches and Cheats open settings pages built from
-  the console's own Options scenes (see [Settings pages](#settings-pages)).
+- Settings > Preferences, Patches, Mods and Cheats open settings pages built
+  from the console's own Options scenes (see [Settings pages](#settings-pages)).
+- While the guide is open, the title behind it is darkened to a quarter of its
+  brightness, fading in and out with the HUD's ClosedToFull and FullToClosed
+  animations. XAM does this in code (`hudbkgnd` has no such element); the
+  amount is measured from a capture of the 17559 guide over a title.
+- Beside the clock, the controller's battery (shown full: GuideMain poses
+  `imgControllerBattery` at frame 3, and the `Controller_Full.xur` it draws is
+  one image, `ico_32x_Ctrl-Battery4.png`, drawn directly) and the ring of
+  light with player 1's quadrant lit green, as XAM sets them.
 - Entries a recompiled title has no use for are taken out and the list closed
   up: Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
   Console, and the whole Media tab (tab changes pass over it). The code is kept
@@ -100,7 +108,8 @@ is saved to the title's config file straight away.
 | Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; voice, Kinect and output hidden | `audio_volume`, applied live |
 | Vibration | `OptionsController` | Enable Vibration | `vibration`, applied live |
 | Resolution | `OptionsVoice`'s output radio list, one button added | Match Display (the display's p), 1280 x 720, 2560 x 1440, 3840 x 2160 | `resolution_match_display`, `resolution_scale`; next launch |
-| Patches, Cheats | `OptionsNotifications` checkboxes, one copy per patch | The title's switchable code patches of that category | `code_patch_states`, applied live |
+| Patches, Mods | `OptionsNotifications` checkboxes, one copy per patch | The title's switchable code patches of that category (`patch`, `mod`) | `code_patch_states`, applied live |
+| Cheats | `OptionsNotifications` checkbox copies without the box, one per code | The title's own cheat codes (`[[cheat]]`): the panel shows the code, what it unlocks and where the game takes it | none; nothing is patched |
 
 - **Resolution.** With `resolution_match_display` (the default) the title draws
   at the display's resolution: at startup `resolution_scale` is set from the
@@ -109,11 +118,17 @@ is saved to the title's config file straight away.
   `resolution_scale` is kept, and `--resolution_scale` on the command line
   still wins. The draw scale needs a restart, so a choice made in the guide
   applies at the next launch; the page says so.
-- **Patches and Cheats** list the title's
+- **Patches and Mods** list the title's
   [switchable code patches](code-patches.md#switchable-patches) by their
-  `category`. Turning one on or off takes effect at once and is kept in
-  `code_patch_states`. A title with none shows the page's "No cheats are
-  available for this game."
+  `category`: fixes such as the frame rate under Patches, changes to play
+  (a trainer's infinite ammo) under Mods. Turning one on or off takes effect
+  at once and is kept in `code_patch_states`. A title with none shows "No
+  mods are available for this game."
+- **Cheats** lists the cheats the title's developers built in, the codes a
+  player types into the game's own menu, from the title's
+  [`[[cheat]]` entries](code-patches.md#title-cheat-codes). It is a reference:
+  the game still takes the code. A title with none shows "This game has no
+  cheat codes."
 - **4K.** The guide's figures, gradients and text are drawn at the display's
   resolution; the fonts are baked for the display's height (120 px at 2160p),
   so text and notifications are sharp at 4K. The console's images (PNG) and the
@@ -142,7 +157,8 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | Settings | Profile | gamer profile | Disabled |
 | | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Works: [settings pages](#settings-pages) |
 | | System Settings | dashboard (dash 47) | Disabled |
-| | Patches, Cheats (added) | | Works: switchable code patches |
+| | Patches, Mods (added) | | Works: switchable code patches |
+| | Cheats (added) | | Works: the title's own cheat codes |
 | | Family Settings, Account Management | dashboard (dash 20, 10) | Removed |
 | | Kinect Tuner | Kinect troubleshooter | Removed |
 | | Turn Off Console | turn-off prompt | Removed |
@@ -238,6 +254,18 @@ against the console.
   equivalent.
 
 ## Validation
+
+- Quantum of Solace and 007 Legends, 2026-10-01, 3840 x 2160, against two
+  photos of the 17559 guide (Xbox Guide over a title, and Console Settings):
+  text was a quarter too small (XUI point size to scene units 1.2, now 1.6;
+  "Xbox Home" now stands 24 of its row's 61 pixels at 1080p, as on the
+  console); the title behind is darkened; the clock's battery and ring of
+  light appear, player 1 green. Panel, blade, highlight and text colours
+  already matched once the photo's limited range (black at 16) is allowed
+  for. The ring's quarter arcs had curved the wrong way: a radial brush's
+  Scale is a texture scale, so 0.55 makes the ellipse larger, not smaller.
+  Legends' Settings > Mods listed its six trainer mods and Settings > Cheats
+  its eight codes, each with its code and where to enter it.
 
 - `unit_tests [guide]`: the chord (once per press, held-at-start, Guide
   button), pad actions (buttons held at open ignored, direction repeat, stick,

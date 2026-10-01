@@ -87,6 +87,8 @@ uint32_t SampleStops(const std::vector<Stop>& stops, float t) {
 
 // Subdivisions per fan triangle side for multi-stop and radial gradients.
 constexpr int kGradientSteps = 10;
+// Radial gradients make thin bands (the ring of light's arcs), so finer.
+constexpr int kRadialSteps = 32;
 
 template <typename T>
 const T* Member(const PropertyBag* bag, std::string_view name) {
@@ -217,21 +219,23 @@ class Renderer {
             },
             opacity, stops.size() > 2 ? kGradientSteps : 1);
       } else if (fill_type == 3) {
-        // The brush is the box's inscribed ellipse, moved by the fill's
-        // Translation (in box units, turned by its Rotation) and sized by its
-        // Scale: the ring of light's quarter arcs are centred past a corner.
+        // The brush is the box's inscribed ellipse with the fill's Scale and
+        // Translation (in box units, turned by its Rotation) applied to the
+        // brush's texture coordinates, so the ellipse itself moves the other
+        // way and grows as the scale shrinks. The ring of light's quarter
+        // arcs (Scale 0.55, Translation 0.34) are centred past a corner.
         const Vec3* translation = Member<Vec3>(fill, "Translation");
         const Vec3* brush_scale = Member<Vec3>(fill, "Scale");
         const float* rotation = Member<float>(fill, "Rotation");
         const float radians = (rotation ? *rotation : 0.0f) * 3.14159265f / 180.0f;
         const float tx = translation ? translation->x : 0.0f;
         const float ty = translation ? translation->y : 0.0f;
-        // The translation moves the brush's texture, so the centre moves
-        // the other way, turned against the brush rotation.
-        const float cx = (0.5f - (tx * std::cos(radians) + ty * std::sin(radians))) * w;
-        const float cy = (0.5f - (-tx * std::sin(radians) + ty * std::cos(radians))) * h;
-        const float rx = 0.5f * w * (brush_scale && brush_scale->x != 0 ? brush_scale->x : 1.0f);
-        const float ry = 0.5f * h * (brush_scale && brush_scale->y != 0 ? brush_scale->y : 1.0f);
+        const float sx = brush_scale && brush_scale->x != 0 ? std::fabs(brush_scale->x) : 1.0f;
+        const float sy = brush_scale && brush_scale->y != 0 ? std::fabs(brush_scale->y) : 1.0f;
+        const float cx = (0.5f - (tx * std::cos(radians) + ty * std::sin(radians)) / sx) * w;
+        const float cy = (0.5f - (-tx * std::sin(radians) + ty * std::cos(radians)) / sy) * h;
+        const float rx = 0.5f * w / sx;
+        const float ry = 0.5f * h / sy;
         FillPolygon(
             m, outline,
             [&](ImVec2 p) {
@@ -239,7 +243,7 @@ class Renderer {
               const float dy = ry > 0 ? (p.y - cy) / ry : 0.0f;
               return SampleStops(stops, std::sqrt(dx * dx + dy * dy));
             },
-            opacity, kGradientSteps);
+            opacity, kRadialSteps);
       }
     }
     if (const PropertyBag* stroke = element.GetCompound("Stroke")) {

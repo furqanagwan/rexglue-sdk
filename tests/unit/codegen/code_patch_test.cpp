@@ -300,6 +300,31 @@ TEST_CASE("Switchable patches may not touch branches", "[codegen][patch]") {
   CHECK_FALSE(PrepareSwitchablePatches(binary, {jump}));
 }
 
+TEST_CASE("[[cheat]] lists the title's own codes, keyed by name", "[codegen][patch]") {
+  auto cfg = Parse(R"(
+file_path = "default.xex"
+[[cheat]]
+name = "007 Pack"
+code = "g3tb0nd"
+description = "Walther PPK"
+where = "Extras > Cheat Codes"
+[[cheat]]
+name = "No code"
+[[cheat]]
+name = "Skyfall Pack"
+code = "l3g3nds"
+[[cheat]]
+name = "007 Pack"
+code = "g3tb0nd"
+description = "Walther PPK and Fast Switch"
+)");
+  REQUIRE(cfg.cheats.size() == 2);
+  CHECK(cfg.cheats[0].name == "007 Pack");
+  CHECK(cfg.cheats[0].description == "Walther PPK and Fast Switch");  // the later entry wins
+  CHECK(cfg.cheats[0].where.empty());
+  CHECK(cfg.cheats[1].code == "l3g3nds");
+}
+
 TEST_CASE("Switchable patches set registers, optionally keyed on lr", "[codegen][patch]") {
   auto cfg = Parse(R"(
 file_path = "default.xex"
@@ -336,7 +361,7 @@ value = 1
   CHECK(god.sets[0].reg == 11);
   CHECK(god.sets[0].value == 30000);
   CHECK(god.sets[0].lr == kBase);
-  CHECK(god.category == "cheat");
+  CHECK(god.category == "mod");  // "cheat" is the earlier name for "mod"
   // A switchable patch may be a flag alone; a fixed one may not set registers.
   CHECK(Named(cfg, "Flag only").error.empty());
   CHECK_FALSE(Named(cfg, "Fixed set").error.empty());

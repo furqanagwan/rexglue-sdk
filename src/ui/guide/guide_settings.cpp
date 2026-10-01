@@ -2,7 +2,7 @@
  * @file        ui/guide/guide_settings.cpp
  * @brief       The guide's settings pages on the console's Options scenes (RG-GDK-041)
  *
- * Preferences and the pages it opens, plus Patches and Cheats, are each one
+ * Preferences and the pages it opens, plus Patches, Mods and Cheats, are each one
  * of the dashboard's own Options scenes, so they look and sound like the
  * rest of the guide. Entries a recompiled title has no use for are taken
  * out of a scene and the list closed up; new entries are copies of the
@@ -338,9 +338,8 @@ void XboxGuide::OpenResolution() {
 }
 
 void XboxGuide::OpenPatches(std::string_view category) {
-  const bool cheats = category == "cheat";
-  xui::Element* scene =
-      PushPage(assets_->options_notifications, cheats ? "Cheats" : "Patches").scene;
+  const bool mods = category == "mod";
+  xui::Element* scene = PushPage(assets_->options_notifications, mods ? "Mods" : "Patches").scene;
   xui::Element* model = scene->FindById("chkShow");
   std::vector<const PPCSwitchablePatch*> patches;
   for (const PPCSwitchablePatch* p = host_.patches; p && p->name; ++p) {
@@ -366,16 +365,16 @@ void XboxGuide::OpenPatches(std::string_view category) {
   Hide(scene,
        {"chkShow", "chkSound", "chkShowMovies", "chkShowIPTV", "XuiLabel2", "labelSoundDisabled"});
   if (boxes.empty()) {
-    SetText(scene, "XuiLabel1",
-            cheats ? "No cheats are available for this game."
-                   : "No patches are available for this game.");
+    SetText(
+        scene, "XuiLabel1",
+        mods ? "No mods are available for this game." : "No patches are available for this game.");
     SetLegends("", scene->GetString("LegendB"), "");
     return;
   }
   SetText(scene, "XuiLabel1",
-          cheats ? "Turn cheats on or off. They take effect straight away."
-                 : "Turn patches on or off, such as the frame rate. They take effect straight "
-                   "away.");
+          mods ? "Turn mods on or off. They take effect straight away."
+               : "Turn patches on or off, such as the frame rate. They take effect straight "
+                 "away.");
   pages_.back().on_select = [this, boxes, patches](xui::Element* control) {
     for (size_t i = 0; i < boxes.size(); ++i) {
       if (boxes[i] != control) {
@@ -391,6 +390,58 @@ void XboxGuide::OpenPatches(std::string_view category) {
     }
   };
   SetFocus(boxes.front(), /*initial=*/true);
+}
+
+void XboxGuide::OpenCheats() {
+  // The title's own cheat codes: nothing to switch, so each row is the
+  // checkbox copy without its box, and the panel says what the code does
+  // and where the game takes it.
+  xui::Element* scene = PushPage(assets_->options_notifications, "Cheats").scene;
+  xui::Element* model = scene->FindById("chkShow");
+  std::vector<const PPCTitleCheat*> cheats;
+  for (const PPCTitleCheat* c = host_.cheats; c && c->name; ++c) {
+    cheats.push_back(c);
+  }
+  std::vector<xui::Element*> rows;
+  const float top = model ? model->GetVector("Position").y : 62.0f;
+  const size_t count = std::min(cheats.size(), size_t(12));
+  for (size_t i = 0; model && i < count; ++i) {
+    xui::Element* row = scene->CloneChild(*model, fmt::format("btnCheat{}", i));
+    xui::Vec3 p = model->GetVector("Position");
+    p.y = top + float(i) * kRowHeight;
+    row->Set("Position", xui::Value{p});
+    row->SetText(cheats[i]->name);
+    SetNav(row, i > 0 ? fmt::format("btnCheat{}", i - 1) : "",
+           i + 1 < count ? fmt::format("btnCheat{}", i + 1) : "");
+    Hide(row, {"CheckboxRule", "Checkbox", "XuiImage"});
+    rows.push_back(row);
+  }
+  Hide(scene,
+       {"chkShow", "chkSound", "chkShowMovies", "chkShowIPTV", "XuiLabel2", "labelSoundDisabled"});
+  SetLegends("", scene->GetString("LegendB"), "");
+  if (rows.empty()) {
+    SetText(scene, "XuiLabel1", "This game has no cheat codes.");
+    return;
+  }
+  auto show = [this, scene, rows, cheats] {
+    for (size_t i = 0; i < rows.size(); ++i) {
+      if (rows[i] != focus_) {
+        continue;
+      }
+      const PPCTitleCheat& cheat = *cheats[i];
+      std::string text = fmt::format("Code: {}", cheat.code);
+      if (cheat.description && *cheat.description) {
+        text += fmt::format("\r\n\r\n{}", cheat.description);
+      }
+      if (cheat.where && *cheat.where) {
+        text += fmt::format("\r\n\r\nEnter it in the game at {}.", cheat.where);
+      }
+      SetText(scene, "XuiLabel1", std::move(text));
+    }
+  };
+  pages_.back().on_focus = show;
+  SetFocus(rows.front(), /*initial=*/true);
+  show();
 }
 
 }  // namespace rex::ui::guide

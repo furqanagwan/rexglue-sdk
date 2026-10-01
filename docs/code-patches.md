@@ -56,14 +56,14 @@ value = 0x01
 
 `switchable = true` compiles both versions in, so the player can turn the
 patch on and off while the title runs (the Xbox guide's Settings > Patches or
-Cheats, [xbox-guide.md](xbox-guide.md#settings-pages)):
+Mods, [xbox-guide.md](xbox-guide.md#settings-pages)):
 
 ```toml
 [[patch]]
 name = "Unlock FPS"
 enabled = false            # the state at first start
 switchable = true
-category = "patch"         # or "cheat": which guide page lists it
+category = "patch"         # or "mod": which guide page lists it ("cheat" reads as "mod")
 ```
 
 - The image is left original. Each word the patch changes is emitted as
@@ -94,6 +94,25 @@ category = "patch"         # or "cheat": which guide page lists it
   (`Name=1;Name=0`) and applied at startup; a patch it does not name starts
   in its `enabled` state.
 
+## Title cheat codes
+
+`[[cheat]]` lists a cheat the title's developers built in: a code the
+player types into the game's own menu. Nothing is patched; the Xbox guide's
+Settings > Cheats lists the codes so a player need not look them up
+([xbox-guide.md](xbox-guide.md#settings-pages)).
+
+```toml
+[[cheat]]
+name = "007 Pack"
+code = "g3tb0nd"
+description = "The Walther PPK in single-player and multiplayer."
+where = "Extras > Cheat Codes"
+```
+
+`name` and `code` are required; a later entry with the same name replaces the
+earlier one. Codegen compiles them into `PPCImageInfo::title_cheats`. Record
+where each code came from next to it.
+
 A patch is title-specific behavior (ADR-005). It belongs in the title's own
 repository and config, never in the SDK. Record where it came from, its author
 and any known problems next to it, as Canary does.
@@ -104,4 +123,5 @@ and any known problems next to it, as Canary does.
 bad entries, an including file switching a patch on, writes into code only,
 refusals for data, out-of-image and past-the-section writes, overlaps, and
 patching before decoding; switchable patches keeping the image original,
-listing both words, skipping unchanged words and refusing branches.
+listing both words, skipping unchanged words and refusing branches; register
+sets; `[[cheat]]` entries keyed by name.

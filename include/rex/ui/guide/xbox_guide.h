@@ -144,6 +144,8 @@ struct GuideHost {
   std::string title_name;
   /// The title's switchable code patches (null name ends the list).
   const PPCSwitchablePatch* patches = nullptr;
+  /// The title's own cheat codes (null name ends the list).
+  const PPCTitleCheat* cheats = nullptr;
   /// The draw resolution scale that matches the display (3 for 4K).
   int display_scale = 1;
   /// Writes changed settings to the title's config file.
@@ -211,6 +213,7 @@ class XboxGuide final : public ImGuiDialog {
   void OpenNotifications();
   void OpenResolution();
   void OpenPatches(std::string_view category);
+  void OpenCheats();
   void SetSlider(xui::Element* slider, int value);
 
   // Games & Apps > Manage Game (guide_dlc.cpp): the title's downloadable
@@ -277,6 +280,7 @@ class XboxGuide final : public ImGuiDialog {
 
   bool closing_ = false;
   bool exit_title_ = false;
+  float dim_ = 0.0f;  // how far the title behind the guide is dimmed, 0 to 1
   std::chrono::steady_clock::time_point last_tick_;
   std::chrono::steady_clock::time_point opened_;
   int64_t clock_minute_ = -1;

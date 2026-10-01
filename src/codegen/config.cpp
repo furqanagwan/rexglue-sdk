@@ -310,6 +310,9 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
         parsed.enabled = enabled.value_or(true);
         parsed.switchable = switchable.value_or(false);
         parsed.category = category.value_or("patch");
+        if (parsed.category == "cheat") {
+          parsed.category = "mod";
+        }
         parsed.source = filePath;
         if (!hasWrites && !hasSets && !parsed.switchable && parsed.error.empty()) {
           parsed.error = "it has no be8, be16, be32 or be64 writes";
@@ -338,7 +341,29 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
         it->switchable = *switchable;
       }
       if (category) {
-        it->category = *category;
+        it->category = *category == "cheat" ? "mod" : *category;
+      }
+    }
+  }
+
+  // [[cheat]] -- keyed by "name": the title's own cheat codes, for the guide.
+  if (auto cheatArray = toml["cheat"].as_array()) {
+    for (auto& entry : *cheatArray) {
+      auto* table = entry.as_table();
+      auto name = table ? (*table)["name"].value<std::string>() : std::nullopt;
+      auto code = table ? (*table)["code"].value<std::string>() : std::nullopt;
+      if (!name || name->empty() || !code || code->empty()) {
+        REXCODEGEN_ERROR("[[cheat]] entry in {} needs a name and a code", filePath);
+        continue;
+      }
+      TitleCheat parsed{*name, *code, (*table)["description"].value_or(std::string()),
+                        (*table)["where"].value_or(std::string())};
+      auto it = std::find_if(cfg.cheats.begin(), cfg.cheats.end(),
+                             [&](const TitleCheat& c) { return c.name == parsed.name; });
+      if (it == cfg.cheats.end()) {
+        cfg.cheats.push_back(std::move(parsed));
+      } else {
+        *it = std::move(parsed);
       }
     }
   }

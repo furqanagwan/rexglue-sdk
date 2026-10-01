@@ -42,6 +42,9 @@ std::string CStringBody(std::string_view text) {
   for (char c : text) {
     if (c == '"' || c == '\\') {
       out.push_back('\\');
+    } else if (c == '\n') {
+      out += "\\n";
+      continue;
     }
     out.push_back(c);
   }
@@ -111,6 +114,14 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
                                      {"category", CStringBody(patch.category)}});
   }
 
+  nlohmann::json titleCheatsJson = nlohmann::json::array();
+  for (const auto& cheat : cfg.cheats) {
+    titleCheatsJson.push_back({{"name", CStringBody(cheat.name)},
+                               {"code", CStringBody(cheat.code)},
+                               {"description", CStringBody(cheat.description)},
+                               {"where", CStringBody(cheat.where)}});
+  }
+
   return {
       {"project", cfg.projectName},
       {"image_base", fmt::format("0x{:X}", ctx.binary().baseAddress())},
@@ -124,6 +135,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"config_flags", configFlags},
       {"code_patches", CStringBody(fmt::format("{}", fmt::join(ctx.appliedPatches(), ", ")))},
       {"switchable_patches", switchablePatchesJson},
+      {"title_cheats", titleCheatsJson},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };
