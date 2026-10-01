@@ -21,6 +21,9 @@
 #include <rex/kernel/crt/heap.h>
 #include <rex/data_locations.h>
 #include <rex/filesystem.h>
+#include <rex/filesystem/entry.h>
+#include <rex/filesystem/vfs.h>
+#include <rex/hash.h>
 #include <rex/logging/sink.h>
 #include <rex/logging.h>
 #include <rex/ui/overlay/achievement_toast.h>
@@ -482,8 +485,19 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
     return false;
   }
-  if (!std::filesystem::is_directory(paths.game_data_root)) {
-    auto msg = fmt::format("--game_data_root does not exist: {}", paths.game_data_root.string());
+  const bool game_image = std::filesystem::is_regular_file(paths.game_data_root);
+  if (!game_image && !std::filesystem::is_directory(paths.game_data_root)) {
+    auto msg =
+        fmt::format("--game_data_root is not a folder or image: {}", paths.game_data_root.string());
+    REXLOG_ERROR("{}", msg);
+    rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+    return false;
+  }
+  if (game_image &&
+      (ppc_info_.title_update || !ppc_info_.xex_content_hash || !*ppc_info_.xex_content_hash)) {
+    auto msg =
+        "ISO loading requires an original-title build generated with an entry-XEX "
+        "fingerprint. Regenerate this title with the current SDK.";
     REXLOG_ERROR("{}", msg);
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
     return false;
@@ -547,8 +561,25 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   std::string xex_image = "game:\\default.xex";
   OnLoadXexImage(xex_image);
 
-  // Mirrors the game:\ / d:\ -> game_data_root mapping in Runtime::SetupVfs.
-  {
+  // Check an ISO's entry executable against the exact XEX used by codegen
+  // before loading any guest code. Older generated builds cannot use an ISO.
+  if (game_image) {
+    auto* xex_entry = runtime_->file_system()->ResolvePath(xex_image);
+    auto mapped = xex_entry ? xex_entry->OpenMapped(memory::MappedMemory::Mode::kRead) : nullptr;
+    const auto actual = mapped ? rex::hash_bytes(std::string_view(
+                                     reinterpret_cast<const char*>(mapped->data()), mapped->size()))
+                               : std::string{};
+    if (actual != ppc_info_.xex_content_hash) {
+      auto msg = fmt::format(
+          "This disc image has a different default.xex from the one used "
+          "to build this executable (expected {}, found {}).",
+          ppc_info_.xex_content_hash, actual.empty() ? "unreadable" : actual);
+      REXLOG_ERROR("{}", msg);
+      rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+      return false;
+    }
+  } else {
+    // Mirrors the game:\ / d:\ -> game_data_root mapping in Runtime::SetupVfs.
     constexpr std::string_view kGameDevice = "game:\\";
     constexpr std::string_view kDDevice = "d:\\";
     std::string_view tail = xex_image;

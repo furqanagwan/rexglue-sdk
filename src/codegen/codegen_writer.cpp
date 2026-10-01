@@ -26,6 +26,7 @@
 #include <rex/codegen/function_graph.h>
 #include <rex/codegen/output_partition.h>
 #include <rex/codegen/template_registry.h>
+#include <rex/hash.h>
 #include <rex/logging.h>
 #include <rex/runtime.h>
 #include <rex/system/export_resolver.h>
@@ -157,6 +158,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"title_dlc", titleDlcJson},
       {"title_update", cfg.titleUpdateVersion},
       {"title_updates", titleUpdatesJson},
+      {"xex_content_hash", rex::hash_file(ctx.configDir() / cfg.filePath)},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };

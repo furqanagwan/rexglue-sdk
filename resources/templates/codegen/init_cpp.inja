@@ -58,6 +58,7 @@ const rex::PPCImageInfo PPCImageConfig = {
     .title_dlc = kTitleDlc,
     .title_update = {{ title_update }},
     .title_updates = kTitleUpdates,
+    .xex_content_hash = "{{ xex_content_hash }}",
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

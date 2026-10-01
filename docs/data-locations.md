@@ -7,7 +7,7 @@ command-line flag or `OnConfigurePaths` overrides any of them.
 
 | What | Default | Override |
 | --- | --- | --- |
-| Game files (`game:`) | `<exe>\game`, else the executable's own folder, whichever holds `default.xex` | `--game_data_root` |
+| Game files (`game:`) | `<exe>\game`, else the executable's own folder, whichever holds `default.xex` | `--game_data_root` (extracted folder or XDVDFS ISO) |
 | Saves, profiles, achievements | `%USERPROFILE%\Saved Games\<name>` | `--user_data_root` |
 | Shader and other caches | `%LOCALAPPDATA%\<name>\cache` | `--cache_root` |
 | Logs | `%LOCALAPPDATA%\<name>\logs` | `--log_dir`, or `--log_file` for one file |
@@ -16,6 +16,13 @@ command-line flag or `OnConfigurePaths` overrides any of them.
 `<name>` is the project name given to `ReXApp` (for example
 `quantumofsolace`), not the title's display name: it is known before the XEX
 loads and never changes.
+
+An ISO supplied with `--game_data_root` is mounted read-only. The image must
+contain a root `default.xex` with an XEX2 signature and its content fingerprint
+must match the entry XEX used to generate the executable. Regenerate a title
+with this SDK to embed that fingerprint. Title-update builds still require an
+extracted folder; ISO selection, optical drives and first-run setup are tracked
+in [RG-GDK-058](https://github.com/furqanagwan/rexglue-sdk/issues/154).
 
 With `--user_data_root` and no `--cache_root`, the cache stays in
 `<user data>\cache`, as it always has. Existing scripts that pass their own
