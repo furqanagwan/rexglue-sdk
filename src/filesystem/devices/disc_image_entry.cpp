@@ -10,6 +10,7 @@
  */
 
 #include <rex/filesystem/devices/disc_image_entry.h>
+#include <rex/filesystem/devices/disc_image_device.h>
 #include <rex/filesystem/devices/disc_image_file.h>
 
 #include <algorithm>
@@ -18,17 +19,30 @@
 
 namespace rex::filesystem {
 
+namespace {
+class OwnedMappedMemory final : public memory::MappedMemory {
+ public:
+  explicit OwnedMappedMemory(size_t size) : storage_(size) {
+    data_ = storage_.data();
+    size_ = storage_.size();
+  }
+
+ private:
+  std::vector<uint8_t> storage_;
+};
+}  // namespace
+
 DiscImageEntry::DiscImageEntry(Device* device, Entry* parent, const std::string_view path,
-                               memory::MappedMemory* mmap)
-    : Entry(device, parent, path), mmap_(mmap), data_offset_(0), data_size_(0) {}
+                               DiscImageDevice* image)
+    : Entry(device, parent, path), image_(image), data_offset_(0), data_size_(0) {}
 
 DiscImageEntry::~DiscImageEntry() = default;
 
 std::unique_ptr<DiscImageEntry> DiscImageEntry::Create(Device* device, Entry* parent,
                                                        const std::string_view name,
-                                                       memory::MappedMemory* mmap) {
+                                                       DiscImageDevice* image) {
   auto path = rex::string::utf8_join_guest_paths(parent->path(), name);
-  auto entry = std::make_unique<DiscImageEntry>(device, parent, path, mmap);
+  auto entry = std::make_unique<DiscImageEntry>(device, parent, path, image);
   return std::move(entry);
 }
 
@@ -44,9 +58,13 @@ std::unique_ptr<memory::MappedMemory> DiscImageEntry::OpenMapped(memory::MappedM
     return nullptr;
   }
 
-  size_t real_offset = data_offset_ + offset;
-  size_t real_length = length ? std::min(length, data_size_) : data_size_;
-  return mmap_->Slice(real_offset, real_length);
+  if (offset > data_size_)
+    return nullptr;
+  size_t real_length = length ? std::min(length, data_size_ - offset) : data_size_ - offset;
+  auto copy = std::make_unique<OwnedMappedMemory>(real_length);
+  if (!image_->ReadAt(data_offset_ + offset, std::span<uint8_t>(copy->data(), real_length)))
+    return nullptr;
+  return copy;
 }
 
 }  // namespace rex::filesystem

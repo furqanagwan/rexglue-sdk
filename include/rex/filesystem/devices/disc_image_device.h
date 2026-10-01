@@ -12,10 +12,11 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string>
 
 #include <rex/filesystem/device.h>
-#include <rex/memory/mapped_memory.h>
+#include <rex/filesystem.h>
 
 namespace rex::filesystem {
 
@@ -41,13 +42,14 @@ class DiscImageDevice : public Device {
   uint64_t file_count() const { return file_count_; }
   uint64_t total_file_size() const { return total_file_size_; }
   const DiscInfo& disc_info() const { return disc_info_; }
+  bool ReadAt(size_t offset, std::span<uint8_t> output) const;
 
   const std::string& name() const override { return name_; }
   uint32_t attributes() const override { return 0; }
   uint32_t component_name_max_length() const override { return 255; }
 
   uint32_t total_allocation_units() const override {
-    return uint32_t(mmap_->size() / sectors_per_allocation_unit() / bytes_per_sector());
+    return uint32_t(disc_info_.host_size / sectors_per_allocation_unit() / bytes_per_sector());
   }
   uint32_t available_allocation_units() const override { return 0; }
   uint32_t sectors_per_allocation_unit() const override { return 1; }
@@ -65,13 +67,12 @@ class DiscImageDevice : public Device {
   std::string name_;
   std::filesystem::path host_path_;
   std::unique_ptr<Entry> root_entry_;
-  std::unique_ptr<memory::MappedMemory> mmap_;
+  std::unique_ptr<FileHandle> file_handle_;
   DiscInfo disc_info_{};
   uint64_t file_count_ = 0;
   uint64_t total_file_size_ = 0;
 
   typedef struct {
-    uint8_t* ptr;
     size_t size;         // Size (bytes) of total image.
     size_t game_offset;  // Offset (bytes) of game partition.
     size_t root_sector;  // Offset (sector) of root.
@@ -81,9 +82,9 @@ class DiscImageDevice : public Device {
 
   Error Verify(ParseState* state);
   bool VerifyMagic(ParseState* state, size_t offset);
-  Error ReadAllEntries(ParseState* state, const uint8_t* root_buffer);
-  bool ReadEntry(ParseState* state, const uint8_t* buffer, uint16_t entry_ordinal,
-                 DiscImageEntry* parent);
+  Error ReadAllEntries(ParseState* state);
+  bool ReadEntry(ParseState* state, std::span<const uint8_t> buffer, uint16_t entry_ordinal,
+                 DiscImageEntry* parent, unsigned depth);
 };
 
 }  // namespace rex::filesystem

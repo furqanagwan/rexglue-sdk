@@ -10,6 +10,7 @@ add_executable(unit_tests
     core/filesystem_test.cpp
     core/data_locations_test.cpp
     filesystem/stfs_container_test.cpp
+    filesystem/disc_image_device_test.cpp
     core/vfs_overwrite_test.cpp
     core/hash_test.cpp
     core/stream_test.cpp

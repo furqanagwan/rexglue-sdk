@@ -12,6 +12,8 @@
 #include <rex/filesystem/devices/disc_image_device.h>
 #include <rex/filesystem/devices/disc_image_entry.h>
 
+#include <algorithm>
+
 #include <rex/literals.h>
 #include <rex/logging.h>
 #include <rex/math.h>
@@ -30,27 +32,51 @@ DiscImageDevice::DiscImageDevice(const std::string_view mount_path,
 DiscImageDevice::~DiscImageDevice() = default;
 
 bool DiscImageDevice::Initialize() {
-  mmap_ = memory::MappedMemory::Open(host_path_, memory::MappedMemory::Mode::kRead);
-  if (!mmap_) {
-    REXFS_ERROR("Disc image could not be mapped");
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(host_path_, ec);
+  if (ec || size > SIZE_MAX) {
+    REXFS_ERROR("Disc image size could not be read: {}", host_path_.string());
+    return false;
+  }
+  file_handle_ = FileHandle::OpenExisting(host_path_, FileAccess::kGenericRead, true);
+  if (!file_handle_) {
+    REXFS_ERROR("Disc image could not be opened: {}", host_path_.string());
     return false;
   }
 
   ParseState state = {};
-  state.ptr = mmap_->data();
-  state.size = mmap_->size();
+  state.size = static_cast<size_t>(size);
+  disc_info_.host_size = state.size;
   auto result = Verify(&state);
   if (result != Error::kSuccess) {
     REXFS_ERROR("Failed to verify disc image header: {}", static_cast<int>(result));
     return false;
   }
 
-  result = ReadAllEntries(&state, state.ptr + state.root_offset);
+  result = ReadAllEntries(&state);
   if (result != Error::kSuccess) {
     REXFS_ERROR("Failed to read all GDFX entries: {}", static_cast<int>(result));
     return false;
   }
 
+  return true;
+}
+
+bool DiscImageDevice::ReadAt(size_t offset, std::span<uint8_t> output) const {
+  if (!file_handle_ || offset > disc_info_.host_size ||
+      output.size() > disc_info_.host_size - offset)
+    return false;
+  if (output.empty())
+    return true;
+  constexpr size_t kReadChunk = 8_MiB;
+  while (!output.empty()) {
+    const size_t length = std::min(output.size(), kReadChunk);
+    size_t bytes_read = 0;
+    if (!file_handle_->Read(offset, output.data(), length, &bytes_read) || bytes_read != length)
+      return false;
+    offset += length;
+    output = output.subspan(length);
+  }
   return true;
 }
 
@@ -89,16 +115,26 @@ DiscImageDevice::Error DiscImageDevice::Verify(ParseState* state) {
   }
 
   // Read sector 32 to get FS state.
-  if (state->size < state->game_offset + (32 * kXESectorSize)) {
+  const uint64_t header_offset = uint64_t(state->game_offset) + 32 * kXESectorSize;
+  if (header_offset > state->size || 32 > state->size - header_offset) {
     return Error::kErrorReadError;
   }
-  uint8_t* fs_ptr = state->ptr + state->game_offset + (32 * kXESectorSize);
+  uint8_t header[32]{};
+  if (!ReadAt(static_cast<size_t>(header_offset), header))
+    return Error::kErrorReadError;
+  const uint8_t* fs_ptr = header;
   state->root_sector = memory::load<uint32_t>(fs_ptr + 20);
   state->root_size = memory::load<uint32_t>(fs_ptr + 24);
-  state->root_offset = state->game_offset + (state->root_sector * kXESectorSize);
+  const uint64_t root_offset =
+      uint64_t(state->game_offset) + uint64_t(state->root_sector) * kXESectorSize;
+  if (root_offset > state->size)
+    return Error::kErrorDamagedFile;
+  state->root_offset = static_cast<size_t>(root_offset);
   if (state->root_size < 13 || state->root_size > 32_MiB) {
     return Error::kErrorDamagedFile;
   }
+  if (state->root_size > state->size - state->root_offset)
+    return Error::kErrorDamagedFile;
 
   disc_info_.game_offset = state->game_offset;
   disc_info_.root_sector = state->root_sector;
@@ -109,30 +145,35 @@ DiscImageDevice::Error DiscImageDevice::Verify(ParseState* state) {
 }
 
 bool DiscImageDevice::VerifyMagic(ParseState* state, size_t offset) {
-  if (offset >= state->size) {
+  if (offset > state->size || 20 > state->size - offset) {
     return false;
   }
 
-  // Simple check to see if the given offset contains the magic value.
-  return std::memcmp(state->ptr + offset, "MICROSOFT*XBOX*MEDIA", 20) == 0;
+  uint8_t magic[20]{};
+  return ReadAt(offset, magic) && std::memcmp(magic, "MICROSOFT*XBOX*MEDIA", 20) == 0;
 }
 
-DiscImageDevice::Error DiscImageDevice::ReadAllEntries(ParseState* state,
-                                                       const uint8_t* root_buffer) {
-  auto root_entry = new DiscImageEntry(this, nullptr, "", mmap_.get());
+DiscImageDevice::Error DiscImageDevice::ReadAllEntries(ParseState* state) {
+  std::vector<uint8_t> root_buffer(state->root_size);
+  if (!ReadAt(state->root_offset, root_buffer))
+    return Error::kErrorReadError;
+  auto root_entry = new DiscImageEntry(this, nullptr, "", this);
   root_entry->attributes_ = kFileAttributeDirectory;
   root_entry_ = std::unique_ptr<Entry>(root_entry);
 
-  if (!ReadEntry(state, root_buffer, 0, root_entry)) {
-    return Error::kErrorOutOfMemory;
+  if (!ReadEntry(state, root_buffer, 0, root_entry, 0)) {
+    return Error::kErrorDamagedFile;
   }
 
   return Error::kSuccess;
 }
 
-bool DiscImageDevice::ReadEntry(ParseState* state, const uint8_t* buffer, uint16_t entry_ordinal,
-                                DiscImageEntry* parent) {
-  const uint8_t* p = buffer + (entry_ordinal * 4);
+bool DiscImageDevice::ReadEntry(ParseState* state, std::span<const uint8_t> buffer,
+                                uint16_t entry_ordinal, DiscImageEntry* parent, unsigned depth) {
+  const size_t entry_offset = size_t(entry_ordinal) * 4;
+  if (depth > 128 || entry_offset > buffer.size() || buffer.size() - entry_offset < 14)
+    return false;
+  const uint8_t* p = buffer.data() + entry_offset;
 
   uint16_t node_l = memory::load<uint16_t>(p + 0);
   uint16_t node_r = memory::load<uint16_t>(p + 2);
@@ -140,15 +181,17 @@ bool DiscImageDevice::ReadEntry(ParseState* state, const uint8_t* buffer, uint16
   size_t length = memory::load<uint32_t>(p + 8);
   uint8_t attributes = memory::load<uint8_t>(p + 12);
   uint8_t name_length = memory::load<uint8_t>(p + 13);
+  if (name_length > buffer.size() - entry_offset - 14)
+    return false;
   auto name_buffer = reinterpret_cast<const char*>(p + 14);
 
-  if (node_l && !ReadEntry(state, buffer, node_l, parent)) {
+  if (node_l && !ReadEntry(state, buffer, node_l, parent, depth + 1)) {
     return false;
   }
 
   auto name = std::string(name_buffer, name_length);
 
-  auto entry = DiscImageEntry::Create(this, parent, name, mmap_.get());
+  auto entry = DiscImageEntry::Create(this, parent, name, this);
   entry->attributes_ = attributes | kFileAttributeReadOnly;
   entry->size_ = length;
   entry->allocation_size_ = rex::round_up(length, bytes_per_sector());
@@ -164,19 +207,24 @@ bool DiscImageDevice::ReadEntry(ParseState* state, const uint8_t* buffer, uint16
     entry->data_size_ = 0;
     if (length) {
       // Not a leaf - read in children.
-      if (state->size < state->game_offset + (sector * kXESectorSize)) {
+      const uint64_t folder_offset = uint64_t(state->game_offset) + sector * kXESectorSize;
+      if (folder_offset > state->size || length > state->size - folder_offset || length < 14 ||
+          length > 32_MiB) {
         // Out of bounds read.
         return false;
       }
-      // Read child list.
-      uint8_t* folder_ptr = state->ptr + state->game_offset + (sector * kXESectorSize);
-      if (!ReadEntry(state, folder_ptr, 0, entry.get())) {
+      std::vector<uint8_t> folder(length);
+      if (!ReadAt(static_cast<size_t>(folder_offset), folder) ||
+          !ReadEntry(state, folder, 0, entry.get(), depth + 1)) {
         return false;
       }
     }
   } else {
     // File.
-    entry->data_offset_ = state->game_offset + (sector * kXESectorSize);
+    const uint64_t data_offset = uint64_t(state->game_offset) + sector * kXESectorSize;
+    if (data_offset > state->size || length > state->size - data_offset)
+      return false;
+    entry->data_offset_ = static_cast<size_t>(data_offset);
     entry->data_size_ = length;
     ++file_count_;
     total_file_size_ += length;
@@ -186,7 +234,7 @@ bool DiscImageDevice::ReadEntry(ParseState* state, const uint8_t* buffer, uint16
   parent->children_.emplace_back(std::move(entry));
 
   // Read next file in the list.
-  if (node_r && !ReadEntry(state, buffer, node_r, parent)) {
+  if (node_r && !ReadEntry(state, buffer, node_r, parent, depth + 1)) {
     return false;
   }
 
