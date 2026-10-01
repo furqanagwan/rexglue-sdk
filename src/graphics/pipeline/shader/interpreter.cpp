@@ -28,6 +28,11 @@ REXCVAR_DEFINE_BOOL(gpu_scalar_approximation_rounding, false, "GPU/Shader",
                     "halfway away from zero (xenia-canary #1190, for 4E4D07D1). The console's "
                     "precision and rounding are unconfirmed, so this is off by default.")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(mulsc_round_toward_zero, false, "GPU/Shader",
+                    "Round MULSC products toward zero instead of to nearest even (xenia-canary "
+                    "#1245, for 5451080D, 4B4D07F6 and 5451086D, whose batch indices otherwise "
+                    "round into the next batch). Unconfirmed on the console, so off by default.")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace rex::graphics {
 
@@ -652,13 +657,27 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
     case ucode::AluScalarOpcode::kAddsPrev: {
       state_.previous_scalar = scalar_operands[0] + state_.previous_scalar;
     } break;
-    case ucode::AluScalarOpcode::kMuls:
-    case ucode::AluScalarOpcode::kMulsc0:
-    case ucode::AluScalarOpcode::kMulsc1: {
+    case ucode::AluScalarOpcode::kMuls: {
       // Direct3D 9 behavior (0 or denormal * anything = +0).
       state_.previous_scalar = (scalar_operands[0] && scalar_operands[1])
                                    ? scalar_operands[0] * scalar_operands[1]
                                    : 0.0f;
+    } break;
+    case ucode::AluScalarOpcode::kMulsc0:
+    case ucode::AluScalarOpcode::kMulsc1: {
+      // Direct3D 9 behavior (0 or denormal * anything = +0).
+      float product = 0.0f;
+      if (scalar_operands[0] && scalar_operands[1]) {
+        product = scalar_operands[0] * scalar_operands[1];
+        if (REXCVAR_GET(mulsc_round_toward_zero) && std::isfinite(product)) {
+          const double exact_product = double(scalar_operands[0]) * double(scalar_operands[1]);
+          // Step back if the float multiply rounded away from zero.
+          if (std::abs(double(product)) > std::abs(exact_product)) {
+            product = std::nextafter(product, 0.0f);
+          }
+        }
+      }
+      state_.previous_scalar = product;
     } break;
     case ucode::AluScalarOpcode::kMulsPrev: {
       // Direct3D 9 behavior (0 or denormal * anything = +0).
