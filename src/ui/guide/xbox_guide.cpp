@@ -405,6 +405,11 @@ void XboxGuide::ConfigureMain() {
       label->Suppress();
     }
   }
+  // Games & Apps gains Manage Game (downloadable content), below
+  // Achievements, made from the Recent entry.
+  if (xui::Element* recent = main_->FindById("btnQuickLaunch")) {
+    AddEntry(recent->parent(), "btnQuickLaunch", "btnAchievements", "btnManageGame", "Manage Game");
+  }
   // Settings gains Patches and Cheats, made from the Preferences entry.
   if (xui::Element* preferences = main_->FindById("btnPersonalSettings")) {
     xui::Element* settings = preferences->parent();
@@ -412,8 +417,8 @@ void XboxGuide::ConfigureMain() {
     AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnCheats", "Cheats");
   }
   auto handled = [&](std::string_view id) {
-    if (assets_->has_options &&
-        (id == "btnPersonalSettings" || id == "btnPatches" || id == "btnCheats")) {
+    if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
+                                 id == "btnCheats" || id == "btnManageGame")) {
       return true;
     }
     return id == "btnDashboard" ||
@@ -590,6 +595,7 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
 
   UpdateClock();
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
+  PollManageGame();
   if (queued_tab_ && !tabs_->playing()) {
     const int next = queued_tab_;
     queued_tab_ = 0;
@@ -713,6 +719,8 @@ void XboxGuide::Activate(xui::Element* control) {
     OpenPatches("patch");
   } else if (id == "btnCheats") {
     OpenPatches("cheat");
+  } else if (id == "btnManageGame") {
+    OpenManageGame();
   }
 }
 

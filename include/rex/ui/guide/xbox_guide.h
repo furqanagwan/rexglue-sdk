@@ -213,6 +213,22 @@ class XboxGuide final : public ImGuiDialog {
   void OpenPatches(std::string_view category);
   void SetSlider(xui::Element* slider, int value);
 
+  // Games & Apps > Manage Game (guide_dlc.cpp): the title's downloadable
+  // content, installed from packages on this PC.
+  struct DlcEntry {
+    std::filesystem::path package;  // empty when only installed
+    std::string file_name;
+    std::string name;
+    std::string description;
+    bool installed = false;
+  };
+  struct DlcJob;  // an install or file pick running off the UI thread
+  void OpenManageGame();
+  void FillManageGame();
+  void ShowDlc(xui::Element* row);
+  void PollManageGame();
+  std::vector<DlcEntry> FindDlc() const;
+
   void BeginClose(bool exit_title);
   void UpdateClock();
   ImTextureID Texture(std::string_view path, std::string_view package, int* width, int* height);
@@ -252,6 +268,12 @@ class XboxGuide final : public ImGuiDialog {
   std::vector<xui::Element*> pending_removal_;  // detached once the backdrop stops
   std::vector<SettingsPage> pages_;
   int queued_tab_ = 0;  // a tab switch that passes over a removed tab
+  xui::Element* manage_scene_ = nullptr;
+  std::vector<xui::Element*> manage_rows_;
+  std::vector<DlcEntry> dlc_;
+  std::vector<std::filesystem::path> picked_packages_;
+  std::shared_ptr<DlcJob> dlc_job_;
+  std::string dlc_status_;
 
   bool closing_ = false;
   bool exit_title_ = false;

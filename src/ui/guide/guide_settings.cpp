@@ -98,6 +98,10 @@ XboxGuide::SettingsPage& XboxGuide::PushPage(const xui::Document& scene, std::st
 void XboxGuide::PopPage() {
   SettingsPage page = std::move(pages_.back());
   pages_.pop_back();
+  if (page.scene == manage_scene_) {
+    manage_scene_ = nullptr;
+    manage_rows_.clear();
+  }
   app_host_->RemoveChild(page.scene);
   focus_ = nullptr;
   if (pages_.empty()) {

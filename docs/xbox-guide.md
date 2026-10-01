@@ -48,6 +48,13 @@ focus, press and sounds come from the skin visuals' named frames.
   `828_AchievDetails`. The button shows the gamerscore earned.
 - Xbox Home (Y, or the Home tab) asks first. Yes closes the guide and ends the
   title through the window's normal close path.
+- Games & Apps > Manage Game lists the title's downloadable content: what is
+  installed, and the content packages (STFS, content type 2, this title's ID)
+  in the `DLC` folder beside the executable or picked with "Add Content from This
+  PC" (the Windows file picker). Installed content is ticked; A on a package
+  that is not installed installs it with `ContentManager::InstallContent`, in
+  the background. The page is the `OptionsNotifications` scene; a game may need
+  a restart to see new content.
 - Settings > Preferences, Patches and Cheats open settings pages built from
   the console's own Options scenes (see [Settings pages](#settings-pages)).
 - Entries a recompiled title has no use for are taken out and the list closed
@@ -121,6 +128,7 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | Tab | Entry | Opens on the console | Here |
 | --- | --- | --- | --- |
 | Games & Apps | Achievements | `802_Achievements` grid, then `828_AchievDetails` | Works |
+| | Manage Game (added) | | Works: install DLC from this PC |
 | | Awards | `837_AvatarAwards` (avatar awards) | Disabled |
 | | Recent | `QuickLaunch`: Games & Apps, Downloads, All tabs | Disabled |
 | | My Games | dashboard (dash command 23) | Disabled |
