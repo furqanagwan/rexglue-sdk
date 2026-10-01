@@ -41,19 +41,64 @@ includes = ["../quantumofsolace_tu2.toml"]   # this version's own settings
   guide's Manage Game uses it for add-ons that need an update.
 - Not yet: projects with DLL `[[modules]]`.
 
+## Listing one for players
+
+The title's config lists each update it had, for the guide's Manage Game (an
+update is never required, and the first run never asks for one):
+
+```toml
+[[title_update]]
+version = 2
+media_id = "06DD88A0"                      # the disc it applies to
+base_version = 7                           # the executable version it updates
+content_id = "B59A1F29F4FB82AB35DC7AEC8975F83F620A8290"
+size_kb = 2420                             # optional
+date = "2012-06-18"                        # optional
+changelog = "..."                          # optional: what it changes
+```
+
+`content_id` is the package's STFS content ID, which Xbox Unity lists as the
+update's `hash`: the SHA-1 of the header from `0x344` up to the header size
+rounded to 4 KB. That region holds the top hash table's hash, so it identifies
+and checks the whole file. Xbox Unity has no changelogs; the title repository
+writes them. Codegen compiles the list into `PPCImageInfo::title_updates`.
+
+## Downloading and installing (`rex/ui/guide/title_update.h`)
+
+- **Sources, in order:** Xbox Unity (`TitleUpdateInfo.php?titleid=` lists the
+  title's updates per media ID; the one whose hash is the content ID gives the
+  `TitleUpdate.php?tuid=` to download), then any URL templates in
+  `title_update_sources` (`;`-separated, with `{title_id}`, `{media_id}`,
+  `{version}`, `{content_id}`). A source that's down or doesn't list the update
+  is skipped with its reason. A file on this PC is the last resort.
+- **Checks:** a LIVE/CON/PIRS package of content type `0x000B0000`, for this
+  title, this disc's media ID and base version, whose header hashes to its
+  content ID and whose content ID is the listed one. A download that fails a
+  check is discarded and the next source tried.
+- **Where it goes:** `%LOCALAPPDATA%\<title>\title_updates\<version>\`, the
+  package as downloaded (one per version). It's mounted at `update:` directly,
+  without extracting.
+
 ## Running one
 
-A title update executable needs its update: pass the package or folder with
-`--update_data_root`. It mounts it at `update:` and applies the executable's
-patch at load, so the update's data sections match its code. Without the
-update it stops with a message.
+- **Choosing:** `title_update` (set from the guide, saved in the title's
+  settings) is the update to run, 0 for the original. At startup each
+  executable checks it: when that update is installed and its executable
+  (`<original>_tu<version>.exe`) is beside the original, the original starts it
+  and quits; turned off, the update build starts the original. Otherwise, or
+  if the update is removed, the original runs: an update is never required.
+  The started executable gets `--title_update_handoff`, so it never hands back.
+- **Mounting:** an update build mounts its installed package at `update:` and
+  applies the executable's patch at load, so the update's data sections match
+  its code. `--update_data_root` (a package or folder) overrides the installed
+  one for development; an update build that has neither, and no original
+  beside it, stops with a message.
+- XEX patches are applied only this way. An original build ignores a
+  `default.xexp` lying beside `default.xex` (it logs that it did) instead of
+  patching its data under the original code, as it did before.
 
-XEX patches are applied only this way. An original build ignores a
-`default.xexp` lying beside `default.xex` (it logs that it did) instead of
-patching its data under the original code, as it did before.
-
-Choosing between the two executables, downloading an update from Xbox Unity
-and installing it are the next parts of #153.
+The guide's Manage Game entry for the update, and Active Downloads, are the
+last part of #153.
 
 ## Validation
 
@@ -72,3 +117,17 @@ and installing it are the next parts of #153.
   0x821C1C20". That is one of the function entries `quantumofsolace.toml`
   adds for the original; the update's own config (in the title repository)
   needs its entries, as the original's did.
+- `unit_tests [title_update]` (part 2): package header and content ID
+  (damaged byte refused), the checks (other game, disc, base version,
+  update, content type), Xbox Unity's listing (Quantum of Solace's real
+  response; 007 Legends' empty one), `title_update_sources` templates,
+  install and replace (a refused package leaves the installed one), sources
+  tried in order with their reasons, and the launch choice (off, on but not
+  installed or not built, on, turned off, handed over, removed).
+- `unit_tests "[.network]"` (run by hand, reaches xboxunity.net): Quantum of
+  Solace's title update 2 found by content ID, downloaded (2,478,080 bytes,
+  with progress), checked and installed, 2026-10-01.
+- Handover with real executables: with title update 2 installed and
+  `--title_update=2`, `quantumofsolace.exe` logged "title update 2 is on",
+  started `quantumofsolace_tu2.exe` and exited 0; the update build mounted the
+  installed package by itself and applied the patch.

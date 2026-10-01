@@ -43,6 +43,7 @@
 #include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/guide/guide_notification.h>
+#include <rex/ui/guide/title_update.h>
 #include <rex/ui/guide/xbox_guide.h>
 #include <rex/ui/keybinds.h>
 #include <rex/ui/window_win.h>
@@ -186,6 +187,37 @@ std::unique_ptr<ui::AchievementNotificationDialog> ReXApp::CreateAchievementNoti
       ui::guide::GuideFonts{guide_font_regular_, guide_font_bold_}, std::move(toast));
 }
 
+namespace {
+
+// Starts `executable` with this process's arguments and a note that it was
+// handed over, so it never hands back.
+bool StartHandOff(const std::filesystem::path& executable) {
+  std::wstring args = GetCommandLineW();
+  // Drop argv[0], quoted or not.
+  size_t at = 0;
+  if (!args.empty() && args[0] == L'"') {
+    at = args.find(L'"', 1);
+    at = at == std::wstring::npos ? args.size() : at + 1;
+  } else {
+    at = args.find(L' ');
+    at = at == std::wstring::npos ? args.size() : at;
+  }
+  std::wstring command_line =
+      L"\"" + executable.wstring() + L"\"" + args.substr(at) + L" --title_update_handoff=true";
+  STARTUPINFOW startup = {sizeof(startup)};
+  PROCESS_INFORMATION process = {};
+  if (!CreateProcessW(executable.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0, nullptr,
+                      executable.parent_path().c_str(), &startup, &process)) {
+    return false;
+  }
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  REXLOG_INFO("Handed over to {}", executable.string());
+  return true;
+}
+
+}  // namespace
+
 system::AchievementManager& ReXApp::achievements() const {
   assert_not_null(runtime_);
   assert_not_null(runtime_->kernel_state());
@@ -193,8 +225,13 @@ system::AchievementManager& ReXApp::achievements() const {
 }
 
 bool ReXApp::OnInitialize() {
-  if (!SetupEnvironment())
+  if (!SetupEnvironment()) {
+    if (handed_off_) {
+      app_context().QuitFromUIThread();
+      return true;
+    }
     return false;
+  }
   if (!SetupPresentation())
     return false;
 
@@ -306,6 +343,38 @@ bool ReXApp::SetupEnvironment() {
 
   if (std::filesystem::exists(config_path_))
     REXLOG_DEBUG("Loaded config: {}", config_path_.string());
+
+  // Title updates are optional (docs/title-updates.md): the player's choice in
+  // the guide (title_update) picks the executable, and the original is always
+  // the fallback. An update build given --update_data_root runs as asked.
+  if (!(ppc_info_.title_update && !update_data_cvar.empty())) {
+    const auto choice = ui::guide::ChooseLaunch(
+        ppc_info_.title_update, uint32_t(std::max(0, REXCVAR_GET(title_update))),
+        rex::filesystem::GetExecutablePath(), locations.local, REXCVAR_GET(title_update_handoff));
+    if (!choice.note.empty()) {
+      REXLOG_INFO("Title update: {}", choice.note);
+    }
+    if (choice.hand_off) {
+      if (StartHandOff(choice.executable)) {
+        handed_off_ = true;
+        return false;
+      }
+      REXLOG_WARN("Could not start {}; running this build", choice.executable.string());
+    }
+    if (choice.cannot_run) {
+      auto msg = fmt::format(
+          "This build runs title update {}, which isn't installed, and the original executable "
+          "isn't beside it.",
+          ppc_info_.title_update);
+      REXLOG_ERROR("{}", msg);
+      rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+      return false;
+    }
+    if (update_data_cvar.empty() && !choice.update.empty()) {
+      update_data_root_ = choice.update;
+      resolved_defaults_.update_data_root = choice.update;
+    }
+  }
 
   // Earlier builds kept user data in Documents\<name>, which OneDrive syncs.
   if (user_data_cvar.empty() && user_data_root_ == locations.user_data) {
