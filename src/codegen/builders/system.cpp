@@ -212,6 +212,14 @@ bool build_mcrf(BuilderContext& ctx) {
   return true;
 }
 
+bool build_mcrfs(BuilderContext& ctx) {
+  const uint32_t shift = 4 * (7 - ctx.insn.operands[1]);
+  ctx.println("\t{}.set_raw((ctx.fpscr.loadFromHost() >> {}) & 0xF);", ctx.cr(ctx.insn.operands[0]),
+              shift);
+  ctx.println("\tctx.fpscr.storeFromGuest(ctx.fpscr.guest_value & 0x{:08X});", ~(0xFu << shift));
+  return true;
+}
+
 //=============================================================================
 // Move From Special Registers
 //=============================================================================
@@ -352,7 +360,7 @@ bool build_mtfsf(BuilderContext& ctx) {
   uint32_t mask = 0;
   for (int j = 0; j < 8; j++) {
     if (fm & (1 << (7 - j)))
-      mask |= 0xF << (4 * j);
+      mask |= 0xFu << (4 * (7 - j));
   }
   if (mask == 0xFFFFFFFF) {
     ctx.println("\tctx.fpscr.storeFromGuest({}.u32);", ctx.f(ctx.insn.operands[1]));

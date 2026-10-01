@@ -72,6 +72,23 @@ namespace rex::codegen {
 // Vector Floating Point Arithmetic
 //=============================================================================
 
+bool build_mtvscr(BuilderContext& ctx) {
+  // Guest word 3 is host lane 0. Only NJ and SAT have defined local behavior.
+  auto source = ctx.v(ctx.insn.operands[0]);
+  ctx.println("\tctx.vscr_nj = ({}.u32[0] >> 16) & 1;", source);
+  ctx.println("\tctx.vscr_sat = {}.u32[0] & 1;", source);
+  ctx.csrState = CSRState::Unknown;
+  return true;
+}
+
+bool build_mfvscr(BuilderContext& ctx) {
+  auto dest = ctx.v(ctx.insn.operands[0]);
+  ctx.println("\t{}.u64[0] = 0;", dest);
+  ctx.println("\t{}.u64[1] = 0;", dest);
+  ctx.println("\t{}.u32[0] = (uint32_t(ctx.vscr_nj) << 16) | ctx.vscr_sat;", dest);
+  return true;
+}
+
 bool build_vaddfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_binary("add");
@@ -244,17 +261,46 @@ bool build_vrfiz(BuilderContext& ctx) {
 // Vector Integer Arithmetic
 //=============================================================================
 
+namespace {
+void emitArithmeticSaturation(BuilderContext& ctx, const char* lane, size_t count,
+                              const char* lower, const char* upper, char operation) {
+  for (size_t i = 0; i < count; ++i) {
+    ctx.println(
+        "\t{{ const int64_t value = int64_t({}.{}[{}]) {} int64_t({}.{}[{}]); "
+        "if (value < {} || value > {}) ctx.vscr_sat = 1; }}",
+        ctx.v(ctx.insn.operands[1]), lane, i, operation, ctx.v(ctx.insn.operands[2]), lane, i,
+        lower, upper);
+  }
+}
+
+void emitPackSaturation(BuilderContext& ctx, const char* lane, size_t count, const char* lower,
+                        const char* upper) {
+  for (size_t source = 1; source <= 2; ++source) {
+    for (size_t i = 0; i < count; ++i) {
+      ctx.println(
+          "\tif (int64_t({}.{}[{}]) < {} || int64_t({}.{}[{}]) > {}) "
+          "ctx.vscr_sat = 1;",
+          ctx.v(ctx.insn.operands[source]), lane, i, lower, ctx.v(ctx.insn.operands[source]), lane,
+          i, upper);
+    }
+  }
+}
+}  // namespace
+
 bool build_vaddsbs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s8", 16, "INT8_MIN", "INT8_MAX", '+');
   ctx.emit_vec_int_binary("adds_epi8", "s8");
   return true;
 }
 
 bool build_vaddshs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s16", 8, "INT16_MIN", "INT16_MAX", '+');
   ctx.emit_vec_int_binary("adds_epi16", "s16");
   return true;
 }
 
 bool build_vaddsws(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s32", 4, "INT32_MIN", "INT32_MAX", '+');
   // vaddsws: Vector Add Signed Word Saturate
   auto vD = ctx.v(ctx.insn.operands[0]);
   auto vA = ctx.v(ctx.insn.operands[1]);
@@ -293,6 +339,7 @@ bool build_vaddubm(BuilderContext& ctx) {
 }
 
 bool build_vaddubs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u8", 16, "0", "UINT8_MAX", '+');
   ctx.emit_vec_int_binary("adds_epu8", "u8");
   return true;
 }
@@ -342,6 +389,7 @@ bool build_vmaxuw(BuilderContext& ctx) {
 }
 
 bool build_vadduws(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u32", 4, "0", "UINT32_MAX", '+');
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "
       "rex::ppc::simde_mm_adds_epu32(simde_mm_load_si128((simde__m128i*){}.u32), "
@@ -351,11 +399,13 @@ bool build_vadduws(BuilderContext& ctx) {
 }
 
 bool build_vadduhs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u16", 8, "0", "UINT16_MAX", '+');
   ctx.emit_vec_int_binary("adds_epu16", "u16");
   return true;
 }
 
 bool build_vsubsws(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s32", 4, "INT32_MIN", "INT32_MAX", '-');
   // TODO: vectorize
   for (size_t i = 0; i < 4; i++) {
     ctx.println("\t{}.s64 = int64_t({}.s32[{}]) - int64_t({}.s32[{}]);", ctx.temp(),
@@ -372,11 +422,13 @@ bool build_vsububm(BuilderContext& ctx) {
 }
 
 bool build_vsububs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u8", 16, "0", "UINT8_MAX", '-');
   ctx.emit_vec_int_binary("subs_epu8", "u8");
   return true;
 }
 
 bool build_vsubuws(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u32", 4, "0", "UINT32_MAX", '-');
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "
       "simde_mm_sub_epi32(simde_mm_load_si128((simde__m128i*) {}.u32), "
@@ -388,6 +440,7 @@ bool build_vsubuws(BuilderContext& ctx) {
 }
 
 bool build_vsubuhs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "u16", 8, "0", "UINT16_MAX", '-');
   ctx.emit_vec_int_binary("subs_epu16", "u16");
   return true;
 }
@@ -448,6 +501,7 @@ bool build_vminuw(BuilderContext& ctx) {
 }
 
 bool build_vsubsbs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s8", 16, "INT8_MIN", "INT8_MAX", '-');
   ctx.emit_vec_int_binary("subs_epi8", "s8");
   return true;
 }
@@ -463,6 +517,7 @@ bool build_vminub(BuilderContext& ctx) {
 }
 
 bool build_vsubshs(BuilderContext& ctx) {
+  emitArithmeticSaturation(ctx, "s16", 8, "INT16_MIN", "INT16_MAX", '-');
   ctx.emit_vec_int_binary("subs_epi16", "s16");
   return true;
 }
@@ -1119,6 +1174,7 @@ bool build_vspltw(BuilderContext& ctx) {
 //=============================================================================
 
 bool build_vpkshus(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "s16", 8, "0", "UINT8_MAX");
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_packus_epi16(simde_mm_load_si128((simde__m128i*){}.s16), "
@@ -1139,6 +1195,7 @@ bool build_vpkuhum(BuilderContext& ctx) {
 }
 
 bool build_vpkuhus(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "u16", 8, "0", "UINT8_MAX");
   // Vector Pack Unsigned Halfword Unsigned Saturate
   // NOTE(tomc): _mm_packus_epi16 treats inputs as signed, so we need custom saturation for
   // unsigned. Unsigned halfwords >= 0x8000 would be interpreted as negative and clamped to 0
@@ -1167,6 +1224,7 @@ bool build_vpkuwum(BuilderContext& ctx) {
 }
 
 bool build_vpkuwus(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "u32", 4, "0", "UINT16_MAX");
   // Vector Pack Unsigned Word Unsigned Saturate
 
   // NOTE(tomc): _mm_packus_epi32 treats inputs as signed, so we need custom saturation for unsigned
@@ -1183,6 +1241,7 @@ bool build_vpkuwus(BuilderContext& ctx) {
 }
 
 bool build_vpkshss(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "s16", 8, "INT8_MIN", "INT8_MAX");
   // Vector Pack Signed Halfword Signed Saturate
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s8, "
@@ -1193,6 +1252,7 @@ bool build_vpkshss(BuilderContext& ctx) {
 }
 
 bool build_vpkswss(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "s32", 4, "INT16_MIN", "INT16_MAX");
   // Vector Pack Signed Word Signed Saturate
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s16, "
@@ -1203,6 +1263,7 @@ bool build_vpkswss(BuilderContext& ctx) {
 }
 
 bool build_vpkswus(BuilderContext& ctx) {
+  emitPackSaturation(ctx, "s32", 4, "0", "UINT16_MAX");
   // Vector Pack Signed Word Unsigned Saturate
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u16, "

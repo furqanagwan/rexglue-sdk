@@ -1295,11 +1295,15 @@ not ports of the Edge JIT.
 | xenia-canary [`72ce1309715b30d07035c8511dffc13c0b92a2d9`](https://github.com/xenia-canary/xenia-canary/commit/72ce1309715b30d07035c8511dffc13c0b92a2d9), 2026-06-14, "Xbox360 cache line is always 128 bytes" | B, fixes 4E4D07E0 and 4E4D083D | Align `dcbz` to a 128-byte block and clear 128 bytes as `dcbzl` already does | `instr_dcbz.s` checks whole block and adjacent sentinel |
 | has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, missing VMX unsigned-word carry, average and maximum forms, and VMX128 shift-table aliases | Four static vector builders with lane-wise unsigned arithmetic; `lvsl128` and `lvsr128` reuse existing shift-table builders | `instr_vector_gap.s` plus pinned Edge `instr_lvsl128.s` and `instr_lvsr128.s` |
 | has207/xenia-edge `vpkpx` implementation and [`instr__gen_vpkpx.s`](https://github.com/has207/xenia-edge/blob/b5cc59e854/src/xenia/cpu/ppc/testing/instr__gen_vpkpx.s) at `b5cc59e854`, reviewed 2026-10-01 | A, missing pixel pack opcode | Snapshot both source vectors, then pack the specified alpha bit and RGB high five bits per pixel | `instr_vpkpx_small.s`: Edge expected values and destination/source alias case; full generated corpus not yet imported |
+| has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, VSCR NJ and SAT state | Context carries NJ through guest thread save/restore; `mtvscr` changes the vector FP flush mode and resets codegen's CSR state; saturating vector arithmetic and packs set sticky SAT | Pinned `instr_mfvscr.s`, `instr_seq_njm.s`; `instr_vscr_sat.s` checks sticky and reset behavior |
+| has207/xenia-edge [`f4af1e2a77703ca60a4dae512fb047cfe73ecb11`](https://github.com/has207/xenia-edge/commit/f4af1e2a77703ca60a4dae512fb047cfe73ecb11), 2026-02-13, "Implement and fix FPSCR-related instructions" | A, missing `mcrfs` | Track guest FPSCR bits separately from the host rounding control word; move and clear a selected field; fix `mtfsf` field mask direction | Pinned `instr_mcrfs.s` plus `instr_fpscr_state.s` with CR and preserved-rounding assertions |
 
 Other scalar and system dispatch additions in this issue use existing static
 builders or narrow no-op implementations. Their title and vendor regressions
-have not yet been measured. The issue remains open until all listed vector,
-scalar and system instructions, full PPC tests and release gates are complete.
+have not yet been measured. Floating-point exception bits produced by arithmetic
+are not yet reflected in guest FPSCR, so `mcrfs` is only verified for fields
+written through `mtfsf`. The issue remains open for this limitation, the
+broader Edge corpus, title validation, and release gates.
 
 ## RG-GDK-048: achievement enumerator offset (2026-10-01)
 

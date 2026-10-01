@@ -336,9 +336,14 @@ void BuilderContext::emit_conditional_branch(bool not_, std::string_view cond) {
 void BuilderContext::emit_set_flush_mode(bool enable) {
   auto newState = enable ? CSRState::VMX : CSRState::FPU;
   if (csrState != newState) {
-    auto prefix = enable ? "enable" : "disable";
-    auto suffix = csrState != CSRState::Unknown ? "Unconditional" : "";
-    println("\tctx.fpscr.{}FlushMode{}();", prefix, suffix);
+    if (enable) {
+      println(
+          "\tif (ctx.vscr_nj) ctx.fpscr.enableFlushMode(); "
+          "else ctx.fpscr.disableFlushMode();");
+    } else {
+      auto suffix = csrState != CSRState::Unknown ? "Unconditional" : "";
+      println("\tctx.fpscr.disableFlushMode{}();", suffix);
+    }
 
     csrState = newState;
   }

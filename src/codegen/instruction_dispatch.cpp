@@ -411,6 +411,7 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       {PPC_INST_DCBST, build_dcbst},
       {PPC_INST_MR, build_mr},
       {PPC_INST_MCRF, build_mcrf},
+      {PPC_INST_MCRFS, build_mcrfs},
       {PPC_INST_MCRXR, build_mcrxr},
       {PPC_INST_MFXER, build_mfxer},
       {PPC_INST_MFCTR, build_mfctr},
@@ -436,6 +437,8 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       // Vector - Floating Point Arithmetic
       //=====================================================================
       {PPC_INST_VADDFP, build_vaddfp},
+      {PPC_INST_MTVSCR, build_mtvscr},
+      {PPC_INST_MFVSCR, build_mfvscr},
       {PPC_INST_VADDFP128, build_vaddfp},
       {PPC_INST_VSUBFP, build_vsubfp},
       {PPC_INST_VSUBFP128, build_vsubfp},

@@ -430,6 +430,7 @@ bool build_mr(BuilderContext& ctx);
 
 // Move register field
 bool build_mcrf(BuilderContext& ctx);
+bool build_mcrfs(BuilderContext& ctx);
 
 // Move from special registers
 bool build_mfctr(BuilderContext& ctx);
@@ -460,6 +461,8 @@ bool build_clrldi(BuilderContext& ctx);
 
 // Vector floating point arithmetic
 bool build_vaddfp(BuilderContext& ctx);
+bool build_mtvscr(BuilderContext& ctx);
+bool build_mfvscr(BuilderContext& ctx);
 bool build_vsubfp(BuilderContext& ctx);
 bool build_vmulfp128(BuilderContext& ctx);
 bool build_vmaddfp(BuilderContext& ctx);
