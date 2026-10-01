@@ -13,8 +13,12 @@ and fixes that help every title go to the SDK.
   STFS content, generated C++, builds, saves, logs, screenshots or captures of
   the game. The `.gitignore` is an allowlist (ignore `/*`, then un-ignore each
   tracked file), so new files stay private until they're deliberately added.
-- **Original artwork only.** Box art, game icons and logos are the publisher's;
-  use original artwork in `assets/`.
+- **No publisher artwork in the repository.** Box art, banners, game icons
+  and logos are the publisher's. The repository's own artwork in `assets/` is
+  original. A game's README may show its marketplace banner by linking to a
+  public database that hosts it (such as
+  [x360db](https://github.com/xenia-manager/x360db)), credited, never by
+  committing the image.
 - **Identify every release exactly**, from the disc and the XEX headers, never
   from memory: the Redump name of the image, region, languages, title ID, media
   ID, executable version, disc number and title updates. Record "not yet
@@ -27,25 +31,32 @@ and fixes that help every title go to the SDK.
 ## Layout
 
 ```text
-README.md                 This standard's README (below)
+README.md                 The series README (below): games, download, how to play
 .gitignore                Allowlist; everything else stays local
+<Title>/
+  README.md               The game's page (below)
+  <title>.toml            Its codegen configuration (function entries, hooks,
+                          patches, mods, cheats, add-ons), added to the private
+                          manifest's `includes` as "../<title>.toml"
 assets/
   logo.svg                Original square logo
   social-preview.svg/.png Original 1280x640 image for Settings → Social preview
-configs/<title>.toml      Codegen includes for each title (function entries,
-                          hooks), added to the private manifest's `includes`
 docs/
   README.md               Notes for contributors
+  building.md             How to build each game from source
   <PREFIX>-NNN.md         One record per issue: goal, evidence, result
 ```
 
-Private work (disc images, the `rexglue init` project, logs) sits beside the
-repository files in the same folder, one subfolder per title, and is
-ignored.
+Private work (disc images, the `rexglue init` project, logs) sits in the
+game's folder next to its README and `.toml`, and is ignored. A title's
+configuration is named after the game only: variants (a frame-rate patch, a
+mod) are switchable patches inside it, not separate files.
 
-## README template
+## Series README template
 
-Sections in this order; drop a section only when it can't apply.
+What a player needs, in this order: what the games are, where to download,
+how to play. Build steps go in a building page in the title repository's
+`docs/`.
 
 ````markdown
 <p align="center"><img src="assets/logo.svg" width="128" alt="<Series> logo"></p>
@@ -59,42 +70,28 @@ Windows PC with ReXGlue.>
 > This repository contains no game files. You need your own legally obtained
 > copy of each game.
 
-## Games
+## The games
 
-| Game | Released | Disc (Redump name) | Region | Languages | Title ID | Media ID | Executable | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| <Title> | <year> · <developer> | `<Redump name>` | <region> | <langs> | `<ID>` | `<ID>` | v<version>, disc <n>/<n>, TU <n or none> | <status> |
+| Game | Released | Status |
+| --- | --- | --- |
+| <Title>, linking to `<Title>/README.md` | <year> · <developer> | <status> |
 
 Status is one of: **Planned** (not started), **Investigating** (recompiles,
 doesn't reach gameplay yet), **In-game** (reaches gameplay, not yet validated
 end to end), **Playable** (validated through the game, with the limits listed).
 
-## <Title> status
+## Download
 
-What works, what hasn't been tested and what's known broken, each with a link
-to its record in `docs/`.
+<The Releases page, or that none is published yet and where the build steps are.>
 
-## Requirements
+## How to play
 
-- Windows 11 x64 and a Direct3D 12 GPU (list what was tested).
-- Visual Studio with LLVM Clang, CMake and Ninja, as the SDK README lists.
-- ReXGlue SDK: the fork and the minimum commit.
-- Optional: the Microsoft GDK edition for GDK builds.
-
-## Build
-
-1. Extract the disc to a private folder.
-2. `rexglue init` for the executable.
-3. Add `configs/<title>.toml` to the manifest's `includes`.
-4. `rexglue codegen`, then configure and build against the installed SDK.
-5. Run command, with the options that matter.
-
-## Repository layout
+<What a player needs (Windows, GPU, their own copy), how to start the game,
+and how to open the Xbox guide.>
 
 ## Issues and records
 
-Where issues are tracked, what an issue ID looks like, and that SDK-wide fixes
-go to the SDK.
+## Repository layout
 
 ## Legal
 
@@ -102,6 +99,43 @@ Trademarks and copyrights belong to their owners; the project isn't
 affiliated with or endorsed by them.
 
 ## Credits
+````
+
+## Game page template
+
+````markdown
+<p align="center"><img src="<linked marketplace banner>" alt="<Title> marketplace banner"></p>
+
+# <Title>
+
+<One sentence: the game, recompiled with ReXGlue. A short overview in your own
+words.>
+
+**Status: <status>.** <One line on how far it gets.>
+
+## The game
+
+Release date, developer, publisher, genre, players, rating: collated from
+public databases (LaunchBox, x360db) and named under Sources. Where sources
+differ, use the more specific one and say so in the record.
+
+## The release this is built from
+
+Redump name, region, languages, title ID, media ID, executable version, XEX
+SHA-256, title updates: from the disc and the XEX headers.
+
+## What works
+
+What works, what hasn't been tested and what's known broken, each with a link
+to its record in `docs/`.
+
+## Patches and mods / Cheat codes / Add-ons
+
+What the title's `.toml` gives the Xbox guide, as lists.
+
+## Configuration
+
+## Sources
 ````
 
 ## Why
