@@ -42,6 +42,12 @@ struct RenderResources {
       texture;
   ImFont* regular_font = nullptr;
   ImFont* bold_font = nullptr;
+  /// Draws an image path as vectors instead of its texture, so it stays sharp
+  /// at any resolution. `to_screen` maps the image element's own units.
+  /// Returns false to draw the path as usual.
+  std::function<bool(ImDrawList& list, std::string_view path,
+                     const std::function<ImVec2(ImVec2)>& to_screen, float opacity)>
+      vector_image;
 };
 
 /// Draws `root` with scene unit (x, y) at screen (origin + scale * (x, y)).

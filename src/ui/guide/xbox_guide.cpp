@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <iterator>
 
 #include <fmt/format.h>
 
@@ -42,9 +43,11 @@ REXCVAR_DEFINE_BOOL(notifications_sound, true, "UI", "Play the notification soun
 REXCVAR_DEFINE_STRING(code_patch_states, "", "UI",
                       "Switchable code patches the player turned on or off in the Xbox guide "
                       "(Name=1;Name=0)");
-REXCVAR_DEFINE_BOOL(resolution_match_display, true, "GPU",
-                    "Render at the display's resolution: sets resolution_scale from the "
-                    "monitor at startup (the title's 720p times 3 on a 4K display)");
+REXCVAR_DEFINE_BOOL(resolution_match_display, false, "GPU",
+                    "Experimental: render at the display's resolution, setting resolution_scale "
+                    "from the monitor at startup (3 on a 4K display: nine times the pixels, "
+                    "much slower). Off by default: titles draw at their own resolution, as on "
+                    "the console");
 
 namespace rex::ui::guide {
 namespace {
@@ -142,18 +145,75 @@ void TintGradient(xui::Element* figure, uint32_t rgb) {
   figure->Set("Fill", xui::Value{std::shared_ptr<const xui::PropertyBag>(tinted)});
 }
 
+// The controller battery icons (Controller_OneFourth.xur to Controller_Full.xur,
+// each a 38 x 14 scene of one PNG, ico_32x_Ctrl-Battery1 to 4) redrawn as
+// shapes traced from those PNGs, so they are sharp at 4K: the console's only
+// copies are 38 x 14 pixels. Units are the PNG's pixels.
+bool DrawControllerBattery(ImDrawList& list, std::string_view path,
+                           const std::function<ImVec2(ImVec2)>& to_screen, float opacity) {
+  int bars = 0;
+  if (path == "Controller_OneFourth.xur") {
+    bars = 1;
+  } else if (path == "Controller_Half.xur") {
+    bars = 2;
+  } else if (path == "Controller_ThreeFourths.xur") {
+    bars = 3;
+  } else if (path == "Controller_Full.xur") {
+    bars = 4;
+  } else {
+    return false;
+  }
+  auto color = [&](float alpha) {
+    return IM_COL32(0xEB, 0xEB, 0xEB, int(alpha * std::clamp(opacity, 0.0f, 1.0f) * 255 + 0.5f));
+  };
+  auto rect = [&](float x0, float y0, float x1, float y1, float alpha) {
+    const ImVec2 points[] = {to_screen({x0, y0}), to_screen({x1, y0}), to_screen({x1, y1}),
+                             to_screen({x0, y1})};
+    list.AddConvexPolyFilled(points, 4, color(alpha));
+  };
+  // The pad: bumpers, body and grips, one outline so nothing overlaps.
+  constexpr ImVec2 kPad[] = {
+      {2.0f, 1.0f},  {2.6f, 0.2f},   {6.2f, 0.2f},   {6.7f, 1.0f},  {10.3f, 1.0f},
+      {10.8f, 0.2f}, {13.6f, 0.2f},  {14.2f, 1.0f},  {14.6f, 3.0f}, {14.7f, 7.5f},
+      {14.6f, 9.6f}, {14.2f, 10.7f}, {13.3f, 10.7f}, {12.5f, 9.4f}, {11.4f, 8.6f},
+      {9.0f, 8.4f},  {6.6f, 8.6f},   {5.3f, 9.2f},   {4.4f, 10.7f}, {3.6f, 11.9f},
+      {1.5f, 11.9f}, {0.5f, 11.0f},  {0.4f, 8.5f},   {0.7f, 5.0f},  {1.3f, 2.2f},
+  };
+  ImVec2 pad[std::size(kPad)];
+  for (size_t i = 0; i < std::size(kPad); ++i) {
+    pad[i] = to_screen(kPad[i]);
+  }
+  // Without the anti-aliasing fringe: at the grips' sharp corners it throws
+  // thin spikes across the body.
+  const ImDrawListFlags flags = list.Flags;
+  list.Flags &= ~ImDrawListFlags_AntiAliasedFill;
+  list.AddConcavePolyFilled(pad, int(std::size(pad)), color(0.6f));
+  list.Flags = flags;
+  // The Guide button, darker on the body.
+  const ImVec2 centre = to_screen({7.5f, 3.6f});
+  const ImVec2 edge = to_screen({8.6f, 3.6f});
+  list.AddCircleFilled(centre, std::hypot(edge.x - centre.x, edge.y - centre.y),
+                       IM_COL32(0, 0, 0, int(0.45f * std::clamp(opacity, 0.0f, 1.0f) * 255)), 16);
+  // The battery: a faint body, its frame, the terminal and the bars.
+  rect(16.9f, 1.9f, 34.1f, 10.0f, 0.12f);
+  rect(16.0f, 1.0f, 35.0f, 1.9f, 0.6f);
+  rect(16.0f, 10.0f, 35.0f, 10.9f, 0.6f);
+  rect(16.0f, 1.9f, 16.9f, 10.0f, 0.6f);
+  rect(34.1f, 1.9f, 35.0f, 10.0f, 0.6f);
+  rect(35.0f, 4.0f, 37.2f, 7.9f, 0.6f);
+  for (int i = 0; i < bars; ++i) {
+    rect(18.7f + 4.0f * float(i), 3.0f, 21.1f + 4.0f * float(i), 8.9f, 1.0f);
+  }
+  return true;
+}
+
 // The status icons by the clock, which XAM sets in code: the controller's
 // battery and the ring of light with player 1's quadrant lit. The battery is
-// shown full: GuideMain poses it by frame (3 is full) and draws
-// Controller_Full.xur, a scene of one image, so that image is drawn instead.
+// shown full: GuideMain poses it by frame (3 is Controller_Full.xur).
 void ShowControllerStatus(xui::Element* main) {
   if (xui::Element* battery = main->FindById("imgControllerBattery")) {
     battery->SetVisible(true);
     battery->Seek(3);
-    if (xui::Element* full = battery->FindById("XuiImage4")) {
-      full->Set("ImagePath", xui::Value{std::string("ico_32x_Ctrl-Battery4.png")});
-      full->Set("Width", xui::Value{38.0f});
-    }
   }
   // The header's ring, a child of the scene; the Sign In button's visual
   // has another.
@@ -417,6 +477,7 @@ XboxGuide::XboxGuide(ImGuiDrawer* drawer, std::shared_ptr<const GuideAssets> ass
   render_.texture = [this](std::string_view path, std::string_view package, int* w, int* h) {
     return Texture(path, package, w, h);
   };
+  render_.vector_image = DrawControllerBattery;
   auto sound = [this](std::string_view file, std::string_view package) {
     media_->PlaySound(file, package);
   };
