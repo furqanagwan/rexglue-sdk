@@ -477,6 +477,30 @@ class Renderer {
     if (style & kTextVerticalCenter) {
       y = (box_h - extent.y) / 2;
     }
+    // Wrapped text taller than its box (a long description in a fixed pane)
+    // scrolls through it as the console's did, clipped to the box.
+    bool clipped = false;
+    if (wrap && !(owner && owner->IsA("XuiEdit")) && box_h >= size && extent.y > box_h &&
+        resources_.text_scroll) {
+      TextScroll& scroll = (*resources_.text_scroll)[&element];
+      const double now = ImGui::GetTime();
+      if (scroll.text != text) {
+        scroll.text = text;
+        scroll.start = now;
+      }
+      // About three quarters of a line a second.
+      const TextScrollFrame frame =
+          TextScrollAt(now - scroll.start, extent.y - box_h, size * 0.75f);
+      y -= frame.offset;
+      opacity *= frame.alpha;
+      ImVec2 lo(FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX);
+      for (ImVec2 p : {m.Apply(0, 0), m.Apply(w, 0), m.Apply(w, h), m.Apply(0, h)}) {
+        lo = ImVec2(std::min(lo.x, p.x), std::min(lo.y, p.y));
+        hi = ImVec2(std::max(hi.x, p.x), std::max(hi.y, p.y));
+      }
+      list_->PushClipRect(lo, hi, true);
+      clipped = true;
+    }
     const ImVec4 no_cull(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     const uint32_t shadow = element.GetColor("DropShadowColor");
     const uint32_t color = element.GetColor("TextColor", 0xFFFFFFFF);
@@ -491,6 +515,9 @@ class Renderer {
     for (int i = first_vertex; i < list_->VtxBuffer.Size; ++i) {
       ImDrawVert& v = list_->VtxBuffer[i];
       v.pos = to_screen.Apply(v.pos.x, v.pos.y);
+    }
+    if (clipped) {
+      list_->PopClipRect();
     }
   }
 
@@ -567,6 +594,32 @@ class Renderer {
 };
 
 }  // namespace
+
+TextScrollFrame TextScrollAt(double elapsed, float overflow, float speed) {
+  constexpr double kHoldTop = 2.5, kHoldBottom = 2.0, kFade = 0.6;
+  if (overflow <= 0 || speed <= 0) {
+    return {};
+  }
+  const double scroll = overflow / speed;
+  const double cycle = kHoldTop + scroll + kHoldBottom + kFade;
+  const double since = std::max(0.0, elapsed);
+  const double round = std::floor(since / cycle);
+  const double t = since - round * cycle;
+  TextScrollFrame frame;
+  if (t < kHoldTop) {
+    // Fades back in at the top, except the first time it's shown.
+    frame.alpha = round > 0 ? float(std::min(1.0, t / kFade)) : 1.0f;
+  } else if (t < kHoldTop + scroll) {
+    frame.offset = float((t - kHoldTop) * speed);
+  } else {
+    frame.offset = overflow;
+    const double fade = t - (kHoldTop + scroll + kHoldBottom);
+    if (fade > 0) {
+      frame.alpha = float(std::max(0.0, 1.0 - fade / kFade));
+    }
+  }
+  return frame;
+}
 
 void Render(ImDrawList* list, const Element& root, ImVec2 origin, float scale, float opacity,
             const RenderResources& resources) {

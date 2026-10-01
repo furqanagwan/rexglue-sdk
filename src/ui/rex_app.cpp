@@ -189,21 +189,49 @@ std::unique_ptr<ui::AchievementNotificationDialog> ReXApp::CreateAchievementNoti
 
 namespace {
 
-// Starts `executable` with this process's arguments and a note that it was
-// handed over, so it never hands back.
-bool StartHandOff(const std::filesystem::path& executable) {
-  std::wstring args = GetCommandLineW();
-  // Drop argv[0], quoted or not.
-  size_t at = 0;
-  if (!args.empty() && args[0] == L'"') {
-    at = args.find(L'"', 1);
-    at = at == std::wstring::npos ? args.size() : at + 1;
-  } else {
-    at = args.find(L' ');
-    at = at == std::wstring::npos ? args.size() : at;
+// This process's arguments after argv[0], without the title update ones: a
+// restart must take the saved choice, and only a hand-over is marked.
+std::wstring ForwardedArguments() {
+  const std::wstring line = GetCommandLineW();
+  std::vector<std::wstring> tokens;
+  std::wstring token;
+  bool quoted = false, any = false;
+  for (wchar_t c : line) {
+    if (c == L'"') {
+      quoted = !quoted;
+    }
+    if (c == L' ' && !quoted) {
+      if (any) {
+        tokens.push_back(token);
+      }
+      token.clear();
+      any = false;
+      continue;
+    }
+    token += c;
+    any = true;
   }
-  std::wstring command_line =
-      L"\"" + executable.wstring() + L"\"" + args.substr(at) + L" --title_update_handoff=true";
+  if (any) {
+    tokens.push_back(token);
+  }
+  std::wstring out;
+  for (size_t i = 1; i < tokens.size(); ++i) {
+    if (tokens[i].starts_with(L"--title_update=") ||
+        tokens[i].starts_with(L"--title_update_handoff")) {
+      continue;
+    }
+    out += L" " + tokens[i];
+  }
+  return out;
+}
+
+// Starts `executable` with this process's arguments. A hand-over is marked so
+// the new one never hands back.
+bool StartHandOff(const std::filesystem::path& executable, bool hand_off = true) {
+  std::wstring command_line = L"\"" + executable.wstring() + L"\"" + ForwardedArguments();
+  if (hand_off) {
+    command_line += L" --title_update_handoff=true";
+  }
   STARTUPINFOW startup = {sizeof(startup)};
   PROCESS_INFORMATION process = {};
   if (!CreateProcessW(executable.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0, nullptr,
@@ -212,7 +240,7 @@ bool StartHandOff(const std::filesystem::path& executable) {
   }
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
-  REXLOG_INFO("Handed over to {}", executable.string());
+  REXLOG_INFO("{} {}", hand_off ? "Handed over to" : "Restarting as", executable.string());
   return true;
 }
 
@@ -344,6 +372,7 @@ bool ReXApp::SetupEnvironment() {
   if (std::filesystem::exists(config_path_))
     REXLOG_DEBUG("Loaded config: {}", config_path_.string());
 
+  local_dir_ = locations.local;
   // Title updates are optional (docs/title-updates.md): the player's choice in
   // the guide (title_update) picks the executable, and the original is always
   // the fallback. An update build given --update_data_root runs as asked.
@@ -938,6 +967,11 @@ void ReXApp::OnDestroy() {
   runtime_.reset();
   // Last: the guest runtime's audio, input and GPU services are gone.
   gaming_runtime_.reset();
+  if (restart_on_exit_) {
+    // The guide changed the title update choice; the new process picks the
+    // executable for it.
+    StartHandOff(rex::filesystem::GetExecutablePath(), /*hand_off=*/false);
+  }
 }
 
 void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provider) {
@@ -1094,6 +1128,9 @@ void ReXApp::ToggleGuide() {
   host.cheats = ppc_info_.title_cheats;
   host.dlc = ppc_info_.title_dlc;
   host.title_update = ppc_info_.title_update;
+  host.title_updates = ppc_info_.title_updates;
+  host.local_dir = local_dir_;
+  host.restart_title = [this] { restart_on_exit_ = true; };
   host.display_scale = DisplayScale(DisplayHeight(window_.get()));
   host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
   host.on_closed = [this](bool exit_title) {

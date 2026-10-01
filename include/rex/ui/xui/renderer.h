@@ -10,9 +10,14 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <string_view>
 
 #include <imgui.h>
+
+#include <rex/ui/xui/text_scroll.h>
 
 namespace rex::ui::xui {
 
@@ -55,6 +60,10 @@ struct RenderResources {
   std::function<bool(ImDrawList& list, std::string_view path,
                      const std::function<ImVec2(ImVec2)>& to_screen, float opacity)>
       vector_image;
+  /// When each overflowing text began scrolling (TextScrollOffset), kept
+  /// across frames; null turns the scrolling off.
+  std::shared_ptr<std::unordered_map<const Element*, TextScroll>> text_scroll =
+      std::make_shared<std::unordered_map<const Element*, TextScroll>>();
 };
 
 /// Draws `root` with scene unit (x, y) at screen (origin + scale * (x, y)).

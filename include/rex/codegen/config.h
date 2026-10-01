@@ -119,7 +119,7 @@ struct TitleDlc {
   uint32_t requires_title_update = 0;  ///< 0: none
 };
 
-// A title update the title had, for the guide's Manage Game page, where the
+// A title update the title had, for the guide's Title Updates page, where the
 // player can download and turn it on (an update is always optional).
 // [[title_update]] with version, media_id, base_version and content_id (Xbox
 // Unity's "hash": the package's STFS content ID), optionally size_kb, date and

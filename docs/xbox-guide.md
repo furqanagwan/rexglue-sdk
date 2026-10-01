@@ -30,8 +30,9 @@ keyboard runs. An owner play session with a pad is still to do.
   the cvar also overrides the built-in guide. `--xbox_guide=false` turns the
   guide off.
 - Navigation: D-pad or left stick; LB/RB or left/right switch tabs; A selects;
-  B goes back or closes; Y is Leave Game. On the keyboard: arrows, Enter or Space,
-  Escape or Backspace, Y, and Page Up/Down.
+  B goes back or closes; Y is Leave Game; X is a page's extra action (Choose
+  File for a title update). On the keyboard: arrows, Enter or Space, Escape or
+  Backspace, X, Y, and Page Up/Down.
 
 ## What it does
 
@@ -73,7 +74,26 @@ focus, press and sounds come from the skin visuals' named frames.
   pane at its top, edge to edge, as the console's marketplace showed it. The 17559 update has no
   in-game marketplace scenes (its dashboard's marketplace is Lua, in
   `contapp.xzp`), so the console's own offer list cannot be used. A game may
-  need a restart to see new content.
+  need a restart to see new content. A description longer than the pane
+  scrolls as the console's did: it holds at the top, scrolls slowly to the
+  end, holds, fades out and fades back in at the top (`TextScrollAt`, for any
+  wrapped text taller than its box), clipped to the pane.
+- Games & Apps > Title Updates, below Manage Game and apart from the add-ons,
+  lists the title's updates (its config's `[[title_update]]` entries) in the
+  same Options scene, as Title Update rows showing Download, the
+  download's progress, On or Off, or Not in Build when this build has no
+  executable for it. They are optional, and the first run never asks for one.
+  A downloads the update (Xbox Unity first, then any other sources, each
+  failure listed in the pane) or, once it's installed, turns it on or off:
+  the skin's message box asks first, since the game restarts into the other
+  executable, then the guide ends the title and it starts again. X chooses
+  the update's package from this PC instead. The right pane shows the
+  status, release date, size, changelog, and that mods made for the original
+  version are left out while it's on
+  ([title updates](title-updates.md)).
+- Games & Apps > Active Downloads lists this session's title update
+  downloads and installs, newest first, with their progress or result; A on a
+  running download cancels it. Downloads carry on when the guide is closed.
 - Settings > Preferences, Patches, Mods and Cheats open settings pages built
   from the console's own Options scenes (see [Settings pages](#settings-pages)).
 - While the guide is open, the title behind it is darkened to a quarter of its
@@ -185,10 +205,11 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | --- | --- | --- | --- |
 | Games & Apps | Achievements | `802_Achievements` grid, then `828_AchievDetails` | Works |
 | | Manage Game (added) | | Works: the title's add-ons from its catalogue, installed from this PC |
+| | Title Updates (added) | | Works: the title's updates, optional, downloaded and turned on or off |
 | | Awards | `837_AvatarAwards` (avatar awards) | Disabled |
 | | Recent | `QuickLaunch`: Games & Apps, Downloads, All tabs | Disabled |
 | | My Games | dashboard (dash command 23) | Disabled |
-| | Active Downloads | download queue | Disabled |
+| | Active Downloads | download queue | Works: title update downloads and installs |
 | | Redeem Code | code entry | Disabled |
 | | Activity Feed (hidden in 17559) | | Hidden |
 | Home | Xbox Home | quit prompt, then the dashboard | Renamed Leave Game: prompt, then ends the title; the tab is titled with the gamertag |

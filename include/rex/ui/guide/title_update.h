@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -113,6 +114,36 @@ bool DownloadTitleUpdate(const PPCTitleUpdate& update, uint32_t title_id,
                          const std::vector<TitleUpdateSource>& sources,
                          const DownloadProgress& progress, const std::atomic<bool>& cancel,
                          std::vector<std::string>* errors);
+
+/// A title update download or install from a file, running in the background
+/// so it outlives the guide. The guide's Title Updates and Active Downloads read
+/// it; the fields are written by its thread.
+struct TitleUpdateJob {
+  enum class State { kRunning, kInstalled, kFailed, kCancelled };
+  PPCTitleUpdate update{};
+  bool from_file = false;  ///< installing a package the player chose
+  std::atomic<uint64_t> done{0};
+  std::atomic<uint64_t> total{0};
+  std::atomic<State> state{State::kRunning};
+  std::atomic<bool> cancel{false};
+  /// Why it failed, one line per source tried; complete once state leaves kRunning.
+  std::vector<std::string> errors;
+};
+
+/// Starts downloading `update` (TitleUpdateSources, in order) unless a job for
+/// that version is already running, which is returned instead.
+std::shared_ptr<TitleUpdateJob> StartTitleUpdateDownload(const PPCTitleUpdate& update,
+                                                         uint32_t title_id,
+                                                         const std::filesystem::path& local_dir);
+/// Starts installing `package_file`, a package the player chose, as `update`.
+std::shared_ptr<TitleUpdateJob> StartTitleUpdateInstall(const PPCTitleUpdate& update,
+                                                        uint32_t title_id,
+                                                        const std::filesystem::path& local_dir,
+                                                        const std::filesystem::path& package_file);
+/// The latest job for `version`, or null.
+std::shared_ptr<TitleUpdateJob> FindTitleUpdateJob(uint32_t version);
+/// Every job this run, oldest first.
+std::vector<std::shared_ptr<TitleUpdateJob>> TitleUpdateJobs();
 
 /// Which executable runs. A title update build is <original>_tu<version>.exe
 /// beside the original; the player's choice (`wanted`, 0 for the original)

@@ -136,6 +136,12 @@ TEST_CASE("Generated CMake adds an executable per title update", "[codegen][titl
   CHECK(Contains(cmake, "set(REXGLUE_TU2_GENERATED_SOURCES ${GENERATED_SOURCES})"));
   CHECK(Contains(cmake, "add_executable(${target_name}_tu2 ${_rexglue_host_sources})"));
   CHECK(Contains(cmake, "\"${CMAKE_CURRENT_SOURCE_DIR}/generated/tu2\")"));
+  // The update's sources.cmake must not replace the original's add-on list:
+  // each executable embeds its own version's catalogue.
+  const auto restore = cmake.find("set(REXGLUE_TITLE_DLC_IDS \"${REXGLUE_ENTRYPOINT_DLC_IDS}\")");
+  CHECK(restore != std::string::npos);
+  CHECK(restore > cmake.find("include(generated/tu2/sources.cmake)"));
+  CHECK(Contains(cmake, "set(REXGLUE_TITLE_DLC_IDS \"${REXGLUE_TU2_DLC_IDS}\")"));
   // Codegen's rule produces the update's sources too, so the build orders after it.
   const auto command = cmake.find("add_custom_command(");
   REQUIRE(command != std::string::npos);

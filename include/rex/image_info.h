@@ -62,7 +62,7 @@ struct PPCTitleDlc {
 };
 
 /// A title update the title had ([[title_update]] in its config), for the
-/// guide's Manage Game: optional, downloaded and installed by the player.
+/// guide's Title Updates page: optional, downloaded and installed by the player.
 struct PPCTitleUpdate {
   u32 version;             ///< the update's number (Xbox Unity's Version)
   const char* media_id;    ///< the disc's media ID it applies to, 8 hex digits

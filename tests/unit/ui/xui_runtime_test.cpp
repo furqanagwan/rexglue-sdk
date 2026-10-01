@@ -17,6 +17,7 @@
 
 #include <rex/ui/guide/guide_layout.h>
 #include <rex/ui/xui/document.h>
+#include <rex/ui/xui/text_scroll.h>
 #include <rex/ui/xui/runtime.h>
 #include <rex/ui/xui/system_update.h>
 
@@ -520,4 +521,21 @@ TEST_CASE("The console's guide scene switches between three tabs", "[xui][local]
   CHECK(x("txt_Settings") == Approx(668.0f));
   CHECK(x("txt_home") == Approx(638.0f));
   CHECK_FALSE(tabs->Play("2To3"));
+}
+
+TEST_CASE("Text taller than its box scrolls, holds and fades back to the top", "[xui]") {
+  using rex::ui::xui::TextScrollAt;
+  // 30 units over, 10 a second: 2.5 s at the top, 3 s scrolling, 2 s at the
+  // end, 0.6 s fading out; then it fades back in at the top.
+  CHECK(TextScrollAt(1.0, 30, 10).offset == 0);
+  CHECK(TextScrollAt(1.0, 30, 10).alpha == 1);  // no fade the first time
+  CHECK(TextScrollAt(4.0, 30, 10).offset == Catch::Approx(15));
+  CHECK(TextScrollAt(6.5, 30, 10).offset == 30);
+  CHECK(TextScrollAt(6.5, 30, 10).alpha == 1);
+  CHECK(TextScrollAt(7.8, 30, 10).alpha == Catch::Approx(0.5).margin(0.01));
+  const double cycle = 2.5 + 3 + 2 + 0.6;
+  CHECK(TextScrollAt(cycle + 0.3, 30, 10).offset == 0);
+  CHECK(TextScrollAt(cycle + 0.3, 30, 10).alpha == Catch::Approx(0.5).margin(0.01));
+  // Text that fits never moves.
+  CHECK(TextScrollAt(5.0, 0, 10).offset == 0);
 }

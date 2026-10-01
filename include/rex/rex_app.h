@@ -359,6 +359,10 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   /// The player's title update choice started the other executable; this one
   /// quits without starting the title.
   bool handed_off_ = false;
+  /// The guide changed the title update choice: start this title again once
+  /// it has shut down, so the choice picks the executable.
+  bool restart_on_exit_ = false;
+  std::filesystem::path local_dir_;  // %LOCALAPPDATA%\<name>
 };
 
 }  // namespace rex

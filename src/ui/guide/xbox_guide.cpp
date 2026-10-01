@@ -733,6 +733,9 @@ void XboxGuide::ConfigureMain() {
   // Achievements, made from the Recent entry.
   if (xui::Element* recent = main_->FindById("btnQuickLaunch")) {
     AddEntry(recent->parent(), "btnQuickLaunch", "btnAchievements", "btnManageGame", "Manage Game");
+    // Title Updates below it, a page of its own: updates are not add-ons.
+    AddEntry(recent->parent(), "btnQuickLaunch", "btnManageGame", "btnTitleUpdates",
+             "Title Updates");
   }
   // Settings gains Patches, Mods and Cheats, made from the Preferences entry.
   if (xui::Element* preferences = main_->FindById("btnPersonalSettings")) {
@@ -759,7 +762,8 @@ void XboxGuide::ConfigureMain() {
   HideButtonLetters(backdrop_.get());
   auto handled = [&](std::string_view id) {
     if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
-                                 id == "btnMods" || id == "btnCheats" || id == "btnManageGame")) {
+                                 id == "btnMods" || id == "btnCheats" || id == "btnManageGame" ||
+                                 id == "btnTitleUpdates" || id == "btnActiveDownloads")) {
       return true;
     }
     return id == "btnDashboard" ||
@@ -792,7 +796,8 @@ void XboxGuide::ConfigureMain() {
   UpdateClock();
 }
 
-void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_view y) {
+void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_view y,
+                           std::string_view x) {
   auto legend = [&](std::string_view button, std::string_view text_id, std::string_view text) {
     xui::Element* glyph = backdrop_->FindById(button);
     xui::Element* label = backdrop_->FindById(text_id);
@@ -805,7 +810,7 @@ void XboxGuide::SetLegends(std::string_view a, std::string_view b, std::string_v
   };
   legend("AButton", "AText", a);
   legend("BButton", "BText", b);
-  legend("XButton", "XText", "");
+  legend("XButton", "XText", x);
   legend("YButton", "YText", y);
 }
 
@@ -932,6 +937,7 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
         {ImGuiKey_Space, GuideAction::kA},
         {ImGuiKey_Escape, GuideAction::kB},
         {ImGuiKey_Backspace, GuideAction::kB},
+        {ImGuiKey_X, GuideAction::kX},
         {ImGuiKey_Y, GuideAction::kY},
         {ImGuiKey_PageUp, GuideAction::kPreviousTab},
         {ImGuiKey_PageDown, GuideAction::kNextTab},
@@ -967,6 +973,8 @@ void XboxGuide::OnDraw(ImGuiIO& io) {
   backdrop_->Advance(std::min(seconds, 0.25) * xui::kFramesPerSecond);
   ColourGamerscoreGlyph();
   PollManageGame();
+  PollTitleUpdates();
+  PollActiveDownloads();
   if (!hud_root_->playing()) {
     for (xui::Element* element : pending_removal_) {
       element->parent()->RemoveChild(element);
@@ -1092,6 +1100,10 @@ void XboxGuide::Activate(xui::Element* control) {
     OpenCheats();
   } else if (id == "btnManageGame") {
     OpenManageGame();
+  } else if (id == "btnTitleUpdates") {
+    OpenTitleUpdates();
+  } else if (id == "btnActiveDownloads") {
+    OpenActiveDownloads();
   }
 }
 
@@ -1332,11 +1344,21 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
       (confirm == Confirm::kTurnOff || focus_->id() == "btnDashboard")) {
     title = focus_->text();
   }
-  const std::string body =
+  std::string body =
       confirm == Confirm::kXboxHome
           ? std::string(kLeaveGameWarning)
           : FindString(assets_->hud_strings, "Turning off the console",
                        "Turning off the console will also turn off all controllers.");
+  if (confirm == Confirm::kTitleUpdate) {
+    // Turning a title update on or off runs the other executable.
+    title = confirm_title_update_ ? fmt::format("Turn On Title Update {}", confirm_title_update_)
+                                  : "Turn Off Title Update";
+    body = confirm_title_update_
+               ? "The game restarts to run the update. Mods made for the original version are "
+                 "left out while it's on. Any unsaved progress will be lost."
+               : "The game restarts with the original version. Any unsaved progress will be "
+                 "lost.";
+  }
   message_->SetText(title);
   auto set_text = [&](std::string_view id, std::string text) {
     if (xui::Element* e = message_->FindById(id)) {
@@ -1360,16 +1382,19 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
 }
 
 void XboxGuide::CloseConfirm() {
-  hud_root_->Play(achievements_ ? "ErrorToFull" : "ErrorToHalf");
+  hud_root_->Play(achievements_ || !pages_.empty() ? "ErrorToFull" : "ErrorToHalf");
   pending_removal_.push_back(message_);
   message_ = nullptr;
-  screen_ = achievements_ ? (details_ ? Screen::kAchievementDetail : Screen::kAchievements)
-                          : Screen::kMain;
+  screen_ = achievements_    ? (details_ ? Screen::kAchievementDetail : Screen::kAchievements)
+            : pages_.empty() ? Screen::kMain
+                             : Screen::kSettings;
   focus_ = nullptr;
   SetFocus(return_focus_, /*initial=*/true);
   if (screen_ == Screen::kMain) {
     SetLegends(main_->GetString("LegendA"), main_->GetString("LegendB"),
                main_->GetString("LegendY"));
+  } else if (screen_ == Screen::kSettings && pages_.back().on_focus) {
+    pages_.back().on_focus();  // the page's details and legends again
   }
   media_->PlaySound("sharedres://btn_Back.xma", "");
 }
@@ -1387,7 +1412,11 @@ void XboxGuide::HandleConfirm(GuideAction action) {
       if (focus_) {
         focus_->Press();
         if (focus_->id() == "Button0") {
-          BeginClose(/*exit_title=*/true);
+          if (confirm_ == Confirm::kTitleUpdate) {
+            ApplyTitleUpdateChoice();
+          } else {
+            BeginClose(/*exit_title=*/true);
+          }
         } else {
           CloseConfirm();
         }
