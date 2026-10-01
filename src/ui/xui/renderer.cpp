@@ -62,6 +62,19 @@ ImU32 ToImColor(uint32_t argb, float opacity) {
                   uint32_t(std::lround(alpha)));
 }
 
+// XUI BlendMode 1 multiplies the destination by the colour: the skin's row
+// separators (Top and Bottom, 0xffd2d5d9) darken whatever is under them by
+// the same proportion, so they look equally dark on every row. Over a normal
+// alpha blend, multiplying by a grey g is drawing black at alpha 1 - g; the
+// channels' mean stands for g (the skin's multiplied colours are near grey).
+constexpr uint32_t kBlendMultiply = 1;
+
+uint32_t MultiplyAsBlack(uint32_t argb) {
+  const float grey = float(((argb >> 16) & 0xFF) + ((argb >> 8) & 0xFF) + (argb & 0xFF)) / 765.0f;
+  const float alpha = float(argb >> 24) * (1.0f - grey);
+  return uint32_t(std::lround(alpha)) << 24;
+}
+
 uint32_t SampleStops(const std::vector<Stop>& stops, float t) {
   if (stops.empty()) {
     return 0;
@@ -190,6 +203,7 @@ class Renderer {
 
   void DrawFigure(const Element& element, const Affine& m, float w, float h, float opacity) {
     const std::vector<ImVec2> outline = Outline(element, w, h);
+    multiply_ = element.GetUnsigned("BlendMode") == kBlendMultiply;
     if (const PropertyBag* fill = element.GetCompound("Fill")) {
       const uint32_t* type = Member<uint32_t>(fill, "FillType");
       const uint32_t fill_type = type ? *type : 1;  // a Fill with no type is solid
@@ -301,7 +315,9 @@ class Renderer {
           const float g = i ? float(j) / float(i) : 0.0f;
           const ImVec2 p(center.x + f * ((a.x - center.x) + g * (b.x - a.x)),
                          center.y + f * ((a.y - center.y) + g * (b.y - a.y)));
-          list_->PrimWriteVtx(m.Apply(p.x, p.y), uv, ToImColor(color_at(p), opacity));
+          const uint32_t argb = color_at(p);
+          list_->PrimWriteVtx(m.Apply(p.x, p.y), uv,
+                              ToImColor(multiply_ ? MultiplyAsBlack(argb) : argb, opacity));
         }
       }
       auto index = [&](int i, int j) { return ImDrawIdx(base + i * (i + 1) / 2 + j); };
@@ -547,6 +563,7 @@ class Renderer {
 
   ImDrawList* list_;
   const RenderResources& resources_;
+  bool multiply_ = false;  // the figure being filled has BlendMode multiply
 };
 
 }  // namespace

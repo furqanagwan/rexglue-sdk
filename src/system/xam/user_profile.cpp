@@ -13,20 +13,69 @@
 
 #include <fmt/format.h>
 
+#include <rex/cvar.h>
 #include <rex/logging.h>
+#include <rex/string.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/user_profile.h>
+
+#include <windows.h>
+
+REXCVAR_DEFINE_STRING(user_gamertag, "", "Kernel",
+                      "The profile's gamertag. Empty: the Xbox account signed in to this PC "
+                      "(the Xbox app), else User");
 
 namespace rex {
 namespace system {
 namespace xam {
+namespace {
+
+// A 360 gamertag: up to 15 characters (XUSER_NAME_SIZE 16, with the null).
+constexpr size_t kMaxGamertag = 15;
+
+// The gamertag of the Xbox account signed in to Windows. The Xbox app's sign-in
+// keeps it in HKCU\Software\Microsoft\XboxLive (Gamertag, the classic form);
+// this is not a documented interface, so it is read only and may be missing.
+// XUserGetGamertag needs a Store package identity and a registered title, which
+// a recompiled title does not have (E_GAMEUSER_NO_PACKAGE_IDENTITY).
+std::string SignedInGamertag() {
+  wchar_t value[64] = {};
+  DWORD size = sizeof(value);
+  if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\XboxLive", L"Gamertag", RRF_RT_REG_SZ,
+                   nullptr, value, &size) != ERROR_SUCCESS) {
+    return {};
+  }
+  return rex::string::to_utf8(std::u16string(reinterpret_cast<const char16_t*>(value)));
+}
+
+std::string ProfileName() {
+  std::string name = REXCVAR_GET(user_gamertag);
+  if (name.empty()) {
+    name = SignedInGamertag();
+  }
+  if (name.empty()) {
+    return "User";
+  }
+  if (name.size() > kMaxGamertag) {
+    name.resize(kMaxGamertag);
+    while (!name.empty() && (uint8_t(name.back()) & 0xC0) == 0x80) {
+      name.pop_back();
+    }
+    if (!name.empty() && (uint8_t(name.back()) & 0x80)) {
+      name.pop_back();  // the lead byte of the character cut short
+    }
+  }
+  return name;
+}
+
+}  // namespace
 
 UserProfile::UserProfile() {
   // 58410A1F checks the user XUID against a mask of 0x00C0000000000000 (3<<54),
   // if non-zero, it prevents the user from playing the game.
   // "You do not have permissions to perform this operation."
   xuid_ = 0xB13EBABEBABEBABE;
-  name_ = "User";
+  name_ = ProfileName();
 
   // https://cs.rin.ru/forum/viewtopic.php?f=38&t=60668&hilit=gfwl+live&start=195
   // https://github.com/arkem/py360/blob/master/py360/constants.py

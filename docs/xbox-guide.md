@@ -52,7 +52,7 @@ focus, press and sounds come from the skin visuals' named frames.
   a recompiled title has no dashboard) is worded as the Xbox One and Series
   consoles' guide words it for 360 titles. That guide also titles the Home
   tab with the gamertag, so the Home blade's labels show the profile's name
-  (the runtime's profile is named "User"). Leave Game asks "Are you sure you want to close
+  (the gamertag of the Xbox account signed in to Windows; see below). Leave Game asks "Are you sure you want to close
   the game? Any unsaved progress will be lost." first, No focused. Yes closes
   the guide and ends the title through the window's normal close path.
 - Games & Apps > Manage Game lists every add-on the title had in the
@@ -298,12 +298,30 @@ against the console.
   colour (`xui::kGamerscoreGlyph`, `kGamerscoreImage`). The skin draws the
   Achievements row's glyph near white whatever the row's state, unseen on an
   unfocused row, so the guide gives it the row's label colour.
+- Row separators: the skin's `Top` and `Bottom` figures (0xffd2d5d9) have
+  BlendMode 1, multiply, so each darkens the row under it by the same
+  proportion and every line looks equally dark. The renderer draws a
+  multiplied grey g as black at alpha 1 - g; drawn as a plain light grey they
+  faded into the darker rows lower down.
 - Button glyphs: sharedres `A-Button.png` to `Y-Button.png` are 18-pixel discs
   with the letter laid over by a separate text element placed for the
   console's font, so they were soft at 4K and their letters off centre. The
   guide draws each as a disc in the PNG's colour with its letter, bold, the
   centre of its ink on the disc's centre (`DrawButtonGlyph`), and hides the
   scenes' letter elements.
+
+## Gamertag
+
+The profile (what titles get from `XUserGetName` and what the Home tab
+shows) is named after the Xbox account signed in to this PC: the Xbox app's
+sign-in keeps its gamertag in `HKCU\Software\Microsoft\XboxLive`
+(`Gamertag`, the classic form, cut to the 360's 15 characters). That key is
+not a documented interface; the GDK's `XUserGetGamertag` would be, but
+`XUserAddAsync` fails with `E_GAMEUSER_NO_PACKAGE_IDENTITY` (0x89245110) for a
+game without a Store package identity and a title registered with Microsoft,
+which a recompiled title is not (checked 2026-10-01, GDK 260404). The
+`user_gamertag` cvar overrides it; with neither, the name is `User`. The
+profile's XUID is unchanged, so save locations do not move.
 
 ## Validation
 
