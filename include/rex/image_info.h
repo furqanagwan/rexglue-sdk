@@ -61,6 +61,18 @@ struct PPCTitleDlc {
   u32 requires_title_update;  ///< the title update version it needs; 0 for none
 };
 
+/// A title update the title had ([[title_update]] in its config), for the
+/// guide's Manage Game: optional, downloaded and installed by the player.
+struct PPCTitleUpdate {
+  u32 version;             ///< the update's number (Xbox Unity's Version)
+  const char* media_id;    ///< the disc's media ID it applies to, 8 hex digits
+  u32 base_version;        ///< the executable version it updates (header 0x35C)
+  const char* content_id;  ///< package content ID, 40 hex digits (Xbox Unity's hash)
+  u32 size_kb;             ///< package size in KB, 0 when unknown
+  const char* date;        ///< release or upload date, empty when unknown
+  const char* changelog;   ///< what it changes, empty when unknown
+};
+
 /// PPC image layout passed from the generated config header into ReXApp.
 struct PPCImageInfo {
   u32 code_base;
@@ -82,6 +94,8 @@ struct PPCImageInfo {
   /// The title update this executable was built for; 0 for the original. A
   /// title update build applies that update's XEX patches (update:) at load.
   u32 title_update = 0;
+  /// The title updates the title had, ended by a zero version; null when none.
+  const PPCTitleUpdate* title_updates = nullptr;
 };
 
 }  // namespace rex

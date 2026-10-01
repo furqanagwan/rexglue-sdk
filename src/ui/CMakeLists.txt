@@ -35,6 +35,7 @@ set(REXUI_GUIDE_SOURCES
     guide/guide_dlc.cpp
     guide/guide_input.cpp
     guide/guide_layout.cpp
+    guide/title_update.cpp
     guide/guide_notification.cpp
     guide/guide_settings.cpp
     guide/xbox_guide.cpp
@@ -98,6 +99,8 @@ target_include_directories(rexui PRIVATE
     ${PROJECT_BINARY_DIR}/include
     ${REXGLUE_ROOT}/src  # For ui/shaders/bytecode includes
     ${REXGLUE_ROOT}/thirdparty/stb  # stb_image.h for icon decoding
+    ${REXGLUE_ROOT}/thirdparty  # crypto/TinySHA1.hpp for title update content IDs
+    ${REXGLUE_ROOT}/thirdparty/inja/third_party/include  # nlohmann/json.hpp (Xbox Unity)
 )
 
 target_link_libraries(rexui PUBLIC
@@ -108,6 +111,8 @@ target_link_libraries(rexui PUBLIC
 target_link_libraries(rexui PRIVATE utf8cpp)
 # Native Win32 window: DWM corner preference, IME association, drag and drop.
 target_link_libraries(rexui PRIVATE dwmapi imm32 shell32)
+# Title update downloads (guide/title_update.cpp).
+target_link_libraries(rexui PRIVATE winhttp)
 
 if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
     target_include_directories(rexui PRIVATE

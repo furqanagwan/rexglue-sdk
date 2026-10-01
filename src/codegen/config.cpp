@@ -393,6 +393,42 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
+  // [[title_update]] -- keyed by "version": the title's updates, for the guide.
+  if (auto updateArray = toml["title_update"].as_array()) {
+    for (auto& entry : *updateArray) {
+      auto* table = entry.as_table();
+      const int64_t version = table ? (*table)["version"].value_or(int64_t(0)) : 0;
+      auto media = table ? (*table)["media_id"].value<std::string>() : std::nullopt;
+      auto content = table ? (*table)["content_id"].value<std::string>() : std::nullopt;
+      if (version <= 0 || !media || media->size() != 8 || !content || content->size() != 40) {
+        REXCODEGEN_ERROR(
+            "[[title_update]] entry in {} needs version, media_id (8 hex digits) and "
+            "content_id (40 hex digits)",
+            filePath);
+        continue;
+      }
+      auto upper = [](std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char c) { return char(std::toupper(c)); });
+        return text;
+      };
+      TitleUpdateInfo parsed{uint32_t(version),
+                             upper(*media),
+                             uint32_t((*table)["base_version"].value_or(int64_t(0))),
+                             upper(*content),
+                             uint32_t((*table)["size_kb"].value_or(int64_t(0))),
+                             (*table)["date"].value_or(std::string()),
+                             (*table)["changelog"].value_or(std::string())};
+      auto it = std::find_if(cfg.titleUpdates.begin(), cfg.titleUpdates.end(),
+                             [&](const TitleUpdateInfo& u) { return u.version == parsed.version; });
+      if (it == cfg.titleUpdates.end()) {
+        cfg.titleUpdates.push_back(std::move(parsed));
+      } else {
+        *it = std::move(parsed);
+      }
+    }
+  }
+
   // --- Arrays of tables: deduplicated by primary key (address), last wins ---
 
   // [[invalid_instructions]] -- keyed by "data" address

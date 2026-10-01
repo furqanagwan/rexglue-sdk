@@ -119,6 +119,22 @@ struct TitleDlc {
   uint32_t requires_title_update = 0;  ///< 0: none
 };
 
+// A title update the title had, for the guide's Manage Game page, where the
+// player can download and turn it on (an update is always optional).
+// [[title_update]] with version, media_id, base_version and content_id (Xbox
+// Unity's "hash": the package's STFS content ID), optionally size_kb, date and
+// changelog. The update runs only in a build that has its executable (a
+// manifest [[title_update]]).
+struct TitleUpdateInfo {
+  uint32_t version = 0;
+  std::string media_id;
+  uint32_t base_version = 0;
+  std::string content_id;
+  uint32_t size_kb = 0;
+  std::string date;
+  std::string changelog;
+};
+
 // Section info for analysis output
 struct SectionInfo {
   std::string name;
@@ -180,6 +196,8 @@ struct RecompilerConfig {
   std::vector<TitleCheat> cheats;
   /// The title's add-ons, in definition order, keyed by id.
   std::vector<TitleDlc> dlc;
+  /// The title's updates, in definition order, keyed by version.
+  std::vector<TitleUpdateInfo> titleUpdates;
   uint32_t longJmpAddress = 0;
   uint32_t setJmpAddress = 0;
   // Analysis-only guard for the recognized CRT's optional setjmp hook.

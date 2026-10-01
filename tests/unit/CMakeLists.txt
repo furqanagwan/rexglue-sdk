@@ -46,6 +46,7 @@ add_executable(unit_tests
     ui/xui_runtime_test.cpp
     ui/dlc_catalog_test.cpp
     ui/guide_input_test.cpp
+    ui/title_update_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
@@ -76,6 +77,7 @@ target_include_directories(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/thirdparty/stb
+    ${PROJECT_SOURCE_DIR}/thirdparty  # crypto/TinySHA1.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

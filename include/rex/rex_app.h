@@ -356,6 +356,9 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   ImFont* guide_font_bold_ = nullptr;
   ui::guide::XboxGuide* guide_ = nullptr;
   bool guide_unavailable_shown_ = false;
+  /// The player's title update choice started the other executable; this one
+  /// quits without starting the title.
+  bool handed_off_ = false;
 };
 
 }  // namespace rex
