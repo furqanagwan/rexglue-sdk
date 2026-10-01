@@ -108,6 +108,17 @@ struct TitleCheat {
   std::string where;        ///< Where the game takes the code
 };
 
+// An add-on the title had in the Xbox 360 marketplace, for the guide's Manage
+// Game page. [[dlc]] with the marketplace media ID (id), and optionally the
+// title update the add-on needs (requires_title_update, its version) and the
+// display name in its package when the catalogue's title differs (package_name).
+// `rexglue dlc-find <title ID>` prints a title's entries.
+struct TitleDlc {
+  std::string id;
+  std::string package_name;
+  uint32_t requires_title_update = 0;  ///< 0: none
+};
+
 // Section info for analysis output
 struct SectionInfo {
   std::string name;
@@ -163,6 +174,8 @@ struct RecompilerConfig {
   std::vector<CodePatch> patches;
   /// The title's own cheat codes, in definition order, keyed by name.
   std::vector<TitleCheat> cheats;
+  /// The title's add-ons, in definition order, keyed by id.
+  std::vector<TitleDlc> dlc;
   uint32_t longJmpAddress = 0;
   uint32_t setJmpAddress = 0;
   // Analysis-only guard for the recognized CRT's optional setjmp hook.

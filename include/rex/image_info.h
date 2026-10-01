@@ -53,6 +53,14 @@ struct PPCTitleCheat {
   const char* where;        ///< Where the game takes the code
 };
 
+/// An add-on the title had in the marketplace, for the guide's Manage Game
+/// page; its name, description and art come from the built-in catalogue.
+struct PPCTitleDlc {
+  const char* id;             ///< marketplace media ID
+  const char* package_name;   ///< display name in its package, when not the catalogue's
+  u32 requires_title_update;  ///< the title update version it needs; 0 for none
+};
+
 /// PPC image layout passed from the generated config header into ReXApp.
 struct PPCImageInfo {
   u32 code_base;
@@ -69,6 +77,8 @@ struct PPCImageInfo {
   const PPCSwitchablePatch* switchable_patches = nullptr;
   /// The title's own cheat codes, ended by a null name; null when none.
   const PPCTitleCheat* title_cheats = nullptr;
+  /// The title's add-ons, ended by a null id; null when none.
+  const PPCTitleDlc* title_dlc = nullptr;
 };
 
 }  // namespace rex

@@ -127,7 +127,8 @@ class Element {
   Element* AttachScene(const Node& node, const SceneContext& context);
   /// A copy of `source` (a child of this element) built from the same scene
   /// data, placed after it: new menu entries look exactly like the others.
-  Element* CloneChild(const Element& source, std::string id);
+  /// `visual` names a different skin visual for the copy.
+  Element* CloneChild(const Element& source, std::string id, std::string_view visual = {});
   void RemoveChild(Element* child);
 
   /// Fills a list with `count` copies of its visual's item template

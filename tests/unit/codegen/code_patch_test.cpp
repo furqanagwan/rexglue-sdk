@@ -325,6 +325,30 @@ description = "Walther PPK and Fast Switch"
   CHECK(cfg.cheats[1].code == "l3g3nds");
 }
 
+TEST_CASE("[[dlc]] lists the title's add-ons, keyed by id", "[codegen][patch]") {
+  auto cfg = Parse(R"(
+file_path = "default.xex"
+[[dlc]]
+id = "d4c83e1f-243b-4a68-ad70-abf3c0fbf372"
+[[dlc]]
+package_name = "No id"
+[[dlc]]
+id = "00000000-0000-400C-80CF-0001415607FF"
+requires_title_update = 2
+package_name = "Camille Map Pack"
+[[dlc]]
+id = "D4C83E1F-243B-4A68-AD70-ABF3C0FBF372"
+package_name = "SKYFALL"
+)");
+  REQUIRE(cfg.dlc.size() == 2);
+  // Ids are compared upper case, so the later entry replaces the first.
+  CHECK(cfg.dlc[0].id == "D4C83E1F-243B-4A68-AD70-ABF3C0FBF372");
+  CHECK(cfg.dlc[0].package_name == "SKYFALL");
+  CHECK(cfg.dlc[0].requires_title_update == 0);
+  CHECK(cfg.dlc[1].requires_title_update == 2);
+  CHECK(cfg.dlc[1].package_name == "Camille Map Pack");
+}
+
 TEST_CASE("Switchable patches set registers, optionally keyed on lr", "[codegen][patch]") {
   auto cfg = Parse(R"(
 file_path = "default.xex"

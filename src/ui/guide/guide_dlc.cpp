@@ -1,13 +1,17 @@
 /**
  * @file        ui/guide/guide_dlc.cpp
- * @brief       Games & Apps > Manage Game: installing a title's DLC (RG-GDK-041)
+ * @brief       Games & Apps > Manage Game: a title's add-ons (RG-GDK-041, RG-GDK-050)
  *
- * Lists the title's downloadable content: what is installed, and the
- * content packages (STFS, content type 2, this title's ID) found in the DLC
- * folder beside the executable or picked with "Add Content from This PC".
- * A on a package that is not installed installs it with the content
- * manager, off the UI thread. The page is the console's own Options scene,
- * its checkboxes ticked for installed content.
+ * Lists every add-on the title had in the marketplace, from its config's
+ * [[dlc]] entries and the catalogue built into it (name, publisher,
+ * description, banner), as the console's in-game marketplace listed offers:
+ * Install where the price was. Installing takes the add-on's package from the
+ * DLC folder beside the executable, or one the player picks on this PC, and
+ * installs it with the content manager off the UI thread. An add-on that
+ * needs a title update the build lacks says so and is not installed. Content
+ * installed or found that the catalogue lacks is listed after it. The page is
+ * the console's Options scene, its rows given the btn_Count visual for the
+ * right-hand column.
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License
@@ -32,22 +36,33 @@
 #include <rex/system/xam/content_device.h>
 #include <rex/system/xam/content_manager.h>
 #include <rex/system/xcontent.h>
+#include <rex/ui/guide/dlc_catalog.h>
 #include <rex/ui/guide/guide_layout.h>
+#include <rex/ui/xui/schema.h>
 
 namespace rex::ui::guide {
 namespace {
 
 constexpr float kRowHeight = 28.0f;
-constexpr std::string_view kAddId = "btnAddContent";
 constexpr size_t kMaxRows = 11;  // the list area of the Options scene
+// The right pane (the scene's graphic_metapane, x 425 to 712): the banner
+// (420 x 95 in the catalogue) across the text column, the add-on's details
+// below it to the pane's foot.
+constexpr float kPaneX = 443.0f;
+constexpr float kPaneWidth = 249.0f;
+constexpr float kBannerY = 70.0f;
+constexpr float kBannerHeight = kPaneWidth * 95.0f / 420.0f;
+constexpr float kDetailsY = kBannerY + kBannerHeight + 8.0f;
+constexpr float kPaneBottom = 405.0f;
 
 bool SameName(std::string_view a, std::string_view b) {
-  return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-                    [](char x, char y) { return std::tolower(x) == std::tolower(y); });
+  return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char x, char y) {
+    return std::tolower(uint8_t(x)) == std::tolower(uint8_t(y));
+  });
 }
 
-// The Windows file picker, for content packages anywhere on this PC.
-std::vector<std::filesystem::path> PickPackages() {
+// The Windows file picker, for an add-on's package anywhere on this PC.
+std::vector<std::filesystem::path> PickPackages(const std::string& title) {
   std::vector<std::filesystem::path> picked;
   const HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   IFileOpenDialog* dialog = nullptr;
@@ -56,7 +71,8 @@ std::vector<std::filesystem::path> PickPackages() {
     DWORD options = 0;
     dialog->GetOptions(&options);
     dialog->SetOptions(options | FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM);
-    dialog->SetTitle(L"Add downloadable content");
+    const std::u16string utf16 = string::to_utf16(title);
+    dialog->SetTitle(reinterpret_cast<const wchar_t*>(utf16.c_str()));
     if (SUCCEEDED(dialog->Show(GetForegroundWindow()))) {
       IShellItemArray* items = nullptr;
       if (SUCCEEDED(dialog->GetResults(&items))) {
@@ -90,6 +106,7 @@ std::vector<std::filesystem::path> PickPackages() {
 struct XboxGuide::DlcJob {
   std::atomic<bool> done{false};
   bool pick = false;
+  std::string entry_id;   // pick: the add-on the package is for
   std::string file_name;  // install: the package being installed
   X_RESULT result = X_ERROR_SUCCESS;
   std::vector<std::filesystem::path> picked;
@@ -97,19 +114,49 @@ struct XboxGuide::DlcJob {
 
 std::vector<XboxGuide::DlcEntry> XboxGuide::FindDlc() const {
   std::vector<DlcEntry> out;
-  auto* kernel = host_.kernel_state;
-  if (!kernel || !kernel->content_manager()) {
-    return out;
-  }
-  const uint32_t title_id = kernel->title_id();
-  for (const auto& content : kernel->content_manager()->ListContent(
-           static_cast<uint32_t>(system::xam::DummyDeviceId::HDD), 0,
-           system::XContentType::kMarketplaceContent, title_id)) {
+  for (const PPCTitleDlc* d = host_.dlc; d && d->id; ++d) {
     DlcEntry entry;
-    entry.file_name = content.file_name();
-    entry.name = string::to_utf8(content.display_name());
-    entry.installed = true;
+    entry.id = d->id;
+    entry.requires_title_update = d->requires_title_update;
+    if (const DlcCatalogEntry* info = FindEmbeddedDlc(entry.id)) {
+      entry.name = info->title;
+      entry.publisher = info->publisher;
+      entry.description = info->description;
+    }
+    entry.package_name = d->package_name && *d->package_name ? d->package_name : entry.name;
+    if (entry.name.empty()) {
+      entry.name = entry.package_name.empty() ? entry.id : entry.package_name;
+    }
     out.push_back(std::move(entry));
+  }
+  const size_t catalogued = out.size();
+  // An installed or found package belongs to the catalogue entry its display
+  // name matches; otherwise it is listed after them.
+  auto entry_for = [&](std::string_view display_name) -> DlcEntry* {
+    for (size_t i = 0; i < catalogued; ++i) {
+      if (SameName(out[i].package_name, display_name) || SameName(out[i].name, display_name)) {
+        return &out[i];
+      }
+    }
+    return nullptr;
+  };
+
+  auto* kernel = host_.kernel_state;
+  const uint32_t title_id = kernel ? kernel->title_id() : 0;
+  if (kernel && kernel->content_manager()) {
+    for (const auto& content : kernel->content_manager()->ListContent(
+             static_cast<uint32_t>(system::xam::DummyDeviceId::HDD), 0,
+             system::XContentType::kMarketplaceContent, title_id)) {
+      const std::string name = string::to_utf8(content.display_name());
+      DlcEntry* entry = entry_for(name);
+      if (!entry) {
+        out.push_back({});
+        entry = &out.back();
+        entry->name = name;
+      }
+      entry->file_name = content.file_name();
+      entry->installed = true;
+    }
   }
   auto add_package = [&](const std::filesystem::path& path) {
     auto header = filesystem::StfsContainerDevice::ReadPackageHeader(path);
@@ -117,21 +164,27 @@ std::vector<XboxGuide::DlcEntry> XboxGuide::FindDlc() const {
         header->metadata.execution_info.title_id != title_id) {
       return;
     }
-    const std::string file_name = path_to_utf8(path.filename());
-    auto it = std::find_if(out.begin(), out.end(),
-                           [&](const DlcEntry& e) { return SameName(e.file_name, file_name); });
-    if (it == out.end()) {
-      out.push_back({});
-      it = std::prev(out.end());
-      it->file_name = file_name;
-    }
-    it->package = path;
     const std::string name =
         string::to_utf8(header->metadata.display_name(system::XLanguage::kEnglish));
-    if (!name.empty()) {
-      it->name = name;
+    const std::string file_name = path_to_utf8(path.filename());
+    DlcEntry* entry = entry_for(name);
+    if (!entry) {
+      auto it = std::find_if(out.begin(), out.end(), [&](const DlcEntry& e) {
+        return SameName(e.file_name, file_name) || (!name.empty() && SameName(e.name, name));
+      });
+      if (it == out.end()) {
+        out.push_back({});
+        it = std::prev(out.end());
+        it->name = name.empty() ? file_name : name;
+        it->description =
+            string::to_utf8(header->metadata.description(system::XLanguage::kEnglish));
+      }
+      entry = &*it;
     }
-    it->description = string::to_utf8(header->metadata.description(system::XLanguage::kEnglish));
+    if (entry->file_name.empty()) {
+      entry->file_name = file_name;
+    }
+    entry->package = path;
   };
   std::error_code ec;
   const std::filesystem::path folder = filesystem::GetExecutableFolder() / "DLC";
@@ -144,12 +197,7 @@ std::vector<XboxGuide::DlcEntry> XboxGuide::FindDlc() const {
   for (const auto& path : picked_packages_) {
     add_package(path);
   }
-  for (DlcEntry& entry : out) {
-    if (entry.name.empty()) {
-      entry.name = entry.file_name;
-    }
-  }
-  std::stable_sort(out.begin(), out.end(),
+  std::stable_sort(out.begin() + catalogued, out.end(),
                    [](const DlcEntry& a, const DlcEntry& b) { return a.name < b.name; });
   return out;
 }
@@ -159,43 +207,77 @@ void XboxGuide::OpenManageGame() {
   manage_scene_ = page.scene;
   manage_rows_.clear();
   dlc_status_.clear();
+  if (!dlc_banner_node_) {
+    dlc_banner_node_ = std::make_unique<xui::Node>();
+    dlc_banner_node_->class_name = "XuiImage";
+    dlc_banner_node_->cls = xui::FindClass("XuiImage");
+  }
+  dlc_banner_ = manage_scene_->AttachScene(*dlc_banner_node_, skin_context_);
+  dlc_banner_->Set("Id", xui::Value{std::string("imgDlcBanner")});
+  dlc_banner_->Set("Position", xui::Value{xui::Vec3{kPaneX, kBannerY, 0.0f}});
+  dlc_banner_->Set("Width", xui::Value{kPaneWidth});
+  dlc_banner_->Set("Height", xui::Value{kBannerHeight});
+  dlc_banner_->SetVisible(false);
+  auto place = [&](std::string_view id, float y, float height) {
+    if (xui::Element* e = manage_scene_->FindById(id)) {
+      xui::Vec3 p = e->GetVector("Position");
+      p.y = y;
+      e->Set("Position", xui::Value{p});
+      e->Set("Height", xui::Value{height});
+    }
+  };
+  place("XuiLabel1", kDetailsY, kPaneBottom - kDetailsY);
+
   page.on_focus = [this] { ShowDlc(focus_); };
   page.on_select = [this](xui::Element* row) {
     if (dlc_job_) {
       return;  // one install or pick at a time
-    }
-    if (row->id() == kAddId) {
-      auto job = std::make_shared<DlcJob>();
-      job->pick = true;
-      dlc_job_ = job;
-      std::thread([job] {
-        job->picked = PickPackages();
-        job->done = true;
-      }).detach();
-      return;
     }
     const auto at = std::find(manage_rows_.begin(), manage_rows_.end(), row);
     if (at == manage_rows_.end() || size_t(at - manage_rows_.begin()) >= dlc_.size()) {
       return;
     }
     const DlcEntry& entry = dlc_[size_t(at - manage_rows_.begin())];
-    if (entry.installed || entry.package.empty() || !host_.kernel_state) {
+    if (entry.installed || !host_.kernel_state) {
       return;
     }
+    if (entry.requires_title_update > host_.title_update) {
+      media_->PlaySound("sharedres://btn_InactiveSelect.xma", "");
+      return;  // ShowDlc says why
+    }
     auto job = std::make_shared<DlcJob>();
-    job->file_name = entry.file_name;
     dlc_job_ = job;
-    dlc_status_ = fmt::format("Installing {}...", entry.name);
-    ShowDlc(row);
-    auto* content = host_.kernel_state->content_manager();
-    const std::filesystem::path package = entry.package;
-    // The install outlives the guide if it is closed meanwhile.
-    std::thread([job, content, package] {
-      job->result = content->InstallContent(package);
-      job->done = true;
-    }).detach();
+    if (entry.package.empty()) {
+      // No package found for it: the player points at one.
+      job->pick = true;
+      job->entry_id = entry.id;
+      const std::string title = fmt::format("Install {}", entry.name);
+      std::thread([job, title] {
+        job->picked = PickPackages(title);
+        job->done = true;
+      }).detach();
+      return;
+    }
+    StartDlcInstall(entry);
   };
   FillManageGame();
+}
+
+void XboxGuide::StartDlcInstall(const DlcEntry& entry) {
+  auto job = dlc_job_ ? dlc_job_ : std::make_shared<DlcJob>();
+  job->pick = false;
+  job->done = false;
+  job->file_name = entry.file_name;
+  dlc_job_ = job;
+  dlc_status_ = fmt::format("Installing {}...", entry.name);
+  ShowDlc(focus_);
+  auto* content = host_.kernel_state->content_manager();
+  const std::filesystem::path package = entry.package;
+  // The install outlives the guide if it is closed meanwhile.
+  std::thread([job, content, package] {
+    job->result = content->InstallContent(package);
+    job->done = true;
+  }).detach();
 }
 
 void XboxGuide::FillManageGame() {
@@ -214,26 +296,25 @@ void XboxGuide::FillManageGame() {
   dlc_ = FindDlc();
 
   const float top = model->GetVector("Position").y;
-  const size_t rows = std::min(dlc_.size(), kMaxRows - 1);
-  auto add_row = [&](std::string id, std::string text, size_t i) {
-    xui::Element* row = scene->CloneChild(*model, std::move(id));
+  const size_t rows = std::min(dlc_.size(), kMaxRows);
+  for (size_t i = 0; i < rows; ++i) {
+    const DlcEntry& entry = dlc_[i];
+    // btn_Count: the name on the left and, where the console had the
+    // price, what A does.
+    xui::Element* row = scene->CloneChild(*model, fmt::format("btnDlc{}", i), "btn_Count");
     xui::Vec3 p = model->GetVector("Position");
     p.y = top + float(i) * kRowHeight;
     row->Set("Position", xui::Value{p});
-    row->SetText(std::move(text));
+    row->SetText(entry.name);
+    std::string action = "Install";
+    if (entry.installed) {
+      action = "Installed";
+    } else if (entry.requires_title_update > host_.title_update) {
+      action = "Needs Update";
+    }
+    row->SetSecondaryText(std::move(action));
     row->SetVisible(true);
     manage_rows_.push_back(row);
-    return row;
-  };
-  for (size_t i = 0; i < rows; ++i) {
-    add_row(fmt::format("chkDlc{}", i), dlc_[i].name, i)->SetChecked(dlc_[i].installed);
-  }
-  // The last row is a plain entry: the checkbox copy without its box.
-  xui::Element* add = add_row(std::string(kAddId), "Add Content from This PC...", rows);
-  for (std::string_view part : {"CheckboxRule", "Checkbox", "XuiImage"}) {
-    if (xui::Element* e = add->FindById(part)) {
-      e->Suppress();
-    }
   }
   for (size_t i = 0; i < manage_rows_.size(); ++i) {
     manage_rows_[i]->Set(
@@ -249,7 +330,16 @@ void XboxGuide::FillManageGame() {
     }
   }
   if (xui::Element* status = scene->FindById("XuiLabel2")) {
-    status->SetVisible(true);
+    status->Suppress();  // the status is in the details (ShowDlc)
+  }
+  if (manage_rows_.empty()) {
+    if (xui::Element* details = scene->FindById("XuiLabel1")) {
+      details->SetText(
+          "This game has no add-ons listed. Its config lists them as [[dlc]] entries; "
+          "\"rexglue dlc-find <title ID>\" finds them.");
+    }
+    SetLegends("", manage_scene_->GetString("LegendB"), "");
+    return;
   }
   SetFocus(manage_rows_.front(), /*initial=*/true);
   ShowDlc(manage_rows_.front());
@@ -264,29 +354,50 @@ void XboxGuide::ShowDlc(xui::Element* row) {
       e->SetText(std::move(text));
     }
   };
-  std::string body;
+  const auto at = std::find(manage_rows_.begin(), manage_rows_.end(), row);
+  if (at == manage_rows_.end() || size_t(at - manage_rows_.begin()) >= dlc_.size()) {
+    return;
+  }
+  const DlcEntry& entry = dlc_[size_t(at - manage_rows_.begin())];
+  const DlcCatalogEntry* info = entry.id.empty() ? nullptr : FindEmbeddedDlc(entry.id);
+  if (dlc_banner_) {
+    const bool banner = info && !info->banner.empty();
+    dlc_banner_->SetVisible(banner);
+    if (banner) {
+      dlc_banner_->Set("ImagePath", xui::Value{fmt::format("dlc://{}/banner", entry.id)});
+    }
+  }
   std::string status = dlc_status_;
   std::string action;
-  if (row->id() == kAddId) {
-    body = fmt::format(
-        "Install downloadable content from a package on this PC.\r\n\r\nPackages in the DLC "
-        "folder beside the game are listed here already{}.",
-        dlc_.empty() ? "; none were found" : "");
-    action = "Select";
-  } else if (auto at = std::find(manage_rows_.begin(), manage_rows_.end(), row);
-             at != manage_rows_.end() && size_t(at - manage_rows_.begin()) < dlc_.size()) {
-    const DlcEntry& entry = dlc_[size_t(at - manage_rows_.begin())];
-    body = entry.description.empty() ? entry.name : entry.description;
-    if (status.empty()) {
-      status =
-          entry.installed ? "Installed. The game may need a restart to use it." : "Not installed.";
-    }
-    if (!entry.installed && !entry.package.empty()) {
+  if (status.empty()) {
+    if (entry.installed) {
+      status = "Installed. The game may need a restart to use it.";
+    } else if (entry.requires_title_update > host_.title_update) {
+      status = fmt::format(
+          "Title update {} needs to be installed before this add-on. Install the title "
+          "update, then this.",
+          entry.requires_title_update);
+    } else {
+      // Install takes the package in the DLC folder, or asks for one.
+      if (!entry.package.empty()) {
+        status = "Its package is in the DLC folder.";
+      }
       action = "Install";
     }
   }
-  set_text("XuiLabel1", std::move(body));
-  set_text("XuiLabel2", std::move(status));
+  // As the console's offer details: title and publisher, then the status in
+  // place of the rating, then the description.
+  std::string details = entry.name;
+  if (!entry.publisher.empty()) {
+    details += "\r\n" + entry.publisher;
+  }
+  if (!status.empty()) {
+    details += "\r\n" + status;
+  }
+  if (!entry.description.empty()) {
+    details += "\r\n\r\n" + entry.description;
+  }
+  set_text("XuiLabel1", std::move(details));
   SetLegends(dlc_job_ ? "" : action, manage_scene_->GetString("LegendB"), "");
 }
 
@@ -294,20 +405,33 @@ void XboxGuide::PollManageGame() {
   if (!dlc_job_ || !dlc_job_->done) {
     return;
   }
-  const auto job = std::move(dlc_job_);
+  const auto job = dlc_job_;
   if (!manage_scene_ || pages_.empty() || pages_.back().scene != manage_scene_) {
+    dlc_job_.reset();
     return;  // the page was left meanwhile
   }
   if (job->pick) {
     picked_packages_.insert(picked_packages_.end(), job->picked.begin(), job->picked.end());
-    const size_t before = dlc_.size();
     FillManageGame();
-    if (!job->picked.empty() && dlc_.size() == before) {
-      dlc_status_ = "No downloadable content for this game was in the files chosen.";
+    auto it = std::find_if(dlc_.begin(), dlc_.end(),
+                           [&](const DlcEntry& e) { return e.id == job->entry_id; });
+    if (it != dlc_.end() && !it->installed && !it->package.empty()) {
+      // The package for the add-on chosen: install it now.
+      if (size_t(it - dlc_.begin()) < manage_rows_.size()) {
+        SetFocus(manage_rows_[size_t(it - dlc_.begin())]);
+      }
+      StartDlcInstall(*it);
+      return;
+    }
+    dlc_job_.reset();
+    if (!job->picked.empty() && it != dlc_.end()) {
+      dlc_status_ = fmt::format("The file chosen is not {} for this game.", it->name);
       ShowDlc(focus_);
+      dlc_status_.clear();
     }
     return;
   }
+  dlc_job_.reset();
   if (job->result == X_ERROR_SUCCESS) {
     REXLOG_INFO("Xbox guide: installed {}", job->file_name);
     dlc_status_ = "Installed. The game may need a restart to use it.";
@@ -316,8 +440,14 @@ void XboxGuide::PollManageGame() {
     REXLOG_WARN("Xbox guide: installing {} failed: {:08X}", job->file_name, job->result);
     dlc_status_ = fmt::format("The content could not be installed (error {:08X}).", job->result);
   }
+  xui::Element* focused = focus_;
+  const size_t index =
+      size_t(std::find(manage_rows_.begin(), manage_rows_.end(), focused) - manage_rows_.begin());
   const std::string keep = dlc_status_;
   FillManageGame();
+  if (index < manage_rows_.size()) {
+    SetFocus(manage_rows_[index]);
+  }
   dlc_status_ = keep;
   ShowDlc(focus_);
   dlc_status_.clear();

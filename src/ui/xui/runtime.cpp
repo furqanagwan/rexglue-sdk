@@ -229,7 +229,7 @@ Element* Element::AttachScene(const Node& node, const SceneContext& context) {
   return children_.back().get();
 }
 
-Element* Element::CloneChild(const Element& source, std::string id) {
+Element* Element::CloneChild(const Element& source, std::string id, std::string_view visual) {
   auto at = std::find_if(children_.begin(), children_.end(),
                          [&](const std::unique_ptr<Element>& c) { return c.get() == &source; });
   if (at == children_.end()) {
@@ -238,6 +238,9 @@ Element* Element::CloneChild(const Element& source, std::string id) {
   std::unique_ptr<Element> copy(new Element(*source.node_, this, source.context_));
   copy->design_parent_width_ = source.design_parent_width_;
   copy->design_parent_height_ = source.design_parent_height_;
+  if (!visual.empty()) {
+    copy->Set("Visual", Value{std::string(visual)});
+  }
   copy->Build(*source.node_);
   copy->Set("Id", Value{std::move(id)});
   Element* raw = copy.get();
