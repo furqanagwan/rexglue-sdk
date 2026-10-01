@@ -307,6 +307,40 @@ bool build_vadduwm(BuilderContext& ctx) {
   return true;
 }
 
+bool build_vaddcuw(BuilderContext& ctx) {
+  for (size_t i = 0; i < 4; ++i) {
+    ctx.println("\t{}.u32[{}] = uint32_t(uint64_t({}.u32[{}]) + {}.u32[{}] > UINT32_MAX);",
+                ctx.v(ctx.insn.operands[0]), i, ctx.v(ctx.insn.operands[1]), i,
+                ctx.v(ctx.insn.operands[2]), i);
+  }
+  return true;
+}
+
+bool build_vsubcuw(BuilderContext& ctx) {
+  for (size_t i = 0; i < 4; ++i) {
+    ctx.println("\t{}.u32[{}] = uint32_t({}.u32[{}] >= {}.u32[{}]);", ctx.v(ctx.insn.operands[0]),
+                i, ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
+  }
+  return true;
+}
+
+bool build_vavguw(BuilderContext& ctx) {
+  for (size_t i = 0; i < 4; ++i) {
+    ctx.println("\t{}.u32[{}] = uint32_t((uint64_t({}.u32[{}]) + {}.u32[{}] + 1) >> 1);",
+                ctx.v(ctx.insn.operands[0]), i, ctx.v(ctx.insn.operands[1]), i,
+                ctx.v(ctx.insn.operands[2]), i);
+  }
+  return true;
+}
+
+bool build_vmaxuw(BuilderContext& ctx) {
+  for (size_t i = 0; i < 4; ++i) {
+    ctx.println("\t{}.u32[{}] = std::max({}.u32[{}], {}.u32[{}]);", ctx.v(ctx.insn.operands[0]), i,
+                ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
+  }
+  return true;
+}
+
 bool build_vadduws(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "

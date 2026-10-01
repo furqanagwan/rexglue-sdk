@@ -50,12 +50,21 @@ bool build_addic(BuilderContext& ctx);
 bool build_addis(BuilderContext& ctx);
 bool build_addme(BuilderContext& ctx);
 bool build_addze(BuilderContext& ctx);
+bool build_addo(BuilderContext& ctx);
+bool build_addco(BuilderContext& ctx);
+bool build_addeo(BuilderContext& ctx);
+bool build_addmeo(BuilderContext& ctx);
+bool build_addzeo(BuilderContext& ctx);
 
 // Division
 bool build_divd(BuilderContext& ctx);
 bool build_divdu(BuilderContext& ctx);
 bool build_divw(BuilderContext& ctx);
 bool build_divwu(BuilderContext& ctx);
+bool build_divdo(BuilderContext& ctx);
+bool build_divduo(BuilderContext& ctx);
+bool build_divwo(BuilderContext& ctx);
+bool build_divwuo(BuilderContext& ctx);
 
 // Multiplication
 bool build_mulhd(BuilderContext& ctx);
@@ -65,9 +74,12 @@ bool build_mulhwu(BuilderContext& ctx);
 bool build_mulld(BuilderContext& ctx);
 bool build_mulli(BuilderContext& ctx);
 bool build_mullw(BuilderContext& ctx);
+bool build_mulldo(BuilderContext& ctx);
+bool build_mullwo(BuilderContext& ctx);
 
 // Negation
 bool build_neg(BuilderContext& ctx);
+bool build_nego(BuilderContext& ctx);
 
 // Subtraction
 bool build_subf(BuilderContext& ctx);
@@ -76,6 +88,12 @@ bool build_subfe(BuilderContext& ctx);
 bool build_subfic(BuilderContext& ctx);
 bool build_subfme(BuilderContext& ctx);
 bool build_subfze(BuilderContext& ctx);
+bool build_subfo(BuilderContext& ctx);
+bool build_subfco(BuilderContext& ctx);
+bool build_subfeo(BuilderContext& ctx);
+bool build_subfmeo(BuilderContext& ctx);
+bool build_subfzeo(BuilderContext& ctx);
+bool build_mcrxr(BuilderContext& ctx);
 
 //=============================================================================
 // Logical Builders (AND, OR, XOR, shifts, rotates, bit manipulation)
@@ -134,6 +152,7 @@ bool build_rldicl(BuilderContext& ctx);
 bool build_rldicr(BuilderContext& ctx);
 bool build_rldimi(BuilderContext& ctx);
 bool build_rotldi(BuilderContext& ctx);
+bool build_rotld(BuilderContext& ctx);
 
 // Rotate left word
 bool build_rlwimi(BuilderContext& ctx);
@@ -401,6 +420,8 @@ bool build_dcbf(BuilderContext& ctx);
 bool build_dcbt(BuilderContext& ctx);
 bool build_dcbtst(BuilderContext& ctx);
 bool build_dcbz(BuilderContext& ctx);
+bool build_isync(BuilderContext& ctx);
+bool build_icbi(BuilderContext& ctx);
 bool build_dcbzl(BuilderContext& ctx);
 bool build_dcbst(BuilderContext& ctx);
 
@@ -469,6 +490,10 @@ bool build_vaddubs(BuilderContext& ctx);
 bool build_vadduhm(BuilderContext& ctx);
 bool build_vadduwm(BuilderContext& ctx);
 bool build_vadduws(BuilderContext& ctx);
+bool build_vaddcuw(BuilderContext& ctx);
+bool build_vsubcuw(BuilderContext& ctx);
+bool build_vavguw(BuilderContext& ctx);
+bool build_vmaxuw(BuilderContext& ctx);
 bool build_vadduhs(BuilderContext& ctx);
 bool build_vsubsbs(BuilderContext& ctx);
 bool build_vsubshs(BuilderContext& ctx);

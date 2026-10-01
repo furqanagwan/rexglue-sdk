@@ -36,6 +36,18 @@ bool build_sync(BuilderContext& ctx) {
   return true;
 }
 
+bool build_isync(BuilderContext& ctx) {
+  // Generated code does not fetch or execute guest instructions dynamically.
+  (void)ctx;
+  return true;
+}
+
+bool build_icbi(BuilderContext& ctx) {
+  // Instruction cache invalidation has no effect on static native code.
+  (void)ctx;
+  return true;
+}
+
 bool build_lwsync(BuilderContext& ctx) {
   // Lightweight memory barrier, x86 has strong ordering so this is a no-op
   (void)ctx;
@@ -148,12 +160,12 @@ bool build_dcbtst(BuilderContext& ctx) {
 }
 
 bool build_dcbz(BuilderContext& ctx) {
-  // Compute EA, align to 32-byte cache line, apply physical offset
+  // Xenon has 128-byte cache blocks for both dcbz and dcbzl.
   ctx.print("\t{} = (", ctx.ea());
   if (ctx.insn.operands[0] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[0]));
-  ctx.println("{}.u32) & ~31;", ctx.r(ctx.insn.operands[1]));
-  ctx.println("\tmemset((void*)REX_RAW_ADDR({}), 0, 32);", ctx.ea());
+  ctx.println("{}.u32) & ~127;", ctx.r(ctx.insn.operands[1]));
+  ctx.println("\tmemset((void*)REX_RAW_ADDR({}), 0, 128);", ctx.ea());
   return true;
 }
 
@@ -253,7 +265,7 @@ bool build_mfmsr(BuilderContext& ctx) {
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
     // Check global lock and return appropriate value
     // Returns 0x8000 if unlocked (interrupts enabled), 0 if locked
-    ctx.println("\t{}.u64 = REX_CHECK_GLOBAL_LOCK();", ctx.r(ctx.insn.operands[0]));
+    ctx.println("\t{}.u64 = 0x1030 | REX_CHECK_GLOBAL_LOCK();", ctx.r(ctx.insn.operands[0]));
   }
   return true;
 }
