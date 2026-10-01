@@ -446,6 +446,10 @@ class Renderer {
         text += "...";
       }
     }
+    if (text.find(kGamerscoreGlyph) != std::string::npos && resources_.texture) {
+      DrawGlyphLine(text, *font, size, style, box_w, box_h, element, m, s, opacity);
+      return;
+    }
     const float wrap_width = wrap ? box_w : 0.0f;
     const ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, wrap_width, text.c_str());
     float x = 0.0f, y = 0.0f;
@@ -467,6 +471,73 @@ class Renderer {
     }
     font->RenderText(list_, size, ImVec2(x, y), ToImColor(color, opacity), no_cull, text.c_str(),
                      nullptr, wrap_width);
+    const Affine to_screen = m * Scale(1.0f / s, 1.0f / s);
+    for (int i = first_vertex; i < list_->VtxBuffer.Size; ++i) {
+      ImDrawVert& v = list_->VtxBuffer[i];
+      v.pos = to_screen.Apply(v.pos.x, v.pos.y);
+    }
+  }
+
+  // One unwrapped line with gamerscore glyphs, each drawn as the
+  // kGamerscoreImage square in the text colour, the height of a capital.
+  void DrawGlyphLine(const std::string& text, ImFont& font, float size, uint32_t style, float box_w,
+                     float box_h, const Element& element, const Affine& m, float s, float opacity) {
+    int glyph_w = 0, glyph_h = 0;
+    ImTextureID glyph = resources_.texture(kGamerscoreImage, "", &glyph_w, &glyph_h);
+    const float glyph_size = size * 0.72f;
+    const float gap = size * 0.12f;
+    std::vector<std::string_view> parts;
+    for (size_t start = 0;;) {
+      const size_t at = text.find(kGamerscoreGlyph, start);
+      parts.push_back(std::string_view(text).substr(start, at - start));
+      if (at == std::string::npos) {
+        break;
+      }
+      start = at + kGamerscoreGlyph.size();
+    }
+    auto width_of = [&](std::string_view part) {
+      return font.CalcTextSizeA(size, FLT_MAX, 0.0f, part.data(), part.data() + part.size()).x;
+    };
+    // Each glyph between two parts, with a gap on the side that has text.
+    float total = 0.0f;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      total += width_of(parts[i]);
+      if (i + 1 < parts.size()) {
+        total += glyph_size + (parts[i].empty() ? 0.0f : gap) + (parts[i + 1].empty() ? 0.0f : gap);
+      }
+    }
+    float x = 0.0f, y = 0.0f;
+    if (style & kTextRight) {
+      x = box_w - total;
+    } else if (style & kTextCenter) {
+      x = (box_w - total) / 2;
+    }
+    if (style & kTextVerticalCenter) {
+      y = (box_h - size) / 2;
+    }
+    const ImVec4 no_cull(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
+    const uint32_t color = ToImColor(element.GetColor("TextColor", 0xFFFFFFFF), opacity);
+    const int first_vertex = list_->VtxBuffer.Size;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      const std::string_view part = parts[i];
+      if (!part.empty()) {
+        font.RenderText(list_, size, ImVec2(x, y), color, no_cull, part.data(),
+                        part.data() + part.size(), 0.0f);
+        x += width_of(part) + gap;
+      }
+      if (i + 1 < parts.size()) {
+        // Beside text, centred on its digits; alone (a visual's glyph
+        // presenter), centred in its box as the font places it.
+        const bool alone = text.size() == kGamerscoreGlyph.size();
+        const float top =
+            alone ? (box_h - glyph_size) / 2 + size * 0.1f : y + size * 0.52f - glyph_size / 2;
+        if (glyph && glyph_w > 0 && glyph_h > 0) {
+          list_->AddImage(glyph, ImVec2(x, top), ImVec2(x + glyph_size, top + glyph_size),
+                          ImVec2(0, 0), ImVec2(1, 1), color);
+        }
+        x += glyph_size + (parts[i + 1].empty() ? 0.0f : gap);
+      }
+    }
     const Affine to_screen = m * Scale(1.0f / s, 1.0f / s);
     for (int i = first_vertex; i < list_->VtxBuffer.Size; ++i) {
       ImDrawVert& v = list_->VtxBuffer[i];

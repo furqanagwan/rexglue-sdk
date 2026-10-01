@@ -215,8 +215,8 @@ from your own dashboard 2.0.17559 system update, and nothing from it ships with
 the SDK. Set `REXGLUE_SYSTEM_UPDATE` to that `$SystemUpdate` folder when you
 build a title (CMake variable or environment variable) and the guide is built into
 the executable: players need nothing and it works offline.
-Games & Apps has the title's achievements (grid and details), and Xbox Home
-(Y, or the Home tab) ends the title after the console's confirmation.
+Games & Apps has the title's achievements (grid and details), and Close Game
+(Y, or the Home tab) ends the title after a confirmation.
 Settings > Preferences sets notifications, game volume, vibration and the render
 resolution (by default the title's own, as on the console; 2x, 3x and Match
 Display are experimental and much slower); Settings > Patches and Mods turn a title's switchable code

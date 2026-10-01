@@ -30,7 +30,7 @@ keyboard runs. An owner play session with a pad is still to do.
   the cvar also overrides the built-in guide. `--xbox_guide=false` turns the
   guide off.
 - Navigation: D-pad or left stick; LB/RB or left/right switch tabs; A selects;
-  B goes back or closes; Y is Xbox Home. On the keyboard: arrows, Enter or Space,
+  B goes back or closes; Y is Close Game. On the keyboard: arrows, Enter or Space,
   Escape or Backspace, Y, and Page Up/Down.
 
 ## What it does
@@ -38,16 +38,20 @@ keyboard runs. An owner play session with a pad is still to do.
 It runs the console's own flow. The HUD backdrop plays `ClosedToHalf` and hosts
 `GuideMain`, and the Home tab's blade comes in with `2Close`. Tabs change with
 the `iToj` blade shuffles. Launching something plays `<tab>Open` with the
-backdrop's `HalfToFull`. The Xbox Home and Turn Off prompts are the skin's
+backdrop's `HalfToFull`. The Close Game and Turn Off prompts are the skin's
 `XuiMessageBox3`, hosted in the backdrop's error frame (`HalfToError`). Button
 focus, press and sounds come from the skin visuals' named frames.
 
 - Games & Apps > Achievements opens `802_Achievements` as a grid of the title's
   achievements. Unlocked ones show their XDBF icon, others the console's
   unearned or secret image. The header shows the focused achievement; A opens
-  `828_AchievDetails`. The button shows the gamerscore earned.
-- Xbox Home (Y, or the Home tab) asks first. Yes closes the guide and ends the
-  title through the window's normal close path.
+  `828_AchievDetails`. The button shows the gamerscore earned. As on the
+  17559 guide, this opens the current title's grid directly: `gp.xzp` has a
+  games list only for Awards (`837_AvatarAwardGamesMe`), not for achievements.
+- Close Game (Y, or the Home tab's one entry, the console's Xbox Home renamed:
+  a recompiled title has no dashboard) asks "Are you sure you want to close
+  the game? Any unsaved progress will be lost." first, No focused. Yes closes
+  the guide and ends the title through the window's normal close path.
 - Games & Apps > Manage Game lists the title's downloadable content: what is
   installed, and the content packages (STFS, content type 2, this title's ID)
   in the `DLC` folder beside the executable or picked with "Add Content from This
@@ -70,8 +74,13 @@ focus, press and sounds come from the skin visuals' named frames.
   whose level the host cannot read. See
   [GameInput: Bluetooth pads and battery](gameinput.md#bluetooth-pads-and-battery-rg-gdk-047).
 - Entries a recompiled title has no use for are taken out and the list closed
-  up: Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
-  Console, and the whole Media tab (tab changes pass over it). The code is kept
+  up: Home > Connect to Xbox Live and the disabled title entry (Disc in Tray),
+  Settings > Family Settings, Account Management, Kinect Tuner and Turn Off
+  Console, and the whole Media tab (tab changes pass over it). At rest, the
+  Media tab's blade slot is closed up: the outermost blade on its side is
+  hidden and the labels beyond it move in one slot (`kBladeLayouts`), the
+  layout GuideMain gives a side with one tab fewer. The shuffles between tabs
+  still play the scene's own four-tab frames. The code is kept
   and commented or listed (`kRemovedEntries`, `kRemovedTab` in
   `xbox_guide.cpp`), so each can be put back.
 - Everything else (Marketplace, My Games, media players, Live features) stays in
@@ -161,9 +170,9 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | | Active Downloads | download queue | Disabled |
 | | Redeem Code | code entry | Disabled |
 | | Activity Feed (hidden in 17559) | | Hidden |
-| Home | Xbox Home | quit prompt, then the dashboard | Works: prompt, then ends the title |
-| | Connect to Xbox Live (offline) or Friends, Party, Messages, Beacons & Activity, Chat (on Live) | Live features | Disabled (offline set shown) |
-| | Disc in Tray | title name; ejects | Shows the title, disabled |
+| Home | Xbox Home | quit prompt, then the dashboard | Renamed Close Game: prompt, then ends the title |
+| | Connect to Xbox Live (offline) or Friends, Party, Messages, Beacons & Activity, Chat (on Live) | Live features | Removed |
+| | Disc in Tray | title name; ejects | Removed |
 | Media | System Video Player, System Music Player, Picture Viewer, Windows Media Center | dashboard apps (dash 39, 6, 44, 8); mini player below | Removed (the tab) |
 | Settings | Profile | gamer profile | Disabled |
 | | Preferences | `Options`: Word Registration, Family Timer (`OptionsPlayTimer`, Add More Time), Vibration (`OptionsController`), Voice (`OptionsVoice`: volumes, output), Notifications (`OptionsNotifications`), Online Status (`OptionsOnline`) | Works: [settings pages](#settings-pages) |
@@ -173,7 +182,7 @@ the guide acts on it; everything else is shown disabled, as on the console.
 | | Family Settings, Account Management | dashboard (dash 20, 10) | Removed |
 | | Kinect Tuner | Kinect troubleshooter | Removed |
 | | Turn Off Console | turn-off prompt | Removed |
-| Y button | Xbox Home | as above | Works |
+| Y button | Xbox Home | as above | Close Game, as above |
 
 ## Where the guide comes from
 
@@ -261,8 +270,11 @@ against the console.
   it in. The names read backwards until the keyframes are checked (Tab2's
   opacity falls in `2Open`).
 - Fonts: the console's `.xtt` fonts are encrypted. Segoe UI stands in for
-  Segoe Xbox, so the private-use gamerscore glyph in `btn_Count_achiev` has no
-  equivalent.
+  Segoe Xbox. Its private-use gamerscore glyph (U+E00A, in `btn_Count_achiev`
+  and in the points XAM puts beside achievements) is drawn as an image: the
+  shape of sharedres `GScore_white.png` (a white disc with a G cut out, so the
+  row's colour shows through) traced at 256 pixels, tinted with the text
+  colour (`xui::kGamerscoreGlyph`, `kGamerscoreImage`).
 
 ## Validation
 

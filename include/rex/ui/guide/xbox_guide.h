@@ -234,6 +234,8 @@ class XboxGuide final : public ImGuiDialog {
 
   void BeginClose(bool exit_title);
   void UpdateClock();
+  /// Closes up the blades around the removed Media tab (kRemovedTab).
+  void LayOutBlades();
   /// Shows player 1's battery, at most once a second.
   void UpdateControllerBattery();
   ImTextureID Texture(std::string_view path, std::string_view package, int* width, int* height);
