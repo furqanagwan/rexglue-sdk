@@ -35,6 +35,7 @@ set(REXUI_GUIDE_SOURCES
     guide/guide_dlc.cpp
     guide/guide_input.cpp
     guide/guide_layout.cpp
+    guide/guide_title_update.cpp
     guide/title_update.cpp
     guide/guide_notification.cpp
     guide/guide_settings.cpp

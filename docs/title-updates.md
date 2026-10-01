@@ -43,7 +43,7 @@ includes = ["../quantumofsolace_tu2.toml"]   # this version's own settings
 
 ## Listing one for players
 
-The title's config lists each update it had, for the guide's Manage Game (an
+The title's config lists each update it had, for the guide's Title Updates (an
 update is never required, and the first run never asks for one):
 
 ```toml
@@ -97,8 +97,16 @@ writes them. Codegen compiles the list into `PPCImageInfo::title_updates`.
   `default.xexp` lying beside `default.xex` (it logs that it did) instead of
   patching its data under the original code, as it did before.
 
-The guide's Manage Game entry for the update, and Active Downloads, are the
-last part of #153.
+## In the guide
+
+Games & Apps > Title Updates lists each update (a page of its own, apart from
+Manage Game's add-ons), and Active Downloads follows
+the downloads ([Xbox guide](xbox-guide.md#what-it-does)). Turning an update
+on or off saves `title_update`, asks first (the game restarts), ends the
+title, and starts the executable again once it has shut down, without the
+command line's `--title_update`; that start picks the executable. Each
+version's config must carry the `[[title_update]]` entries, so the update
+build's guide can turn it off again.
 
 ## Validation
 

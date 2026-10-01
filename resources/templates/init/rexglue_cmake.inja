@@ -63,16 +63,21 @@ if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/
     set_source_files_properties({{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }}
         PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
 endif()
+# Each version's sources.cmake sets the add-on list its executable embeds.
+set(REXGLUE_ENTRYPOINT_DLC_IDS "{{ cmake_var("REXGLUE_TITLE_DLC_IDS") }}")
 {% for tu in title_updates %}
 # Title update {{ tu.version }} ([[title_update]] in the manifest): the executable
 # again, patched by that update, built as <target>_tu{{ tu.version }}.
 if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ tu.out_dir }}/sources.cmake")
     include({{ tu.out_dir }}/sources.cmake)
     set({{ tu.sources_var }} {{ cmake_var("GENERATED_SOURCES") }})
+    set({{ tu.dlc_var }} "{{ cmake_var("REXGLUE_TITLE_DLC_IDS") }}")
     set_source_files_properties({{ cmake_var(tu.sources_var) }}
         PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
 endif()
 {% endfor %}
+set(REXGLUE_TITLE_DLC_IDS "{{ cmake_var("REXGLUE_ENTRYPOINT_DLC_IDS") }}")
+
 # The options go on the target as well: CMake compiles the header from its own
 # cmake_pch.hxx.cxx, which carries none of the source properties above, and
 # clang rejects a PCH whose EH mode disagrees with the TU including it.
@@ -138,7 +143,10 @@ macro(rexglue_setup_target target_name)
         _rexglue_link_recomp({{ cmake_var("target_name") }}_tu{{ tu.version }}
             "{{ cmake_var(tu.sources_var) }}"
             "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ tu.out_dir }}")
+        # This version's own add-on list for its catalogue, then the original's again.
+        set(REXGLUE_TITLE_DLC_IDS "{{ cmake_var(tu.dlc_var) }}")
         rexglue_configure_target({{ cmake_var("target_name") }}_tu{{ tu.version }} {{ cmake_var("ARGN") }})
+        set(REXGLUE_TITLE_DLC_IDS "{{ cmake_var("REXGLUE_ENTRYPOINT_DLC_IDS") }}")
     endif()
 {% endfor %}
 endmacro()

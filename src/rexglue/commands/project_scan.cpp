@@ -51,7 +51,8 @@ static nlohmann::json TitleUpdatesJson(const std::vector<TitleUpdateTarget>& tit
     list.push_back(
         {{"version", tu.version},
          {"out_dir", tu.out_dir},
-         {"sources_var", "REXGLUE_TU" + std::to_string(tu.version) + "_GENERATED_SOURCES"}});
+         {"sources_var", "REXGLUE_TU" + std::to_string(tu.version) + "_GENERATED_SOURCES"},
+         {"dlc_var", "REXGLUE_TU" + std::to_string(tu.version) + "_DLC_IDS"}});
   }
   return list;
 }

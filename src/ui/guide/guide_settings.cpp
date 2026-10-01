@@ -155,6 +155,11 @@ void XboxGuide::HandleSettings(GuideAction action) {
     case GuideAction::kB:
       PopPage();
       break;
+    case GuideAction::kX:
+      if (focus_ && page.on_x) {
+        page.on_x(focus_);
+      }
+      break;
     default:
       break;
   }

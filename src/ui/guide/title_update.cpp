@@ -11,11 +11,14 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <mutex>
+#include <thread>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <rex/cvar.h>
+#include <rex/filesystem.h>
 #include <rex/logging.h>
 #include <rex/string.h>
 
@@ -442,6 +445,84 @@ bool DownloadTitleUpdate(const PPCTitleUpdate& update, uint32_t title_id, const 
   }
   fs::remove(part, ec);
   return false;
+}
+
+namespace {
+
+std::mutex jobs_mutex;
+std::vector<std::shared_ptr<TitleUpdateJob>>& Jobs() {
+  static auto* jobs = new std::vector<std::shared_ptr<TitleUpdateJob>>();  // outlives exit
+  return *jobs;
+}
+
+// Runs `work` for a new job of `update`, unless one is running for it.
+std::shared_ptr<TitleUpdateJob> StartJob(const PPCTitleUpdate& update, bool from_file,
+                                         std::function<void(TitleUpdateJob&)> work) {
+  std::lock_guard lock(jobs_mutex);
+  for (const auto& job : Jobs()) {
+    if (job->update.version == update.version &&
+        job->state.load() == TitleUpdateJob::State::kRunning) {
+      return job;
+    }
+  }
+  auto job = std::make_shared<TitleUpdateJob>();
+  job->update = update;
+  job->from_file = from_file;
+  Jobs().push_back(job);
+  std::thread([job, work = std::move(work)] { work(*job); }).detach();
+  return job;
+}
+
+}  // namespace
+
+std::shared_ptr<TitleUpdateJob> StartTitleUpdateDownload(const PPCTitleUpdate& update,
+                                                         uint32_t title_id,
+                                                         const fs::path& local_dir) {
+  return StartJob(update, false, [title_id, local_dir](TitleUpdateJob& job) {
+    std::vector<std::string> errors;
+    const bool installed = DownloadTitleUpdate(
+        job.update, title_id, local_dir, TitleUpdateSources(),
+        [&job](uint64_t done, uint64_t total) {
+          job.done = done;
+          job.total = total;
+        },
+        job.cancel, &errors);
+    job.errors = std::move(errors);
+    job.state = installed           ? TitleUpdateJob::State::kInstalled
+                : job.cancel.load() ? TitleUpdateJob::State::kCancelled
+                                    : TitleUpdateJob::State::kFailed;
+  });
+}
+
+std::shared_ptr<TitleUpdateJob> StartTitleUpdateInstall(const PPCTitleUpdate& update,
+                                                        uint32_t title_id,
+                                                        const fs::path& local_dir,
+                                                        const fs::path& package_file) {
+  return StartJob(update, true, [title_id, local_dir, package_file](TitleUpdateJob& job) {
+    std::error_code ec;
+    job.total = fs::file_size(package_file, ec);
+    const std::string why = InstallTitleUpdate(package_file, job.update, title_id, local_dir);
+    if (!why.empty()) {
+      job.errors.push_back(fmt::format("{}: {}", path_to_utf8(package_file.filename()), why));
+    }
+    job.done = job.total.load();
+    job.state = why.empty() ? TitleUpdateJob::State::kInstalled : TitleUpdateJob::State::kFailed;
+  });
+}
+
+std::shared_ptr<TitleUpdateJob> FindTitleUpdateJob(uint32_t version) {
+  std::lock_guard lock(jobs_mutex);
+  for (auto it = Jobs().rbegin(); it != Jobs().rend(); ++it) {
+    if ((*it)->update.version == version) {
+      return *it;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<std::shared_ptr<TitleUpdateJob>> TitleUpdateJobs() {
+  std::lock_guard lock(jobs_mutex);
+  return Jobs();
 }
 
 fs::path TitleUpdateExecutable(const fs::path& exe_path, uint32_t built, uint32_t version) {

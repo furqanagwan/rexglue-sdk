@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -151,6 +152,15 @@ struct GuideHost {
   const PPCTitleDlc* dlc = nullptr;
   /// The title update version the title was built with; 0 for none.
   uint32_t title_update = 0;
+  /// The title's updates (zero version ends the list), for the Title Updates page, where
+  /// the player can download one and turn it on: they are optional.
+  const PPCTitleUpdate* title_updates = nullptr;
+  /// The title's local data folder (%LOCALAPPDATA%\<name>): updates install
+  /// under title_updates there.
+  std::filesystem::path local_dir;
+  /// Restarts the title once it has closed, so a title update choice takes
+  /// effect; the guide then ends the title as Leave Game does.
+  std::function<void()> restart_title;
   /// The draw resolution scale that matches the display (3 for 4K).
   int display_scale = 1;
   /// Writes changed settings to the title's config file.
@@ -177,7 +187,7 @@ class XboxGuide final : public ImGuiDialog {
 
  private:
   enum class Screen { kMain, kAchievements, kAchievementDetail, kConfirm, kSettings };
-  enum class Confirm { kXboxHome, kTurnOff };
+  enum class Confirm { kXboxHome, kTurnOff, kTitleUpdate };
 
   void Handle(GuideAction action);
   void HandleMain(GuideAction action);
@@ -190,7 +200,8 @@ class XboxGuide final : public ImGuiDialog {
   void SwitchTab(int direction);
   xui::Element* FirstFocusable(xui::Element* root);
   void SetFocus(xui::Element* control, bool initial = false);
-  void SetLegends(std::string_view a, std::string_view b, std::string_view y);
+  void SetLegends(std::string_view a, std::string_view b, std::string_view y,
+                  std::string_view x = {});
   void ConfigureMain();
 
   void OpenAchievements();
@@ -210,6 +221,7 @@ class XboxGuide final : public ImGuiDialog {
     std::function<void(xui::Element*)> on_select;
     std::function<void()> on_focus;  // after focus moves on the page
     std::function<void(xui::Element*, int)> on_adjust;
+    std::function<void(xui::Element*)> on_x;  // X on the focused control
   };
   SettingsPage& PushPage(const xui::Document& scene, std::string heading);
   void PopPage();
@@ -243,6 +255,23 @@ class XboxGuide final : public ImGuiDialog {
   void ShowDlc(xui::Element* row);
   void PollManageGame();
   std::vector<DlcEntry> FindDlc() const;
+  // Games & Apps > Title Updates (guide_title_update.cpp): the title's
+  // updates, optional, downloaded and turned on or off. Not add-ons, so not
+  // in Manage Game.
+  void OpenTitleUpdates();
+  void FillTitleUpdates();
+  void PollTitleUpdates();
+  /// The title update `row` is on the Title Updates page, or null.
+  const PPCTitleUpdate* TitleUpdateAt(xui::Element* row) const;
+  std::string TitleUpdateAction(const PPCTitleUpdate& update) const;
+  void ShowTitleUpdate(const PPCTitleUpdate& update);
+  void SelectTitleUpdate(const PPCTitleUpdate& update);
+  void ChooseTitleUpdateFile(const PPCTitleUpdate& update);
+  void ApplyTitleUpdateChoice();
+  // Games & Apps > Active Downloads: title update downloads and installs.
+  void OpenActiveDownloads();
+  void FillActiveDownloads();
+  void PollActiveDownloads();
 
   void BeginClose(bool exit_title);
   void UpdateClock();
@@ -283,6 +312,7 @@ class XboxGuide final : public ImGuiDialog {
   int visible_rows_ = 1;
 
   Confirm confirm_ = Confirm::kXboxHome;
+  uint32_t confirm_title_update_ = 0;  // kTitleUpdate: the version to run (0: the original)
   xui::Element* message_ = nullptr;
   xui::Element* return_focus_ = nullptr;
   std::vector<xui::Element*> pending_removal_;  // detached once the backdrop stops
@@ -293,6 +323,13 @@ class XboxGuide final : public ImGuiDialog {
   std::vector<std::filesystem::path> picked_packages_;
   std::shared_ptr<DlcJob> dlc_job_;
   std::string dlc_status_;
+  std::shared_ptr<std::filesystem::path> picked_title_update_;  // a file pick's result
+  std::shared_ptr<std::atomic<bool>> title_update_pick_;        // set when the pick is done
+  uint32_t title_update_pick_version_ = 0;
+  xui::Element* updates_scene_ = nullptr;
+  std::vector<xui::Element*> update_rows_;
+  xui::Element* downloads_scene_ = nullptr;
+  std::vector<xui::Element*> download_rows_;
   // The right pane's banner: an XuiImage the Options scene does not have.
   std::unique_ptr<xui::Node> dlc_banner_node_;
   xui::Element* dlc_banner_ = nullptr;
