@@ -14,6 +14,7 @@
 
 #include "guide_bundle_command.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -81,6 +82,42 @@ Result<void> WriteGuideBundle(const GuideBundleArgs& args) {
   return rex::Ok();
 }
 
+struct XuiDumpArgs {
+  std::vector<std::string> sources;
+  std::string output;
+};
+
+// Every file of every package, for research: <output>/<module>/<resource>/<file>.
+Result<void> DumpXui(const XuiDumpArgs& args) {
+  using rex::ui::xui::SystemUpdate;
+  std::string error;
+  const std::vector<std::filesystem::path> sources(args.sources.begin(), args.sources.end());
+  auto modules = SystemUpdate::ReadModules(sources, &error);
+  std::unique_ptr<SystemUpdate> update;
+  if (!modules || !(update = SystemUpdate::FromModules(*modules, &error))) {
+    return Err<void>(ErrorCategory::Config,
+                     fmt::format("{}: {}", fmt::join(args.sources, ", "), error));
+  }
+  size_t files = 0;
+  for (const auto& [name, package] : update->packages()) {
+    for (const auto& entry : package.entries()) {
+      std::filesystem::path out = std::filesystem::path(args.output) / name;
+      std::string relative = entry.name;
+      std::replace(relative.begin(), relative.end(), '\\', '/');
+      out /= relative;
+      std::error_code ec;
+      std::filesystem::create_directories(out.parent_path(), ec);
+      const auto bytes = package.Find(entry.name);
+      std::ofstream file(out, std::ios::binary | std::ios::trunc);
+      file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+      ++files;
+    }
+  }
+  REXLOG_INFO("XUI dump: {} files from {} packages -> {}", files, update->packages().size(),
+              args.output);
+  return rex::Ok();
+}
+
 }  // namespace
 
 void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
@@ -101,6 +138,18 @@ void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction
   sub->callback([args, &pending]() {
     pending = [args]() -> Result<void> { return WriteGuideBundle(*args); };
   });
+
+  auto dump = std::make_shared<XuiDumpArgs>();
+  auto* dump_sub = parent.add_subcommand(
+      "xui-dump", "Write out every file of the system modules' XUI packages, for research");
+  dump_sub->add_option("sources", dump->sources, "As for guide-bundle")
+      ->required()
+      ->type_name("PATH");
+  dump_sub->add_option("-o,--output", dump->output, "Folder to write the files to")
+      ->required()
+      ->type_name("PATH");
+  dump_sub->callback(
+      [dump, &pending]() { pending = [dump]() -> Result<void> { return DumpXui(*dump); }; });
 }
 
 }  // namespace rexglue::cli

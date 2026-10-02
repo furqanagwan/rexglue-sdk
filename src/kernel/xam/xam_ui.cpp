@@ -9,6 +9,10 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <mutex>
+#include <optional>
+#include <thread>
+
 #include <rex/logging.h>
 #include <rex/runtime.h>
 #include <rex/string.h>
@@ -20,6 +24,7 @@
 REXCVAR_DEFINE_BOOL(headless, false, "Kernel",
                     "Don't display any UI, using defaults for prompts as needed");
 #include <rex/kernel/xam/private.h>
+#include <rex/kernel/xam/module.h>
 #include <rex/hook.h>
 #include <rex/input/input_system.h>
 #include <rex/types.h>
@@ -450,6 +455,59 @@ class KeyboardInputDialog : public XamDialog {
 };
 
 // https://www.se7ensins.com/forums/threads/release-how-to-use-xshowkeyboardui-release.906568/
+namespace {
+std::mutex keyboard_provider_mutex_;
+KeyboardProvider keyboard_provider_;
+}  // namespace
+
+void xeXamSetKeyboardProvider(KeyboardProvider provider) {
+  std::lock_guard<std::mutex> lock(keyboard_provider_mutex_);
+  keyboard_provider_ = std::move(provider);
+}
+
+namespace {
+
+// Console: shows the keyboard a title gets from XamShowKeyboardUI, with a
+// sample prompt, and logs what was typed.
+void ConsoleKeyboardTest(std::string_view args) {
+  KeyboardProvider provider;
+  {
+    std::lock_guard<std::mutex> lock(keyboard_provider_mutex_);
+    provider = keyboard_provider_;
+  }
+  auto* app_context = REX_KERNEL_STATE() ? REX_KERNEL_STATE()->emulator()->app_context() : nullptr;
+  if (!provider || !app_context) {
+    REXLOG_INFO("keyboard_test: no console keyboard in this build");
+    return;
+  }
+  KeyboardRequest request;
+  request.title = u"Enter Name";
+  request.description = u"Enter a name for your save game.";
+  request.default_text = rex::string::to_utf16(std::string(args));
+  request.max_length = 15;
+  // After a second, so the console can be closed first.
+  std::thread([app_context, provider, request] {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    app_context->CallInUIThread([provider, request] {
+      auto* dialog = provider(request, [](std::optional<std::u16string> text) {
+        if (text) {
+          REXLOG_INFO("keyboard_test: \"{}\"", rex::string::to_utf8(*text));
+        } else {
+          REXLOG_INFO("keyboard_test: cancelled");
+        }
+      });
+      if (!dialog) {
+        REXLOG_INFO("keyboard_test: the console keyboard is not available");
+      }
+    });
+  }).detach();
+}
+
+}  // namespace
+
+REXCVAR_DEFINE_COMMAND_ARGS(keyboard_test, ConsoleKeyboardTest, "Console",
+                            "Show the console keyboard XamShowKeyboardUI uses, [default text]");
+
 u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_text,
                             mapped_wstring title, mapped_wstring description, mapped_wstring buffer,
                             u32 buffer_length, mapped_void overlapped) {
@@ -510,7 +568,86 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
                            REX_KERNEL_MEMORY()->TranslateVirtual(default_text.guest_address())))
                      : "";
 
-    if (imgui_drawer) {
+    KeyboardProvider provider;
+    {
+      std::lock_guard<std::mutex> lock(keyboard_provider_mutex_);
+      provider = keyboard_provider_;
+    }
+    if (provider && emulator->app_context()) {
+      // The console's own keyboard (RG-GDK-059); the ImGui dialog when it
+      // cannot be shown (no keyboard scenes built in).
+      auto load = [](mapped_wstring s) {
+        return s ? rex::memory::load_and_swap<std::u16string>(
+                       REX_KERNEL_MEMORY()->TranslateVirtual(s.guest_address()))
+                 : std::u16string();
+      };
+      KeyboardRequest request;
+      request.user_index = user_index;
+      request.flags = flags;
+      request.title = load(title);
+      request.description = load(description);
+      request.default_text = load(default_text);
+      request.max_length = buffer_length ? buffer_length - 1 : 0;
+      REXKRNL_INFO("XamShowKeyboardUI: flags {:08X}, {} characters", uint32_t(flags),
+                   request.max_length);
+      auto run = [request, provider, buffer, buffer_length, imgui_drawer, title_str, desc_str,
+                  def_text_str](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
+        ScopedGuestInputBlock input_block;
+        rex::ui::WindowedAppContext* app_context = REX_KERNEL_STATE()->emulator()->app_context();
+        std::optional<std::u16string> text;
+        bool shown = false;
+        rex::thread::Fence fence;
+        app_context->CallInUIThreadSynchronous([&] {
+          rex::ui::ImGuiDialog* dialog = provider(
+              request, [&text](std::optional<std::u16string> result) { text = std::move(result); });
+          if (!dialog && imgui_drawer) {
+            // Fallback: the ImGui dialog, its result read as it closes.
+            auto* fallback = new KeyboardInputDialog(imgui_drawer, title_str, desc_str,
+                                                     def_text_str, buffer_length + 1);
+            fallback->set_close_callback([fallback, &text] {
+              if (!fallback->cancelled()) {
+                text = rex::string::to_utf16(fallback->text());
+              }
+            });
+            dialog = fallback;
+          }
+          if (dialog) {
+            dialog->Then(&fence);
+            shown = true;
+          }
+        });
+        if (shown) {
+          ++xam_dialogs_shown_;
+          fence.Wait();
+          --xam_dialogs_shown_;
+        } else {
+          text = request.default_text;
+        }
+        length = 0;
+        if (!text) {
+          extended_error = X_ERROR_CANCELLED;
+          return X_ERROR_SUCCESS;
+        }
+        rex::string::copy_and_swap_truncating(buffer, *text, buffer_length);
+        extended_error = X_ERROR_SUCCESS;
+        return X_ERROR_SUCCESS;
+      };
+      auto pre = []() { REX_KERNEL_STATE()->BroadcastNotification(0x9, true); };
+      auto post = []() {
+        rex::thread::Sleep(std::chrono::milliseconds(100));
+        REX_KERNEL_STATE()->BroadcastNotification(0x9, false);
+      };
+      if (!overlapped) {
+        pre();
+        uint32_t extended_error, length;
+        result = run(extended_error, length);
+        post();
+      } else {
+        REX_KERNEL_STATE()->CompleteOverlappedDeferredEx(run, overlapped.guest_address(), pre,
+                                                         post);
+        result = X_ERROR_IO_PENDING;
+      }
+    } else if (imgui_drawer) {
       uint32_t buffer_length_safe = buffer_length + 1;  // +1 for null terminator, just in case
       result = xeXamDispatchDialogEx<KeyboardInputDialog>(
           new KeyboardInputDialog(imgui_drawer, title_str, desc_str, def_text_str,

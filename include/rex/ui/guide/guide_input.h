@@ -36,6 +36,10 @@ enum class GuideAction : uint8_t {
   kY,
   kPreviousTab,  // left bumper
   kNextTab,      // right bumper
+  kStart,
+  kLeftThumb,    // the left stick pressed in
+  kLeftTrigger,  // pulled past half way
+  kRightTrigger,
 };
 
 /// Pad buttons and the left stick as guide actions. Directions repeat while
@@ -47,18 +51,22 @@ class GuidePad {
   static constexpr uint64_t kRepeatDelayMs = 400;
   static constexpr uint64_t kRepeatIntervalMs = 110;
   static constexpr int16_t kStickThreshold = 16384;
+  static constexpr uint8_t kTriggerThreshold = 128;
 
   /// `buttons` held at open; they will not produce actions.
   explicit GuidePad(uint16_t held_buttons = 0xFFFF);
 
   std::vector<GuideAction> Update(uint16_t buttons, int16_t thumb_lx, int16_t thumb_ly,
-                                  uint64_t now_ms);
+                                  uint64_t now_ms, uint8_t left_trigger = 0,
+                                  uint8_t right_trigger = 0);
 
  private:
   uint16_t previous_ = 0;
   uint16_t ignored_ = 0;
   int direction_ = -1;  // GuideAction for the held direction, -1 when none
   uint64_t next_repeat_ms_ = 0;
+  // The triggers as two more buttons: pulled past kTriggerThreshold.
+  bool left_trigger_ = true, right_trigger_ = true;
 };
 
 }  // namespace rex::ui::guide

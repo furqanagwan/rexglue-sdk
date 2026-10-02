@@ -48,6 +48,7 @@ add_executable(unit_tests
     ui/xui_runtime_test.cpp
     ui/dlc_catalog_test.cpp
     ui/guide_input_test.cpp
+    ui/virtual_keyboard_test.cpp
     ui/title_update_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/output_partition_test.cpp

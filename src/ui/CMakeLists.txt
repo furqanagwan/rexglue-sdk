@@ -39,7 +39,9 @@ set(REXUI_GUIDE_SOURCES
     guide/title_update.cpp
     guide/guide_notification.cpp
     guide/guide_settings.cpp
+    guide/virtual_keyboard.cpp
     guide/xbox_guide.cpp
+    guide/xbox_keyboard.cpp
 )
 
 # Native XUI: the console's own scene format (RG-GDK-041)

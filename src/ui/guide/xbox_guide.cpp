@@ -272,22 +272,19 @@ bool DrawButtonGlyph(ImDrawList& list, std::string_view path,
   if (!font || scale <= 0.0f) {
     return true;
   }
-  // Laid out in pixels around the origin, then mapped through `to_screen`.
+  // At the screen size of the disc (pixels per PNG unit times 11).
   const float size = 11.0f * scale;
   ImFontBaked* baked = font->GetFontBaked(size);
   const ImFontGlyph* g = baked ? baked->FindGlyph(ImWchar(glyph->letter[0])) : nullptr;
   if (!g) {
     return true;
   }
+  // The centre of its ink on the disc's centre. AddText binds the font's
+  // texture itself, whatever the list drew before.
   const float k = size / baked->Size;
-  const ImVec2 at(-(g->X0 + g->X1) / 2.0f * k, -(g->Y0 + g->Y1) / 2.0f * k);
-  const int first_vertex = list.VtxBuffer.Size;
-  font->RenderText(&list, size, at, IM_COL32(0xF5, 0xF5, 0xF5, int(alpha * 255.0f + 0.5f)),
-                   ImVec4(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX), glyph->letter, nullptr);
-  for (int i = first_vertex; i < list.VtxBuffer.Size; ++i) {
-    ImDrawVert& v = list.VtxBuffer[i];
-    v.pos = to_screen({9.0f + v.pos.x / scale, 9.0f + v.pos.y / scale});
-  }
+  const ImVec2 at(centre.x - (g->X0 + g->X1) / 2.0f * k, centre.y - (g->Y0 + g->Y1) / 2.0f * k);
+  list.AddText(font, size, at, IM_COL32(0xF5, 0xF5, 0xF5, int(alpha * 255.0f + 0.5f)),
+               glyph->letter);
   return true;
 }
 
@@ -398,6 +395,17 @@ void ShowControllerStatus(xui::Element* main) {
 }
 
 }  // namespace
+
+bool DrawGuideVectorImage(ImDrawList& list, std::string_view path,
+                          const std::function<ImVec2(ImVec2)>& to_screen, float opacity,
+                          ImFont* bold) {
+  return DrawControllerBattery(list, path, to_screen, opacity) ||
+         DrawButtonGlyph(list, path, to_screen, opacity, bold);
+}
+
+void HideGuideButtonLetters(xui::Element* root) {
+  HideButtonLetters(root);
+}
 
 void ApplySavedCodePatches(const PPCSwitchablePatch* patches) {
   const std::string& saved = REXCVAR_GET(code_patch_states);
@@ -549,6 +557,8 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
       scene(assets->options_vibration, "hud/hud", "OptionsController.xur") &&
       scene(assets->options_notifications, "hud/hud", "OptionsNotifications.xur") &&
       scene(assets->options_voice, "hud/hud", "OptionsVoice.xur");
+  assets->has_keyboard = scene(assets->keyboard_main, "vk/vk", "KeyboardMain.xur") &&
+                         scene(assets->keyboard_base, "vk/vk", "KeyboardBase.xur");
   if (error) {
     error->clear();
   }

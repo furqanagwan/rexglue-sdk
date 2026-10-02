@@ -35,7 +35,8 @@ bool GuideChord::Update(uint16_t buttons) {
 GuidePad::GuidePad(uint16_t held_buttons) : previous_(held_buttons), ignored_(held_buttons) {}
 
 std::vector<GuideAction> GuidePad::Update(uint16_t buttons, int16_t thumb_lx, int16_t thumb_ly,
-                                          uint64_t now_ms) {
+                                          uint64_t now_ms, uint8_t left_trigger,
+                                          uint8_t right_trigger) {
   std::vector<GuideAction> actions;
   ignored_ &= buttons;
   const uint16_t held = buttons & ~ignored_;
@@ -53,12 +54,25 @@ std::vector<GuideAction> GuidePad::Update(uint16_t buttons, int16_t thumb_lx, in
       {X_INPUT_GAMEPAD_Y, GuideAction::kY},
       {X_INPUT_GAMEPAD_LEFT_SHOULDER, GuideAction::kPreviousTab},
       {X_INPUT_GAMEPAD_RIGHT_SHOULDER, GuideAction::kNextTab},
+      {X_INPUT_GAMEPAD_START, GuideAction::kStart},
+      {X_INPUT_GAMEPAD_LEFT_THUMB, GuideAction::kLeftThumb},
   };
   for (const Press& press : kPresses) {
     if (pressed & press.button) {
       actions.push_back(press.action);
     }
   }
+  // A trigger fires once as it passes half way; one held at open waits for
+  // its release, as buttons do.
+  auto trigger = [&](uint8_t value, bool& was_down, GuideAction action) {
+    const bool down = value >= kTriggerThreshold;
+    if (down && !was_down) {
+      actions.push_back(action);
+    }
+    was_down = down;
+  };
+  trigger(left_trigger, left_trigger_, GuideAction::kLeftTrigger);
+  trigger(right_trigger, right_trigger_, GuideAction::kRightTrigger);
 
   // One held direction at a time, the D-pad before the stick.
   int direction = -1;

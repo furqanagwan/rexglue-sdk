@@ -19,9 +19,10 @@ keyboard runs. An owner play session with a pad is still to do.
   cache variable, or the environment variable of that name) to their own
   console's `$SystemUpdate` folder once, as they supply the game itself.
   `rexglue_configure_target`, which every title calls, then runs
-  `rexglue guide-bundle` to take the four modules the guide reads (`hud`,
-  `huduiskin`, `xam`, `gamerprofile`, about 2.7 MB) and embeds them in the
-  executable with `.incbin`. Nothing from the update ships with the SDK. Note that
+  `rexglue guide-bundle` to take the modules the guide reads (`hud`,
+  `huduiskin`, `xam`, `gamerprofile` and the keyboard's `vk`) and embeds them
+  in the executable with `.incbin`. The bundle is rebuilt when the update or
+  the rexglue CLI changes, so a newer SDK takes what it needs. Nothing from the update ships with the SDK. Note that
   a title built this way carries those console files; anyone passing the
   executable on passes them on.
 - `REXGLUE_GUIDE_FLASH` (optional, RG-GDK-061) names an Xbox PC
@@ -168,6 +169,58 @@ hold it, so it leaves with TransFrom after 4 s, which is the console's timing as
 remembered, not measured. Without a system update, the SDK's own toast shows the
 unlock. The console command `achievement_notify [id]` shows an achievement's
 popup without unlocking it.
+
+## On-screen keyboard (RG-GDK-059)
+
+`XamShowKeyboardUI` shows the console's own keyboard from the same built-in
+files. The guide bundle now carries `vk` (`$flash_vk.xex`, the keyboard), whose
+`vk/vk` package holds `KeyboardMain` (a HUD scene with the title) and
+`KeyboardBase`:
+
+- the description;
+- the text field (`scr_Edit`, with its own caret, placed after the characters
+  before the cursor and blinking);
+- a 5 x 10 grid of keys, with Backspace and Space below;
+- a column of three keys on each side: Left, the previous page and Caps;
+  Right, the next page and Done.
+
+It opens like XAM's other full-screen UI, in the HUD backdrop with
+`ClosedToFull`, over the darkened title, and closes with `FullToClosed`.
+
+- **Pages.** The English pages of the 2.0.17559 keyboard, from `vk.xex`'s own
+  tables (`VirtualKeyboard`):
+  - Alphabet (QWERTY): `1234567890`, `qwertyuiop`, `asdfghjkl-`, `zxcvbnm_@.`,
+    and a blank fifth row;
+  - Symbols;
+  - Accents.
+
+  Caps gives capitals. The side keys show the console's pictures (LB, RB, LT,
+  RT, the left stick, Start) and their page names.
+- **Pad**, as on the console:
+  - A presses the focused key and B cancels;
+  - X is Backspace and Y is Space;
+  - LB and RB move the cursor;
+  - LT and RT change the page;
+  - the left stick pressed in is Caps;
+  - Start is Done.
+
+  The D-pad or the stick moves over the keys and wraps.
+- **PC keyboard.** Typing goes straight into the field. Backspace deletes,
+  Enter is Done, Escape cancels and the arrows move over the keys. Keys held as
+  the keyboard opens are ignored until released.
+- **Result.** The text goes to the title's buffer (cut to its length);
+  cancelling gives `X_ERROR_CANCELLED`. Without the keyboard scenes (no update
+  built in) the SDK's ImGui dialog is shown as before.
+- **Not yet.** Only the English pages and the full keyboard are done. The flag
+  modes (email, numeric, password and others, `flags`, logged on each call)
+  are not applied: their values are not recorded yet. The other languages'
+  pages (Russian, Polish, Greek, Czech, Turkish, Japanese, Korean, Chinese) are
+  in `vk.xex` and not yet read.
+- **Tools.**
+  - The console command `keyboard_test [default text]` shows the keyboard a
+    title gets and logs the result.
+  - `rexglue xui-dump <sources> -o <dir>` writes out every file of the built-in
+    modules' packages, for research.
 
 ## Settings pages
 
@@ -423,6 +476,14 @@ profile's XUID is unchanged, so save locations do not move.
   compound properties, gradient stops, timelines with compound paths, named
   frames, truncation, unknown classes, object count) and XEX2 resources (plain
   and basic compression, encrypted images refused).
+- `unit_tests [keyboard]`:
+  - the console's English pages and capitals;
+  - editing at the cursor within the buffer's length;
+  - Start, the left stick and the triggers from the pad.
+
+  Quantum of Solace, 2026-10-02: `keyboard_test 007`, then typing "bond" and
+  Enter, returned "007bond"; Escape returned cancelled. The keyboard drew with
+  the console's scenes and pictures at 3840 x 2160.
 - `unit_tests [xtt]`: a synthetic two-block XTT converts (loca, maxp,
   checksums), damaged ones are refused and fonts round-trip through the
   bundle. With `REXGLUE_GUIDE_FLASH` and/or `REXGLUE_SYSTEM_UPDATE` set, every
