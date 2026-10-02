@@ -9,7 +9,7 @@ command-line flag or `OnConfigurePaths` overrides any of them.
 | --- | --- | --- |
 | Game files (`game:`) | `<exe>\game`, else the executable's own folder, whichever holds `default.xex` | `--game_data_root` |
 | Saves, profiles, achievements | `%USERPROFILE%\Saved Games\<name>` | `--user_data_root` |
-| Shader and other caches | `%LOCALAPPDATA%\<name>\cache` | `--cache_root` |
+| Shader and other caches | `%LOCALAPPDATA%\<name>\cache` (seeded from a [shipped shader cache](shader-cache.md) beside the executable) | `--cache_root` |
 | Logs | `%LOCALAPPDATA%\<name>\logs` | `--log_dir`, or `--log_file` for one file |
 | Settings (`<name>.toml`) | `<exe>\<name>.toml` if it exists, else `%LOCALAPPDATA%\<name>\<name>.toml` | none |
 

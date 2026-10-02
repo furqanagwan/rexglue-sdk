@@ -55,6 +55,7 @@ target_sources(rexcore PRIVATE
     ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/texture/extent.cpp
     ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/texture/util.cpp
     ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/texture/conversion.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/shader/storage_seed.cpp
 )
 
 target_include_directories(rexcore PUBLIC

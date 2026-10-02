@@ -34,6 +34,7 @@
 #include <rex/graphics/d3d12/pipeline_cache.h>
 #include <rex/graphics/d3d12/render_target_cache.h>
 #include <rex/graphics/flags.h>
+#include <rex/graphics/pipeline/shader/storage_seed.h>
 #include <rex/graphics/format/dxbc.h>
 #include <rex/graphics/pipeline_util.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
@@ -59,6 +60,9 @@ REXCVAR_DEFINE_INT32(d3d12_pipeline_creation_threads, -1, "GPU/D3D12",
     .range(-1, 32)
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_STRING(shader_cache_shipped, "", "GPU",
+                      "Folder of the shader cache shipped with the title (empty: shader_cache "
+                      "beside the executable); seeds this PC's cache at startup");
 REXCVAR_DEFINE_BOOL(d3d12_tessellation_wireframe, false, "GPU/D3D12",
                     "Render tessellation as wireframe");
 
@@ -269,6 +273,40 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       fmt::format("{:08X}.{}{}.d3d12.xpso", title_id, edram_rov_used ? "rov" : "rtv",
                   // Full ZPD counters change every ROV pixel shader.
                   edram_rov_used && REXCVAR_GET(occlusion_query_full_counters) ? "-fc" : "");
+  // The cache shipped with the title seeds this PC's first (RG-GDK-064).
+  const std::filesystem::path shipped_root =
+      REXCVAR_GET(shader_cache_shipped).empty()
+          ? rex::filesystem::GetExecutableFolder() / "shader_cache"
+          : std::filesystem::path(REXCVAR_GET(shader_cache_shipped));
+  auto seed = [&](const std::filesystem::path& file, const StorageFormat& format) {
+    const SeedOutcome outcome = SeedStorageFile(shipped_root / file.filename(), file, format);
+    switch (outcome.result) {
+      case SeedResult::kCopied:
+      case SeedResult::kMerged:
+        REXGPU_INFO("Shipped shader cache: {} records of {} added", outcome.added,
+                    rex::path_to_utf8(file.filename()));
+        break;
+      case SeedResult::kStale:
+        REXGPU_WARN("Shipped shader cache: {} is from another SDK version; not used",
+                    rex::path_to_utf8(file.filename()));
+        break;
+      case SeedResult::kFailed:
+        REXGPU_WARN("Shipped shader cache: {}", outcome.error);
+        break;
+      default:
+        break;
+    }
+  };
+  {
+    const struct {
+      uint32_t magic, magic_api, version_swapped;
+    } header = {0x53504558, edram_rov_used ? 0x4F525844u : 0x54525844u,
+                rex::byte_swap(std::max(PipelineDescription::kVersion,
+                                        DxbcShaderTranslator::Modification::kVersion))};
+    seed(pipeline_storage_file_path,
+         {std::span(reinterpret_cast<const uint8_t*>(&header), sizeof(header)),
+          sizeof(PipelineStoredDescription)});
+  }
   pipeline_storage_file_ = rex::filesystem::OpenFile(pipeline_storage_file_path, "a+b");
   if (!pipeline_storage_file_) {
     REXGPU_ERROR(
@@ -346,6 +384,14 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
   uint64_t shader_storage_initialization_start = rex::chrono::Clock::QueryHostTickCount();
   auto shader_storage_file_path =
       shader_storage_shareable_root / fmt::format("{:08X}.xsh", title_id);
+  {
+    const struct {
+      uint32_t magic, version_swapped;
+    } header = {0x48534558, rex::byte_swap(ShaderStoredHeader::kVersion)};
+    static_assert(sizeof(ShaderStoredHeader) == 12);
+    seed(shader_storage_file_path,
+         {std::span(reinterpret_cast<const uint8_t*>(&header), sizeof(header)), 0});
+  }
   shader_storage_file_ = rex::filesystem::OpenFile(shader_storage_file_path, "a+b");
   if (!shader_storage_file_) {
     REXGPU_ERROR(
