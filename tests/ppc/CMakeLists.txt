@@ -98,3 +98,9 @@ catch_discover_tests(ppc_tests
 )
 
 message(STATUS "Configured PPC test suite with ${NUM_TESTS} test files")
+
+# The hardware-captured corpus (RG-GDK-054), off by default: about 170,000
+# cases that take a while to compile.
+if(REXGLUE_PPC_CORPUS)
+    add_subdirectory(corpus)
+endif()

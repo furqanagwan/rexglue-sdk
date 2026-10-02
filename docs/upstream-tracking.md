@@ -1320,3 +1320,16 @@ off, float24 depth rounding and conversion, gamma as unorm16 off and stencil
 output off on RTV, none of which drew it). The RTV cause is open; NHL opts
 into ROV through the new title cvar defaults (`rexglue_configure_target`
 `CVAR_DEFAULTS`, `rex::cvar::SetTitleDefault`, ADR-009).
+
+## RG-GDK-054: Edge's PPC test corpus (2026-10-02)
+
+| Source | Class | Adaptation | Tests |
+| --- | --- | --- | --- |
+| has207/xenia-edge `b5cc59e854020f8406c0b3a96eff6a3d036a514b` (2026-10-01), `src/xenia/cpu/ppc/testing/*.s` and `skip.txt` | A (test data) | Copied unchanged into `tests/ppc/corpus` (578 files; xenia-project `gen_tests` hardware captures plus hand-written cases). 11 files the bundled binutils can't assemble are listed in `assembler_unsupported.txt`. | `ppc_corpus.*` CTest tests (`REXGLUE_PPC_CORPUS=ON`). |
+| Edge `e25eaffff` (bracketed `MEMORY_IN`/`MEMORY_OUT` bytes) and its runner's per-test clearing of `0x10001000`-`0x10010000` | A (harness) | Reimplemented in `rexglue recompile-tests`: bracketed bytes and scalars, `xer` in/out, per-file function names, `skip.txt` labels without `test_`. The new table runner also resets the host FPSCR per case. | The corpus runs deterministically (two runs, same 30,967 failures). |
+
+ReXGlue's generator emits the corpus as data (`--table`, `ppc_table_runner.h`)
+with one Catch2 test per file: a test per case gave 48 sources of about 2 MB
+whose compile exhausted memory. Failures are recorded with their cause issue
+(#149, #151, #185) in `tests/ppc/corpus/known_failures.txt`
+([regression strategy](regression-strategy.md#ppc-test-corpus-rg-gdk-054)).

@@ -460,6 +460,32 @@ and a tested rollback. Run save tests on disposable copies. A build-only pass
 cannot close a compatibility migration. When hardware is unavailable, keep that
 gate blocked and the issue open.
 
+## PPC test corpus (RG-GDK-054)
+
+Besides ReXGlue's own `tests/ppc` suite (1,473 cases, default CTest),
+`tests/ppc/corpus` carries xenia-edge's 578 instruction test files, most of
+them captured on Xbox 360 hardware ([README](../tests/ppc/corpus/README.md)).
+It is opt-in (`-DREXGLUE_PPC_CORPUS=ON`), one CTest test per file, labelled
+`ppc_corpus`; run it for any codegen, PPC builder or FPSCR change.
+
+`tests/ppc/corpus/known_failures.txt` lists each case expected to fail with
+its cause. A new failure or a known failure that passes fails the file's test,
+so the list always matches the run; a fix removes its entries in the same
+change. Measured 2026-10-02 (GDK Release, `main` 621c3f3 plus RG-GDK-054):
+567 files, 169,459 cases run (917 skipped by Edge's `skip.txt`, 11 files the
+bundled assembler can't assemble), 30,967 known failures:
+
+| Cause | Cases |
+| --- | --- |
+| #151 PowerPC FP NaN, denormal, CR1 and estimate rules | 27,585 |
+| #149 missing instructions, and `mfmsr` | 3,333 |
+| #185 other wrong results (`vsl`, `mffs`, `stwcx.`, `vmaddfp`, `vmsum3fp128`/`vmsum4fp128`) | 41 |
+| Corpus errors: hand-written cases expecting a non-IEEE result (`faddx_3`, `fcmpu_1`, ...) | 8 |
+
+Each case starts from a reset FPSCR (round to nearest, no flush) and a zeroed
+test data window, as Edge's runner does; without that, rounding modes and
+memory left by earlier cases changed later results.
+
 ## Regression tracking index
 
 These are **upstream-reported risks**, not newly proven ReXGlue regressions.
