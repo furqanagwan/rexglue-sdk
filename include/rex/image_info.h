@@ -99,6 +99,8 @@ struct PPCImageInfo {
   u32 title_update = 0;
   /// The title updates the title had, ended by a zero version; null when none.
   const PPCTitleUpdate* title_updates = nullptr;
+  /// Content fingerprint of the entry XEX used by codegen. Empty in older builds.
+  const char* xex_content_hash = "";
 };
 
 }  // namespace rex

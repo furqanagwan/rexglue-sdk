@@ -196,7 +196,12 @@ Both paths are optional: by default the title finds its game files in a `game`
 folder beside the executable (or the executable's own folder), keeps saves in
 `Saved Games\<name>` and caches, logs and settings in `%LOCALAPPDATA%\<name>`,
 as an Xbox PC game does ([data locations](docs/data-locations.md)).
-This is how the Quantum of Solace baseline runs. Add `--input_backend=gameinput`,
+This is how the Quantum of Solace baseline runs.
+For an original-title build regenerated with this SDK, `--game_data_root` can
+also point to an XDVDFS ISO. The runtime checks its root `default.xex` against
+the XEX used by codegen before starting; first-run selection and physical disc
+drives are still tracked in [RG-GDK-058](https://github.com/furqanagwan/rexglue-sdk/issues/154).
+Add `--input_backend=gameinput`,
 `--ui_backend=win32` and `--audio_backend=xaudio2` for the native paths (GameInput
 needs a GDK build). `rexglue init gameconfig` adds a `MicrosoftGame.config` for
 GDK packaging. This is not a

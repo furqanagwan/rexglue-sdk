@@ -27,6 +27,7 @@
 #include <rex/codegen/codegen_context.h>
 #include <rex/codegen/codegen_writer.h>
 #include <rex/codegen/test_support.h>
+#include <rex/hash.h>
 
 namespace fs = std::filesystem;
 using namespace rex::codegen;
@@ -96,6 +97,18 @@ struct WriterFixture {
 };
 
 }  // namespace
+
+TEST_CASE("Generated image binds to the entry XEX contents", "[codegen_writer]") {
+  WriterFixture fx("xex_hash");
+  const auto xex = fx.root / "default.xex";
+  { std::ofstream(xex, std::ios::binary) << "synthetic-XEX-revision-A"; }
+  fx.ctx->Config().filePath = "default.xex";
+
+  CodegenWriter writer(*fx.ctx);
+  REQUIRE(writer.write(false));
+  const auto generated = ReadAll(fx.outputDir() / "testproj_init.cpp");
+  CHECK(generated.find(".xex_content_hash = \"" + rex::hash_file(xex) + "\"") != std::string::npos);
+}
 
 TEST_CASE("Second write with unchanged inputs writes nothing", "[codegen_writer]") {
   WriterFixture fx("unchanged");
