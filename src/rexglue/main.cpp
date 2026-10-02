@@ -10,6 +10,7 @@
 #include "commands/codegen_command.h"
 #include "commands/dlc_command.h"
 #include "commands/guide_bundle_command.h"
+#include "commands/library_art_command.h"
 #include "commands/init_command.h"
 #include "commands/test_recompiler.h"
 #include "ui/ui.h"
@@ -84,6 +85,7 @@ int main(int argc, char** argv) {
   rexglue::cli::RegisterInit(app, ctx, pending);
   rexglue::cli::RegisterRecompileTests(app, ctx, pending);
   rexglue::cli::RegisterGuideBundle(app, ctx, pending);
+  rexglue::cli::RegisterLibraryArt(app, ctx, pending);
   rexglue::cli::RegisterDlcCommands(app, ctx, pending);
 
   rex::cvar::RegisterCliOptions(app);
