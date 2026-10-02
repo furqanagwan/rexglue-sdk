@@ -49,6 +49,7 @@ set(REXUI_XUI_SOURCES
     xui/runtime.cpp
     xui/schema.cpp
     xui/system_update.cpp
+    xui/xtt_font.cpp
     xui/xur_reader.cpp
 )
 

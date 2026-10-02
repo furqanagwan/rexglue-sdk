@@ -18,6 +18,7 @@
 #include <rex/filesystem/entry.h>
 #include <rex/filesystem/file.h>
 #include <rex/system/lzx.h>
+#include <rex/ui/xui/xtt_font.h>
 
 namespace rex::ui::xui {
 namespace {
@@ -227,6 +228,29 @@ bool SystemUpdate::AddModule(std::string_view module, std::span<const uint8_t> x
   return true;
 }
 
+bool SystemUpdate::AddFont(std::string_view name, std::span<const uint8_t> xtt,
+                           std::string* error) {
+  std::string font_error;
+  auto font = XttToTrueType(xtt, &font_error);
+  if (!font) {
+    if (error) {
+      *error = fmt::format("font/{}: {}", name, font_error);
+    }
+    return false;
+  }
+  fonts_.insert_or_assign(std::string(name), std::move(*font));
+  return true;
+}
+
+std::span<const uint8_t> SystemUpdate::Font(std::string_view name) const {
+  for (const auto& [key, font] : fonts_) {
+    if (SamePath(key, name)) {
+      return font;
+    }
+  }
+  return {};
+}
+
 const Package* SystemUpdate::Find(std::string_view module_resource) const {
   for (const auto& [key, package] : packages_) {
     if (SamePath(key, module_resource)) {
@@ -248,7 +272,11 @@ std::unique_ptr<SystemUpdate> SystemUpdate::FromModules(const Modules& modules,
   std::string first_error;
   for (const auto& [module, bytes] : modules) {
     std::string add_error;
-    if (!update->AddModule(module, bytes, &add_error) && first_error.empty()) {
+    // A font that does not convert leaves the guide on its fallback font.
+    const bool added = module.starts_with("font/")
+                           ? update->AddFont(module.substr(5), bytes, &add_error)
+                           : update->AddModule(module, bytes, &add_error);
+    if (!added && first_error.empty()) {
       first_error = add_error;
     }
   }
@@ -355,13 +383,29 @@ std::optional<SystemUpdate::Modules> SystemUpdate::ReadModules(const std::filesy
     }
   };
 
+  // A file named $flash_<name> in a flash folder, or <name> as Xbox PC
+  // backward-compatibility games ship them.
+  auto read_flash = [&](std::string_view name) {
+    auto bytes = ReadHostFile(path / fmt::format("$flash_{}", name));
+    return bytes ? bytes : ReadHostFile(path / name);
+  };
+  auto add_fonts = [&](auto&& read) {
+    for (std::string_view font : kFonts) {
+      add(fmt::format("font/{}", font), read(fmt::format("{}.xtt", font)));
+    }
+  };
+
   std::filesystem::path package_path;
   if (std::filesystem::is_directory(path, ec)) {
-    if (std::filesystem::is_regular_file(path / "$flash_hud.xex", ec)) {
+    if (std::filesystem::is_regular_file(path / "$flash_hud.xex", ec) ||
+        std::filesystem::is_regular_file(path / "hud.xex", ec)) {
       for (std::string_view module : kModules) {
-        add(module, ReadHostFile(path / fmt::format("$flash_{}.xex", module)));
+        add(module, read_flash(fmt::format("{}.xex", module)));
       }
+      add_fonts(read_flash);
     } else {
+      // The update folder holds some fonts beside its package.
+      add_fonts([&](const std::string& name) { return ReadHostFile(path / name); });
       // The update package is named su<version>_00000000.
       for (const auto& item : std::filesystem::directory_iterator(path, ec)) {
         const std::string name = item.path().filename().string();
@@ -388,12 +432,31 @@ std::optional<SystemUpdate::Modules> SystemUpdate::ReadModules(const std::filesy
     for (std::string_view module : kModules) {
       add(module, ReadStfsFile(device, fmt::format("$flash_{}.xex", module)));
     }
+    add_fonts([&](const std::string& name) {
+      return ReadStfsFile(device, fmt::format("$flash_{}", name));
+    });
   }
 
   if (modules.empty()) {
     return fail(fmt::format("{} holds none of the system modules", path.string()));
   }
   return modules;
+}
+
+std::optional<SystemUpdate::Modules> SystemUpdate::ReadModules(
+    std::span<const std::filesystem::path> paths, std::string* error) {
+  Modules modules;
+  for (const std::filesystem::path& path : paths) {
+    auto read = ReadModules(path, error);
+    if (!read) {
+      return std::nullopt;
+    }
+    modules.merge(*read);
+  }
+  if (modules.empty() && error) {
+    *error = "no system update given";
+  }
+  return modules.empty() ? std::nullopt : std::optional<Modules>(std::move(modules));
 }
 
 }  // namespace rex::ui::xui

@@ -24,6 +24,13 @@ keyboard runs. An owner play session with a pad is still to do.
   executable with `.incbin`. Nothing from the update ships with the SDK. Note that
   a title built this way carries those console files; anyone passing the
   executable on passes them on.
+- `REXGLUE_GUIDE_FLASH` (optional, RG-GDK-061) names an Xbox PC
+  backward-compatibility game's `Content/Flash` folder (its `hud.xex`,
+  `huduiskin.xex`, `xam.xex` and `xenonjklatin.xtt`). Its newer modules and
+  the console font are taken ahead of the update's; `gamerprofile` and the
+  update's own fonts still come from `REXGLUE_SYSTEM_UPDATE`.
+  `rexglue guide-bundle <flash> <$SystemUpdate> -o <bundle>` does the same by
+  hand: each module or font comes from the first source that has it.
 - A build without `REXGLUE_SYSTEM_UPDATE` logs "Xbox guide not built in" and,
   at run time, falls back to the `xbox_guide_system_update` cvar, `$SystemUpdate`
   beside the executable, then `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`. Naming
@@ -311,8 +318,19 @@ against the console.
 - GuideMain's `<tab>Open`/`<tab>Close` frames take a tab's blade out and bring
   it in. The names read backwards until the keyframes are checked (Tab2's
   opacity falls in `2Open`).
-- Fonts: the console's `.xtt` fonts are encrypted. Segoe UI stands in for
-  Segoe Xbox. Its private-use gamerscore glyph (U+E00A, in `btn_Count_achiev`
+- Fonts (RG-GDK-061): the console's `.xtt` fonts are not encrypted but
+  repacked. After a 0x118-byte header (magic `xttf`, a 256-byte signature,
+  then signed, file, compressed and uncompressed sizes and a version) comes a
+  zlib-compressed sfnt directory with the standard tables plus Xbox ones:
+  `xglf` (at its offset in the file) holds the glyph outlines as separately
+  zlib-compressed 4 KiB blocks, `xloc` locates glyph *n* as
+  `(block << 16) | offset` within the inflated block, and `xchk` is a SHA-1
+  per `xglf` block. `xui::XttToTrueType` rebuilds glyf and loca from them,
+  keeps the font's own tables and builds the maxp, OS/2 and post a font lacks
+  (`xenonjklatin.xtt`, 20,334 glyphs, has none; `SegoeXbox-Light.xtt` has
+  all three). The bundle keeps the `.xtt` files as they are, keyed
+  `font/<name>`, and the guide draws its text in `xenonjklatin` ("Xbox JK")
+  when the bundle has it; without it, Segoe UI stands in. Its private-use gamerscore glyph (U+E00A, in `btn_Count_achiev`
   and in the points XAM puts beside achievements) is drawn as an image: the
   shape of sharedres `GScore_white.png` (a white disc with a G cut out, so the
   row's colour shows through) traced at 256 pixels, tinted with the text
@@ -389,6 +407,11 @@ profile's XUID is unchanged, so save locations do not move.
   compound properties, gradient stops, timelines with compound paths, named
   frames, truncation, unknown classes, object count) and XEX2 resources (plain
   and basic compression, encrypted images refused).
+- `unit_tests [xtt]`: a synthetic two-block XTT converts (loca, maxp,
+  checksums), damaged ones are refused and fonts round-trip through the
+  bundle. With `REXGLUE_GUIDE_FLASH` and/or `REXGLUE_SYSTEM_UPDATE` set, every
+  console font found converts (2026-10-02: `xenonjklatin` from Fuzion Frenzy's
+  Flash, `SegoeXbox-Light` and `XenonSCLatin` from 17559).
 - `unit_tests [local]` with `REXGLUE_SYSTEM_UPDATE` set to a `$SystemUpdate`
   folder: loads the package through the SDK's STFS device and LZX decoder, then
   decodes every non-Kinect scene in `hud/hud`, `huduiskin/skin`, `xam/xam` and

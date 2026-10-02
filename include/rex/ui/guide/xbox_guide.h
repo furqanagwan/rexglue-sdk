@@ -109,9 +109,10 @@ struct GuideFonts {
   ImFont* bold = nullptr;
 };
 
-/// Adds Segoe UI (the host stand-in for Segoe Xbox) to the atlas. Call from
-/// the ImGui drawer's font setup, before the atlas is built. The glyphs are
-/// baked for `display_height` (the guide's text is sharp at 4K too).
+/// Adds the console's system font from the guide built into the title
+/// (RG-GDK-061), or Segoe UI, the host stand-in, without one. Call from the
+/// ImGui drawer's font setup, before the atlas is built. The glyphs are baked
+/// for `display_height` (the guide's text is sharp at 4K too).
 GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height = 0);
 
 /// Textures and sounds from the system update, kept across openings.
