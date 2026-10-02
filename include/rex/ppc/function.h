@@ -408,6 +408,8 @@ __attribute__((noinline)) void HostToGuestFunction(PPCContext& ctx, uint8_t* bas
 
   auto args = function_args(Func);
   _translate_args_to_host<Func>(ctx, base, args);
+  // The export runs in the host's FP mode, not the guest's (RG-GDK-056).
+  HostFpScope host_fp(ctx.fpscr);
 
   if constexpr (std::is_same_v<ret_t, void>) {
     std::apply(Func, args);
@@ -469,12 +471,15 @@ T GuestToHostFunction(const TFunction& func, TArgs&&... argv) {
 
   _translate_args_to_guest(newCtx, base, args);
 
-  if constexpr (std::is_function_v<TFunction>) {
-    func(newCtx, base);
-  } else if constexpr (std::is_integral_v<TFunction>) {
-    (void)func;
-  } else {
-    func(newCtx, base);
+  {
+    GuestFpScope guest_fp(newCtx.fpscr);
+    if constexpr (std::is_function_v<TFunction>) {
+      func(newCtx, base);
+    } else if constexpr (std::is_integral_v<TFunction>) {
+      (void)func;
+    } else {
+      func(newCtx, base);
+    }
   }
 
   currentCtx->fpscr = newCtx.fpscr;

@@ -126,7 +126,10 @@ struct ImportFunction<R(Args...)> {
   R operator()(PPCContext& ctx, uint8_t* base, Args... args) const {
     auto tpl = std::make_tuple(args...);
     _translate_args_to_guest(ctx, base, tpl);
-    fn(ctx, base);
+    {
+      GuestFpScope guest_fp(ctx.fpscr);
+      fn(ctx, base);
+    }
     if constexpr (std::is_void_v<R>) {
       return;
     } else if constexpr (is_precise_v<R>) {
@@ -157,7 +160,10 @@ struct ImportFunction<R(Args...)> {
 
     auto tpl = std::make_tuple(args...);
     _translate_args_to_guest(ctx, base, tpl);
-    fn(ctx, base);
+    {
+      GuestFpScope guest_fp(ctx.fpscr);
+      fn(ctx, base);
+    }
 
     parentCtx->fpscr = ctx.fpscr;
 

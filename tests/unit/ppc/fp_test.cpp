@@ -46,3 +46,34 @@ TEST_CASE("Record forms set CR1 from what the operation raised", "[ppc][fp]") {
   CHECK(fp::bits(fp::recorded(cr1, sub, false, false, inf, inf)) == fp::kDefaultNaN);
   CHECK(cr1.raw() == 0xA);
 }
+
+TEST_CASE("Host code runs in the host FP mode, guest code in its own", "[ppc][fp]") {
+  using Platform = rex::ppc::FPSCRRegister::Platform;
+  constexpr uint32_t kGuestBits = rex::ppc::FPSCRRegister::GuestMask;
+  const uint32_t original = Platform::getcsr();
+
+  // Guest code with VMX flush on and rounding toward zero calls an export.
+  rex::ppc::FPSCRRegister guest{};
+  guest.csr = original & ~kGuestBits;
+  guest.storeFromGuest(rex::ppc::kRoundTowardZero);
+  guest.enableFlushModeUnconditional();
+  const uint32_t guest_mode = guest.csr;
+  {
+    rex::ppc::HostFpScope host(guest);
+    CHECK((Platform::getcsr() & kGuestBits) == 0);
+    {
+      // The export calls back into guest code, which switches to rounding
+      // down.
+      rex::ppc::GuestFpScope callback(guest);
+      CHECK(Platform::getcsr() == guest_mode);
+      guest.storeFromGuest(rex::ppc::kRoundDown);
+    }
+    CHECK((Platform::getcsr() & kGuestBits) == 0);
+  }
+  // Back in guest code: the callback's rounding mode, and the cache agrees.
+  CHECK(Platform::getcsr() == guest.csr);
+  CHECK(guest.loadFromHost() == rex::ppc::kRoundDown);
+  CHECK((guest.csr & rex::ppc::FPSCRRegister::FlushMask) == rex::ppc::FPSCRRegister::FlushMask);
+
+  Platform::setcsr(original);
+}

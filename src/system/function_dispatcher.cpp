@@ -79,7 +79,11 @@ bool FunctionDispatcher::Execute(ThreadState* thread_state, uint32_t address) {
   uint64_t previous_lr = ctx->lr;
   ctx->lr = 0xBCBCBCBC;
 
-  fn(*ctx, memory_->virtual_membase());
+  {
+    // Guest code finds its own FP mode, and the host gets its own back.
+    rex::ppc::GuestFpScope guest_fp(ctx->fpscr);
+    fn(*ctx, memory_->virtual_membase());
+  }
 
   ctx->lr = previous_lr;
   ctx->r1.u64 += 64 + 112;

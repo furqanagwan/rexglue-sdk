@@ -1363,3 +1363,23 @@ case, `vmaddfp_1`); PPC 1,473/1,473. A micro-benchmark (`-O2 -msse4.1`,
 vectorisation off, three runs) puts `fadds`/`fmuls`/`fmadds` at +20-40% per
 op, `fadd` +5%, `vmaddfp` and `vmaxfp` level, `vnmsubfp` +30-60%. Title frame
 time is not yet measured.
+
+## RG-GDK-056: host and guest FP modes kept apart (2026-10-02)
+
+has207/xenia-edge commits (September-October 2026, class A: correctness,
+latent; no symptom was seen in a title). Edge switches modes in its JIT's host
+thunks; ReXGlue does it in the call wrappers, with two scopes in
+`include/rex/ppc/context.h`.
+
+| Edge commit | Rule | ReXGlue |
+| --- | --- | --- |
+| `10c8ae795` "Enter host code with the default MXCSR" (2026-10-01) | Host code called from guest code runs at round to nearest, no flush | `HostFpScope` in `HostToGuestFunction` (every `REX_HOOK`/`REX_EXPORT`) |
+| `95b14f55f` "Keep host and guest FP modes apart around guest callbacks" (2026-10-01) | Guest code entered from host code finds its own mode | `GuestFpScope` in `GuestToHostFunction`, `ImportFunction` and `FunctionDispatcher::Execute` (thread start, APCs, interrupts) |
+| `efbac5e9f` "Run exception handlers in the host FP mode" (2026-10-01) | Host exception handlers don't inherit the faulting guest mode | `exception_handler_win.cpp` clears the guest bits around the handlers |
+| `cb86a688e`, `2802ae523` (mode tracking after host calls) | The JIT forgets its tracked mode after a host call | Already so: codegen resets its tracked state after calls. `HostFpScope` restores the guest bits from `ctx.fpscr`, so a callback that changed the rounding mode is kept and the cache stays true |
+
+Not covered: `REX_HOOK_RAW` hooks and stubs run in the caller's mode (they get
+the raw context; a raw hook doing float math should open a `HostFpScope`).
+Cost, measured on the development laptop: about 9 ns per export call while the
+guest is in flush mode (two control-register writes), 1-2 ns otherwise.
+Tested by `tests/unit/ppc/fp_test.cpp` ("Host code runs in the host FP mode").
