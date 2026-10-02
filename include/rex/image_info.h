@@ -79,6 +79,9 @@ struct PPCImageInfo {
   u32 code_size;
   u32 image_base;
   u32 image_size;
+  /// Where the function dispatch table goes; 0 for image_base + image_size.
+  /// Codegen moves it when a guest DLL's image would sit there.
+  u32 function_table_base = 0;
   const PPCFuncMapping* func_mappings;
   bool rexcrt_heap = false;  ///< Set by codegen when [rexcrt] has heap functions
   RegisterModulesFunc register_modules = nullptr;  ///< Set by codegen for multi-binary projects

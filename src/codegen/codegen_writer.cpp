@@ -144,6 +144,10 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"project", cfg.projectName},
       {"image_base", fmt::format("0x{:X}", ctx.binary().baseAddress())},
       {"image_size", fmt::format("0x{:X}", ctx.binary().imageSize())},
+      {"function_table_base",
+       fmt::format("0x{:X}", ctx.functionTableBase()
+                                 ? ctx.functionTableBase()
+                                 : ctx.binary().baseAddress() + ctx.binary().imageSize())},
       {"code_base", fmt::format("0x{:X}", codeMin)},
       {"code_size", fmt::format("0x{:X}", codeMax - codeMin)},
       {"rexcrt_heap", cfg.rexcrtFunctions.contains("RtlAllocateHeap") ? 1 : 0},

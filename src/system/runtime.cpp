@@ -38,6 +38,13 @@ REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
 REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
 REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
 REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
+// As Xenia Canary does (mount_cache, on since 2024-08-31): EA's titles copy
+// their streaming archives to the utility partition and read them from there;
+// without it NHL Legacy Edition read D:\(null)\cacherender.big and drew its
+// matches black (RG-GDK-069).
+REXCVAR_DEFINE_BOOL(mount_cache, true, "Runtime",
+                    "Mount the console's cache partitions (cache:, cache0:, cache1:) in the "
+                    "cache folder");
 
 namespace rex {
 
@@ -247,9 +254,9 @@ X_STATUS Runtime::Setup(const rex::PPCImageInfo& image_info, RuntimeConfig confi
 
   codegen_flags_ = image_info.codegen_flags;
 
-  if (!function_dispatcher_->InitializeFunctionTable(image_info.code_base, image_info.code_size,
-                                                     image_info.image_base, image_info.image_size,
-                                                     /*is_entrypoint=*/true)) {
+  if (!function_dispatcher_->InitializeFunctionTable(
+          image_info.code_base, image_info.code_size, image_info.image_base, image_info.image_size,
+          /*is_entrypoint=*/true, image_info.function_table_base)) {
     REXSYS_ERROR("Failed to initialize function table");
     Shutdown();
     return X_STATUS_UNSUCCESSFUL;
@@ -403,9 +410,29 @@ bool Runtime::SetupVfs() {
     REXSYS_DEBUG("  Registered NullDevice for \\Device\\Harddisk0\\{{Partition0,Cache0,Cache1}}");
   }
 
-  // NOTE: Do NOT register a device for cache: paths
-  // Games handle "device not found" gracefully but don't handle actual device
-  // errors (like NAME_COLLISION) well. Let cache: fail cleanly.
+  // The utility partitions as host folders under the cache root (Canary's
+  // mount_cache): cache0: and cache1: first, since cache: is their prefix.
+  if (REXCVAR_GET(mount_cache) && !cache_root_.empty()) {
+    struct Partition {
+      const char* device;
+      const char* folder;
+      const char* link;
+    };
+    for (const Partition& p :
+         {Partition{"\\CACHE0", "cache0", "cache0:"}, Partition{"\\CACHE1", "cache1", "cache1:"},
+          Partition{"\\CACHE", "cache", "cache:"}}) {
+      const std::filesystem::path folder = cache_root_ / "partitions" / p.folder;
+      std::error_code ec;
+      std::filesystem::create_directories(folder, ec);
+      auto partition = std::make_unique<rex::filesystem::HostPathDevice>(p.device, folder, false);
+      if (partition->Initialize() && file_system_->RegisterDevice(std::move(partition))) {
+        file_system_->RegisterSymbolicLink(p.link, p.device);
+        REXSYS_DEBUG("  Mounted {} at {}", folder.string(), p.link);
+      } else {
+        REXSYS_WARN("Runtime::SetupVfs: could not mount {} at {}", folder.string(), p.link);
+      }
+    }
+  }
 
   return true;
 }

@@ -13,6 +13,7 @@
 
 #include <cstdlib>
 #include <functional>
+#include <ranges>
 #include <string>
 
 #include <rex/assert.h>
@@ -346,6 +347,19 @@ bool ReXApp::SetupEnvironment() {
   metadata_root_ = path_config.metadata_root;
   config_path_ = path_config.config_path;
   resolved_defaults_ = std::move(path_config);
+
+  // The title's own defaults (rexglue_configure_target CVAR_DEFAULTS,
+  // "name=value|..."), under the config file and command line.
+#ifdef REXGLUE_TITLE_CVAR_DEFAULTS
+  for (const auto item : std::views::split(std::string_view(REXGLUE_TITLE_CVAR_DEFAULTS), '|')) {
+    const std::string_view pair(item.begin(), item.end());
+    const size_t eq = pair.find('=');
+    if (eq != std::string_view::npos &&
+        !rex::cvar::SetTitleDefault(pair.substr(0, eq), pair.substr(eq + 1))) {
+      REXLOG_WARN("Title default {} not applied", pair);
+    }
+  }
+#endif
 
   // Load config FIRST so log cvars have final values
   if (std::filesystem::exists(config_path_))

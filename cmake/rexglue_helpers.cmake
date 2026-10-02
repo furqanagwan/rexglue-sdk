@@ -33,9 +33,10 @@ endfunction()
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
 #   - The shipped shader cache (SHADER_CACHE <dir>, or ./shader_cache).
+#   - The title's cvar defaults (CVAR_DEFAULTS "name=value" ...).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "SHADER_CACHE" "GPU_PLUGINS" ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADER_CACHE" "GPU_PLUGINS;CVAR_DEFAULTS" ${ARGN})
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main.cpp
@@ -43,6 +44,13 @@ function(rexglue_configure_target target_name)
 
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")
+    # The title's own cvar defaults ("name=value" each), under its config
+    # file and the command line (ADR-009: titles opt in by name).
+    if(ARG_CVAR_DEFAULTS)
+        list(JOIN ARG_CVAR_DEFAULTS "|" _cvar_defaults)
+        target_compile_definitions(${target_name} PRIVATE
+            REXGLUE_TITLE_CVAR_DEFAULTS="${_cvar_defaults}")
+    endif()
 
     rexglue_apply_target_settings(${target_name})
     _rexglue_embed_xbox_guide(${target_name})

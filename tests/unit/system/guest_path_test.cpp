@@ -41,3 +41,18 @@ TEST_CASE("ObDosDevices relative directory names retain the directory", "[system
   CHECK_FALSE(NormalizeDosDevicesRelativePath("\\Device\\Harddisk0\\Partition1"));
   CHECK_FALSE(NormalizeDosDevicesRelativePath(""));
 }
+
+TEST_CASE("A module loaded by a bare name matches its game-root path", "[system][path]") {
+  using rex::system::GuestPathEndsWithModule;
+  using rex::system::NormalizeGuestPath;
+  // FIFA Street's launcher loads "fifadllzf.xex.dll", joined to its own
+  // \Device\Harddisk0\Partition1\default.xex.
+  const auto loaded = NormalizeGuestPath("\\Device\\Harddisk0\\Partition1\\fifadllzf.xex.dll");
+  CHECK(GuestPathEndsWithModule(loaded, "fifadllzf.xex.dll"));
+  CHECK(GuestPathEndsWithModule(
+      NormalizeGuestPath("\\Device\\Harddisk0\\Partition1\\dlc\\a\\b.xex.dll"), "dlc/a/b.xex.dll"));
+  // Whole segments only, and never the empty path.
+  CHECK_FALSE(GuestPathEndsWithModule(loaded, "dllzf.xex.dll"));
+  CHECK_FALSE(GuestPathEndsWithModule(loaded, ""));
+  CHECK_FALSE(GuestPathEndsWithModule("fifadllzf.xex.dll", "fifadllzf.xex.dll"));
+}

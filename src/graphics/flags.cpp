@@ -15,8 +15,12 @@
 #include <rex/logging.h>
 #include <rex/ui/renderdoc_api.h>
 
-REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, false, "GPU",
-                    "Allow invalid fetch constants");
+// On by default, as in Xenia Canary and Edge: titles leave fetch constants
+// with the "invalid" type bits set for textures they still sample (NHL Legacy
+// Edition's gameplay drew black, RG-GDK-069).
+REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, true, "GPU",
+                    "Allow texture and vertex fetch constants with the invalid type (off skips "
+                    "the draws that use them)");
 REXCVAR_DEFINE_BOOL(native_2x_msaa, true, "GPU", "Enable native 2x MSAA");
 REXCVAR_DEFINE_BOOL(depth_float24_round, false, "GPU", "Round float24 depth values");
 REXCVAR_DEFINE_BOOL(depth_float24_convert_in_pixel_shader, false, "GPU",
