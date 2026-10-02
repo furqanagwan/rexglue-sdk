@@ -131,6 +131,21 @@ focus, press and sounds come from the skin visuals' named frames.
   Xbox Settings (the Series consoles' Xbox One X Settings) and stays disabled.
   The code is kept and commented or listed (`kRemovedEntries`, `kRemovedTab`
   in `xbox_guide.cpp`), so each can be put back.
+- With `REXGLUE_GUIDE_FLASH`, the guide is the one Microsoft's PC backward
+  compatibility shows, from the BC `hud.xex`'s own emulator scenes:
+  `GuideMainEmulator` has three tabs (Games, Home and Settings: `Tab1` to
+  `Tab3`, their own `1To2` to `3To2` shuffles) and a Y legend of Leave Game, so
+  nothing is rewritten. Home is `HomeTabEmulatorSignedInLocal` (Leave Game and
+  Manage Storage, for a profile without Xbox Live), Games
+  `GamesTabEmulatorSignedIn` (Achievements, Awards) and Settings
+  `SettingsTabEmulatorSignedIn` (Profile, Preferences, Xbox One X Settings).
+  Preferences is `OptionsEmulator`. Manage Game, Title Updates and Active
+  Downloads are added below Awards, as `XuiButtonGuide` rows (`AddEntry`'s
+  `visual`), and Patches, Mods and Cheats below Xbox Settings. Xbox One X
+  Settings is renamed Xbox Settings and opens its own scene,
+  `XboxOneXSettings` (see [Settings pages](#settings-pages)). Manage Storage
+  stays disabled. Without the emulator scenes (a 17559-only build) the guide
+  is the 17559 one above.
 - Everything else (Marketplace, My Games, media players, Live features) stays in
   the menu, disabled, as the console's disabled controls behave: they take focus,
   and pressing them plays the inactive sound.
@@ -164,7 +179,8 @@ is saved to the title's config file straight away.
 
 | Page | Scene | Controls | Setting |
 | --- | --- | --- | --- |
-| Preferences | `Options` | Notifications, Volume (the Voice entry), Vibration, Resolution (a copy of Vibration). Online Status, Family Timer and Word Registration are removed. | |
+| Preferences | `Options` (`OptionsEmulator` with the BC HUD) | Notifications, Volume (the Voice entry), Vibration, Resolution (a copy of Vibration; with the BC HUD it is under Xbox Settings instead). Online Status, Family Timer and Word Registration are removed. | |
+| Xbox Settings (BC HUD) | `XboxOneXSettings` | Optimize game for: Graphics or Performance. The pane's first line, "Changing this setting will end your current session.", reads that the setting is used at the next start. | Graphics: `resolution_match_display`; Performance: `resolution_scale` 1; next launch |
 | Notifications | `OptionsNotifications` | Show Notifications; Play Sound (disabled while Show is off) | `notifications_show`, `notifications_sound`: the unlock popup and its sound |
 | Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; voice, Kinect and output hidden | `audio_volume`, applied live |
 | Vibration | `OptionsController` | Enable Vibration | `vibration`, applied live |
@@ -412,6 +428,19 @@ profile's XUID is unchanged, so save locations do not move.
   bundle. With `REXGLUE_GUIDE_FLASH` and/or `REXGLUE_SYSTEM_UPDATE` set, every
   console font found converts (2026-10-02: `xenonjklatin` from Fuzion Frenzy's
   Flash, `SegoeXbox-Light` and `XenonSCLatin` from 17559).
+- `unit_tests [guide][local]` with `REXGLUE_GUIDE_FLASH`: the guide assets take
+  the emulator layout (Leave Game, Home without Connect to Xbox Live, Xbox
+  Settings and Preferences scenes found) and `GuideMainEmulator` plays `2Close`,
+  `2To3`, `3To2` and `2To1` with each tab shown in turn; `AddEntry` with a
+  `visual` gives the copy that visual.
+- Quantum of Solace, 2026-10-02, built with Fuzion Frenzy's Flash and 17559:
+  the emulator guide's Home (Leave Game, Manage Storage disabled), Games
+  (Achievements with gamerscore, Awards disabled, Manage Game, Title Updates,
+  Active Downloads), Settings (Profile disabled, Preferences, Xbox Settings,
+  Patches, Mods, Cheats), Xbox Settings (Performance checked) and Preferences
+  (Notifications, Volume, Vibration), at 1280 x 720, 1920 x 1080, 2560 x 1440
+  and 3840 x 2160. 7680 x 4320 was not tested: the only display is 4K and
+  Windows keeps a window within it. No errors in the log.
 - `unit_tests [local]` with `REXGLUE_SYSTEM_UPDATE` set to a `$SystemUpdate`
   folder: loads the package through the SDK's STFS device and LZX decoder, then
   decodes every non-Kinect scene in `hud/hud`, `huduiskin/skin`, `xam/xam` and

@@ -68,10 +68,10 @@ inline void RemoveEntry(xui::Element* scene, std::string_view id) {
 }
 
 /// Adds an entry below `after` that is a copy of `model` (same class and
-/// visual, so it looks like its neighbours), with `text`. Entries below
-/// `after` move down to make room.
+/// visual, so it looks like its neighbours, or `visual` when given), with
+/// `text`. Entries below `after` move down to make room.
 inline xui::Element* AddEntry(xui::Element* scene, std::string_view model, std::string_view after,
-                              std::string id, std::string text) {
+                              std::string id, std::string text, std::string_view visual = {}) {
   xui::Element* model_entry = scene->FindById(model);
   xui::Element* after_entry = scene->FindById(after);
   if (!model_entry || !after_entry || model_entry->parent() != after_entry->parent()) {
@@ -87,7 +87,7 @@ inline xui::Element* AddEntry(xui::Element* scene, std::string_view model, std::
       sibling->Set("Position", xui::Value{p});
     }
   }
-  xui::Element* entry = parent->CloneChild(*model_entry, id);
+  xui::Element* entry = parent->CloneChild(*model_entry, id, visual);
   xui::Vec3 p = model_entry->GetVector("Position");
   p.y = y + height;
   entry->Set("Position", xui::Value{p});

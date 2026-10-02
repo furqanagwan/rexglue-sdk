@@ -80,8 +80,10 @@ constexpr std::string_view kXboxSettings = "Xbox Settings";
 // player's gamertag.
 constexpr std::string_view kHomeTabLabels[] = {"txt_home", "txt_homeSel"};
 
-// The tabs left to right; Media (3) is removed and GuideMain's timelines are
-// rewritten to match (UseThreeTabs).
+// The tabs left to right. The backward-compatibility guide has three; in
+// 2.0.17559's, Media (3) is removed and GuideMain's timelines are rewritten to
+// match (UseThreeTabs).
+constexpr int kEmulatorTabs[] = {1, 2, 3};
 constexpr int kTabs[] = {1, 2, 4};
 constexpr int kRemovedTab = 3;
 
@@ -502,19 +504,34 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
     }
   };
   if (!scene(assets->skin, "huduiskin/skin", "skin.xur") ||
-      !scene(assets->backdrop, "xam/xam", "hudbkgnd.xur") ||
-      !scene(assets->main, "hud/hud", "GuideMain.xur") ||
-      !scene(assets->home_tab, "hud/hud", "HomeTabSignedIn.xur") ||
-      !scene(assets->games_tab, "hud/hud", "GamesTabSignedIn.xur") ||
-      !scene(assets->settings_tab, "hud/hud", "SettingsTabSignedIn.xur")) {
+      !scene(assets->backdrop, "xam/xam", "hudbkgnd.xur")) {
     return nullptr;
   }
-  if (!UseThreeTabs(assets->main.root)) {
-    if (error) {
-      *error = "GuideMain.xur in hud/hud: not the 2.0.17559 tab layout";
+  // The backward-compatibility guide when the HUD has it. Its Home tab for a
+  // profile without Xbox Live is HomeTabEmulatorSignedInLocal: Leave Game and
+  // Manage Storage.
+  assets->emulator_layout =
+      scene(assets->main, "hud/hud", "GuideMainEmulator.xur") &&
+      (scene(assets->home_tab, "hud/hud", "HomeTabEmulatorSignedInLocal.xur") ||
+       scene(assets->home_tab, "hud/hud", "HomeTabEmulatorSignedIn.xur")) &&
+      scene(assets->games_tab, "hud/hud", "GamesTabEmulatorSignedIn.xur") &&
+      scene(assets->settings_tab, "hud/hud", "SettingsTabEmulatorSignedIn.xur");
+  if (!assets->emulator_layout) {
+    if (!scene(assets->main, "hud/hud", "GuideMain.xur") ||
+        !scene(assets->home_tab, "hud/hud", "HomeTabSignedIn.xur") ||
+        !scene(assets->games_tab, "hud/hud", "GamesTabSignedIn.xur") ||
+        !scene(assets->settings_tab, "hud/hud", "SettingsTabSignedIn.xur")) {
+      return nullptr;
     }
-    return nullptr;
+    if (!UseThreeTabs(assets->main.root)) {
+      if (error) {
+        *error = "GuideMain.xur in hud/hud: not the 2.0.17559 tab layout";
+      }
+      return nullptr;
+    }
   }
+  assets->has_xbox_settings =
+      assets->emulator_layout && scene(assets->xbox_settings, "hud/hud", "XboxOneXSettings.xur");
   std::string ignored;
   assets->has_achievement_scenes =
       scene(assets->achievements, "gamerprofile/gp", "802_Achievements.xur") &&
@@ -524,8 +541,11 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
     error->clear();
   }
   assets->has_notify = scene(assets->notify, "xam/xam", "notify.xur");
+  // Preferences: the emulator's own list where there is one (Family Timer
+  // hidden).
   assets->has_options =
-      scene(assets->options, "hud/hud", "Options.xur") &&
+      ((assets->emulator_layout && scene(assets->options, "hud/hud", "OptionsEmulator.xur")) ||
+       scene(assets->options, "hud/hud", "Options.xur")) &&
       scene(assets->options_vibration, "hud/hud", "OptionsController.xur") &&
       scene(assets->options_notifications, "hud/hud", "OptionsNotifications.xur") &&
       scene(assets->options_voice, "hud/hud", "OptionsVoice.xur");
@@ -709,7 +729,7 @@ XboxGuide::XboxGuide(ImGuiDrawer* drawer, std::shared_ptr<const GuideAssets> ass
   }
   tab_scenes_[1]->AttachScene(SceneNode(assets_->games_tab), hud_context_);
   tab_scenes_[2]->AttachScene(SceneNode(assets_->home_tab), hud_context_);
-  tab_scenes_[4]->AttachScene(SceneNode(assets_->settings_tab), hud_context_);
+  tab_scenes_[SettingsTab()]->AttachScene(SceneNode(assets_->settings_tab), hud_context_);
   ConfigureMain();
 
   // The title sees system UI, as for the Guide button on the console.
@@ -746,7 +766,7 @@ void XboxGuide::ConfigureMain() {
   for (std::string_view id : kRemovedEntries) {
     RemoveEntry(main_, id);
   }
-  if (tab_scenes_[kRemovedTab]) {
+  if (!assets_->emulator_layout && tab_scenes_[kRemovedTab]) {
     tab_scenes_[kRemovedTab]->Suppress();
   }
   for (std::string_view id : {"txt_Media", "txt_MediaSel"}) {
@@ -754,18 +774,34 @@ void XboxGuide::ConfigureMain() {
       label->Suppress();
     }
   }
-  // Games & Apps gains Manage Game (downloadable content), below
-  // Achievements, made from the Recent entry.
-  if (xui::Element* recent = main_->FindById("btnQuickLaunch")) {
+  if (assets_->emulator_layout) {
+    // Games has Achievements and Awards; Manage Game (downloadable content),
+    // Title Updates and Active Downloads follow, plain entries made from
+    // Awards.
+    if (xui::Element* awards = main_->FindById("btnAvatarAwards")) {
+      xui::Element* games = awards->parent();
+      AddEntry(games, "btnAvatarAwards", "btnAvatarAwards", "btnManageGame", "Manage Game",
+               "XuiButtonGuide");
+      AddEntry(games, "btnAvatarAwards", "btnManageGame", "btnTitleUpdates", "Title Updates",
+               "XuiButtonGuide");
+      AddEntry(games, "btnAvatarAwards", "btnTitleUpdates", "btnActiveDownloads",
+               "Active Downloads", "XuiButtonGuide");
+    }
+  } else if (xui::Element* recent = main_->FindById("btnQuickLaunch")) {
+    // Games & Apps gains Manage Game (downloadable content), below
+    // Achievements, made from the Recent entry.
     AddEntry(recent->parent(), "btnQuickLaunch", "btnAchievements", "btnManageGame", "Manage Game");
     // Title Updates below it, a page of its own: updates are not add-ons.
     AddEntry(recent->parent(), "btnQuickLaunch", "btnManageGame", "btnTitleUpdates",
              "Title Updates");
   }
-  // Settings gains Patches, Mods and Cheats, made from the Preferences entry.
+  // Settings gains Patches, Mods and Cheats below the console's settings
+  // entry, made from the Preferences entry.
+  const std::string_view system_settings =
+      assets_->emulator_layout ? "btnXboxOneXSettings" : "btnSystemSettings";
   if (xui::Element* preferences = main_->FindById("btnPersonalSettings")) {
     xui::Element* settings = preferences->parent();
-    AddEntry(settings, "btnPersonalSettings", "btnSystemSettings", "btnPatches", "Patches");
+    AddEntry(settings, "btnPersonalSettings", system_settings, "btnPatches", "Patches");
     AddEntry(settings, "btnPersonalSettings", "btnPatches", "btnMods", "Mods");
     AddEntry(settings, "btnPersonalSettings", "btnMods", "btnCheats", "Cheats");
   }
@@ -773,7 +809,7 @@ void XboxGuide::ConfigureMain() {
     home->SetText(std::string(kLeaveGame));
   }
   main_->Set("LegendY", xui::Value{std::string(kLeaveGame)});
-  if (xui::Element* system = main_->FindById("btnSystemSettings")) {
+  if (xui::Element* system = main_->FindById(system_settings)) {
     system->SetText(std::string(kXboxSettings));
   }
   const auto* profile = host_.kernel_state ? host_.kernel_state->user_profile() : nullptr;
@@ -790,6 +826,9 @@ void XboxGuide::ConfigureMain() {
                                  id == "btnMods" || id == "btnCheats" || id == "btnManageGame" ||
                                  id == "btnTitleUpdates" || id == "btnActiveDownloads")) {
       return true;
+    }
+    if (id == "btnXboxOneXSettings") {
+      return assets_->has_xbox_settings;
     }
     return id == "btnDashboard" ||
            (id == "btnAchievements" && assets_->has_achievement_scenes && host_.achievements);
@@ -1077,14 +1116,20 @@ void XboxGuide::HandleMain(GuideAction action) {
   }
 }
 
+std::span<const int> XboxGuide::Tabs() const {
+  return assets_->emulator_layout ? std::span<const int>(kEmulatorTabs)
+                                  : std::span<const int>(kTabs);
+}
+
 void XboxGuide::SwitchTab(int direction) {
   // No wrap; the blade shuffle plays between neighbours.
-  const auto at = std::find(std::begin(kTabs), std::end(kTabs), tab_);
-  const ptrdiff_t next = (at - std::begin(kTabs)) + direction;
-  if (at == std::end(kTabs) || next < 0 || next >= ptrdiff_t(std::size(kTabs))) {
+  const std::span<const int> tabs = Tabs();
+  const auto at = std::find(tabs.begin(), tabs.end(), tab_);
+  const ptrdiff_t next = (at - tabs.begin()) + direction;
+  if (at == tabs.end() || next < 0 || next >= ptrdiff_t(tabs.size())) {
     return;
   }
-  const int tab = kTabs[next];
+  const int tab = tabs[next];
   if (tabs_->playing() || !tabs_->Play(fmt::format("{}To{}", tab_, tab))) {
     return;
   }
@@ -1117,6 +1162,8 @@ void XboxGuide::Activate(xui::Element* control) {
     OpenAchievements();
   } else if (id == "btnPersonalSettings") {
     OpenPreferences();
+  } else if (id == "btnXboxOneXSettings") {
+    OpenXboxSettings();
   } else if (id == "btnPatches") {
     OpenPatches("patch");
   } else if (id == "btnMods") {

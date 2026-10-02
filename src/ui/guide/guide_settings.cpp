@@ -173,7 +173,10 @@ void XboxGuide::OpenPreferences() {
     RemoveEntry(scene, id);
   }
   SetText(scene, "btnVoice", "Volume");
-  AddEntry(scene, "btnController", "btnController", "btnResolution", "Resolution");
+  // The render resolution is under Xbox Settings where the guide has it.
+  if (!assets_->has_xbox_settings) {
+    AddEntry(scene, "btnController", "btnController", "btnResolution", "Resolution");
+  }
   pages_.back().on_select = [this](xui::Element* control) {
     const std::string_view id = control->id();
     if (id == "btnNotifications") {
@@ -342,6 +345,44 @@ void XboxGuide::OpenResolution() {
     }
   };
   SetFocus(chosen ? chosen : group->FindById(choices.front().id), /*initial=*/true);
+}
+
+void XboxGuide::OpenXboxSettings() {
+  xui::Element* scene = PushPage(assets_->xbox_settings, "").scene;
+  SetText(scene, "labelHeadingOptions", "Xbox Settings");
+  // Optimize game for: Graphics draws the game at the display's resolution
+  // (a multiple of the console's), Performance at the console's own. A
+  // resolution takes effect at the next start, not by ending the session.
+  SetText(scene, "XuiLabel1",
+          "The new setting is used the next time you start the game.\n"
+          "Optimizing for graphics makes this game look better.\n"
+          "Optimizing for performance can make play feel smoother.");
+  xui::Element* group = scene->FindById("radgrpSettings");
+  xui::Element* graphics = scene->FindById("radbtnGraphics");
+  xui::Element* performance = scene->FindById("radbtnPerformance");
+  if (!group || !graphics || !performance) {
+    return;
+  }
+  SetNav(graphics, "", "radbtnPerformance");
+  SetNav(performance, "radbtnGraphics", "");
+  const bool match = REXCVAR_GET(resolution_match_display);
+  CheckOnly(group, match                                                ? graphics
+                   : rex::cvar::Query<int32_t>("resolution_scale") == 1 ? performance
+                                                                        : nullptr);
+  pages_.back().on_select = [this, group, graphics](xui::Element* control) {
+    if (!control->IsA("XuiRadioButton")) {
+      return;
+    }
+    rex::cvar::SetFlagByName("resolution_match_display", control == graphics ? "true" : "false");
+    if (control != graphics) {
+      rex::cvar::SetFlagByName("resolution_scale", "1");
+    }
+    CheckOnly(group, control);
+    if (host_.save_settings) {
+      host_.save_settings();
+    }
+  };
+  SetFocus(match ? graphics : performance, /*initial=*/true);
 }
 
 void XboxGuide::OpenPatches(std::string_view category) {
