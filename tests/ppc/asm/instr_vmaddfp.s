@@ -1,9 +1,9 @@
 test_vmaddfp_1:
   #_ REGISTER_IN v4 [3f800000, 3fc00000, 3f8ccccd, 3ff33333]
-  # 1.0, 1.5, 1.1, 1.9
+  # 1.0, 1.5, 1.1, 1.9; vmaddfp rounds once (1.1f x 1.1f + 1.1f = 2.3100000763)
   vmaddfp v3, v4, v4, v4
   blr
-  #_ REGISTER_OUT v3 [40000000, 40700000, 4013d70a, 40b051eb]
+  #_ REGISTER_OUT v3 [40000000, 40700000, 4013d70b, 40b051eb]
   #_ REGISTER_OUT v4 [3f800000, 3fc00000, 3f8ccccd, 3ff33333]
   # 2.0, 3.75, 2.31, 5.51
   # 40b051eb is actually 5.50999975, not 5.51?
