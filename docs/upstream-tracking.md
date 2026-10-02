@@ -1281,6 +1281,32 @@ Known regressions: none reported upstream. #1250 is split out to RG-GDK-045
 Canary #1072 (`d119505289`), #1137 (`6a45452087`) and #1177 (`0c843efb32`),
 and #1072 has an open D3D12 device-loss report (Canary #1134).
 
+## RG-GDK-053: PPC instruction gaps (2026-10-01, in progress)
+
+Tracking [SDK issue #149](https://github.com/furqanagwan/rexglue-sdk/issues/149).
+The 007 generated binaries contain no stubs for these instructions; no title
+compatibility improvement has been demonstrated. Upstream regression status
+for these CPU changes is unknown. These are adaptations to static C++ codegen,
+not ports of the Edge JIT.
+
+| Reference | Class and motivation | Local adaptation | Evidence |
+| --- | --- | --- | --- |
+| has207/xenia-edge [`10da45ea4073d0a2ca82dfcf25c57d83ea3d879f`](https://github.com/has207/xenia-edge/commit/10da45ea4073d0a2ca82dfcf25c57d83ea3d879f), 2026-10-01, "Implement XER[OV] and XER[SO] for the PPC OE forms" | A, arithmetic correctness; sticky SO and 64-bit overflow | OE add, subtract, negate, multiply and divide dispatch and XER test directives; OE doubleword record forms compare all 64 bits | `instr_overflow.s` plus pinned Edge `instr_addo.s`, `instr_divwo.s`, `instr_mcrxr.s`, `instr_mullwo.s`, `instr_nego.s`; `mcrxr` mnemonic encoded as `.long` for the bundled assembler |
+| xenia-canary [`72ce1309715b30d07035c8511dffc13c0b92a2d9`](https://github.com/xenia-canary/xenia-canary/commit/72ce1309715b30d07035c8511dffc13c0b92a2d9), 2026-06-14, "Xbox360 cache line is always 128 bytes" | B, fixes 4E4D07E0 and 4E4D083D | Align `dcbz` to a 128-byte block and clear 128 bytes as `dcbzl` already does | `instr_dcbz.s` checks whole block and adjacent sentinel |
+| has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, missing VMX unsigned-word carry, average and maximum forms, and VMX128 shift-table aliases | Four static vector builders with lane-wise unsigned arithmetic; `lvsl128` and `lvsr128` reuse existing shift-table builders | `instr_vector_gap.s` plus pinned Edge `instr_vaddcuw.s`, `instr_vsubcuw.s`, `instr_vavguw.s`, `instr_vmaxuw.s`, `instr_lvsl128.s` and `instr_lvsr128.s` |
+| has207/xenia-edge `vpkpx` implementation and [`instr__gen_vpkpx.s`](https://github.com/has207/xenia-edge/blob/b5cc59e854/src/xenia/cpu/ppc/testing/instr__gen_vpkpx.s) at `b5cc59e854`, reviewed 2026-10-01 | A, missing pixel pack opcode | Snapshot both source vectors, then pack the specified alpha bit and RGB high five bits per pixel | Pinned Edge `instr_vpkpx.s` and `instr_vpkpx_small.s` (destination/source alias case); full generated corpus not yet imported |
+| has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, VSCR NJ and SAT state | Context carries NJ through guest thread save/restore; `mtvscr` changes the vector FP flush mode and resets codegen's CSR state; saturating vector arithmetic and packs set sticky SAT | Pinned `instr_mfvscr.s`, `instr_seq_njm.s`; `instr_vscr_sat.s` checks sticky and reset behavior |
+| has207/xenia-edge [`f4af1e2a77703ca60a4dae512fb047cfe73ecb11`](https://github.com/has207/xenia-edge/commit/f4af1e2a77703ca60a4dae512fb047cfe73ecb11), 2026-02-13, "Implement and fix FPSCR-related instructions" | A, missing `mcrfs` | Track guest FPSCR bits separately from the host rounding control word; move and clear a selected field; fix `mtfsf` field mask direction | Pinned `instr_mcrfs.s` plus `instr_fpscr_state.s` with CR and preserved-rounding assertions |
+
+Other scalar and system dispatch additions in this issue use existing static
+builders or narrow no-op implementations; pinned Edge `instr_icbi.s`,
+`instr_isync.s`, `instr_mfmsr.s`, `instr_mtmsr.s` and `instr_mtmsrd.s` cover them.
+Their title and vendor regressions
+have not yet been measured. Floating-point exception bits produced by arithmetic
+are not yet reflected in guest FPSCR, so `mcrfs` is only verified for fields
+written through `mtfsf`. The issue remains open for this limitation, the
+broader Edge corpus, title validation, and release gates.
+
 ## RG-GDK-048: achievement enumerator offset (2026-10-01)
 
 xenia-canary PR #861 "[XAM] Fixed enumeration of achievements once again",

@@ -146,6 +146,7 @@ constexpr uint32_t kRoundMask = 0x03;
 
 struct FPSCRRegister {
   uint32_t csr;
+  uint32_t guest_value = 0;
 
   static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundDown, kRoundUp, kRoundTowardZero};
 
@@ -168,10 +169,12 @@ struct FPSCRRegister {
 
   inline uint32_t loadFromHost() noexcept {
     csr = getcsr();
-    return HostToGuest[(csr & RoundMaskVal) >> RoundShift];
+    guest_value = (guest_value & ~kRoundMask) | HostToGuest[(csr & RoundMaskVal) >> RoundShift];
+    return guest_value;
   }
 
   inline void storeFromGuest(uint32_t value) noexcept {
+    guest_value = value;
     csr &= ~RoundMaskVal;
     csr |= Platform::GuestToHost[value & kRoundMask];
     setcsr(csr);
@@ -269,6 +272,7 @@ struct alignas(0x40) PPCContext {
   PPCCRRegister cr7;
   PPCFPSCRRegister fpscr;
   uint8_t vscr_sat = 0;  // VSCR saturation flag (for vector ops)
+  uint8_t vscr_nj = 1;   // VSCR non-Java mode; Xenon defaults to flushing VMX denormals.
 
   /**
    * Last indirect call target address. Set by REX_CALL_INDIRECT_FUNC before
@@ -475,5 +479,6 @@ struct alignas(0x40) PPCContext {
     PPCFPSCRRegister saved_fpscr;
     std::memcpy(&saved_fpscr, src, sizeof(PPCFPSCRRegister));
     fpscr.restoreGuestBits(saved_fpscr.csr);
+    fpscr.guest_value = saved_fpscr.guest_value;
   }
 };

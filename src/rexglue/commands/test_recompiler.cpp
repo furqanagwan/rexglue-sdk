@@ -250,8 +250,8 @@ nlohmann::json SerializeRegisters(const std::vector<RegValue>& regs) {
   for (const auto& rv : regs) {
     nlohmann::json reg;
     reg["reg"] = rv.reg;
-    if (rv.reg == "cr") {
-      reg["type"] = "cr";
+    if (rv.reg == "cr" || rv.reg == "xer") {
+      reg["type"] = rv.reg;
       reg["value"] = rv.value;
     } else if (rv.is_vector) {
       reg["type"] = "vector";
