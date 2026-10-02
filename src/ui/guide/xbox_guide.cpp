@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <iterator>
 
@@ -539,10 +540,6 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
 
 GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height) {
   GuideFonts fonts;
-  const char* windows = std::getenv("WINDIR");
-  if (!windows) {
-    return fonts;
-  }
   // Latin, Latin Extended-A, punctuation, euro and trade mark.
   static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x2010, 0x2027,
                                     0x20AC, 0x20AC, 0x2122, 0x2122, 0};
@@ -555,6 +552,34 @@ GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height) {
   ImFontConfig config;
   config.OversampleH = baked_size > 64.0f ? 1 : 2;
   config.OversampleV = 1;
+  // The console's own font, from the guide built into the title.
+  if (const auto bundle = EmbeddedGuide(); !bundle.empty()) {
+    std::string error;
+    if (auto modules = xui::SystemUpdate::ReadBundle(bundle, &error)) {
+      xui::SystemUpdate update;
+      const auto xtt = modules->find("font/xenonjklatin");
+      if (xtt != modules->end() && update.AddFont("xenonjklatin", xtt->second, &error)) {
+        const std::span<const uint8_t> ttf = update.Font("xenonjklatin");
+        // The atlas owns and frees the copy.
+        void* data = IM_ALLOC(ttf.size());
+        std::memcpy(data, ttf.data(), ttf.size());
+        fonts.regular =
+            atlas->AddFontFromMemoryTTF(data, int(ttf.size()), baked_size, &config, kRanges);
+      } else if (xtt != modules->end()) {
+        REXLOG_WARN("Xbox guide: the console font does not load ({})", error);
+      }
+    }
+  }
+  if (fonts.regular) {
+    // The console guide draws all its text in the one system font.
+    fonts.bold = fonts.regular;
+    return fonts;
+  }
+  // Without the console's font: Segoe UI, the host's stand-in for it.
+  const char* windows = std::getenv("WINDIR");
+  if (!windows) {
+    return fonts;
+  }
   auto add = [&](const char* file) -> ImFont* {
     const std::filesystem::path path = std::filesystem::path(windows) / "Fonts" / file;
     std::error_code ec;

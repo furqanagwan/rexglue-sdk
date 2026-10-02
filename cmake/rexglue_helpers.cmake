@@ -104,11 +104,16 @@ endfunction()
 # The guide runs the console's own scenes. They come from the builder's own
 # console system update (like the game files, never shipped with the SDK),
 # named by REXGLUE_SYSTEM_UPDATE or the environment variable of that name.
-# `rexglue guide-bundle` takes the four modules the guide reads (about 3 MB)
-# and the executable embeds them, so players need nothing for the guide.
+# REXGLUE_GUIDE_FLASH optionally names an Xbox PC backward-compatibility
+# game's Content/Flash folder, whose newer guide modules and fonts take
+# precedence (RG-GDK-061). `rexglue guide-bundle` takes the four modules the
+# guide reads and the console fonts, and the executable embeds them, so
+# players need nothing for the guide.
 #==========================================================
 set(REXGLUE_SYSTEM_UPDATE "$ENV{REXGLUE_SYSTEM_UPDATE}" CACHE PATH
     "Console $SystemUpdate (dashboard 2.0.17559) built into each title for the Xbox guide")
+set(REXGLUE_GUIDE_FLASH "$ENV{REXGLUE_GUIDE_FLASH}" CACHE PATH
+    "Optional Xbox PC backward-compatibility Content/Flash folder for the Xbox guide")
 
 function(_rexglue_embed_xbox_guide target_name)
     if(NOT REXGLUE_SYSTEM_UPDATE)
@@ -129,14 +134,25 @@ function(_rexglue_embed_xbox_guide target_name)
     set(_dir "${CMAKE_CURRENT_BINARY_DIR}/rexglue_guide")
     set(_bundle "${_dir}/${_id}_xbox_guide.bin")
     set(_source "${_dir}/${_id}_xbox_guide.cpp")
-    if(IS_DIRECTORY "${REXGLUE_SYSTEM_UPDATE}")
-        file(GLOB_RECURSE _inputs CONFIGURE_DEPENDS "${REXGLUE_SYSTEM_UPDATE}/*")
-    else()
-        set(_inputs "${REXGLUE_SYSTEM_UPDATE}")
+    set(_sources "${REXGLUE_SYSTEM_UPDATE}")
+    if(REXGLUE_GUIDE_FLASH)
+        if(NOT IS_DIRECTORY "${REXGLUE_GUIDE_FLASH}")
+            message(FATAL_ERROR "REXGLUE_GUIDE_FLASH: '${REXGLUE_GUIDE_FLASH}' is not a folder")
+        endif()
+        list(PREPEND _sources "${REXGLUE_GUIDE_FLASH}")
     endif()
+    set(_inputs "")
+    foreach(_src IN LISTS _sources)
+        if(IS_DIRECTORY "${_src}")
+            file(GLOB_RECURSE _src_inputs CONFIGURE_DEPENDS "${_src}/*")
+            list(APPEND _inputs ${_src_inputs})
+        else()
+            list(APPEND _inputs "${_src}")
+        endif()
+    endforeach()
     add_custom_command(
         OUTPUT "${_bundle}"
-        COMMAND $<TARGET_FILE:${_rexglue_cli}> guide-bundle "${REXGLUE_SYSTEM_UPDATE}"
+        COMMAND $<TARGET_FILE:${_rexglue_cli}> guide-bundle ${_sources}
                 -o "${_bundle}"
         DEPENDS ${_inputs}
         COMMENT "Building the Xbox guide into ${target_name}"

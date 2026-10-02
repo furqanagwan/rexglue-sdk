@@ -217,7 +217,10 @@ compatibility does. The Xbox button is left to Windows for Game Bar. The guide i
 from your own dashboard 2.0.17559 system update, and nothing from it ships with
 the SDK. Set `REXGLUE_SYSTEM_UPDATE` to that `$SystemUpdate` folder when you
 build a title (CMake variable or environment variable) and the guide is built into
-the executable: players need nothing and it works offline.
+the executable: players need nothing and it works offline. Optionally set
+`REXGLUE_GUIDE_FLASH` to an Xbox PC backward-compatibility game's
+`Content/Flash` folder as well: its newer guide files and the console's own
+font are built in ahead of the update's ([Xbox guide](docs/xbox-guide.md)).
 Games & Apps has the title's achievements (grid and details) and Manage Game,
 which lists the title's marketplace add-ons (its config's `[[dlc]]`; the build
 fetches their names, descriptions and art) and installs them from packages on

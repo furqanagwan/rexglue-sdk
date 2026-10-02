@@ -481,12 +481,17 @@ TEST_CASE("The console's system update round-trips through a guide bundle", "[xu
   std::string error;
   auto modules = SystemUpdate::ReadModules(path, &error);
   REQUIRE(modules);
-  CHECK(modules->size() == 4);
+  for (std::string_view module : SystemUpdate::kModules) {
+    CHECK(modules->contains(std::string(module)));
+  }
   const auto bundle = SystemUpdate::WriteBundle(*modules);
   auto read = SystemUpdate::ReadBundle(bundle, &error);
   REQUIRE(read);
+  CHECK(read->size() == modules->size());
   auto update = SystemUpdate::FromModules(*read, &error);
   INFO(error);
   REQUIRE(update);
   CHECK(update->Find("hud/hud")->Contains("GuideMain.xur"));
+  // 2.0.17559 carries its light Segoe in the package (RG-GDK-061).
+  CHECK_FALSE(update->Font("SegoeXbox-Light").empty());
 }

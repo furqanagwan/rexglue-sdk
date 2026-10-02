@@ -3,8 +3,9 @@
  * @brief       rexglue guide-bundle: the Xbox guide's console files for embedding (RG-GDK-041)
  *
  * Reads the system modules the Xbox guide needs (hud, huduiskin, xam,
- * gamerprofile) from the builder's own console system update and writes them
- * as one bundle. rexglue_configure_target runs this at build time and embeds
+ * gamerprofile) and the console's fonts from the builder's own console system
+ * update, or an Xbox PC backward-compatibility game's Flash folder ahead of
+ * it, and writes them as one bundle. rexglue_configure_target runs this at build time and embeds
  * the bundle into the title, so players need nothing for the guide.
  *
  * @copyright   Copyright (c) 2026 Tom Clay
@@ -17,9 +18,11 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <rex/logging.h>
 #include <rex/ui/xui/system_update.h>
@@ -33,17 +36,25 @@ using rex::Result;
 namespace {
 
 struct GuideBundleArgs {
-  std::string system_update;
+  std::vector<std::string> sources;
   std::string output;
 };
 
 Result<void> WriteGuideBundle(const GuideBundleArgs& args) {
   using rex::ui::xui::SystemUpdate;
   std::string error;
-  auto modules = SystemUpdate::ReadModules(args.system_update, &error);
+  const std::vector<std::filesystem::path> sources(args.sources.begin(), args.sources.end());
+  auto modules = SystemUpdate::ReadModules(sources, &error);
   // Check the guide can be built from it before anything is embedded.
-  if (!modules || !SystemUpdate::FromModules(*modules, &error)) {
-    return Err<void>(ErrorCategory::Config, fmt::format("{}: {}", args.system_update, error));
+  std::unique_ptr<SystemUpdate> update;
+  if (!modules || !(update = SystemUpdate::FromModules(*modules, &error))) {
+    return Err<void>(ErrorCategory::Config,
+                     fmt::format("{}: {}", fmt::join(args.sources, ", "), error));
+  }
+  for (std::string_view font : SystemUpdate::kFonts) {
+    if (modules->contains(fmt::format("font/{}", font)) && update->Font(font).empty()) {
+      REXLOG_WARN("Xbox guide bundle: font {} does not convert; the guide falls back", font);
+    }
   }
   const auto bundle = SystemUpdate::WriteBundle(*modules);
   const std::filesystem::path out(args.output);
@@ -77,9 +88,11 @@ void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction
   auto args = std::make_shared<GuideBundleArgs>();
   auto* sub = parent.add_subcommand(
       "guide-bundle", "Bundle the Xbox guide's console files for embedding in a title");
-  sub->add_option("system_update", args->system_update,
+  sub->add_option("sources", args->sources,
                   "$SystemUpdate folder (dashboard 2.0.17559), its su*_00000000 package, or a "
-                  "folder of $flash_<module>.xex files")
+                  "folder of $flash_<module>.xex or <module>.xex files (an Xbox PC "
+                  "backward-compatibility game's Content/Flash); a module or font comes from "
+                  "the first source that has it")
       ->required()
       ->type_name("PATH");
   sub->add_option("-o,--output", args->output, "Bundle file to write")
