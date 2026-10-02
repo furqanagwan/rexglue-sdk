@@ -1303,3 +1303,20 @@ in Canary's later `xenumerator` history as of 2026-10-01.
   (60 achievements: 25 from 1, 25 from 26, 10 from 51, then none, and none
   past the end). 007 Legends after the fix: pages of 25, 25, then
   `NO_MORE_FILES`.
+
+## RG-GDK-069: two Canary defaults, and title cvar defaults (2026-10-02)
+
+Found with NHL Legacy Edition (`454109EC`), whose matches drew black but for
+the HUD ([furqanagwan/nhl](https://github.com/furqanagwan/nhl) RG-NHL-002).
+
+| Canary commit | Class | Adaptation | Tests |
+| --- | --- | --- | --- |
+| `d36b1b38304d58da3daadff76aba0da9bd37b278` "[GPU] gpu_allow_invalid_fetch_constants true by default" (disjtqz, 2023-10-12) | A (Edge has the same default) | Default flipped in `graphics/flags.cpp`. NHL logged 26,635 "invalid type" texture fetch constants in four minutes, skipping those draws. | NHL: no fetch constant warnings with it on. |
+| `4452e300acfc0ceb76fab579c12915d70133ce92` "[Emulator] Changed default config values" (Gliniak, 2024-08-31), `mount_cache` only | B (EA titles) | `mount_cache` (Runtime, default on) mounts `cache:`, `cache0:` and `cache1:` as host folders under `<cache root>\partitions`, the prefixed devices first, as Canary's `xenia_main.cc` does. Replaces the inherited note that `cache:` should fail cleanly. | NHL keeps its cache files there (`809284.ver`, `highlights.sav`); the three 007 titles boot and reach their menus with it. |
+
+Neither fixed NHL's black matches: the scene draws on the ROV render target
+path and not on the RTV path (tested with occlusion queries faked, 2x MSAA
+off, float24 depth rounding and conversion, gamma as unorm16 off and stencil
+output off on RTV, none of which drew it). The RTV cause is open; NHL opts
+into ROV through the new title cvar defaults (`rexglue_configure_target`
+`CVAR_DEFAULTS`, `rex::cvar::SetTitleDefault`, ADR-009).

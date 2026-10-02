@@ -51,6 +51,7 @@ add_executable(unit_tests
     ui/virtual_keyboard_test.cpp
     ui/title_update_test.cpp
     codegen/codegen_writer_test.cpp
+    codegen/function_table_layout_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp

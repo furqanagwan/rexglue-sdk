@@ -1,6 +1,6 @@
 # ADR-009: Title compatibility profiles — a fix catalog and per-title profiles, no database
 
-Status: **Accepted design; implementation deferred until a title needs it** (RG-GDK-013). Date: 2026-09-27. Implements the mechanism ADR-005 left pending; ADR-005's policy is unchanged.
+Status: **Accepted design; implementation deferred until a title needs it** (RG-GDK-013). Date: 2026-09-27. First step 2026-10-02 (RG-GDK-069): titles can set cvar defaults by name, `rexglue_configure_target(<target> CVAR_DEFAULTS "name=value" ...)`, applied with `rex::cvar::SetTitleDefault` beneath the config file, environment and command line; NHL Legacy Edition uses it for `render_target_path_d3d12=rov`. The fix catalog itself is still to come. Implements the mechanism ADR-005 left pending; ADR-005's policy is unchanged.
 
 ## Context
 

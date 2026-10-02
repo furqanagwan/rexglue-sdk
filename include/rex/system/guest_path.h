@@ -28,6 +28,14 @@ namespace rex::system {
  */
 std::string NormalizeGuestPath(std::string_view path);
 
+/**
+ * Whether normalized `path` names `module_path` (normalized, relative to the
+ * game root) through a device path: it ends with `/module_path`. Modules
+ * loaded by a bare name are joined to the executable's device path
+ * (\Device\Harddisk0\Partition1\...), which NormalizeGuestPath keeps.
+ */
+bool GuestPathEndsWithModule(std::string_view path, std::string_view module_path);
+
 /// Return an unqualified ObDosDevices name suitable for opening relative to
 /// the title directory. A trailing separator names the directory itself.
 std::optional<std::string> NormalizeDosDevicesRelativePath(std::string_view path);

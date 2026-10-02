@@ -163,6 +163,9 @@ class CodegenContext {
 
   void setHasDllModules(bool has) { has_dll_modules_ = has; }
   bool hasDllModules() const { return has_dll_modules_; }
+  /// The function dispatch table's guest address (0: image base + size).
+  void setFunctionTableBase(uint32_t base) { function_table_base_ = base; }
+  uint32_t functionTableBase() const { return function_table_base_; }
 
   /// Names of the guest code patches applied to this module's image.
   const std::vector<std::string>& appliedPatches() const { return applied_patches_; }
@@ -180,9 +183,10 @@ class CodegenContext {
   AnalysisState analysisState_;             ///< Analysis state (populated during analysis)
   std::unique_ptr<DecodedBinary> decoded_;  ///< Decoded instructions (created via initDecoded())
   runtime::ExportResolver* resolver_ = nullptr;  ///< For runtime resolution (borrowed)
-  std::filesystem::path configDir_;  ///< Directory containing config file (for relative paths)
-  bool is_dll_module_ = false;       ///< True if this module is a DLL (shared library output)
-  bool has_dll_modules_ = false;     ///< True if the project has DLL modules (multi-binary)
+  std::filesystem::path configDir_;   ///< Directory containing config file (for relative paths)
+  bool is_dll_module_ = false;        ///< True if this module is a DLL (shared library output)
+  bool has_dll_modules_ = false;      ///< True if the project has DLL modules (multi-binary)
+  uint32_t function_table_base_ = 0;  ///< Dispatch table address; 0 for image base + size
   std::vector<std::string> applied_patches_;
   SwitchablePatches switchable_patches_;  ///< Code patches applied before analysis
 };
