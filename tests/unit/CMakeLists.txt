@@ -74,6 +74,14 @@ target_sources(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/rexglue/commands/project_scan.cpp
 )
 
+if(WIN32)
+    target_sources(unit_tests PRIVATE
+        rexglue/library_art_test.cpp
+        ${PROJECT_SOURCE_DIR}/src/rexglue/commands/library_art.cpp
+    )
+    target_link_libraries(unit_tests PRIVATE windowscodecs)
+endif()
+
 target_include_directories(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src

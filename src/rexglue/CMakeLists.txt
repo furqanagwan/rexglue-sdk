@@ -8,6 +8,8 @@ add_executable(rexglue
     commands/dlc_command.cpp
     commands/guide_bundle_command.cpp
     commands/http_client.cpp
+    commands/library_art.cpp
+    commands/library_art_command.cpp
     commands/init_command.cpp
     commands/test_recompiler.cpp
     commands/project_scan.cpp
@@ -26,9 +28,9 @@ target_link_libraries(rexglue
     PRIVATE
         rexcodegen
 )
-# HTTP for dlc-catalog and dlc-find (RG-GDK-050).
+# HTTP for dlc-catalog and dlc-find (RG-GDK-050); WIC for library-art (RG-GDK-068).
 if(WIN32)
-    target_link_libraries(rexglue PRIVATE winhttp)
+    target_link_libraries(rexglue PRIVATE winhttp windowscodecs)
 endif()
 
 rex_target_pch(rexglue <CLI/CLI.hpp>)
