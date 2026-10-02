@@ -10,8 +10,9 @@
 #include <rex/system/xmemory.h>
 #include "ppc_test_decls.h"
 
-// Global memory instance - same class used by real runtime
-static rex::memory::Memory& get_memory() {
+// Global memory instance - same class used by real runtime. Inline so the
+// chunks of a split corpus share one instance rather than reserving one each.
+inline rex::memory::Memory& get_memory() {
     static rex::memory::Memory memory;
     static bool initialized = false;
     if (!initialized) {
@@ -32,7 +33,12 @@ static rex::memory::Memory& get_memory() {
 }
 
 ## for test in tests
+## if test.known_failure
+// Known failure: {{ test.known_failure_reason }}
+TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}][!shouldfail]") {
+## else
 TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
+## endif
     auto& mem = get_memory();
     uint8_t* memory = mem.virtual_membase();
     PPCContext ctx{};
@@ -48,6 +54,10 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
     ctx.cr5.set_raw(({{ reg.value }} >> 8) & 0xF);
     ctx.cr6.set_raw(({{ reg.value }} >> 4) & 0xF);
     ctx.cr7.set_raw({{ reg.value }} & 0xF);
+## else if reg.type == "xer"
+    ctx.xer.so = ({{ reg.value }} >> 31) & 1;
+    ctx.xer.ov = ({{ reg.value }} >> 30) & 1;
+    ctx.xer.ca = ({{ reg.value }} >> 29) & 1;
 ## else if reg.type == "vector"
     ctx.{{ reg.reg }}.u32[3] = 0x{{ reg.values.0 }};
     ctx.{{ reg.reg }}.u32[2] = 0x{{ reg.values.1 }};
@@ -58,6 +68,9 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
 ## else
     ctx.{{ reg.reg }}.u64 = {{ reg.value }};
 ## endif
+## endfor
+## for mem_out in test.outputs.memory
+    std::memset(memory + 0x{{ mem_out.address }}, 0, {{ length(mem_out.bytes) }});
 ## endfor
 ## for mem_in in test.inputs.memory
 ## for entry in mem_in.bytes
@@ -72,6 +85,11 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
     {
         uint32_t cr_actual = (ctx.cr0.raw() << 28) | (ctx.cr1.raw() << 24) | (ctx.cr2.raw() << 20) | (ctx.cr3.raw() << 16) | (ctx.cr4.raw() << 12) | (ctx.cr5.raw() << 8) | (ctx.cr6.raw() << 4) | ctx.cr7.raw();
         REQUIRE(cr_actual == {{ reg.value }});
+    }
+## else if reg.type == "xer"
+    {
+        const uint32_t xer_actual = (uint32_t(ctx.xer.so) << 31) | (uint32_t(ctx.xer.ov) << 30) | (uint32_t(ctx.xer.ca) << 29);
+        REQUIRE(xer_actual == uint32_t({{ reg.value }}));
     }
 ## else if reg.type == "vector"
     REQUIRE(ctx.{{ reg.reg }}.u32[3] == 0x{{ reg.values.0 }});

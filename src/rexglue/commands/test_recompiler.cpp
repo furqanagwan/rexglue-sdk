@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <charconv>
 #include <filesystem>
 #include <fstream>
@@ -85,7 +86,9 @@ std::map<size_t, std::string> ParseMapFile(const std::string& mapPath) {
   return symbols;
 }
 
-std::vector<uint8_t> ParseHexBytes(const std::string& hex) {
+std::vector<uint8_t> ParseHexBytes(std::string hex) {
+  // "ABCD12" or, as hardware captures write them, "[AB, CD, 12]".
+  std::erase_if(hex, [](char c) { return c == '[' || c == ']' || c == ',' || c == ' '; });
   std::vector<uint8_t> result;
   for (size_t i = 0; i < hex.size(); i += 2) {
     if (i + 1 >= hex.size())
@@ -127,7 +130,12 @@ RegValue ParseRegisterDirective(const std::string& line, size_t directive_idx) {
 
   RegValue rv;
   rv.reg = std::move(reg);
-  rv.value = line.substr(sp2 + 1);
+  rv.value = rex::string::trim_string(line.substr(sp2 + 1));
+  // A bracketed scalar ("f4 [3FF0000000000000]") is the register's bits.
+  if (rv.value.size() > 2 && rv.value.front() == '[' && rv.value.back() == ']') {
+    rv.value = "0x" + rv.value.substr(1, rv.value.size() - 2);
+    return rv;
+  }
   rv.is_float = (line.find('.', sp2) != std::string::npos);
   return rv;
 }
@@ -137,6 +145,10 @@ MemValue ParseMemoryDirective(const std::string& line, size_t directive_idx) {
   auto sp2 = line.find(' ', sp1 + 1);
   MemValue mv;
   mv.address = line.substr(sp1 + 1, sp2 - sp1 - 1);
+  // Hardware captures write "0x0000000010001000"; the template adds the 0x.
+  if (mv.address.starts_with("0x") || mv.address.starts_with("0X")) {
+    mv.address = mv.address.substr(2);
+  }
   mv.data = ParseHexBytes(line.substr(sp2 + 1));
   return mv;
 }
@@ -253,6 +265,9 @@ nlohmann::json SerializeRegisters(const std::vector<RegValue>& regs) {
     if (rv.reg == "cr") {
       reg["type"] = "cr";
       reg["value"] = rv.value;
+    } else if (rv.reg == "xer") {
+      reg["type"] = "xer";  // SO, OV and CA are bits 31, 30 and 29
+      reg["value"] = rv.value;
     } else if (rv.is_vector) {
       reg["type"] = "vector";
       reg["values"] = {rv.vec_values[3], rv.vec_values[2], rv.vec_values[1], rv.vec_values[0]};
@@ -301,7 +316,137 @@ std::string CategoryFromStem(std::string_view stem) {
   return "misc";
 }
 
-bool RecompileTests(std::string_view binDir, std::string_view asmDir, std::string_view outDir) {
+// Labels named one per line ("#" comments allowed), e.g. Edge's skip.txt.
+// With `with_reason`, the rest of a line after the label is kept.
+std::unordered_map<std::string, std::string> ReadLabelList(const std::string& path,
+                                                           bool with_reason) {
+  std::unordered_map<std::string, std::string> labels;
+  if (path.empty()) {
+    return labels;
+  }
+  std::ifstream in(path);
+  if (!in.is_open()) {
+    REXLOG_WARN("Unable to open label list: {}", path);
+    return labels;
+  }
+  std::string line;
+  while (std::getline(in, line)) {
+    line = rex::string::trim_string(line);
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    const auto space = line.find_first_of(" \t");
+    std::string label = line.substr(0, space);
+    std::string reason =
+        space == std::string::npos ? "" : rex::string::trim_string(line.substr(space + 1));
+    labels.emplace(std::move(label), with_reason ? std::move(reason) : "");
+  }
+  return labels;
+}
+
+// A file's cases as ppc_table data (ppc_table_runner.h) and one TEST_CASE
+// that runs them. Each case carries its known failure cause, or nullptr.
+std::string EmitTable(const std::string& stem, const std::string& category,
+                      const std::vector<std::pair<const TestSpec*, const std::string*>>& cases) {
+  std::string ops, list, pool;
+  size_t op_count = 0, pool_size = 0;
+  // Some captures already carry a suffix ("0x...ull").
+  auto u64 = [](const std::string& v) {
+    const char last = v.empty() ? '0' : char(std::tolower(uint8_t(v.back())));
+    return last == 'l' || last == 'u' ? v : v + "ULL";
+  };
+  // u32[3], u32[2] in the high half; u32[1], u32[0] in the low half.
+  auto vec_hi = [](const RegValue& rv) {
+    return fmt::format("0x{:0>8}{:0>8}ULL", rv.vec_values[3], rv.vec_values[2]);
+  };
+  auto vec_lo = [](const RegValue& rv) {
+    return fmt::format("0x{:0>8}{:0>8}ULL", rv.vec_values[1], rv.vec_values[0]);
+  };
+  auto add_op = [&](std::string_view kind, std::string_view reg, const std::string& where,
+                    const std::string& a, const std::string& b) {
+    ops += fmt::format("{{{},\"{}\",{},{},{}}},\n", kind, reg, where, a, b);
+    ++op_count;
+  };
+  auto add_bytes = [&](const std::vector<uint8_t>& bytes) {
+    const size_t at = pool_size;
+    for (uint8_t b : bytes)
+      pool += fmt::format("0x{:02X},", b);
+    pool += '\n';
+    pool_size += bytes.size();
+    return std::to_string(at);
+  };
+  auto offset = [](const std::string& reg) { return fmt::format("O({})", reg); };
+  for (const auto& [spec, known] : cases) {
+    const size_t first = op_count;
+    for (const auto& rv : spec->inputs) {
+      if (rv.reg == "cr")
+        add_op("kSetCr", "cr", "0", u64(rv.value), "0");
+      else if (rv.reg == "xer")
+        add_op("kSetXer", "xer", "0", u64(rv.value), "0");
+      else if (rv.is_vector)
+        add_op("kSetVec", rv.reg, offset(rv.reg), vec_hi(rv), vec_lo(rv));
+      else if (rv.is_float)
+        add_op("kSetU64", rv.reg, offset(rv.reg), fmt::format("F({})", rv.value), "0");
+      else
+        add_op("kSetU64", rv.reg, offset(rv.reg), u64(rv.value), "0");
+    }
+    for (const auto& mv : spec->mem_outputs)
+      add_op("kZeroMem", "memory", "0x" + mv.address, "0", std::to_string(mv.data.size()));
+    for (const auto& mv : spec->mem_inputs)
+      add_op("kSetMem", "memory", "0x" + mv.address, add_bytes(mv.data),
+             std::to_string(mv.data.size()));
+    for (const auto& rv : spec->outputs) {
+      if (rv.reg == "cr")
+        add_op("kCheckCr", "cr", "0", u64(rv.value), "0");
+      else if (rv.reg == "xer")
+        add_op("kCheckXer", "xer", "0", u64(rv.value), "0");
+      else if (rv.is_vector)
+        add_op("kCheckVec", rv.reg, offset(rv.reg), vec_hi(rv), vec_lo(rv));
+      else if (rv.is_float)
+        add_op("kCheckF64", rv.reg, offset(rv.reg), fmt::format("F({})", rv.value), "0");
+      else
+        add_op("kCheckU64", rv.reg, offset(rv.reg), u64(rv.value), "0");
+    }
+    for (const auto& mv : spec->mem_outputs)
+      add_op("kCheckMem", "memory", "0x" + mv.address, add_bytes(mv.data),
+             std::to_string(mv.data.size()));
+    std::string cause = "nullptr";
+    if (known) {
+      cause = "\"";
+      for (char ch : *known)
+        cause += (ch == '"' || ch == '\\') ? ' ' : ch;
+      cause += "\"";
+    }
+    list += fmt::format("    {{\"{}\", {}, {}, {}, {}}},\n", spec->name, spec->symbol, first,
+                        op_count - first, cause);
+  }
+  std::string out = fmt::format("namespace ppc_table_{} {{\n", stem);
+  out += fmt::format("const uint8_t kPool[] = {{\n{}0}};\n", pool);
+  out += fmt::format("const ppc_table::Op kOps[] = {{\n{}}};\n", ops);
+  out += fmt::format("const ppc_table::Case kCases[] = {{\n{}}};\n}}  // namespace\n", list);
+  out += fmt::format(
+      "TEST_CASE(\"ppc_corpus/{0}\", \"[ppc][{1}][{0}]\") {{\n"
+      "  ppc_table::RunCases(\"{0}\", ppc_table_{0}::kCases, std::size(ppc_table_{0}::kCases),\n"
+      "                      ppc_table_{0}::kOps, ppc_table_{0}::kPool);\n}}\n\n",
+      stem, category);
+  return out;
+}
+
+struct RecompileOptions {
+  std::string bin_dir, asm_dir, out_dir;
+  // Output split over this many function and case files, so a large corpus
+  // compiles in parallel; 1 writes ppc_test_functions.cpp and
+  // ppc_test_cases.cpp as before.
+  size_t chunks = 1;
+  std::string skip_list;       // test labels left out (captures judged wrong)
+  std::string known_failures;  // labels expected to fail, each with its cause
+  // Cases as data run from one loop per file (ppc_table_runner.h), for a
+  // corpus too large for a Catch2 test per case.
+  bool table = false;
+};
+
+bool RecompileTests(const RecompileOptions& opts) {
+  const std::string_view binDir = opts.bin_dir, asmDir = opts.asm_dir, outDir = opts.out_dir;
   std::array<ui::KeyValueRow, 3> header_rows = {{
       {"Bin dir", std::string(binDir)},
       {"ASM dir", std::string(asmDir)},
@@ -310,10 +455,16 @@ bool RecompileTests(std::string_view binDir, std::string_view asmDir, std::strin
   ui::KeyValueBlock("Recompiling PPC tests:", header_rows);
 
   fs::create_directories(outDir);
+  const auto skip = ReadLabelList(opts.skip_list, false);
+  const auto known_failures = ReadLabelList(opts.known_failures, true);
 
-  std::map<std::string, std::unordered_set<size_t>> functionsByFile;
-  std::vector<std::string> allFunctionNames;
-  std::stringstream functionsOut;
+  struct FileOutput {
+    std::string code;
+    std::vector<std::string> function_names;
+    std::unordered_set<size_t> addresses;
+    std::map<size_t, std::string> symbols;
+  };
+  std::map<std::string, FileOutput> files;
 
   for (const auto& entry : fs::directory_iterator(binDir)) {
     if (entry.path().extension() != ".bin")
@@ -365,92 +516,126 @@ bool RecompileTests(std::string_view binDir, std::string_view asmDir, std::strin
 
     codegen::EmitContext emitCtx{ctx.binary(), ctx.Config(), ctx.graph, 0, nullptr};
 
-    std::string recompiledCode;
+    FileOutput& out = files[stem];
+    out.symbols = std::move(symbols);
     for (const auto* fn : functions) {
       std::string code = fn->emitCpp(emitCtx);
       if (code.empty())
         continue;
-      functionsByFile[stem].emplace(fn->base());
-      allFunctionNames.push_back(fmt::format("{}_{:X}", stem, fn->base()));
-      recompiledCode += code;
-    }
-    functionsOut << recompiledCode << '\n';
-  }
-
-  std::unordered_map<std::string, std::string> allSymbols;
-  for (const auto& [stem, addresses] : functionsByFile) {
-    auto mapPath = fmt::format("{}/{}.map", binDir, stem);
-    auto mapSymbols = ParseMapFile(mapPath);
-    for (const auto& [addr, name] : mapSymbols) {
-      if (addresses.count(addr))
-        allSymbols.emplace(name, fmt::format("{}_{:X}", stem, addr));
-    }
-    if (!mapSymbols.empty())
-      continue;
-
-    std::vector<size_t> sortedAddresses(addresses.begin(), addresses.end());
-    std::sort(sortedAddresses.begin(), sortedAddresses.end());
-    std::ifstream in(fmt::format("{}/{}.s", asmDir, stem));
-    if (!in.is_open())
-      continue;
-    std::string line;
-    size_t functionIndex = 0;
-    while (std::getline(in, line)) {
-      if (line.empty() || line[0] == '#' || line[0] == '/' || line[0] == '*')
-        continue;
-      auto colonIdx = line.find(':');
-      if (colonIdx == std::string::npos || line[0] == ' ' || line[0] == '\t' || line[0] == '.')
-        continue;
-      auto name = line.substr(0, colonIdx);
-      if (functionIndex < sortedAddresses.size()) {
-        allSymbols.emplace(name, fmt::format("{}_{:X}", stem, sortedAddresses[functionIndex]));
-        ++functionIndex;
-      }
+      out.addresses.emplace(fn->base());
+      out.function_names.push_back(fmt::format("{}_{:X}", stem, fn->base()));
+      out.code += code;
     }
   }
 
-  nlohmann::json templateData;
-  templateData["functions"] = nlohmann::json::array();
-  for (const auto& funcName : allFunctionNames)
-    templateData["functions"].push_back({{"name", funcName}});
-  templateData["functions_code"] = functionsOut.str();
-  templateData["image_base"] = "82010000";
-  templateData["image_size"] = "100000";
-  templateData["code_base"] = "82010000";
-  templateData["code_size"] = "100000";
+  // Each file's labels name its own functions: files reuse labels (both
+  // instr_vcmpbfp.s and instr_vcmpxxfp.s have test_vcmpbfp_1).
+  auto labels_of = [](const std::string& stem, const FileOutput& out) {
+    std::unordered_map<std::string, std::string> labels;
+    for (const auto& [addr, name] : out.symbols) {
+      if (out.addresses.count(addr))
+        labels.emplace(name, fmt::format("{}_{:X}", stem, addr));
+    }
+    return labels;
+  };
 
-  templateData["tests"] = nlohmann::json::array();
-  size_t totalTests = 0;
-  for (const auto& [stem, addresses] : functionsByFile) {
-    auto specs = ParseTestSpecs(fmt::format("{}/{}.s", asmDir, stem), allSymbols);
+  nlohmann::json allFunctions = nlohmann::json::array();
+  for (const auto& [stem, out] : files) {
+    for (const auto& name : out.function_names)
+      allFunctions.push_back({{"name", name}});
+  }
+  auto base_data = [&] {
+    nlohmann::json data;
+    data["functions"] = allFunctions;
+    data["image_base"] = "82010000";
+    data["image_size"] = "100000";
+    data["code_base"] = "82010000";
+    data["code_size"] = "100000";
+    return data;
+  };
+
+  const size_t chunks = std::max<size_t>(1, opts.chunks);
+  std::vector<nlohmann::json> chunkTests(chunks, nlohmann::json::array());
+  std::vector<std::string> chunkCode(chunks);
+  std::vector<nlohmann::json> chunkFunctions(chunks, nlohmann::json::array());
+  std::vector<std::string> chunkTables(chunks);
+  size_t totalTests = 0, skipped = 0, expected_failures = 0, fileIndex = 0;
+  for (const auto& [stem, out] : files) {
+    const size_t chunk = fileIndex++ % chunks;
+    chunkCode[chunk] += out.code + '\n';
+    for (const auto& name : out.function_names)
+      chunkFunctions[chunk].push_back({{"name", name}});
+    auto specs = ParseTestSpecs(fmt::format("{}/{}.s", asmDir, stem), labels_of(stem, out));
     std::string category = CategoryFromStem(stem);
+    std::vector<std::pair<const TestSpec*, const std::string*>> table_cases;
     for (const auto& spec : specs) {
+      // Edge's skip.txt names labels without their "test_" prefix.
+      const std::string bare = spec.name.starts_with("test_") ? spec.name.substr(5) : spec.name;
+      if (skip.contains(spec.name) || skip.contains(bare)) {
+        ++skipped;
+        continue;
+      }
       nlohmann::json testJson;
       testJson["name"] = BuildHierarchicalName(stem, spec.name);
       testJson["category"] = category;
       testJson["stem"] = stem;
       testJson["symbol"] = spec.symbol;
+      // Catch2 reports a known failure that passes, so a fix shows too.
+      // Keyed "stem/label": files reuse labels.
+      if (auto known = known_failures.find(fmt::format("{}/{}", stem, spec.name));
+          known != known_failures.end()) {
+        testJson["known_failure"] = true;
+        testJson["known_failure_reason"] = known->second;
+        ++expected_failures;
+      } else {
+        testJson["known_failure"] = false;
+      }
+      ++totalTests;
+      if (opts.table) {
+        auto known = known_failures.find(fmt::format("{}/{}", stem, spec.name));
+        table_cases.emplace_back(&spec, known != known_failures.end() ? &known->second : nullptr);
+        continue;
+      }
       testJson["inputs"]["registers"] = SerializeRegisters(spec.inputs);
       testJson["inputs"]["memory"] = SerializeMemory(spec.mem_inputs);
       testJson["outputs"]["registers"] = SerializeRegisters(spec.outputs);
       testJson["outputs"]["memory"] = SerializeMemory(spec.mem_outputs);
-      templateData["tests"].push_back(testJson);
-      ++totalTests;
+      chunkTests[chunk].push_back(testJson);
     }
+    if (!table_cases.empty())
+      chunkTables[chunk] += EmitTable(stem, category, table_cases);
   }
 
   codegen::TemplateRegistry registry;
-  auto writeRendered = [&](std::string_view templateId, std::string_view filename) {
-    auto rendered = codegen::renderWithJson(registry, std::string(templateId), templateData);
+  auto writeRendered = [&](std::string_view templateId, const nlohmann::json& data,
+                           const std::string& filename) {
+    auto rendered = codegen::renderWithJson(registry, std::string(templateId), data);
     std::ofstream out(fmt::format("{}/{}", outDir, filename));
     out << rendered;
   };
-  writeRendered("test/ppc_config_h", "ppc_config.h");
-  writeRendered("test/ppc_test_decls_h", "ppc_test_decls.h");
-  writeRendered("test/ppc_test_functions_cpp", "ppc_test_functions.cpp");
-  writeRendered("test/ppc_test_cases_cpp", "ppc_test_cases.cpp");
+  const nlohmann::json shared = base_data();
+  writeRendered("test/ppc_config_h", shared, "ppc_config.h");
+  writeRendered("test/ppc_test_decls_h", shared, "ppc_test_decls.h");
+  if (opts.table)
+    writeRendered("test/ppc_table_runner_h", shared, "ppc_table_runner.h");
+  for (size_t i = 0; i < chunks; ++i) {
+    const std::string suffix = chunks == 1 ? "" : fmt::format("_{}", i);
+    nlohmann::json data = base_data();
+    data["functions"] = chunkFunctions[i];
+    data["functions_code"] = chunkCode[i];
+    data["tests"] = chunkTests[i];
+    writeRendered("test/ppc_test_functions_cpp", data,
+                  fmt::format("ppc_test_functions{}.cpp", suffix));
+    if (opts.table) {
+      data["table_code"] = chunkTables[i];
+      writeRendered("test/ppc_test_table_cpp", data, fmt::format("ppc_test_cases{}.cpp", suffix));
+    } else {
+      writeRendered("test/ppc_test_cases_cpp", data, fmt::format("ppc_test_cases{}.cpp", suffix));
+    }
+  }
 
-  REXLOG_TRACE("Generated {} test cases", totalTests);
+  REXLOG_INFO("Generated {} test cases in {} chunk(s); {} skipped, {} expected to fail", totalTests,
+              chunks, skipped, expected_failures);
   return true;
 }
 
@@ -458,6 +643,10 @@ struct RecompileTestsArgs {
   std::string bin_dir;
   std::string asm_dir;
   std::string output;
+  size_t chunks = 1;
+  std::string skip_list;
+  std::string known_failures;
+  bool table = false;
 };
 
 }  // namespace
@@ -476,9 +665,20 @@ void RegisterRecompileTests(CLI::App& parent, const CliContext& ctx, DeferredAct
   sub->add_option("--output", args->output, "Output path for recompile-tests")
       ->type_name("PATH")
       ->required();
+  sub->add_option("--chunks", args->chunks,
+                  "Split the generated sources over this many files (default 1)");
+  sub->add_option("--skip-list", args->skip_list, "Test labels to leave out, one per line")
+      ->type_name("PATH");
+  sub->add_option("--known-failures", args->known_failures,
+                  "Test labels expected to fail, one per line with their cause")
+      ->type_name("PATH");
+  sub->add_flag("--table", args->table,
+                "Emit the cases as data run from one test per file, for a large corpus");
   sub->callback([args, &pending]() {
     pending = [args]() -> rex::Result<void> {
-      if (!RecompileTests(args->bin_dir, args->asm_dir, args->output)) {
+      RecompileOptions opts{args->bin_dir,   args->asm_dir,        args->output, args->chunks,
+                            args->skip_list, args->known_failures, args->table};
+      if (!RecompileTests(opts)) {
         return Err<void>(rex::ErrorCategory::Validation, "Test recompilation failed");
       }
       return rex::Ok();
