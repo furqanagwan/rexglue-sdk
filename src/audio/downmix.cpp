@@ -9,6 +9,7 @@
  *              See LICENSE file in the project root for full license text.
  */
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 
 #include <rex/audio/downmix.h>
@@ -60,6 +61,22 @@ float GetOutputGain() {
 float MasterOutputGain() {
   const int32_t volume = std::clamp<int32_t>(REXCVAR_GET(audio_volume), 0, 100);
   return GetOutputGain() * (float(volume) / 100.0f);
+}
+
+namespace {
+std::atomic<bool> g_constrained = false;
+}  // namespace
+
+void SetAppConstrained(bool constrained) {
+  g_constrained.store(constrained, std::memory_order_relaxed);
+}
+
+bool AppConstrained() {
+  return g_constrained.load(std::memory_order_relaxed);
+}
+
+bool OutputSilenced() {
+  return REXCVAR_GET(audio_mute) || (AppConstrained() && REXCVAR_GET(audio_mute_minimized));
 }
 
 }  // namespace rex::audio

@@ -159,7 +159,7 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
 
   // Same conversion and mix controls as the SDL output, applied per frame.
   float* out = slots_[slot].samples.data();
-  if (REXCVAR_GET(audio_mute)) {
+  if (OutputSilenced()) {
     std::memset(out, 0, sizeof(float) * channels * kChannelSamples);
   } else if (channels == 2) {
     conversion::sequential_6_BE_to_interleaved_2_LE(out, frame, kChannelSamples, GetStereoFold(),

@@ -1,6 +1,6 @@
 /**
  * @file        master_volume_test.cpp
- * @brief       audio_volume scales the output stage's gain
+ * @brief       audio_volume scales the output stage's gain and a minimised title is silenced
  *
  * @copyright   Copyright (c) 2026 Tom Clay
  * @license     BSD 3-Clause License
@@ -33,4 +33,24 @@ TEST_CASE("audio_volume scales the master output gain", "[audio][volume]") {
 
   REQUIRE(rex::cvar::SetFlagByName("audio_volume", "100"));
   rex::audio::SetOutputGain(previous);
+}
+
+TEST_CASE("A minimised title is silent unless the player keeps it playing", "[audio][volume]") {
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute", "false"));
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute_minimized", "true"));
+  rex::audio::SetAppConstrained(false);
+  CHECK_FALSE(rex::audio::OutputSilenced());
+
+  rex::audio::SetAppConstrained(true);
+  CHECK(rex::audio::OutputSilenced());
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute_minimized", "false"));
+  CHECK_FALSE(rex::audio::OutputSilenced());
+
+  // audio_mute silences regardless.
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute", "true"));
+  rex::audio::SetAppConstrained(false);
+  CHECK(rex::audio::OutputSilenced());
+
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute", "false"));
+  REQUIRE(rex::cvar::SetFlagByName("audio_mute_minimized", "true"));
 }

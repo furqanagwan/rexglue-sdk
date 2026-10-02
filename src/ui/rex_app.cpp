@@ -30,6 +30,8 @@
 #include <rex/ui/overlay/settings_overlay.h>
 #include <rex/audio/audio_backend.h>
 #include <rex/audio/audio_system.h>
+#include <rex/audio/downmix.h>
+#include <rex/audio/flags.h>
 #include <rex/input/input_system.h>
 #include <rex/kernel/init.h>
 #include <rex/string/numeric.h>
@@ -904,11 +906,19 @@ void ReXApp::OnLostFocus(ui::UISetupEvent& e) {
 
 void ReXApp::OnMinimized(ui::UIEvent& e) {
   (void)e;
+  rex::audio::SetAppConstrained(true);
+  if (REXCVAR_GET(audio_mute_minimized)) {
+    REXLOG_INFO("Window minimized: the game's audio is silenced until it is restored");
+  }
   OnWindowMinimized();
 }
 
 void ReXApp::OnRestored(ui::UIEvent& e) {
   (void)e;
+  if (rex::audio::AppConstrained() && REXCVAR_GET(audio_mute_minimized)) {
+    REXLOG_INFO("Window restored: the game's audio plays again");
+  }
+  rex::audio::SetAppConstrained(false);
   OnWindowRestored();
 }
 
