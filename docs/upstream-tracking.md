@@ -1307,7 +1307,7 @@ in Canary's later `xenumerator` history as of 2026-10-01.
 ## RG-GDK-069: two Canary defaults, and title cvar defaults (2026-10-02)
 
 Found with NHL Legacy Edition (`454109EC`), whose matches drew black but for
-the HUD ([furqanagwan/nhl](https://github.com/furqanagwan/nhl) RG-NHL-002).
+the HUD ([furqanagwan/nhl](https://github.com/furqanagwan/nhl) RG-NHL-003).
 
 | Canary commit | Class | Adaptation | Tests |
 | --- | --- | --- | --- |
