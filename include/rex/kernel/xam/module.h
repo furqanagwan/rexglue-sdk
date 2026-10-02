@@ -10,12 +10,18 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <functional>
+#include <optional>
 #include <string>
 
 #include <rex/ppc/function.h>
 #include <rex/system/export_resolver.h>
 #include <rex/system/kernel_module.h>
 #include <rex/system/kernel_state.h>
+
+namespace rex::ui {
+class ImGuiDialog;
+}  // namespace rex::ui
 
 namespace rex {
 namespace kernel {
@@ -27,6 +33,23 @@ bool xeXamIsUIActive();
 /// as XAM's own dialogs are counted.
 void xeXamAddSystemUI();
 void xeXamRemoveSystemUI();
+
+/// A title's request for text (XamShowKeyboardUI).
+struct KeyboardRequest {
+  uint32_t user_index = 0;
+  uint32_t flags = 0;  // VKBD_* modes, as the title passed them
+  std::u16string title, description, default_text;
+  size_t max_length = 0;  // characters, without the terminator
+};
+/// Shows a keyboard on the UI thread and returns it (a dialog that deletes
+/// itself once closed), calling `done` with the text, or nothing when
+/// cancelled, before it closes; null when it cannot show one.
+using KeyboardDone = std::function<void(std::optional<std::u16string>)>;
+using KeyboardProvider =
+    std::function<rex::ui::ImGuiDialog*(const KeyboardRequest&, KeyboardDone done)>;
+/// The console's own keyboard (RG-GDK-059), which XamShowKeyboardUI uses
+/// ahead of the SDK's ImGui dialog. Empty to unset.
+void xeXamSetKeyboardProvider(KeyboardProvider provider);
 
 class XamModule : public system::KernelModule {
  public:

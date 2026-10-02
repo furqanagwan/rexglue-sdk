@@ -36,8 +36,9 @@ std::optional<std::vector<XexResource>> ReadXexResources(std::span<const uint8_t
 /// "hud/hud", "huduiskin/skin", "xam/shrdres", "gamerprofile/gp"...
 class SystemUpdate {
  public:
-  /// The system XEXs the guide reads, as they are named in the update package.
-  static constexpr std::string_view kModules[] = {"hud", "huduiskin", "xam", "gamerprofile"};
+  /// The system XEXs the guide reads, as they are named in the update package;
+  /// vk is the on-screen keyboard (RG-GDK-059).
+  static constexpr std::string_view kModules[] = {"hud", "huduiskin", "xam", "gamerprofile", "vk"};
   /// The console's system fonts (.xtt) the guide's text uses, when present:
   /// the Latin and Japanese/Korean font of the PC backward-compatibility
   /// files, the update's light Segoe and the Chinese ones.

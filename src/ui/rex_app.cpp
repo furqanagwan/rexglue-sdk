@@ -47,6 +47,8 @@
 #include <rex/ui/guide/guide_notification.h>
 #include <rex/ui/guide/title_update.h>
 #include <rex/ui/guide/xbox_guide.h>
+#include <rex/kernel/xam/module.h>
+#include <rex/ui/guide/xbox_keyboard.h>
 #include <rex/ui/keybinds.h>
 #include <rex/ui/window_win.h>
 #include <rex/version.h>
@@ -999,6 +1001,35 @@ void ReXApp::SetupGuide() {
   }
   rex::ui::RegisterBind("bind_xbox_guide", "Home", "Open or close the Xbox guide",
                         [this] { ToggleGuide(); });
+  // XamShowKeyboardUI shows the console's own keyboard from the same files
+  // (RG-GDK-059); the ImGui dialog while they load or without them.
+  kernel::xam::xeXamSetKeyboardProvider([this](const kernel::xam::KeyboardRequest& request,
+                                               kernel::xam::KeyboardDone done) -> ui::ImGuiDialog* {
+    if (!REXCVAR_GET(xbox_guide) || !imgui_drawer_ || shutting_down_.load() || !runtime_) {
+      return nullptr;
+    }
+    std::shared_ptr<const ui::guide::GuideAssets> assets;
+    {
+      std::lock_guard<std::mutex> lock(guide_mutex_);
+      assets = guide_assets_;
+      if (assets && assets->has_keyboard && !guide_media_) {
+        guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), assets);
+      }
+    }
+    if (!assets || !assets->has_keyboard) {
+      return nullptr;
+    }
+    auto* input = static_cast<rex::input::InputSystem*>(runtime_->input_system());
+    uint32_t user = request.user_index;
+    if (user > 3 && input) {
+      user = input->GetLastUsedUser();
+    }
+    return new ui::guide::XboxKeyboard(
+        imgui_drawer_.get(), std::move(assets), guide_media_.get(),
+        {guide_font_regular_, guide_font_bold_}, input, user,
+        {request.title, request.description, request.default_text, request.max_length},
+        std::move(done));
+  });
   // Reading the system update decompresses XAM; keep it off the UI thread.
   guide_loader_ = std::thread([this] {
     std::string errors;
@@ -1085,6 +1116,7 @@ void ReXApp::StopGuide() {
     delete guide_;  // detaches from the ImGui drawer and releases guest input
     guide_ = nullptr;
   }
+  kernel::xam::xeXamSetKeyboardProvider(nullptr);
   guide_media_.reset();
   rex::ui::UnregisterBind("bind_xbox_guide");
 }

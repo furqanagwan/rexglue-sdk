@@ -190,7 +190,8 @@ function(_rexglue_embed_xbox_guide target_name)
         OUTPUT "${_bundle}"
         COMMAND $<TARGET_FILE:${_rexglue_cli}> guide-bundle ${_sources}
                 -o "${_bundle}"
-        DEPENDS ${_inputs}
+        # The CLI too: a newer SDK may take more from the same update.
+        DEPENDS ${_inputs} ${_rexglue_cli}
         COMMENT "Building the Xbox guide into ${target_name}"
         VERBATIM)
 

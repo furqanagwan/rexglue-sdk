@@ -96,6 +96,9 @@ struct GuideAssets {
   // Preferences and the pages built on its scenes (hud).
   xui::Document options, options_vibration, options_notifications, options_voice;
   bool has_options = false;
+  // The on-screen keyboard (vk: KeyboardMain hosts KeyboardBase; RG-GDK-059).
+  xui::Document keyboard_main, keyboard_base;
+  bool has_keyboard = false;
   std::vector<std::string> hud_strings, xam_strings, profile_strings;
 
   static std::unique_ptr<GuideAssets> Load(const std::filesystem::path& path, std::string* error);
@@ -115,6 +118,16 @@ struct GuideFonts {
   ImFont* regular = nullptr;
   ImFont* bold = nullptr;
 };
+
+/// The guide's own vector drawings of the console's small images, for
+/// xui::RenderResources::vector_image: the legend button glyphs and the
+/// controller battery, sharp at any size.
+bool DrawGuideVectorImage(ImDrawList& list, std::string_view path,
+                          const std::function<ImVec2(ImVec2)>& to_screen, float opacity,
+                          ImFont* bold);
+/// Hides the letters scenes lay over the button glyphs, which
+/// DrawGuideVectorImage draws itself.
+void HideGuideButtonLetters(xui::Element* root);
 
 /// Adds the console's system font from the guide built into the title
 /// (RG-GDK-061), or Segoe UI, the host stand-in, without one. Call from the
