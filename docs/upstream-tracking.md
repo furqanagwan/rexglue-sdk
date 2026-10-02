@@ -1333,3 +1333,33 @@ with one Catch2 test per file: a test per case gave 48 sources of about 2 MB
 whose compile exhausted memory. Failures are recorded with their cause issue
 (#149, #151, #185) in `tests/ppc/corpus/known_failures.txt`
 ([regression strategy](regression-strategy.md#ppc-test-corpus-rg-gdk-054)).
+
+## RG-GDK-055: PowerPC floating-point rules (2026-10-02)
+
+has207/xenia-edge commits (August-September 2026, all class A: correctness,
+measured against the hardware-captured corpus). Edge makes them in its HIR
+frontend and JIT backends; ReXGlue puts them in inline helpers in
+`include/rex/ppc/fp.h`, which the codegen builders call, and a table in
+`src/system/ppc_fp.cpp`.
+
+| Edge commit | Rule | ReXGlue |
+| --- | --- | --- |
+| `9804846f4`, `19fb3979d`, `01efb80ed` | Multiply-add family: a NaN is picked in A, B, C order, quieted, and the negated forms don't negate it | `madd`/`msub`/`nmadd`/`nmsub` (and `s` forms), `vmadd`, `vnmsub` |
+| `cf43c4c52`, `6de9c21ec` | Invalid operations give the positive default QNaN | `nan_result`; `vnan` for VMX elements |
+| `28f38affe`, `8b19ee756`, `078a07b53` | Single precision answers the default QNaN for a double-denormal operand (all finite); `fdivs`/`fsqrts` instead skip rounding; one cheap screen per op | `single_denormal`, one unlikely branch per single op (`Suspect`/`SingleSlow`) |
+| `de4d24493`, `32920009d` | Record forms set CR1 (FX, FEX, VX, OX) from the host exception status, plus invalid the host doesn't report | `recorded`, `madd_invalid`; per instruction, not sticky in FPSCR |
+| `e4b13738c`, `ed9bfc9a4` (and Canary `7ff152a5a`) | `vcmpbfp` sets both bounds bits for a NaN; `vmaxfp`/`vminfp` quiet a NaN, flush denormals, order +0 above -0 | `vcmpb`, `vmax`, `vmin`; `vcmpbfp.` sets only CR6[2] |
+| `378c95215` | `fctiw`/`fctid` saturate, NaN gives the sign-extended minimum; CR1 for the conversions | `to_int32`, `to_int64`, `set_cr1_convert` |
+| `fb225d975`, `vrsqrte_table.cc`, x64 `EmitFrsqrteHelper` (all at `b5cc59e854`) | Estimates: `vexptefp`/`vlogefp` polynomials snapped to the 2^-11 grid; `vrsqrtefp` coefficient table; `frsqrte` 16-entry table | `vexpte`, `vloge`, `vrsqrte`, `rsqrte`, `set_cr1_estimate` |
+| `c496db01f` | `lfs`/`stfs` keep a signalling NaN signalling | `load_single`, `store_single` (unit tested; not in the corpus) |
+
+`vmaddfp`/`vnmsubfp` are fused, as on hardware: FMA3 through inline assembly
+when the CPU has it (the titles build for SSE4.1), otherwise in double. This
+changed ReXGlue's own `instr_vmaddfp` expectation by one ulp, to the correctly
+rounded value. Known regressions in Edge: none recorded against these commits.
+
+Measured: the corpus loses all 27,585 #151 known failures (and one #185
+case, `vmaddfp_1`); PPC 1,473/1,473. A micro-benchmark (`-O2 -msse4.1`,
+vectorisation off, three runs) puts `fadds`/`fmuls`/`fmadds` at +20-40% per
+op, `fadd` +5%, `vmaddfp` and `vmaxfp` level, `vnmsubfp` +30-60%. Title frame
+time is not yet measured.

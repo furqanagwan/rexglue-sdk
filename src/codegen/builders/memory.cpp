@@ -252,7 +252,8 @@ bool build_lfs(BuilderContext& ctx) {
   if (ctx.insn.operands[2] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[2]));
   ctx.println("{});", static_cast<int32_t>(ctx.insn.operands[1]));
-  ctx.println("\t{}.f64 = double({}.f32);", ctx.f(ctx.insn.operands[0]), ctx.temp());
+  ctx.println("\t{}.f64 = rex::ppc::fp::load_single({}.u32);", ctx.f(ctx.insn.operands[0]),
+              ctx.temp());
   return true;
 }
 
@@ -262,7 +263,8 @@ bool build_lfsx(BuilderContext& ctx) {
   if (ctx.insn.operands[1] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
   ctx.println("{}.u32);", ctx.r(ctx.insn.operands[2]));
-  ctx.println("\t{}.f64 = double({}.f32);", ctx.f(ctx.insn.operands[0]), ctx.temp());
+  ctx.println("\t{}.f64 = rex::ppc::fp::load_single({}.u32);", ctx.f(ctx.insn.operands[0]),
+              ctx.temp());
   return true;
 }
 
@@ -292,7 +294,8 @@ bool build_lfsu(BuilderContext& ctx) {
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
   ctx.println("\t{}.u32 = REX_LOAD_U32({});", ctx.temp(), ctx.ea());
-  ctx.println("\t{}.f64 = double({}.f32);", ctx.f(ctx.insn.operands[0]), ctx.temp());
+  ctx.println("\t{}.f64 = rex::ppc::fp::load_single({}.u32);", ctx.f(ctx.insn.operands[0]),
+              ctx.temp());
   ctx.println("\t{}.u32 = {};", ctx.r(ctx.insn.operands[2]), ctx.ea());
   return true;
 }
@@ -303,7 +306,8 @@ bool build_lfsux(BuilderContext& ctx) {
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
   ctx.println("\t{}.u32 = REX_LOAD_U32({});", ctx.temp(), ctx.ea());
-  ctx.println("\t{}.f64 = double({}.f32);", ctx.f(ctx.insn.operands[0]), ctx.temp());
+  ctx.println("\t{}.f64 = rex::ppc::fp::load_single({}.u32);", ctx.f(ctx.insn.operands[0]),
+              ctx.temp());
   ctx.println("\t{}.u32 = {};", ctx.r(ctx.insn.operands[1]), ctx.ea());
   return true;
 }
@@ -505,7 +509,8 @@ bool build_stfiwx(BuilderContext& ctx) {
 
 bool build_stfs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  ctx.println("\t{}.f32 = float({}.f64);", ctx.temp(), ctx.f(ctx.insn.operands[0]));
+  ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
+              ctx.f(ctx.insn.operands[0]));
   ctx.print("{}", ctx.mmio_check_d_form() ? "\tREX_MM_STORE_U32(" : "\tREX_STORE_U32(");
   if (ctx.insn.operands[2] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[2]));
@@ -515,7 +520,8 @@ bool build_stfs(BuilderContext& ctx) {
 
 bool build_stfsx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  ctx.println("\t{}.f32 = float({}.f64);", ctx.temp(), ctx.f(ctx.insn.operands[0]));
+  ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
+              ctx.f(ctx.insn.operands[0]));
   ctx.print("{}", ctx.mmio_check_x_form() ? "\tREX_MM_STORE_U32(" : "\tREX_STORE_U32(");
   if (ctx.insn.operands[1] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
@@ -538,7 +544,8 @@ bool build_stfsu(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
-  ctx.println("\t{}.f32 = float({}.f64);", ctx.temp(), ctx.f(ctx.insn.operands[0]));
+  ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
+              ctx.f(ctx.insn.operands[0]));
   ctx.println("\tREX_STORE_U32({}, {}.u32);", ctx.ea(), ctx.temp());
   ctx.println("\t{}.u32 = {};", ctx.r(ctx.insn.operands[2]), ctx.ea());
   return true;
@@ -547,7 +554,8 @@ bool build_stfsu(BuilderContext& ctx) {
 bool build_stfsux(BuilderContext& ctx) {
   // Store Floating-point Single with Update Indexed
   ctx.emit_set_flush_mode(false);
-  ctx.println("\t{}.f32 = float({}.f64);", ctx.temp(), ctx.f(ctx.insn.operands[0]));
+  ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
+              ctx.f(ctx.insn.operands[0]));
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
   ctx.println("\t{}({}, {}.u32);", ctx.mmio_check_x_form() ? "REX_MM_STORE_U32" : "REX_STORE_U32",

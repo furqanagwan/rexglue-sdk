@@ -74,40 +74,48 @@ namespace rex::codegen {
 
 bool build_vaddfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_binary("add");
+  ctx.println(
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vadd(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32)));",
+      ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]));
   return true;
 }
 
 bool build_vsubfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_binary("sub");
+  ctx.println(
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vsub(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32)));",
+      ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]));
   return true;
 }
 
 bool build_vmulfp128(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_binary("mul");
+  ctx.println(
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmul(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32)));",
+      ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]));
   return true;
 }
 
 bool build_vmaddfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
+  // (vA x vC) + vB, with PowerPC NaN rules (rex/ppc/fp.h).
   ctx.println(
-      "\tsimde_mm_store_ps({}.f32, simde_mm_add_ps(simde_mm_mul_ps(simde_mm_load_ps({}.f32), "
-      "simde_mm_load_ps({}.f32)), simde_mm_load_ps({}.f32)));",
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmadd(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32), simde_mm_load_ps({}.f32)));",
       ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]),
       ctx.v(ctx.insn.operands[3]));
   return true;
 }
 
 bool build_vnmsubfp(BuilderContext& ctx) {
-  // vnmsubfp: vD = -(vA * vB - vC) - negation done by XOR with sign bit (0x80000000)
   ctx.emit_set_flush_mode(true);
+  // -((vA x vC) - vB); a NaN result keeps its sign (rex/ppc/fp.h).
   ctx.println(
-      "\tsimde_mm_store_ps({}.f32, "
-      "simde_mm_xor_ps(simde_mm_sub_ps(simde_mm_mul_ps(simde_mm_load_ps({}.f32), "
-      "simde_mm_load_ps({}.f32)), simde_mm_load_ps({}.f32)), "
-      "simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0x80000000)))));",
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vnmsub(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32), simde_mm_load_ps({}.f32)));",
       ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]),
       ctx.v(ctx.insn.operands[3]));
   return true;
@@ -115,13 +123,19 @@ bool build_vnmsubfp(BuilderContext& ctx) {
 
 bool build_vmaxfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_binary("max");
+  ctx.println(
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmax(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32)));",
+      ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]));
   return true;
 }
 
 bool build_vminfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_binary("min");
+  ctx.println(
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmin(simde_mm_load_ps({}.f32), "
+      "simde_mm_load_ps({}.f32)));",
+      ctx.v(ctx.insn.operands[0]), ctx.v(ctx.insn.operands[1]), ctx.v(ctx.insn.operands[2]));
   return true;
 }
 
@@ -133,49 +147,23 @@ bool build_vrefp(BuilderContext& ctx) {
 }
 
 bool build_vrsqrtefp(BuilderContext& ctx) {
-  // TODO: see if we can use rsqrt safely
+  // The Xenon's estimate, from a table (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
-  ctx.emit_vec_fp_unary_expr(
-      "simde_mm_div_ps(simde_mm_set1_ps(1), simde_mm_sqrt_ps(simde_mm_load_ps({vA}.f32)))");
+  ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vrsqrte(simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
 bool build_vexptefp(BuilderContext& ctx) {
-  // SIMD exp2 estimate (~12-bit precision, matching PPC vexptefp spec)
-  // Algorithm: exp2(x) = 2^n * poly(f), where n = floor(x), f = x - n
-  auto vD = ctx.v(ctx.insn.operands[0]);
-  auto vA = ctx.v(ctx.insn.operands[1]);
+  // The Xenon 2^x estimate (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
-  ctx.println("\t{{");
-  ctx.println("\t\tsimde__m128 x = simde_mm_load_ps({}.f32);", vA);
-  ctx.println(
-      "\t\tsimde__m128 n = simde_mm_round_ps(x, "
-      "SIMDE_MM_FROUND_TO_NEG_INF | SIMDE_MM_FROUND_NO_EXC);");
-  ctx.println("\t\tsimde__m128 f = simde_mm_sub_ps(x, n);");
-  // 4th-order minimax polynomial for 2^f, f in [0,1), ~12-bit accuracy
-  ctx.println("\t\tsimde__m128 p = simde_mm_set1_ps(1.8775767e-3f);");
-  ctx.println("\t\tp = simde_mm_add_ps(simde_mm_mul_ps(p, f), simde_mm_set1_ps(8.9893397e-3f));");
-  ctx.println("\t\tp = simde_mm_add_ps(simde_mm_mul_ps(p, f), simde_mm_set1_ps(5.5826318e-2f));");
-  ctx.println("\t\tp = simde_mm_add_ps(simde_mm_mul_ps(p, f), simde_mm_set1_ps(2.4015361e-1f));");
-  ctx.println("\t\tp = simde_mm_add_ps(simde_mm_mul_ps(p, f), simde_mm_set1_ps(6.9315308e-1f));");
-  ctx.println("\t\tp = simde_mm_add_ps(simde_mm_mul_ps(p, f), simde_mm_set1_ps(1.0f));");
-  // Construct 2^n by adding n to the IEEE 754 exponent bias and shifting into place
-  ctx.println("\t\tsimde__m128i exp_bits = simde_mm_slli_epi32(");
-  ctx.println("\t\t\tsimde_mm_add_epi32(simde_mm_cvttps_epi32(n), simde_mm_set1_epi32(127)), 23);");
-  ctx.println(
-      "\t\tsimde_mm_store_ps({}.f32, "
-      "simde_mm_mul_ps(p, simde_mm_castsi128_ps(exp_bits)));",
-      vD);
-  ctx.println("\t}}");
+  ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vexpte(simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
 bool build_vlogefp(BuilderContext& ctx) {
-  // TODO: vectorize
+  // The Xenon log2 estimate (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
-  for (size_t i = 0; i < 4; i++)
-    ctx.println("\t{}.f32[{}] = log2f({}.f32[{}]);", ctx.v(ctx.insn.operands[0]), i,
-                ctx.v(ctx.insn.operands[1]), i);
+  ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vloge(simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
@@ -563,33 +551,22 @@ bool build_vcmpbfp(BuilderContext& ctx) {
   auto vB = ctx.v(ctx.insn.operands[2]);
   auto vD = ctx.v(ctx.insn.operands[0]);
 
-  // Use v_temp as intermediate storage
-  // gt_mask = (vA > vB) & 0x80000000
+  // A NaN in either operand is out of bounds both ways (rex/ppc/fp.h).
   ctx.println(
-      "\tsimde_mm_store_ps({}.f32, simde_mm_and_ps(simde_mm_cmpgt_ps(simde_mm_load_ps({}.f32), "
-      "simde_mm_load_ps({}.f32)), simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0x80000000)))));",
-      ctx.v_temp(), vA, vB);
-  // lt_neg_mask = (vA < -vB) & 0x40000000
-  ctx.println(
-      "\tsimde_mm_store_ps({}.f32, simde_mm_and_ps(simde_mm_cmplt_ps(simde_mm_load_ps({}.f32), "
-      "simde_mm_xor_ps(simde_mm_load_ps({}.f32), "
-      "simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0x80000000))))), "
-      "simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0x40000000)))));",
-      vD, vA, vB);
-  // result = gt_mask | lt_neg_mask
-  ctx.println(
-      "\tsimde_mm_store_ps({}.f32, simde_mm_or_ps(simde_mm_load_ps({}.f32), "
+      "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vcmpb(simde_mm_load_ps({}.f32), "
       "simde_mm_load_ps({}.f32)));",
-      vD, ctx.v_temp(), vD);
+      vD, vA, vB);
 
   // CR6 from vD: movemask_ps only checks bit 31, but lower-bound violations only
   // set bit 30. Shift left by 1 to move bit 30 into bit 31, then OR with original
-  // so movemask detects both upper and lower bound violations.
+  // so movemask detects both upper and lower bound violations. vcmpbfp. sets
+  // only CR6[2] (every element in bounds): 0x10 never matches, so CR6[0] stays
+  // clear.
   if (isRecordForm(ctx.insn))
     ctx.println(
         "\t{}.setFromMask(simde_mm_castsi128_ps(simde_mm_or_si128("
         "simde_mm_load_si128((simde__m128i*){}.f32), "
-        "simde_mm_slli_epi32(simde_mm_load_si128((simde__m128i*){}.f32), 1))), 0xF);",
+        "simde_mm_slli_epi32(simde_mm_load_si128((simde__m128i*){}.f32), 1))), 0x10);",
         ctx.cr(6), vD, vD);
   return true;
 }

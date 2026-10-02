@@ -471,15 +471,15 @@ It is opt-in (`-DREXGLUE_PPC_CORPUS=ON`), one CTest test per file, labelled
 `tests/ppc/corpus/known_failures.txt` lists each case expected to fail with
 its cause. A new failure or a known failure that passes fails the file's test,
 so the list always matches the run; a fix removes its entries in the same
-change. Measured 2026-10-02 (GDK Release, `main` 621c3f3 plus RG-GDK-054):
+change. Measured 2026-10-02 (GDK Release, `main` 8aaf14e plus RG-GDK-055):
 567 files, 169,459 cases run (917 skipped by Edge's `skip.txt`, 11 files the
-bundled assembler can't assemble), 30,967 known failures:
+bundled assembler can't assemble), 3,381 known failures. RG-GDK-055 (#151)
+cleared the 27,585 floating-point failures RG-GDK-054 started with.
 
 | Cause | Cases |
 | --- | --- |
-| #151 PowerPC FP NaN, denormal, CR1 and estimate rules | 27,585 |
 | #149 missing instructions, and `mfmsr` | 3,333 |
-| #185 other wrong results (`vsl`, `mffs`, `stwcx.`, `vmaddfp`, `vmsum3fp128`/`vmsum4fp128`) | 41 |
+| #185 other wrong results (`vsl`, `mffs`, `stwcx.`, `vmsum3fp128`/`vmsum4fp128`) | 40 |
 | Corpus errors: hand-written cases expecting a non-IEEE result (`faddx_3`, `fcmpu_1`, ...) | 8 |
 
 Each case starts from a reset FPSCR (round to nearest, no flush) and a zeroed
