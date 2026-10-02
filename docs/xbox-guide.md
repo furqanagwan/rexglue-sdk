@@ -182,7 +182,7 @@ is saved to the title's config file straight away.
 | Preferences | `Options` (`OptionsEmulator` with the BC HUD) | Notifications, Volume (the Voice entry), Vibration, Resolution (a copy of Vibration; with the BC HUD it is under Xbox Settings instead). Online Status, Family Timer and Word Registration are removed. | |
 | Xbox Settings (BC HUD) | `XboxOneXSettings` | Optimize game for: Graphics or Performance. The pane's first line, "Changing this setting will end your current session.", reads that the setting is used at the next start. | Graphics: `resolution_match_display`; Performance: `resolution_scale` 1; next launch |
 | Notifications | `OptionsNotifications` | Show Notifications; Play Sound (disabled while Show is off) | `notifications_show`, `notifications_sound`: the unlock popup and its sound |
-| Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; voice, Kinect and output hidden | `audio_volume`, applied live |
+| Volume | `OptionsVoice` | Game Volume slider, steps of 10, left and right; the Kinect checkbox as Mute When Minimized; voice and output hidden | `audio_volume`, `audio_mute_minimized`, applied live |
 | Vibration | `OptionsController` | Enable Vibration | `vibration`, applied live |
 | Resolution | `OptionsVoice`'s output radio list, one button added | Original (the default), 2x, 3x and Match Display, the last three marked Experimental | `resolution_scale`, `resolution_match_display`; next launch |
 | Patches, Mods | `OptionsNotifications` checkboxes, one copy per patch | The title's switchable code patches of that category (`patch`, `mod`) | `code_patch_states`, applied live |

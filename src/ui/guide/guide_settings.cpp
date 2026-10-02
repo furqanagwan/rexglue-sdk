@@ -24,6 +24,7 @@
 
 REXCVAR_DECLARE(bool, vibration);
 REXCVAR_DECLARE(int32_t, audio_volume);
+REXCVAR_DECLARE(bool, audio_mute_minimized);
 
 namespace rex::ui::guide {
 namespace {
@@ -222,18 +223,32 @@ void XboxGuide::SetSlider(xui::Element* slider, int value) {
 
 void XboxGuide::OpenVolume() {
   xui::Element* scene = PushPage(assets_->options_voice, "Volume").scene;
-  // Voice Volume, Kinect and voice output are for chat; only Game Volume
-  // has a meaning here: the title's output level (audio_volume).
-  Hide(scene, {"sliderVolume", "chkMuteKinect", "radgrpOutputLocation", "LabelSubHeader2"});
+  // Voice Volume and voice output are for chat; Game Volume is the title's
+  // output level (audio_volume). The Kinect checkbox, which the console shows
+  // only with a Kinect, becomes Mute When Minimized (audio_mute_minimized),
+  // as Microsoft's PC backward compatibility silences a minimised title.
+  Hide(scene, {"sliderVolume", "radgrpOutputLocation", "LabelSubHeader2"});
   xui::Element* slider = scene->FindById("sliderDucking");
+  xui::Element* mute = scene->FindById("chkMuteKinect");
   if (!slider) {
     return;
   }
   MoveTo(scene, "sliderDucking", 72.0f);
-  SetNav(slider, "", "");
+  SetNav(slider, "", mute ? "chkMuteKinect" : "");
+  if (mute) {
+    MoveTo(scene, "chkMuteKinect", 72.0f + slider->height() + 14.0f);
+    mute->SetVisible(true);
+    mute->SetText("Mute When Minimized");
+    mute->SetChecked(REXCVAR_GET(audio_mute_minimized));
+    SetNav(mute, "sliderDucking", "");
+  }
   SetText(scene, "LabelSubHeader1",
-          "Game Volume sets how loud the game is. Press left or right to change it.");
+          "Game Volume sets how loud the game is. Press left or right to change it.\r\n\r\n"
+          "Mute When Minimized silences the game while its window is minimized.");
   pages_.back().on_adjust = [this](xui::Element* control, int direction) {
+    if (control->id() != "sliderDucking") {
+      return;
+    }
     const int volume = std::clamp(REXCVAR_GET(audio_volume) + direction * kVolumeStep, 0, 100);
     if (volume == REXCVAR_GET(audio_volume)) {
       return;
@@ -241,6 +256,17 @@ void XboxGuide::OpenVolume() {
     rex::cvar::SetFlagByName("audio_volume", std::to_string(volume));
     SetSlider(control, volume);
     media_->PlaySound("sharedres://btn_Focus.xma", "");
+    if (host_.save_settings) {
+      host_.save_settings();
+    }
+  };
+  pages_.back().on_select = [this](xui::Element* control) {
+    if (control->id() != "chkMuteKinect") {
+      return;
+    }
+    const bool on = !control->checked();
+    control->SetChecked(on);
+    rex::cvar::SetFlagByName("audio_mute_minimized", on ? "true" : "false");
     if (host_.save_settings) {
       host_.save_settings();
     }

@@ -66,4 +66,14 @@ float GetOutputGain();
 /// `audio_volume` cvar (0-100, read on every call so changes apply at once).
 float MasterOutputGain();
 
+/// The app is constrained: its window is minimised (RG-GDK-065). Microsoft's
+/// PC backward compatibility stops a title's audio then
+/// (`disableAudioOnConstrained`); the title itself keeps running.
+void SetAppConstrained(bool constrained);
+bool AppConstrained();
+
+/// Whether the output stage plays silence: `audio_mute`, or the app
+/// constrained while `audio_mute_minimized` is on. Read on every frame.
+bool OutputSilenced();
+
 }  // namespace rex::audio

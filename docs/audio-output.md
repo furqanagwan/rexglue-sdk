@@ -35,6 +35,12 @@ where Xenia hand-declares the 2.7 and 2.8 interfaces and loads
   before it. A mono or stereo endpoint gets the stereo fold. A wider one
   gets 5.1 with the matching speaker mask, and XAudio2 maps it onto the
   endpoint.
+- **Minimised (RG-GDK-065).** While the window is minimised, the output plays
+  silence (`OutputSilenced`), as Microsoft's PC backward compatibility stops a
+  constrained title's audio (`disableAudioOnConstrained` in its launch
+  arguments). The title keeps running, and audio comes back on restore.
+  `audio_mute_minimized` (default on; the guide's Volume page as Mute When
+  Minimized) turns it off. Losing focus alone does not silence the game.
 - **Device.** The mastering voice uses the default device, channel count and
   rate. The default device ID selects Windows' virtual audio client, which
   follows default-device changes itself, and not forcing a rate lets it move to
