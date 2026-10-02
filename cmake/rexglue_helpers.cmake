@@ -32,9 +32,10 @@ endfunction()
 #   - Windows POST_BUILD copy of TARGET_RUNTIME_DLLS and the FidelityFX DLLs.
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
+#   - The shipped shader cache (SHADER_CACHE <dir>, or ./shader_cache).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "" "GPU_PLUGINS" ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADER_CACHE" "GPU_PLUGINS" ${ARGN})
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main.cpp
@@ -46,6 +47,7 @@ function(rexglue_configure_target target_name)
     rexglue_apply_target_settings(${target_name})
     _rexglue_embed_xbox_guide(${target_name})
     _rexglue_embed_dlc_catalog(${target_name})
+    _rexglue_stage_shader_cache(${target_name} "${ARG_SHADER_CACHE}")
 
     if(WIN32)
         # Stage runtime DLLs (rexruntime, TracyClient, etc.) next to the host
@@ -96,6 +98,40 @@ function(rexglue_configure_target target_name)
         unset(_plugin_target)
     endforeach()
 
+endfunction()
+
+#==========================================================
+# The shipped shader cache (RG-GDK-064)
+#
+# A title's recorded shader and pipeline storage files (<title ID>.xsh and
+# <title ID>.*.d3d12.xpso, from a playthrough's cache\shaders\shareable)
+# go beside the executable in shader_cache\; at startup they seed the
+# player's cache, so pipelines are built before play instead of mid-frame.
+# From SHADER_CACHE, else the project's own shader_cache folder. They hold
+# the game's shaders: keep them out of the repository, like the game.
+#==========================================================
+function(_rexglue_stage_shader_cache target_name dir)
+    if(NOT dir)
+        set(dir "${CMAKE_CURRENT_SOURCE_DIR}/shader_cache")
+        if(NOT IS_DIRECTORY "${dir}")
+            return()
+        endif()
+    elseif(NOT IS_DIRECTORY "${dir}")
+        message(FATAL_ERROR "rexglue_configure_target: SHADER_CACHE '${dir}' is not a folder")
+    endif()
+    file(GLOB _files CONFIGURE_DEPENDS "${dir}/*.xsh" "${dir}/*.xpso")
+    if(NOT _files)
+        message(WARNING "rexglue_configure_target: no .xsh or .xpso files in '${dir}'")
+        return()
+    endif()
+    list(LENGTH _files _count)
+    message(STATUS "${target_name}: shipping ${_count} shader cache files from ${dir}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_files}
+            "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
+        VERBATIM
+    )
 endfunction()
 
 #==========================================================
