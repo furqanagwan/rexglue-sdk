@@ -82,6 +82,13 @@ struct GuideAssets {
   xui::Document backdrop;  // xam hudbkgnd: the HUD frame the guide opens in
   xui::Document main;      // hud GuideMain: tabs and blades
   xui::Document home_tab, games_tab, settings_tab;
+  // The guide Microsoft's backward compatibility shows (GuideMainEmulator
+  // and the *TabEmulator* scenes, in the PC backward-compatibility HUD): three
+  // tabs, Games (1), Home (2) and Settings (3). Otherwise the 2.0.17559 guide
+  // without Media: tabs 1, 2 and 4 (UseThreeTabs).
+  bool emulator_layout = false;
+  xui::Document xbox_settings;  // hud XboxOneXSettings (emulator layout only)
+  bool has_xbox_settings = false;
   xui::Document achievements, achievement_details;  // gamerprofile
   bool has_achievement_scenes = false;
   xui::Document notify;  // xam: the notification popup
@@ -196,8 +203,10 @@ class XboxGuide final : public ImGuiDialog {
   void HandleConfirm(GuideAction action);
   void Activate(xui::Element* control);
 
-  /// The next tab left (-1) or right (+1) of the current one: Games & Apps,
-  /// Home and Settings (tabs 1, 2 and 4; Media, 3, is removed).
+  /// The tabs left to right: Games, Home and Settings (GuideAssets::emulator_layout).
+  std::span<const int> Tabs() const;
+  int SettingsTab() const { return Tabs().back(); }
+  /// The next tab left (-1) or right (+1) of the current one.
   void SwitchTab(int direction);
   xui::Element* FirstFocusable(xui::Element* root);
   void SetFocus(xui::Element* control, bool initial = false);
@@ -232,6 +241,9 @@ class XboxGuide final : public ImGuiDialog {
   void OpenVolume();
   void OpenNotifications();
   void OpenResolution();
+  /// Settings > Xbox Settings, emulator layout: the render resolution on the
+  /// XboxOneXSettings scene's Graphics and Performance choice.
+  void OpenXboxSettings();
   void OpenPatches(std::string_view category);
   void OpenCheats();
   void SetSlider(xui::Element* slider, int value);

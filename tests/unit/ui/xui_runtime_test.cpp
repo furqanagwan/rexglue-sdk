@@ -10,12 +10,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <rex/ui/guide/guide_layout.h>
+#include <rex/ui/guide/xbox_guide.h>
 #include <rex/ui/xui/document.h>
 #include <rex/ui/xui/text_scroll.h>
 #include <rex/ui/xui/runtime.h>
@@ -301,6 +303,15 @@ TEST_CASE("Menu entries are removed and added with the list closed up", "[xui][g
   CHECK(d->Navigate(NavDirection::kDown) == c);
   CHECK(c->Navigate(NavDirection::kUp) == d);
   CHECK(d->FindById("hl"));  // the model's visual
+
+  // A plain entry made from a row of another look.
+  Element* e = rex::ui::guide::AddEntry(scene, "a", "d", "e", "Ee", "XuiLabel");
+  REQUIRE(e);
+  CHECK(e->GetString("Visual") == "XuiLabel");
+  CHECK_FALSE(e->FindById("hl"));
+  CHECK(e->GetVector("Position").y == Approx(40.0f));
+  CHECK(c->GetVector("Position").y == Approx(60.0f));
+  CHECK(d->Navigate(NavDirection::kDown) == e);
 }
 
 TEST_CASE("The XUI ease curve", "[xui]") {
@@ -521,6 +532,52 @@ TEST_CASE("The console's guide scene switches between three tabs", "[xui][local]
   CHECK(x("txt_Settings") == Approx(668.0f));
   CHECK(x("txt_home") == Approx(638.0f));
   CHECK_FALSE(tabs->Play("2To3"));
+}
+
+// Local only (REXGLUE_GUIDE_FLASH, an Xbox PC backward-compatibility game's
+// Content/Flash): the guide Microsoft's backward compatibility shows, with its
+// own three tabs.
+TEST_CASE("The backward-compatibility guide has its own three tabs", "[xui][guide][local]") {
+  const char* path = std::getenv("REXGLUE_GUIDE_FLASH");
+  if (!path || !*path) {
+    SKIP("REXGLUE_GUIDE_FLASH is not set");
+  }
+  std::string error;
+  auto modules = SystemUpdate::ReadModules(std::filesystem::path(path), &error);
+  REQUIRE(modules);
+  auto assets =
+      rex::ui::guide::GuideAssets::FromUpdate(SystemUpdate::FromModules(*modules, &error), &error);
+  REQUIRE(assets);
+  CHECK(assets->emulator_layout);
+  CHECK(assets->has_xbox_settings);
+  CHECK(assets->has_options);
+
+  SceneContext context;
+  context.skin = &assets->skin;
+  context.package = "hud/hud";
+  auto root = Element::Create(assets->main.root, context);
+  CHECK(root->FindById("btnY")->text() == "Leave Game");
+  auto home = Element::Create(assets->home_tab.root, context);
+  CHECK(home->FindById("btnDashboard"));
+  CHECK(home->FindById("btnManageStorage"));
+  CHECK_FALSE(home->FindById("btnConnectToLive"));
+  Element* tabs = root->FindById("Tabscene");
+  REQUIRE(tabs);
+  auto play = [&](std::string_view name) {
+    REQUIRE(tabs->Play(name, false));
+    tabs->Advance(60.0);
+    CHECK_FALSE(tabs->playing());
+  };
+  auto opacity = [&](std::string_view id) { return root->FindById(id)->GetFloat("Opacity"); };
+  play("2Close");
+  CHECK(opacity("Tab2") == Approx(1.0f));
+  play("2To3");
+  CHECK(opacity("Tab3") == Approx(1.0f));
+  CHECK(opacity("Tab2") == Approx(0.0f));
+  play("3To2");
+  play("2To1");
+  CHECK(opacity("Tab1") == Approx(1.0f));
+  CHECK_FALSE(root->FindById("Tab4"));
 }
 
 TEST_CASE("Text taller than its box scrolls, holds and fades back to the top", "[xui]") {

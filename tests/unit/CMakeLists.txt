@@ -85,6 +85,7 @@ target_include_directories(unit_tests PRIVATE
 target_link_libraries(unit_tests PRIVATE
     rexcodegen
     rexruntime
+    imgui::imgui  # the guide's headers (xbox_guide.h)
     Catch2::Catch2WithMain
 )
 
