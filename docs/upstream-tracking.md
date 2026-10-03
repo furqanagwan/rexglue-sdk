@@ -1585,3 +1585,20 @@ DirectXShaderCompiler. Tests: `tests/dxil/dxil_smoke_test.cpp` (sign and
 create a pipeline through the Agility runtime). See
 [DXIL shader toolchain](shader-dxil.md). Known regressions: none at the pin;
 Edge's pipeline is still changing, so later stages re-pin.
+
+## RG-GDK-032 stage 2 (part 1): SPIR-V translator port (2026-10-03)
+
+has207/xenia-edge `0788c561e3`: `spirv_shader_translator{,_alu,_fetch,_memexport,_rb}`,
+`spirv_builder`, `spirv_shader`, `spirv_compatibility.h`,
+`spirv_fsi_system_constants`, `spirv_builtin_geometry_shader`,
+`spirv_to_dxil_compiler`; glslang `a57276bf558f5cf94d3a9854ebdf5a2236849a5a`
+(Edge's pin). Class C (enabling; opt-in build only). Also from Edge's
+`shader.h`/`shader_translator.{h,cc}`/`xenos.h`: re-entered label register
+writes, the call return-point label, point-fetch coordinate registers,
+`TextureFetchUsesComputedLod`, `kTexture1DWideMaxRows`. Adaptation: mechanical
+rename to ReXGlue conventions; Vulkan device paths removed; `dxil.dll` loaded
+from `D3D12\` first. Not taken yet (DXBC-visible parsing changes, with the
+wide 1D texture work): 1D fetch XY coordinates (545407D4) and the scalar
+second component of three-operand vector ops. Tests:
+`tests/dxil/spirv_translator_test.cpp`; the default GPU and unit suites pass
+unchanged. Known regressions: none at the pin.

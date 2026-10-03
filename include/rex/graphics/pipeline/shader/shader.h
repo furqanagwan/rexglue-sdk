@@ -921,6 +921,20 @@ class Shader {
   // (each corresponds to 3 dwords).
   uint32_t cf_pair_index_bound() const { return cf_pair_index_bound_; }
 
+  // Whether the shader contains subroutine calls (cond_call).
+  bool uses_subroutine_calls() const { return uses_subroutine_calls_; }
+  // Components of registers 0-15, 4 bits per register, that may be written
+  // after the label in the program and then reach it by jumping back or
+  // returning from a subroutine. Zero for labels only jumped to forward.
+  uint64_t GetRegisterComponentsWrittenBeforeReentering(uint32_t label) const {
+    return label < reentered_label_register_components_written_.size()
+               ? reentered_label_register_components_written_[label]
+               : 0;
+  }
+  // Registers 0-15 used with absolute addressing as coordinates of texture
+  // fetches that may snap to texel centers (see CanSnapToTexelCenter).
+  uint32_t point_fetch_coordinate_registers() const { return point_fetch_coordinate_registers_; }
+
   // Upper bound of temporary registers addressed statically by the shader -
   // highest static register address + 1, or 0 if no registers referenced this
   // way. SQ_PROGRAM_CNTL is not always reliable - some draws (like single point
@@ -1051,6 +1065,11 @@ class Shader {
   ConstantRegisterMap constant_register_map_ = {};
   std::set<uint32_t> label_addresses_;
   uint32_t cf_pair_index_bound_ = 0;
+  // Per control flow instruction index.
+  std::vector<uint64_t> cf_register_components_written_;
+  std::vector<uint64_t> reentered_label_register_components_written_;
+  uint32_t point_fetch_coordinate_registers_ = 0;
+  bool uses_subroutine_calls_ = false;
   uint32_t register_static_address_bound_ = 0;
   uint32_t writes_interpolators_ = 0;
   uint32_t writes_point_size_edge_flag_kill_vertex_ = 0;
@@ -1081,16 +1100,17 @@ class Shader {
                              ucode::VertexFetchInstruction& previous_vfetch_full,
                              uint32_t& unique_texture_bindings,
                              string::StringBuffer& ucode_disasm_buffer);
-  void GatherVertexFetchInformation(const ucode::VertexFetchInstruction& op,
+  void GatherVertexFetchInformation(const ucode::VertexFetchInstruction& op, uint32_t exec_cf_index,
                                     ucode::VertexFetchInstruction& previous_vfetch_full,
                                     string::StringBuffer& ucode_disasm_buffer);
   void GatherTextureFetchInformation(const ucode::TextureFetchInstruction& op,
-                                     uint32_t& unique_texture_bindings,
+                                     uint32_t exec_cf_index, uint32_t& unique_texture_bindings,
                                      string::StringBuffer& ucode_disasm_buffer);
   void GatherAluInstructionInformation(const ucode::AluInstruction& op, uint32_t exec_cf_index,
                                        string::StringBuffer& ucode_disasm_buffer);
   void GatherOperandInformation(const InstructionOperand& operand);
-  void GatherFetchResultInformation(const InstructionResult& result);
+  void GatherFetchResultInformation(const InstructionResult& result, uint32_t exec_cf_index);
+  void GatherRegisterWriteInformation(const InstructionResult& result, uint32_t exec_cf_index);
   void GatherAluResultInformation(const InstructionResult& result, uint32_t exec_cf_index);
 };
 
