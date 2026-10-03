@@ -2671,6 +2671,15 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
               vfetch_index, vfetch_constant.dword_0, vfetch_constant.dword_1);
           return false;
         default:
+          // A texture type (xenia-canary b083312b8): some titles draw with
+          // these, and dropping the draw loses whole models.
+          if (REXCVAR_GET(gpu_allow_invalid_fetch_constants)) {
+            REXGPU_WARN(
+                "Vertex fetch constant {} ({:08X} {:08X}) has a texture type - allowing due to "
+                "--gpu_allow_invalid_fetch_constants=true.",
+                vfetch_index, vfetch_constant.dword_0, vfetch_constant.dword_1);
+            break;
+          }
           REXGPU_WARN("Vertex fetch constant {} ({:08X} {:08X}) is completely invalid!",
                       vfetch_index, vfetch_constant.dword_0, vfetch_constant.dword_1);
           return false;

@@ -1473,3 +1473,14 @@ visible keeps it, both with the consumer in the same submission under the
 predicate and after a flush using the resolved answer, RTV and ROV; a survey
 nothing rejects stays visible). Known regressions: none reported upstream at
 the pin; title validation is in the deferred game-run batch.
+
+## Texture-typed vertex fetch constants (2026-10-03)
+
+xenia-canary `b083312b8` ("[D3D12] Don't drop kInvalidVertex draws",
+2026-10-02; class B, correctness and compatibility; fixes missing character
+models in 5454086C and 425607FE). ReXGlue already allowed `kInvalidVertex`
+under `gpu_allow_invalid_fetch_constants` (default on); the commit also lets
+texture-typed vertex fetch constants through, which this adopts in
+`D3D12CommandProcessor::IssueDraw`. Tests: `tests/gpu/invalid_fetch_fixture_test.cpp`
+(drawn with the cvar on, dropped with it off; `DrawOptions::fetch_type` in the
+guest draw helpers). Known regressions: none at the pin.
