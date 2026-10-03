@@ -12,6 +12,11 @@ endif()
 # D3D12 capability/fixture tests (Windows D3D12 only)
 add_subdirectory(gpu)
 
+# The opt-in DXIL toolchain (RG-GDK-032 stage 1)
+if(REXGLUE_SHADER_DXIL)
+  add_subdirectory(dxil)
+endif()
+
 # PPC instruction tests (requires PPC toolchain)
 add_subdirectory(ppc)
 

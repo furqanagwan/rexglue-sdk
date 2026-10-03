@@ -55,6 +55,15 @@
       }
     },
     {
+      "name": "win-amd64-gdk-dxil",
+      "displayName": "Windows AMD64 (April 2026 GDK) + DXIL toolchain",
+      "description": "The win-amd64-gdk build plus the opt-in DXIL shader toolchain (Mesa spirv_to_dxil, D3D12 Agility SDK 1.618.5, DXC 1.8.2502.8); see docs/shader-dxil.md",
+      "inherits": "win-amd64-gdk",
+      "cacheVariables": {
+        "REXGLUE_SHADER_DXIL": "ON"
+      }
+    },
+    {
       "name": "win-arm64",
       "displayName": "Windows ARM64",
       "description": "Multi-config build for Windows ARM64 using Clang",
@@ -85,6 +94,16 @@
     {
       "name": "win-amd64-gdk-release",
       "configurePreset": "win-amd64-gdk",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-dxil-debug",
+      "configurePreset": "win-amd64-gdk-dxil",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win-amd64-gdk-dxil-release",
+      "configurePreset": "win-amd64-gdk-dxil",
       "configuration": "Release"
     },
     {
@@ -127,6 +146,16 @@
     {
       "name": "win-amd64-gdk-release",
       "configurePreset": "win-amd64-gdk",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-dxil-debug",
+      "configurePreset": "win-amd64-gdk-dxil",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win-amd64-gdk-dxil-release",
+      "configurePreset": "win-amd64-gdk-dxil",
       "configuration": "Release"
     },
     {

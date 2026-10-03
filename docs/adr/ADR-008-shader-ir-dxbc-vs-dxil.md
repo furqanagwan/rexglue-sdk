@@ -35,7 +35,7 @@ Since #51 ([RG-GDK-023](https://github.com/furqanagwan/rexglue-sdk/issues/23)), 
 ## Capability floor and rollback
 
 - DXBC path: SM 5.1 (current).
-- DXIL path: SM 6.6, D3D12 Agility SDK as pinned by RG-GDK-002, and `dxil.dll` shipped beside the title. Hardware below SM 6.6 falls back to DXBC.
+- DXIL path: SM 6.6, D3D12 Agility SDK 1.618.5 and DXC 1.8.2502.8's `dxil.dll` shipped in the title's `D3D12\` folder (pinned by RG-GDK-032 stage 1 to the versions Microsoft's PC backward compatibility ships; see [DXIL shader toolchain](../shader-dxil.md)). Hardware below SM 6.6 falls back to DXBC.
 - Rollback: a runtime selector returns to DXBC per run. The build option removes the DXIL path entirely. Stages land as separate PRs, and no PR both adds a path and switches the default.
 
 ## Measured results

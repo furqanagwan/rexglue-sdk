@@ -26,6 +26,7 @@ option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter regi
 # Opt-in PC GDK build (RG-GDK-002). Off by default so standard Windows builds
 # need no GDK. The edition is pinned; see docs/gdk-toolchain.md.
 option(REXGLUE_USE_GDK "Build against an installed Microsoft GDK (PC) edition" OFF)
+option(REXGLUE_SHADER_DXIL "Opt-in DXIL shader toolchain: Mesa spirv_to_dxil, D3D12 Agility SDK and DXC (RG-GDK-032 stage 1)" OFF)
 set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Required GDK edition (_GRDK_EDITION)")
 set(REXGLUE_GDK_ROOT "$ENV{GameDKCoreLatest}" CACHE PATH "Installed GDK edition directory")
 # Propagate profiling defines globally (compiled out in Release)
@@ -154,6 +155,9 @@ set(REXGLUE_OUTPUT_DIR "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
 if(REXGLUE_USE_GDK)
     string(APPEND REXGLUE_OUTPUT_DIR "-gdk")
 endif()
+if(REXGLUE_SHADER_DXIL)
+    string(APPEND REXGLUE_OUTPUT_DIR "-dxil")
+endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
@@ -169,6 +173,10 @@ endif()
 if(REXGLUE_USE_GDK)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_gdk.cmake)
     rexglue_find_gdk(ROOT "${REXGLUE_GDK_ROOT}" EDITION "${REXGLUE_GDK_EDITION}")
+endif()
+
+if(REXGLUE_SHADER_DXIL)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_shader_dxil.cmake)
 endif()
 
 if(REXGLUE_BUILD_TESTS)
