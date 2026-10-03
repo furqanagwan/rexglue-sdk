@@ -15,7 +15,24 @@ add_executable(gpu_tests
     win32_present_test.cpp
     pix_capture_fixture_test.cpp
     async_draw_fixture_test.cpp
+    shader_replacement_fixture_test.cpp
 )
+
+# The replacement shader the fixture swaps in, compiled like a title's
+# (rexglue_configure_target SHADER_REPLACEMENTS).
+file(GLOB _gpu_test_fxc "$ENV{ProgramFiles\(x86\)}/Windows Kits/10/bin/*/x64/fxc.exe")
+list(SORT _gpu_test_fxc COMPARE NATURAL ORDER DESCENDING)
+list(GET _gpu_test_fxc 0 _gpu_test_fxc)
+set(_replacement_dxbc "${CMAKE_CURRENT_BINARY_DIR}/replacement_magenta.ps.dxbc")
+add_custom_command(OUTPUT "${_replacement_dxbc}"
+    COMMAND "${_gpu_test_fxc}" /nologo /T ps_5_1 /E main /Fo "${_replacement_dxbc}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/replacement_magenta.ps.hlsl"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/replacement_magenta.ps.hlsl"
+    VERBATIM)
+target_sources(gpu_tests PRIVATE "${_replacement_dxbc}")
+set_source_files_properties("${_replacement_dxbc}" PROPERTIES HEADER_FILE_ONLY TRUE)
+target_compile_definitions(gpu_tests PRIVATE
+    REXGLUE_TEST_REPLACEMENT_DXBC="${_replacement_dxbc}")
 
 target_include_directories(gpu_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include

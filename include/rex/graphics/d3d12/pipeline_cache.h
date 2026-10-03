@@ -30,6 +30,7 @@
 #include <rex/graphics/d3d12/shader.h>
 #include <rex/graphics/flags.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
+#include <rex/graphics/pipeline/shader/replacements.h>
 #include <rex/graphics/primitive_processor.h>
 #include <rex/graphics/register_file.h>
 #include <rex/graphics/registers.h>
@@ -319,6 +320,9 @@ class PipelineCache {
   string::StringBuffer ucode_disasm_buffer_;
   // Reusable shader translator for the processor thread.
   std::unique_ptr<DxbcShaderTranslator> shader_translator_;
+
+  // The title's replacement shaders, read once at startup (RG-GDK-067).
+  ShaderReplacements shader_replacements_;
   std::mutex translation_request_lock_;
 
   // Command processor thread DXIL conversion/disassembly interfaces, if DXIL

@@ -1405,3 +1405,14 @@ title runs on NVIDIA here are part of the deferred game-run batch. AMD and
 Intel not run. Tests: `tests/unit/graphics/fetch_conversion_test.cpp`
 (packing for narrow formats, both num_formats, swizzle walk, gamma, point
 flag); gpu suite 43/43; shader bytecode reproducible.
+
+## RG-GDK-067: per-title replacement shaders (2026-10-03)
+
+No Xenia counterpart (class H: new ReXGlue feature). Modelled on the named
+replacement shaders in Microsoft's Xbox One/PC backward compatibility GPU
+emulator (`VGPUDX12.dll`, observed in the installed PC BC files; nothing
+copied). `ShaderReplacements` (rexcore) reads `<HASH>[_<MOD>].<stage>.dxbc`;
+the D3D12 pipeline cache swaps a translation's binary after translating it,
+keeping its bindings. Build side: `rexglue_configure_target(SHADER_REPLACEMENTS)`.
+See [shader replacements](shader-replacements.md). The QoS frame-capture check
+the issue asks for is in the deferred game-run batch.
