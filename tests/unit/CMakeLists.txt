@@ -63,6 +63,7 @@ add_executable(unit_tests
     codegen/code_patch_test.cpp
     codegen/game_config_test.cpp
     codegen/title_update_manifest_test.cpp
+    codegen/indirect_trace_test.cpp
     rexglue/app_name_test.cpp
 )
 

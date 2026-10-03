@@ -1416,3 +1416,14 @@ the D3D12 pipeline cache swaps a translation's binary after translating it,
 keeping its bindings. Build side: `rexglue_configure_target(SHADER_REPLACEMENTS)`.
 See [shader replacements](shader-replacements.md). The QoS frame-capture check
 the issue asks for is in the deferred game-run batch.
+
+## RG-GDK-066: runtime indirect trace and fallback build (2026-10-03)
+
+No Xenia counterpart (class H: ReXGlue tooling). Design observations from the
+build metadata of Microsoft's PC backward compatibility modules
+(`xeo3_<hash>.dll` and `_no.dll`, `ficompiler` control files); no Microsoft
+code or data used. `--indirect_trace` records unregistered indirect targets as
+a codegen `[functions]` include; `REXGLUE_RECOMP_FALLBACK` builds matching
+generated files unoptimised. See
+[indirect function discovery](indirect-function-discovery.md#runtime-trace-and-the-fallback-build-rg-gdk-066).
+The QoS trace round trip is in the deferred game-run batch.
