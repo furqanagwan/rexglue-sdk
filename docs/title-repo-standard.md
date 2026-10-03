@@ -44,6 +44,10 @@ README.md                 The series README (below): games, download, how to pla
   <title>.toml            Its codegen configuration (function entries, hooks,
                           patches, mods, cheats, add-ons), added to the private
                           manifest's `includes` as "../<title>.toml"
+  shader_replacements/    Optional hand-written replacement shaders
+                          (<HASH>[_<MOD>].<vs|ps_rtv|ps_rov>.hlsl), see
+                          [shader replacements](shader-replacements.md); HLSL
+                          only, never DXBC dumped from the game
 assets/
   logo.svg                Original square logo
   social-preview.svg/.png Original 1280x640 image for Settings → Social preview

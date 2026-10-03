@@ -63,6 +63,10 @@ REXCVAR_DEFINE_INT32(d3d12_pipeline_creation_threads, -1, "GPU/D3D12",
 REXCVAR_DEFINE_STRING(shader_cache_shipped, "", "GPU",
                       "Folder of the shader cache shipped with the title (empty: shader_cache "
                       "beside the executable); seeds this PC's cache at startup");
+REXCVAR_DEFINE_BOOL(shader_replacements, false, "GPU",
+                    "Use the title's replacement shaders (shader_replacements beside the "
+                    "executable) in place of the translated ones they name")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(d3d12_tessellation_wireframe, false, "GPU/D3D12",
                     "Render tessellation as wireframe");
 
@@ -127,6 +131,13 @@ PipelineCache::~PipelineCache() {
 
 bool PipelineCache::Initialize() {
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
+
+  if (REXCVAR_GET(shader_replacements)) {
+    const std::filesystem::path folder =
+        rex::filesystem::GetExecutableFolder() / "shader_replacements";
+    const size_t count = shader_replacements_.Load(folder);
+    REXGPU_INFO("Shader replacements: {} from {}", count, rex::path_to_utf8(folder));
+  }
 
   // Initialize the command processor thread DXIL objects.
   dxbc_converter_ = nullptr;
@@ -1162,6 +1173,29 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
     REXGPU_ERROR("Shader {:016X} translation failed; marking as ignored", shader.ucode_data_hash());
     translation.PublishTranslated();
     return false;
+  }
+
+  // A title's replacement stands in for the translated code, keeping the
+  // translation's bindings (RG-GDK-067). Domain shaders are not replaced.
+  if (!shader_replacements_.empty()) {
+    const bool is_vertex = shader.type() == xenos::ShaderType::kVertex;
+    const bool replaceable =
+        !is_vertex ||
+        DxbcShaderTranslator::Modification(translation.modification())
+                .vertex.host_vertex_shader_type == Shader::HostVertexShaderType::kVertex;
+    const ShaderReplacements::Stage stage =
+        is_vertex ? ShaderReplacements::Stage::kVertex
+        : render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock
+            ? ShaderReplacements::Stage::kPixelRov
+            : ShaderReplacements::Stage::kPixelRtv;
+    if (const std::vector<uint8_t>* replacement =
+            replaceable ? shader_replacements_.Find(shader.ucode_data_hash(), stage,
+                                                    translation.modification())
+                        : nullptr) {
+      REXGPU_INFO("Shader {:016X} (modification {:016X}): title replacement used",
+                  shader.ucode_data_hash(), translation.modification());
+      translation.ReplaceTranslatedBinary(*replacement);
+    }
   }
 
   const char* host_shader_type;

@@ -34,9 +34,17 @@ endfunction()
 #     so this single copy handles them transitively.
 #   - The shipped shader cache (SHADER_CACHE <dir>, or ./shader_cache).
 #   - The title's cvar defaults (CVAR_DEFAULTS "name=value" ...).
+#   - The title's replacement shaders (SHADER_REPLACEMENTS <dir>): HLSL
+#     compiled with FXC, or DXBC, staged in shader_replacements beside the
+#     executable, with shader_replacements=true as a title default
+#     (docs/shader-replacements.md).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "SHADER_CACHE" "GPU_PLUGINS;CVAR_DEFAULTS" ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS" "GPU_PLUGINS;CVAR_DEFAULTS"
+        ${ARGN})
+    if(ARG_SHADER_REPLACEMENTS)
+        list(APPEND ARG_CVAR_DEFAULTS "shader_replacements=true")
+    endif()
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main.cpp
@@ -56,6 +64,9 @@ function(rexglue_configure_target target_name)
     _rexglue_embed_xbox_guide(${target_name})
     _rexglue_embed_dlc_catalog(${target_name})
     _rexglue_stage_shader_cache(${target_name} "${ARG_SHADER_CACHE}")
+    if(ARG_SHADER_REPLACEMENTS)
+        _rexglue_stage_shader_replacements(${target_name} "${ARG_SHADER_REPLACEMENTS}")
+    endif()
 
     if(WIN32)
         # Stage runtime DLLs (rexruntime, TracyClient, etc.) next to the host
@@ -138,6 +149,68 @@ function(_rexglue_stage_shader_cache target_name dir)
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_files}
             "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
+        VERBATIM
+    )
+endfunction()
+
+# Replacement shaders (RG-GDK-067): <HASH>[_<MODIFICATION>].<vs|ps_rtv|ps_rov>
+# .hlsl is compiled by FXC (entry point main, shader model 5.1, as
+# scripts/build_shaders.py builds the SDK's own); a .dxbc of that name is
+# shipped as it is.
+function(_rexglue_stage_shader_replacements target_name dir)
+    if(NOT IS_ABSOLUTE "${dir}")
+        set(dir "${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
+    endif()
+    if(NOT IS_DIRECTORY "${dir}")
+        message(FATAL_ERROR "rexglue_configure_target: SHADER_REPLACEMENTS '${dir}' is not a folder")
+    endif()
+    file(GLOB _hlsl CONFIGURE_DEPENDS "${dir}/*.hlsl")
+    file(GLOB _dxbc CONFIGURE_DEPENDS "${dir}/*.dxbc")
+    set(_outputs ${_dxbc})
+    if(_hlsl)
+        file(GLOB _fxc_candidates
+            "$ENV{ProgramFiles\(x86\)}/Windows Kits/10/bin/*/x64/fxc.exe")
+        list(SORT _fxc_candidates COMPARE NATURAL ORDER DESCENDING)
+        list(GET _fxc_candidates 0 _fxc)
+        if(NOT _fxc)
+            message(FATAL_ERROR "rexglue_configure_target: SHADER_REPLACEMENTS needs FXC (Windows SDK)")
+        endif()
+        set(_out_dir "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_shader_replacements")
+        file(MAKE_DIRECTORY "${_out_dir}")
+        foreach(_source IN LISTS _hlsl)
+            get_filename_component(_name "${_source}" NAME_WLE)
+            if(NOT _name MATCHES "^[0-9A-Fa-f]+(_[0-9A-Fa-f]+)?[.](vs|ps_rtv|ps_rov)$")
+                message(FATAL_ERROR
+                    "rexglue_configure_target: replacement shader '${_name}.hlsl' is not "
+                    "<HASH>[_<MODIFICATION>].<vs|ps_rtv|ps_rov>.hlsl")
+            endif()
+            if(_name MATCHES "[.]vs$")
+                set(_profile vs_5_1)
+            else()
+                set(_profile ps_5_1)
+            endif()
+            set(_output "${_out_dir}/${_name}.dxbc")
+            add_custom_command(OUTPUT "${_output}"
+                COMMAND "${_fxc}" /nologo /T ${_profile} /E main /O3 /Fo "${_output}" "${_source}"
+                DEPENDS "${_source}"
+                COMMENT "Compiling replacement shader ${_name}"
+                VERBATIM)
+            list(APPEND _outputs "${_output}")
+        endforeach()
+        add_custom_target(${target_name}_shader_replacements DEPENDS ${_outputs})
+        add_dependencies(${target_name} ${target_name}_shader_replacements)
+    endif()
+    if(NOT _outputs)
+        message(WARNING "rexglue_configure_target: no .hlsl or .dxbc files in '${dir}'")
+        return()
+    endif()
+    list(LENGTH _outputs _count)
+    message(STATUS "${target_name}: shipping ${_count} replacement shaders from ${dir}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${target_name}>/shader_replacements"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_outputs}
+            "$<TARGET_FILE_DIR:${target_name}>/shader_replacements"
         VERBATIM
     )
 endfunction()
