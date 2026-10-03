@@ -40,8 +40,8 @@ uint64_t PixelShaderHash() {
   return XXH3_64bits(bytes.data(), bytes.size());
 }
 
-// Draws an 8x8 rectangle of `color` with kPixelShader, resolves it, and returns
-// the first texel; 0 if the fixture can't run.
+// Draws an 8x8 rectangle of `color` with kPixelShader, resolves it, and reads
+// the first texel; false if the fixture can't run.
 bool DrawAndRead(bool replacements, uint32_t color, uint32_t& texel_out, std::string& error) {
   auto fixture =
       GpuFixture::Create(&error, {{"shader_replacements", replacements ? "true" : "false"},
