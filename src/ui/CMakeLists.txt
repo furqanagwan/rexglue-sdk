@@ -33,6 +33,7 @@ set(REXUI_OVERLAY_SOURCES
 set(REXUI_GUIDE_SOURCES
     guide/dlc_catalog.cpp
     guide/guide_dlc.cpp
+    guide/guide_storage.cpp
     guide/guide_input.cpp
     guide/guide_layout.cpp
     guide/guide_title_update.cpp

@@ -179,6 +179,10 @@ class ContentManager {
                                  XContentType content_type, XCONTENT_AGGREGATE_DATA& data) const;
 
   std::filesystem::path ResolveGameUserContentPath();
+  // The host folder of a package, open or not (the guide's Manage Storage).
+  std::filesystem::path GetPackagePath(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+    return ResolvePackagePath(xuid, data);
+  }
   bool IsContentOpen(const XCONTENT_AGGREGATE_DATA& data) const;
   void CloseOpenedFilesFromContent(const std::string_view root_name);
 

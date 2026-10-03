@@ -208,7 +208,7 @@ class XboxGuide final : public ImGuiDialog {
 
  private:
   enum class Screen { kMain, kAchievements, kAchievementDetail, kConfirm, kSettings };
-  enum class Confirm { kXboxHome, kTurnOff, kTitleUpdate };
+  enum class Confirm { kXboxHome, kTurnOff, kTitleUpdate, kDeleteSave };
 
   void Handle(GuideAction action);
   void HandleMain(GuideAction action);
@@ -281,6 +281,20 @@ class XboxGuide final : public ImGuiDialog {
   void ShowDlc(xui::Element* row);
   void PollManageGame();
   std::vector<DlcEntry> FindDlc() const;
+  // Home > Manage Storage (guide_storage.cpp): the title's saved games on
+  // this PC, which the player can delete.
+  struct SaveEntry {
+    std::string name;       // display name
+    std::string file_name;  // content file name
+    uint64_t xuid = 0;      // 0 for saves common to every profile
+    uint64_t size = 0;      // bytes
+    std::string modified;   // last write, local time
+  };
+  void OpenManageStorage();
+  void FillManageStorage();
+  void ShowSave(xui::Element* row);
+  void DeleteChosenSave();
+  std::vector<SaveEntry> FindSaves() const;
   // Games & Apps > Title Updates (guide_title_update.cpp): the title's
   // updates, optional, downloaded and turned on or off. Not add-ons, so not
   // in Manage Game.
@@ -349,6 +363,11 @@ class XboxGuide final : public ImGuiDialog {
   std::vector<std::filesystem::path> picked_packages_;
   std::shared_ptr<DlcJob> dlc_job_;
   std::string dlc_status_;
+  xui::Element* storage_scene_ = nullptr;
+  std::vector<xui::Element*> storage_rows_;
+  std::vector<SaveEntry> saves_;
+  size_t confirm_save_ = 0;  // kDeleteSave: the index in saves_
+  std::string storage_status_;
   std::shared_ptr<std::filesystem::path> picked_title_update_;  // a file pick's result
   std::shared_ptr<std::atomic<bool>> title_update_pick_;        // set when the pick is done
   uint32_t title_update_pick_version_ = 0;
