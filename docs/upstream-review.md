@@ -2,6 +2,53 @@
 
 Snapshot: 2026-09-23. Every current open issue/PR is indexed below. “Detailed” means body, available comments, PR metadata and changed-file patches were retrieved and reviewed; “triage” means list/body relevance review only and is not port approval. Recent closed rows are selected technical evidence, not a complete historical census. Both projects have Discussions disabled. Full issue URLs remain the source of later changes.
 
+## Watch procedure (RG-GDK-026)
+
+**Owner:** the repository owner. Agents run the review and record the results;
+the owner decides what is ported. Nothing merges from upstream automatically.
+
+**Cadence:** monthly, and before any port from Canary or Edge (re-read the
+source PR and its follow-ups at that moment, not from this snapshot), and at
+every sync of the furqanagwan/xenia-edge fork.
+
+**Query:** for each upstream (`xenia-canary/xenia-canary` `canary_experimental`,
+`has207/xenia-edge` `edge`):
+
+```sh
+gh api "repos/<repo>/commits?sha=<branch>&since=<last review date>" --paginate   --jq '.[] | .sha[0:10] + " " + .commit.committer.date + " " + (.commit.message | split("
+")[0])'
+gh pr list --repo <repo> --state all --search "updated:>=<last review date>" --limit 200
+gh issue list --repo <repo> --state all --search "updated:>=<last review date>" --limit 200
+```
+
+Then for each relevant item: compare ReXGlue's current behaviour first; read
+the diff, motivation, comments and later follow-ups or reverts; record it in
+[upstream-tracking.md](upstream-tracking.md) with source repo, commit, PR or
+issue, date, scope, class A–H, known regressions, adaptation and tests, and
+file a ReXGlue issue for work worth doing. Watched items move only on settled
+upstream semantics plus local repro or test evidence: a merge upstream alone
+does not unblock them, and unknown stays unknown.
+
+**Reviews completed:** the full snapshot below (2026-09-23); Edge fork syncs
+to `12e3b4223` (2026-09-29, PR #114), `23e76712f` (2026-09-30) and
+`b5cc59e854` (2026-10-01, issues #149–#151); Canary ports of 2026-10-03
+(#1111 VIZ_QUERY, `b083312b8`, the #1072 resolve half). Each sync's ledger
+is in upstream-tracking.md and summarised on issue #26.
+
+**Trial-review examples** (the three outcomes the watch must catch):
+
+- *Pending → merged:* Canary #1111 (VIZ_QUERY predication) was pending at the
+  2026-09-24 review, so #65 waited; it merged as `692cd59cf` on 2026-09-29 and
+  was ported behind `occlusion_query_viz` once its semantics had settled and
+  GPU fixture tests reproduced them (RG-GDK-010b).
+- *Rejected:* Canary #1195 (ring read pointer every 8 packets) closed
+  unmerged; ReXGlue took Edge's RB_BLKSZ write-back instead, with its own
+  tests. Edge #145 (closed unmerged) is recorded as rejected and not ported.
+- *Regression follow-up:* Canary #1134, a D3D12 device loss bisected to
+  `d119505` (#1072), was carried into RG-GDK-045 and RG-GDK-073: the fetch and
+  resolve halves shipped separately, each gated on NVIDIA title runs
+  (FIFA Street and the 007 titles, 2026-10-03, no device loss).
+
 ## xenia-canary/xenia-canary — issues
 
 | Item | State | Assessment / ReXGlue relevance | Review | Roadmap |

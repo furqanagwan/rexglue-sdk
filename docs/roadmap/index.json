@@ -1432,6 +1432,6 @@
     "risk": "Stale status or duplicate/cherry-picked evidence can promote rejected code or miss a regression follow-up.",
     "number": 26,
     "url": "https://github.com/furqanagwan/rexglue-sdk/issues/26",
-    "state": "open"
+    "state": "closed"
   }
 ]
