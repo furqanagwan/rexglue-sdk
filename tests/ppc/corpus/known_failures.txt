@@ -2602,38 +2602,6 @@ instr__gen_vpkpx/test_vpkpx_97_GEN #149 missing vpkpx
 instr__gen_vpkpx/test_vpkpx_98_GEN #149 missing vpkpx
 instr__gen_vpkpx/test_vpkpx_99_GEN #149 missing vpkpx
 instr__gen_vpkpx/test_vpkpx_9_GEN #149 missing vpkpx
-instr__gen_vsl/test_vsl_113_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_117_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_29_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_38_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_42_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_530_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_539_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_543_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_54_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_564_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_568_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_614_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_618_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_627_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_629_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_630_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_631_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_632_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_637_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_638_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_639_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_63_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_641_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_642_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_643_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_644_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_645_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_647_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_648_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_649_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_650_GEN #185 wrong result (vsl)
-instr__gen_vsl/test_vsl_67_GEN #185 wrong result (vsl)
 instr__gen_vsubcuw/test_vsubcuw_100_GEN #149 missing vsubcuw
 instr__gen_vsubcuw/test_vsubcuw_101_GEN #149 missing vsubcuw
 instr__gen_vsubcuw/test_vsubcuw_102_GEN #149 missing vsubcuw
@@ -3324,9 +3292,6 @@ instr_mcrfs/test_mcrfs_2 #149 missing mcrfs
 instr_mcrxr/test_mcrxr_1 #149 missing mcrxr
 instr_mcrxr/test_mcrxr_2 #149 missing mcrxr
 instr_mcrxr/test_mcrxr_3 #149 missing addo
-instr_mffsx/test_mffsx_2 #185 wrong result (mffsx)
-instr_mffsx/test_mffsx_3 #185 wrong result (mffsx)
-instr_mffsx/test_mffsx_4 #185 wrong result (mffsx)
 instr_mfmsr/test_mfmsr_1 #149 mfmsr returns 0
 instr_mfmsr/test_mfmsr_2 #149 mfmsr returns 0
 instr_mfvscr/test_mfvscr_1 #149 missing mfvscr
@@ -3354,9 +3319,6 @@ instr_stvrxl128/test_stvrxl128_1 #149 missing stvrxl128
 instr_stvrxl128/test_stvrxl128_2 #149 missing stvrxl128
 instr_stvxl128/test_stvxl128_1 #149 missing stvxl128
 instr_stvxl128/test_stvxl128_2 #149 missing stvxl128
-instr_stwcx/test_stdcx_fail #185 wrong result (stwcx)
-instr_stwcx/test_stwcx_address_mismatch #185 wrong result (stwcx)
-instr_stwcx/test_stwcx_fail #185 wrong result (stwcx)
 instr_vaddcuw/test_vaddcuw_1 #149 missing vaddcuw
 instr_vaddcuw/test_vaddcuw_2 #149 missing vaddcuw
 instr_vaddcuw/test_vaddcuw_3 #149 missing vaddcuw
@@ -3371,8 +3333,6 @@ instr_vmaxuw/test_vmaxuw_1 #149 missing vmaxuw
 instr_vmaxuw/test_vmaxuw_2 #149 missing vmaxuw
 instr_vmaxuw/test_vmaxuw_3 #149 missing vmaxuw
 instr_vmaxuw/test_vmaxuw_4 #149 missing vmaxuw
-instr_vmsum3fp128/test_vmsum3fp128_3 #185 wrong result (vmsum3fp128)
-instr_vmsum4fp128/test_vmsum4fp128_3 #185 wrong result (vmsum4fp128)
 instr_vpkpx/test_vpkpx_1 #149 missing vpkpx
 instr_vpkpx/test_vpkpx_2 #149 missing vpkpx
 instr_vpkpx/test_vpkpx_3 #149 missing vpkpx

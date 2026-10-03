@@ -222,6 +222,31 @@ inline simde__m128i simde_mm_vctuxs(simde__m128 src1) {
   return result;
 }
 
+// vmsum3fp128/vmsum4fp128: the dot product of the elements in kMask's high
+// nibble, in every element (as dpps). Hardware adds the products before
+// flushing, so a sum that flushes to zero keeps its sign; dpps flushes the
+// products first and adds them to +0.
+template <int kMask>
+inline simde__m128 simde_mm_vmsumfp(simde__m128 a, simde__m128 b) {
+  simde__m128 result = simde_mm_dp_ps(a, b, kMask);
+  if (simde_mm_cvtss_f32(result) != 0.0f) {
+    return result;
+  }
+  alignas(16) float fa[4], fb[4];
+  simde_mm_store_ps(fa, a);
+  simde_mm_store_ps(fb, b);
+  double sum = 0.0;
+  for (int i = 0; i < 4; ++i) {
+    if (kMask & (0x10 << i)) {
+      sum += double(fa[i]) * double(fb[i]);
+    }
+  }
+  if (sum != 0.0) {
+    return simde_mm_set1_ps(sum < 0.0 ? -0.0f : 0.0f);
+  }
+  return result;
+}
+
 // Vector Shift Right
 inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b) {
   b = simde_mm_srli_epi64(simde_mm_slli_epi64(b, 61), 61);
@@ -232,7 +257,22 @@ inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b) {
 
 // Vector Shift Left - shift entire 128-bit vector left by bits in low 3 bits of b
 inline simde__m128i simde_mm_vsl(simde__m128i a, simde__m128i b) {
-  int shift = simde_mm_extract_epi8(b, 15) & 0x7;  // Get low 3 bits from byte 15 (BE: byte 0)
+  // On hardware each byte shifts by its own count, taking the bits of the
+  // next lower-addressed byte; the 128-bit shift below is the usual case where
+  // all counts agree (a vspltisb count).
+  const simde__m128i counts = simde_mm_and_si128(b, simde_mm_set1_epi8(0x7));
+  if (simde_mm_movemask_epi8(simde_mm_cmpeq_epi8(
+          counts, simde_mm_shuffle_epi8(counts, simde_mm_setzero_si128()))) != 0xFFFF) {
+    alignas(16) uint8_t src[16], count[16], dst[16];
+    simde_mm_store_si128((simde__m128i*)src, a);
+    simde_mm_store_si128((simde__m128i*)count, counts);
+    // Host byte j is guest byte 15 - j, so the next guest byte is host j - 1.
+    for (int j = 0; j < 16; ++j) {
+      dst[j] = uint8_t((src[j] << count[j]) | (j ? src[j - 1] >> (8 - count[j]) : 0));
+    }
+    return simde_mm_load_si128((simde__m128i*)dst);
+  }
+  int shift = simde_mm_extract_epi8(counts, 0);
   if (shift == 0)
     return a;
 
