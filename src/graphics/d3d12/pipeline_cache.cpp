@@ -1471,6 +1471,15 @@ bool PipelineCache::GetCurrentStateDescription(
       case xenos::PrimitiveType::kQuadList:
         description_out.geometry_shader = PipelineGeometryShader::kQuadList;
         break;
+      case xenos::PrimitiveType::kLineList:
+      case xenos::PrimitiveType::kLineStrip:
+        // Host lines are 1 host pixel wide; a guest line covers 1 guest pixel
+        // (has207/xenia-edge 7d0a45263).
+        description_out.geometry_shader = (render_target_cache_.draw_resolution_scale_x() > 1 ||
+                                           render_target_cache_.draw_resolution_scale_y() > 1)
+                                              ? PipelineGeometryShader::kLineList
+                                              : PipelineGeometryShader::kNone;
+        break;
       default:
         description_out.geometry_shader = PipelineGeometryShader::kNone;
         break;
@@ -1813,8 +1822,10 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   uint32_t system_cbuffer_size_vector_aligned_bytes = 0;
 
-  if (key.type == PipelineGeometryShader::kPointList) {
-    // Need point parameters from the system constants.
+  if (key.type == PipelineGeometryShader::kPointList ||
+      key.type == PipelineGeometryShader::kLineList) {
+    // Need point parameters from the system constants (lines only use the NDC
+    // size of a guest pixel).
 
     // Constant types - float2 only.
     // Names.
@@ -2296,6 +2307,13 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
       max_output_vertex_count = 4;
       break;
+    case PipelineGeometryShader::kLineList:
+      // Line (of a list or a strip) to a strip of 2 triangles.
+      input_primitive = dxbc::Primitive::kLine;
+      input_primitive_vertex_count = 2;
+      output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
+      max_output_vertex_count = 4;
+      break;
     default:
       assert_unhandled_case(key.type);
   }
@@ -2744,6 +2762,74 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                       (UINT32_C(1) << std::min(input_clip_distance_count - j, UINT32_C(4))) - 1),
                   dxbc::Src::V2D(input_vertex_index,
                                  input_register_clip_and_cull_distances + (j >> 2)));
+        }
+        a.OpEmitStream(stream);
+      }
+      a.OpCutStream(stream);
+    } break;
+
+    case PipelineGeometryShader::kLineList: {
+      // Host lines are rasterized 1 host pixel wide, but a guest line covers
+      // 1 guest pixel, draw_resolution_scale host pixels. Expand the segment
+      // into a quad 1 guest pixel wide centered on the line, each end keeping
+      // its own attributes (has207/xenia-edge 7d0a45263).
+      stat.temp_register_count = std::max(UINT32_C(3), stat.temp_register_count);
+      // The NDC radius of a 1 guest pixel diameter: half a guest pixel.
+      dxbc::Src half_pixel_ndc(dxbc::Src::CB(
+          0, uint32_t(DxbcShaderTranslator::CbufferRegister::kSystemConstants),
+          offsetof(DxbcShaderTranslator::SystemConstants, point_screen_diameter_to_ndc_radius) >> 4,
+          ((offsetof(DxbcShaderTranslator::SystemConstants,
+                     point_screen_diameter_to_ndc_radius[0]) >>
+            2) &
+           3) |
+              (((offsetof(DxbcShaderTranslator::SystemConstants,
+                          point_screen_diameter_to_ndc_radius[1]) >>
+                 2) &
+                3)
+               << 2)));
+      // The ends in half guest pixels (NDC over half a guest pixel's NDC
+      // size), so the direction is in screen space whatever the aspect:
+      // r1.xy for the first, r2.xy for the second.
+      for (uint32_t i = 0; i < 2; ++i) {
+        a.OpDiv(dxbc::Dest::R(1 + i, 0b0011), dxbc::Src::V2D(i, input_register_position),
+                dxbc::Src::V2D(i, input_register_position, dxbc::Src::kWWWW));
+        a.OpDiv(dxbc::Dest::R(1 + i, 0b0011), dxbc::Src::R(1 + i), half_pixel_ndc);
+      }
+      // r2.xy = direction.
+      a.OpAdd(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2), -dxbc::Src::R(1));
+      // Drop zero-length (and NaN) lines: nothing to expand, and no normal.
+      a.OpDP2(dxbc::Dest::R(1, 0b0100), dxbc::Src::R(2), dxbc::Src::R(2));
+      a.OpLT(dxbc::Dest::R(1, 0b1000), dxbc::Src::LF(0.0f), dxbc::Src::R(1, dxbc::Src::kZZZZ));
+      a.OpRetC(false, dxbc::Src::R(1, dxbc::Src::kWWWW));
+      a.OpRSq(dxbc::Dest::R(1, 0b0100), dxbc::Src::R(1, dxbc::Src::kZZZZ));
+      // Unit normal (-dy, dx), then half a guest pixel along it in the NDC:
+      // r2.xy.
+      a.OpMul(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2).Swizzle(0b11100001),
+              dxbc::Src::R(1, dxbc::Src::kZZZZ));
+      a.OpMul(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2), half_pixel_ndc);
+      a.OpMov(dxbc::Dest::R(2, 0b0001), -dxbc::Src::R(2, dxbc::Src::kXXXX));
+
+      for (uint32_t i = 0; i < 4; ++i) {
+        uint32_t vertex = i >> 1;
+        for (uint32_t j = 0; j < key.interpolator_count; ++j) {
+          a.OpMov(dxbc::Dest::O(output_register_interpolators + j),
+                  dxbc::Src::V2D(vertex, input_register_interpolators + j));
+        }
+        if (key.has_point_coordinates) {
+          a.OpMov(dxbc::Dest::O(output_register_point_coordinates, 0b0011), dxbc::Src::LF(0.0f));
+        }
+        // The offset in the clip space is the NDC offset times W.
+        a.OpMAd(dxbc::Dest::R(0, 0b0011), (i & 1) ? dxbc::Src::R(2) : -dxbc::Src::R(2),
+                dxbc::Src::V2D(vertex, input_register_position, dxbc::Src::kWWWW),
+                dxbc::Src::V2D(vertex, input_register_position));
+        a.OpMov(dxbc::Dest::O(output_register_position, 0b0011), dxbc::Src::R(0));
+        a.OpMov(dxbc::Dest::O(output_register_position, 0b1100),
+                dxbc::Src::V2D(vertex, input_register_position));
+        for (uint32_t j = 0; j < input_clip_distance_count; j += 4) {
+          a.OpMov(dxbc::Dest::O(
+                      output_register_clip_distances + (j >> 2),
+                      (UINT32_C(1) << std::min(input_clip_distance_count - j, UINT32_C(4))) - 1),
+                  dxbc::Src::V2D(vertex, input_register_clip_and_cull_distances + (j >> 2)));
         }
         a.OpEmitStream(stream);
       }

@@ -154,6 +154,8 @@ class PipelineCache {
     kPointList,
     kRectangleList,
     kQuadList,
+    // Lines expanded to 1 guest pixel wide for resolution-scaled draws.
+    kLineList,
   };
 
   enum class PipelineCullMode : uint32_t {
@@ -208,23 +210,23 @@ class PipelineCache {
     // xenos::TessellationMode for a domain shader.
     uint32_t primitive_topology_type_or_tessellation_mode : 2;  // 4
     // Zero for non-kVertex host_vertex_shader_type.
-    PipelineGeometryShader geometry_shader : 2;       // 6
-    uint32_t fill_mode_wireframe : 1;                 // 7
-    PipelineCullMode cull_mode : 2;                   // 9
-    uint32_t front_counter_clockwise : 1;             // 10
-    uint32_t depth_clip : 1;                          // 11
-    xenos::MsaaSamples host_msaa_samples : 2;         // 13
-    xenos::DepthRenderTargetFormat depth_format : 1;  // 14
-    xenos::CompareFunction depth_func : 3;            // 17
-    uint32_t depth_write : 1;                         // 18
-    uint32_t stencil_enable : 1;                      // 19
-    uint32_t stencil_read_mask : 8;                   // 27
+    PipelineGeometryShader geometry_shader : 3;       // 7
+    uint32_t fill_mode_wireframe : 1;                 // 8
+    PipelineCullMode cull_mode : 2;                   // 10
+    uint32_t front_counter_clockwise : 1;             // 11
+    uint32_t depth_clip : 1;                          // 12
+    xenos::MsaaSamples host_msaa_samples : 2;         // 14
+    xenos::DepthRenderTargetFormat depth_format : 1;  // 15
+    xenos::CompareFunction depth_func : 3;            // 18
+    uint32_t depth_write : 1;                         // 19
+    uint32_t stencil_enable : 1;                      // 20
+    uint32_t stencil_read_mask : 8;                   // 28
     // Hybrid occlusion query draw (RTV + in-shader Total counting). Selects
     // the counting depth-only pixel shader when there is no guest PS.
-    uint32_t zpd_total : 1;  // 28
+    uint32_t zpd_total : 1;  // 29
     // Survey draw for VIZ conditional rendering (ROV + occlusion_query_viz).
     // Selects the depth-only pixel shader that marks the ZPass lane.
-    uint32_t viz_survey : 1;  // 29
+    uint32_t viz_survey : 1;  // 30
 
     uint32_t stencil_write_mask : 8;                   // 8
     xenos::StencilOp stencil_front_fail_op : 3;        // 11
@@ -238,7 +240,7 @@ class PipelineCache {
 
     PipelineRenderTarget render_targets[xenos::kMaxColorRenderTargets];
 
-    static constexpr uint32_t kVersion = 0x20261003;
+    static constexpr uint32_t kVersion = 0x20261004;
   });
 
   REXPACKEDSTRUCT(PipelineStoredDescription, {
@@ -259,7 +261,7 @@ class PipelineCache {
   union GeometryShaderKey {
     uint32_t key;
     struct {
-      PipelineGeometryShader type : 2;
+      PipelineGeometryShader type : 3;
       uint32_t interpolator_count : 5;
       uint32_t user_clip_plane_count : 3;
       uint32_t user_clip_plane_cull : 1;

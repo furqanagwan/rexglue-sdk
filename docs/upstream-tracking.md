@@ -1546,3 +1546,23 @@ and unsigned integer destinations). Known regression: Canary #1134 (open),
 D3D12 device loss on a GTX 1660 SUPER in EA titles bisected to `d119505`;
 the FIFA Street and 007 NVIDIA runs are in the deferred game-run batch, and
 AMD and Intel are not run.
+
+## Resolution-scaled lines as quads (2026-10-03)
+
+has207/xenia-edge `7d0a45263` (2026-09-30, "[GPU] Expand resolution-scaled
+lines to 1 guest pixel wide"; class A, correctness at resolution scales above
+1; Dragon's Dogma's 1024x8 tone-mapping LUT came out mostly empty at 3x).
+Edge did it in its SPIR-V built-in geometry shader; ReXGlue keeps DXBC, so
+this is a DXBC port of the same algorithm into
+`PipelineCache::CreateDxbcGeometryShader` (`PipelineGeometryShader::kLineList`):
+each segment of a line list or strip becomes a quad half a guest pixel either
+side of the line, measured in screen space through the point constants'
+NDC size of a guest pixel, which the command processor now also sets for
+line draws. Zero-length and NaN lines are dropped. Selected only when the
+draw resolution scale is above 1; the pipeline description's and geometry
+shader key's `geometry_shader` field gained a bit (description version
+bumped). Noted on epic [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53),
+whose DXIL path would carry Edge's version. Tests:
+`tests/gpu/line_scale_fixture_test.cpp` (RTV and ROV, three line positions:
+one guest pixel of coverage at 1x and 2x; half without the expansion, checked
+by disabling it). Known regressions: none at the pin.
