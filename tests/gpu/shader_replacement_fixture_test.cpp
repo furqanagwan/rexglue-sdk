@@ -84,6 +84,9 @@ TEST_CASE("A title's replacement pixel shader stands in for the translated one",
   // The replacement draws magenta whatever the guest asks for.
   REQUIRE(DrawAndRead(true, kGreen, replaced, error));
   std::filesystem::remove_all(folder);
+  // The fixtures' cvars outlive them.
+  rex::cvar::ResetToDefault("shader_replacements");
+  rex::cvar::ResetToDefault("render_target_path_d3d12");
 
   INFO("magenta 0x" << std::hex << magenta << ", green 0x" << green << ", replaced 0x" << replaced);
   CHECK(magenta != green);

@@ -16,6 +16,7 @@ add_executable(gpu_tests
     pix_capture_fixture_test.cpp
     async_draw_fixture_test.cpp
     shader_replacement_fixture_test.cpp
+    native_resolve_fixture_test.cpp
 )
 
 # The replacement shader the fixture swaps in, compiled like a title's

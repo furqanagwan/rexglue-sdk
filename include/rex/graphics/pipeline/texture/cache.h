@@ -81,6 +81,16 @@ class TextureCache {
   virtual void BeginFrame();
 
   void MarkRangeAsResolved(uint32_t start_unscaled, uint32_t length_unscaled);
+  // A resolve that wrote this range at the guest's size (ADR-012): pages it
+  // covers whole are no longer scaled, so textures there read the unscaled
+  // data. A page it only partly covers keeps the scaled copy, which the
+  // resolve also wrote.
+  void MarkRangeAsNativeResolved(uint32_t start_unscaled, uint32_t length_unscaled);
+  // Whether any page of the range holds a scaled resolve, so its data is the
+  // scaled copy rather than shared memory.
+  bool IsRangeResolvedScaled(uint32_t start_unscaled, uint32_t length_unscaled) {
+    return IsRangeScaledResolved(start_unscaled, length_unscaled);
+  }
   // Ensures the memory backing the range in the scaled resolve address space is
   // allocated and returns whether it is.
   virtual bool EnsureScaledResolveMemoryCommitted(uint32_t /*start_unscaled*/,

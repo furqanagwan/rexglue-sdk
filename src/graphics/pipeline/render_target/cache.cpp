@@ -29,12 +29,13 @@
 #include <rex/math.h>
 
 REXCVAR_DEFINE_STRING(resolution_scale_targets, "", "GPU",
-                      "Render target sizes to upscale, as WxH with 0 for any (\"720x0 0x240\"); "
-                      "empty: all. Reported only, see log_resolution_scale_targets (ADR-012)")
+                      "Resolve sizes kept upscaled, as WxH with 0 for any (\"720x0 0x240\"); "
+                      "other resolves are written at the guest's size. Empty: all upscaled "
+                      "(ADR-012)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(log_resolution_scale_targets, false, "GPU",
-                    "Log each new render target size once, with whether "
-                    "resolution_scale_targets would upscale it");
+                    "Log each resolved size once, with whether resolution_scale_targets "
+                    "keeps it upscaled");
 REXCVAR_DEFINE_BOOL(mrt_edram_used_range_clamp_to_min, true, "GPU",
                     "Clamp MRT EDRAM used range to minimum");
 
@@ -370,8 +371,6 @@ void RenderTargetCache::InitializeCommon() {
     std::string bad_entry;
     if (!scaling_list_.Parse(list, &bad_entry)) {
       REXGPU_ERROR("resolution_scale_targets: \"{}\" is not WxH; list ignored", bad_entry);
-    } else if (GetPath() == Path::kPixelShaderInterlock) {
-      REXGPU_WARN("resolution_scale_targets: not supported on the ROV path (ADR-012)");
     }
   }
   assert_true(ownership_ranges_.empty());
@@ -456,6 +455,43 @@ bool RenderTargetCache::TrackLastUpdateDrawTarget(uint64_t frame) {
 std::string RenderTargetCache::GetLastUpdateDrawTargetName() const {
   return last_update_draw_target_.IsEmpty() ? std::string("no render target")
                                             : last_update_draw_target_.GetDebugName();
+}
+
+bool RenderTargetCache::IsResolveNative(const draw_util::ResolveInfo& resolve_info) {
+  const uint32_t width = uint32_t(resolve_info.coordinate_info.width_div_8) << 3;
+  const uint32_t height = resolve_info.height_div_8 << 3;
+  const bool listed = scaling_list_.Matches(width, height);
+  if (REXCVAR_GET(log_resolution_scale_targets)) {
+    const uint64_t size = (uint64_t(width) << 32) | height;
+    if (logged_render_target_sizes_.size() < 4096 &&
+        logged_render_target_sizes_.insert(size).second) {
+      REXGPU_INFO("Resolve {}x{}: {}", width, height, listed ? "scaled" : "native");
+    }
+  }
+  if (listed || !IsDrawResolutionScaled()) {
+    return false;
+  }
+  const reg::RB_COPY_DEST_INFO dest_info = resolve_info.copy_dest_info;
+  const draw_util::ResolveCopyDestCoordinateInfo dest = resolve_info.copy_dest_coordinate_info;
+  const uint32_t pixel_size_log2 = draw_util::GetResolveDownscalePixelSizeLog2(dest_info);
+  const uint32_t group_bytes_log2 = pixel_size_log2 <= 2 ? 7 : 6;
+  const uint32_t group_mask = (UINT32_C(1) << group_bytes_log2) - 1;
+  const bool whole = !dest_info.copy_dest_array && pixel_size_log2 <= 3 && !dest.offset_x_div_8 &&
+                     !dest.offset_y_div_8 && ((width + 31) >> 5) >= dest.pitch_aligned_div_32 &&
+                     ((height + 31) >> 5) >= dest.height_aligned_div_32 &&
+                     !(resolve_info.copy_dest_extent_start & group_mask) &&
+                     !(resolve_info.copy_dest_extent_length & group_mask);
+  if (!whole) {
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      REXGPU_WARN(
+          "resolution_scale_targets: a {}x{} resolve stays scaled (it doesn't cover its whole "
+          "destination, or the format can't be downscaled)",
+          width, height);
+    }
+  }
+  return whole;
 }
 
 bool RenderTargetCache::Update(bool is_rasterization_done,
@@ -684,16 +720,6 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
                        ? REXCVAR_GET(execute_unclipped_draw_vs_on_cpu_for_psi_render_backend)
                        : true,
                    vertex_shader));
-
-  if (REXCVAR_GET(log_resolution_scale_targets) && is_rasterization_done) {
-    const uint64_t size = (uint64_t(pitch_pixels) << 32) | height_used;
-    if (logged_render_target_sizes_.size() < 4096 &&
-        logged_render_target_sizes_.insert(size).second) {
-      REXGPU_INFO("Render target {}x{} ({}x MSAA): {}", pitch_pixels, height_used,
-                  uint32_t(1) << uint32_t(msaa_samples),
-                  scaling_list_.Matches(pitch_pixels, height_used) ? "scaled" : "native");
-    }
-  }
 
   RenderTargetKey rt_keys[1 + xenos::kMaxColorRenderTargets] = {};
   RenderTarget* rts[1 + xenos::kMaxColorRenderTargets] = {};
