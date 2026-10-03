@@ -121,6 +121,10 @@ class TextureCache {
     const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
     return binding ? binding->swizzled_signs : kSwizzledSignsUnsigned;
   }
+  uint32_t GetActiveIntegerScaleBits(uint32_t fetch_constant_index) const {
+    const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
+    return binding ? binding->integer_scale_bits : 0;
+  }
   bool IsActiveTextureResolutionScaled(uint32_t fetch_constant_index) const {
     const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
     if (!binding) {
@@ -452,6 +456,9 @@ class TextureCache {
 
   struct TextureBinding {
     TextureKey key;
+    // Packed fixed texture conversion for the fetch shader, see
+    // texture_util::GetIntegerScaleBits.
+    uint32_t integer_scale_bits;
     // Destination swizzle merged with guest to host format swizzle.
     uint32_t host_swizzle;
     // Packed TextureSign values, 2 bit per each component, with guest-side

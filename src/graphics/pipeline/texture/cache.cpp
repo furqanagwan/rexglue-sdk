@@ -492,6 +492,7 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     TextureBinding& binding = texture_bindings_[index];
     xenos::xe_gpu_texture_fetch_t fetch = regs.GetTextureFetch(index);
     TextureKey old_key = binding.key;
+    uint32_t old_integer_scale_bits = binding.integer_scale_bits;
     uint8_t old_swizzled_signs = binding.swizzled_signs;
     BindingInfoFromFetchConstant(fetch, binding.key, &binding.swizzled_signs);
     texture_bindings_in_sync_ |= index_bit;
@@ -504,6 +505,7 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     }
     uint32_t old_host_swizzle = binding.host_swizzle;
     binding.host_swizzle = GuestToHostSwizzle(fetch.swizzle, GetHostFormatSwizzle(binding.key));
+    binding.integer_scale_bits = texture_util::GetIntegerScaleBits(fetch, binding.swizzled_signs);
 
     // Check if need to load the unsigned and the signed versions of the texture
     // (if the format is emulated with different host bit representations for
@@ -513,7 +515,8 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     bool any_sign_was_signed = texture_util::IsAnySignSigned(old_swizzled_signs);
     bool any_sign_is_not_signed = texture_util::IsAnySignNotSigned(binding.swizzled_signs);
     bool any_sign_is_signed = texture_util::IsAnySignSigned(binding.swizzled_signs);
-    if (key_changed || binding.host_swizzle != old_host_swizzle ||
+    if (key_changed || binding.integer_scale_bits != old_integer_scale_bits ||
+        binding.host_swizzle != old_host_swizzle ||
         any_sign_is_not_signed != any_sign_was_not_signed ||
         any_sign_is_signed != any_sign_was_signed) {
       bindings_changed |= index_bit;

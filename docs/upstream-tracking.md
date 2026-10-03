@@ -1383,3 +1383,25 @@ the raw context; a raw hook doing float math should open a `HostFpScope`).
 Cost, measured on the development laptop: about 9 ns per export call while the
 guest is in flush mode (two control-register writes), 1-2 ns otherwise.
 Tested by `tests/unit/ppc/fp_test.cpp` ("Host code runs in the host FP mode").
+
+## RG-GDK-045: Canary fixed-format texture fetches (2026-10-03)
+
+The texture fetch side of four xenia-canary PRs, taken as they stand at
+Canary `6260a87b8551d2f5ffb30763573d84652bb9e00e` (2026-10-02) rather than
+replayed one by one:
+
+| Canary | Class | What | ReXGlue |
+| --- | --- | --- | --- |
+| #1072 `d119505289` (2026-07-01), fetch half; `2ddc5ef737` (2026-07-28, unsigned-biased scaling) | A (compatibility: Canary reports black screens fixed in dozens of titles) | Integer `num_format` on fixed formats scales the normalized host sample back to the guest's integer range; unsigned-biased decodes as offset binary | `FormatInfo::component_bits`/`fixed` (`info_formats.cpp`), `texture_util::GetIntegerScaleBits`, `texture_integer_scale_bits` system constant (`xenos_draw.hlsli` too; tessellation bytecode rebuilt), DXBC fetch block |
+| #1137 `6a45452087` | A | Walk the guest swizzle to each output's source component (past the stored ones, the last one) | `GetIntegerScaleBits` |
+| #1177 `0c843efb32` (2026-08-26) | A (SSAO in 4D5309C9, 4D530AA4) | Normalized unsigned fixed fetches round to 16 fractional bits; point sampled 4-7 bit components rebuild the guest's `n * (2^w + 1) / 2^(2w)` | bit 24 and the widths; DXBC fetch block |
+| #1250 `c3cd8617b1` (2026-09-27) | B (idTech 5 virtual texturing, 425307EC seams) | Point sampled 2D fetches snap to the texel center instead of adding the coordinate epsilon | bit 26, `CanSnapToTexelCenter`, `kTextureCoordEpsilon` |
+
+Not taken: the resolve half of #1072 (8_8_8_8_GAMMA PWL decode before MSAA
+averaging, `copy_dest_number` packing) and its follow-ups, split to
+RG-GDK-073 (#189). Known regression: Canary #1134 (open), D3D12 device loss on
+a GTX 1660 SUPER in EA titles, bisected to `d119505` with both halves; the
+title runs on NVIDIA here are part of the deferred game-run batch. AMD and
+Intel not run. Tests: `tests/unit/graphics/fetch_conversion_test.cpp`
+(packing for narrow formats, both num_formats, swizzle walk, gamma, point
+flag); gpu suite 43/43; shader bytecode reproducible.
