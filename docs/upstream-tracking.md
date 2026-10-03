@@ -1437,3 +1437,10 @@ Microsoft's PC backward compatibility GPU emulator (`scalingResolutions`,
 `resolution_scale_targets` parsing and matching (`ScalingResolutionList`,
 `tests/unit/graphics/scaling_list_test.cpp`) and the
 `log_resolution_scale_targets` report, with no rendering change.
+
+RG-GDK-062 phase 2 (2026-10-03): resolves the list doesn't name are written at
+the guest's size through the existing resolve downscale shader (xenia-canary
+`a635ac64f`, already ported for readback), now also dispatched into shared
+memory (`DispatchResolveDownscale`), with `MarkRangeAsNativeResolved` in the
+texture cache; resolve readback reads shared memory for such ranges. ADR-012
+revised accordingly.

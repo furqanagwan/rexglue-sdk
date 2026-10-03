@@ -166,6 +166,13 @@ class RenderTargetCache {
   // to be discarded.
   uint32_t draw_resolution_scale_x() const { return draw_resolution_scale_x_; }
   uint32_t draw_resolution_scale_y() const { return draw_resolution_scale_y_; }
+  // Whether this resolve is written at the guest's size (ADR-012): the
+  // resolution is scaled, resolution_scale_targets doesn't list the resolved
+  // size, and the copy can be downscaled whole (a 2D destination of up to
+  // 64bpp that the resolved rectangle covers, so no texel beside it changes).
+  // Logs each resolved size once with log_resolution_scale_targets.
+  bool IsResolveNative(const draw_util::ResolveInfo& resolve_info);
+
   bool IsDrawResolutionScaled() const {
     return draw_resolution_scale_x() > 1 || draw_resolution_scale_y() > 1;
   }

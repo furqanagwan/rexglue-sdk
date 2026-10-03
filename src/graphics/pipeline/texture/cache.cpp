@@ -349,6 +349,35 @@ void TextureCache::MarkRangeAsResolved(uint32_t start_unscaled, uint32_t length_
   shared_memory().RangeWrittenByGpu(start_unscaled, length_unscaled);
 }
 
+void TextureCache::MarkRangeAsNativeResolved(uint32_t start_unscaled, uint32_t length_unscaled) {
+  if (length_unscaled == 0) {
+    return;
+  }
+  start_unscaled &= 0x1FFFFFFF;
+  length_unscaled = std::min(length_unscaled, 0x20000000 - start_unscaled);
+
+  if (IsDrawResolutionScaled()) {
+    // Whole pages only.
+    uint32_t page_first = (start_unscaled + 0xFFF) >> 12;
+    uint32_t page_end = (start_unscaled + length_unscaled) >> 12;
+    if (page_first < page_end) {
+      auto global_lock = global_critical_region_.Acquire();
+      for (uint32_t page = page_first; page < page_end; ++page) {
+        scaled_resolve_pages_[page >> 5] &= ~(UINT32_C(1) << (page & 31));
+      }
+      // Keep the second level a superset: clear a block's bit only when the
+      // block has no scaled page left.
+      for (uint32_t block = page_first >> 5; block <= (page_end - 1) >> 5; ++block) {
+        if (!scaled_resolve_pages_[block]) {
+          scaled_resolve_pages_l2_[block >> 6] &= ~(UINT64_C(1) << (block & 63));
+        }
+      }
+    }
+  }
+
+  shared_memory().RangeWrittenByGpu(start_unscaled, length_unscaled);
+}
+
 uint32_t TextureCache::GuestToHostSwizzle(uint32_t guest_swizzle, uint32_t host_format_swizzle) {
   uint32_t host_swizzle = 0;
   for (uint32_t i = 0; i < 4; ++i) {

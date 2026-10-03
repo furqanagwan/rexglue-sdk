@@ -1,6 +1,6 @@
 # ADR-012: Selective render target upscaling and MSAA boost
 
-Date: 2026-10-03. Status: **accepted design, phase 1 implemented**
+Date: 2026-10-03. Status: **accepted design, phases 1 and 2 implemented**
 ([RG-GDK-062 #168](https://github.com/furqanagwan/rexglue-sdk/issues/168),
 [RG-GDK-063 #169](https://github.com/furqanagwan/rexglue-sdk/issues/169)).
 Later phases need their own issues before code.
@@ -44,19 +44,36 @@ into every pixel shader's EDRAM addressing.
 
 `resolution_scale_targets` (GPU cvar, a title default by name until the
 ADR-009 fix catalog exists) holds Microsoft's syntax: space-separated
-`WxH`, `0` meaning any. A render target is scaled when its width or height
-matches an entry with that dimension non-zero (`720x0` matches width 720,
-`0x240` height 240, `1280x720` both). Width is the surface pitch in pixels;
-height is the largest extent the draw can cover (window scissor and viewport,
-as `GetRenderTargetHeight` bounds it today). Empty list: everything scaled,
-as now.
+`WxH`, `0` meaning any. A size matches an entry when every non-zero dimension
+of the entry is equal (`720x0` matches width 720, `0x240` height 240,
+`1280x720` both). The size is the resolved rectangle's: what the game copies
+out of the render target, and what its shaders later read. Empty list:
+everything scaled, as now.
 
-### 2. RTV path only
+### Revision, phase 2 (2026-10-03): native resolves first
+
+What a game reads of a render target is its resolve. Phase 2 therefore keeps
+every render target scaled while it is drawn, and writes a resolve whose size
+the list doesn't name at the guest's size: after the usual scaled copy, the
+resolve downscale shader (already used for resolve readback) keeps the
+center host sample of each guest texel and writes it to shared memory, and
+the texture cache clears the scaled mark of the pages the resolve covers
+whole (`MarkRangeAsNativeResolved`). Shaders sampling those textures then
+read guest-size data, which is where upscaled shadow maps, bloom chains and
+atlases go wrong. This works on both render target paths, needs no new
+render target key, translation or transfer, and is used only for resolves
+that cover their whole 2D destination of up to 64bpp (otherwise the resolve
+stays scaled and a warning is logged once). Rendering unlisted targets still
+costs the scaled resolution; sections 2 and 3 below (render-time per-target
+scale on the RTV path) remain the design if that cost or a title's rendering
+itself needs it.
+
+### 2. RTV path only (render-time scale)
 
 The ROV path addresses one EDRAM buffer whose layout is the scale; mixing
 scales there means two EDRAM layouts and every ROV shader branching on both.
-With a list and the ROV path, the list is ignored and logged. A title that
-needs both ROV and a list is a new decision.
+Render-time per-target scale is therefore RTV-only; native resolves (the
+revision above) work on both paths.
 
 ### 3. Scale becomes per render target on the RTV path
 
@@ -105,13 +122,13 @@ color/depth target pair is created with that host sample count.
 
 1. **Matcher and diagnostics** (this ADR's commit): `resolution_scale_targets`
    parsing and matching (`ScalingResolutionList`), unit tested; with
-   `log_resolution_scale_targets`, the render target cache logs each new
-   render target size once with whether the list would scale it, so a title's
-   list can be built from a run before any behaviour changes. No rendering
-   change.
-2. **Per-key scale on the RTV path** (#168): key bit, modification bits,
-   transfers, resolve bookkeeping; gpu fixture tests for a scaled and a native
-   target in one frame, transfers both ways, and resolves of each.
+   `log_resolution_scale_targets`, each resolved size is logged once with
+   whether the list keeps it scaled, so a title's list can be built from a
+   run.
+2. **Native resolves** (#168, done): see the revision above;
+   `tests/gpu/native_resolve_fixture_test.cpp` resolves a draw whose edge
+   falls inside a guest pixel on both paths, listed and not. Render-time
+   per-key scale (sections 2 and 3) only if a title needs it.
 3. **MSAA boost** (#169): resource sample count, averaging resolve, transfer
    reduction; fixture tests at 2x and 4x boost.
 4. **Atlas UV clamp**, if a title needs it.
