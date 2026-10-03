@@ -570,9 +570,18 @@ std::unique_ptr<GuideAssets> GuideAssets::FromUpdate(std::unique_ptr<xui::System
 
 GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height) {
   GuideFonts fonts;
-  // Latin, Latin Extended-A, punctuation, euro and trade mark.
-  static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x2010, 0x2027,
-                                    0x20AC, 0x20AC, 0x2122, 0x2122, 0};
+  // Latin with Extended-A and -B, Greek, Cyrillic, punctuation, euro and
+  // trade mark, plus every character of the guide's string tables (filled in
+  // below once the bundle is read). Glyphs the font lacks are left out.
+  static const ImWchar kBaseRanges[] = {0x0020, 0x024F, 0x0370, 0x03FF, 0x0400, 0x04FF, 0x2010,
+                                        0x2027, 0x20AC, 0x20AC, 0x2122, 0x2122, 0};
+  // The atlas reads the ranges when it builds, so they outlive this call.
+  static ImVector<ImWchar> ranges;
+  ImFontGlyphRangesBuilder ranges_builder;
+  ranges_builder.AddRanges(kBaseRanges);
+  ranges.clear();
+  ranges_builder.BuildRanges(&ranges);
+  const ImWchar* kRanges = ranges.Data;
   // One size; the static atlas scales it to each XUI point size. Baked for
   // the guide's larger text (20 pt) at the display's scale over the
   // console's 480-line scenes: 64 px at 1080p, 120 px at 2160p.
@@ -586,6 +595,23 @@ GuideFonts AddGuideFonts(ImFontAtlas* atlas, int display_height) {
   if (const auto bundle = EmbeddedGuide(); !bundle.empty()) {
     std::string error;
     if (auto modules = xui::SystemUpdate::ReadBundle(bundle, &error)) {
+      // The characters the guide's own strings use.
+      if (auto packages = xui::SystemUpdate::FromModules(*modules, &error)) {
+        for (const auto& [package, name] :
+             {std::pair{"hud/hud", "Strings.xus"}, std::pair{"huduiskin/xam", "XamStrings.xus"},
+              std::pair{"gamerprofile/gp", "GamerProfile_Custom.xus"}}) {
+          if (const xui::Package* p = packages->Find(package)) {
+            if (auto table = xui::ParseStringTable(p->Find(name), nullptr)) {
+              for (const std::string& text : *table) {
+                ranges_builder.AddText(text.c_str());
+              }
+            }
+          }
+        }
+        ranges.clear();
+        ranges_builder.BuildRanges(&ranges);
+        kRanges = ranges.Data;
+      }
       xui::SystemUpdate update;
       const auto xtt = modules->find("font/xenonjklatin");
       if (xtt != modules->end() && update.AddFont("xenonjklatin", xtt->second, &error)) {
@@ -1182,6 +1208,8 @@ void XboxGuide::Activate(xui::Element* control) {
     OpenCheats();
   } else if (id == "btnManageGame") {
     OpenManageGame();
+  } else if (id == "btnManageStorage") {
+    OpenManageStorage();
   } else if (id == "btnTitleUpdates") {
     OpenTitleUpdates();
   } else if (id == "btnActiveDownloads") {
@@ -1431,6 +1459,10 @@ void XboxGuide::OpenConfirm(Confirm confirm) {
           ? std::string(kLeaveGameWarning)
           : FindString(assets_->hud_strings, "Turning off the console",
                        "Turning off the console will also turn off all controllers.");
+  if (confirm == Confirm::kDeleteSave && confirm_save_ < saves_.size()) {
+    title = "Delete";
+    body = fmt::format("Delete {}? It can't be recovered.", saves_[confirm_save_].name);
+  }
   if (confirm == Confirm::kTitleUpdate) {
     // Turning a title update on or off runs the other executable.
     title = confirm_title_update_ ? fmt::format("Turn On Title Update {}", confirm_title_update_)
@@ -1496,6 +1528,9 @@ void XboxGuide::HandleConfirm(GuideAction action) {
         if (focus_->id() == "Button0") {
           if (confirm_ == Confirm::kTitleUpdate) {
             ApplyTitleUpdateChoice();
+          } else if (confirm_ == Confirm::kDeleteSave) {
+            CloseConfirm();
+            DeleteChosenSave();
           } else {
             BeginClose(/*exit_title=*/true);
           }

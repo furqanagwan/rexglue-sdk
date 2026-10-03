@@ -49,6 +49,7 @@ add_executable(unit_tests
     ui/display_mode_test.cpp
     ui/xui_format_test.cpp
     ui/xtt_font_test.cpp
+    ui/guide_font_test.cpp
     ui/xui_runtime_test.cpp
     ui/dlc_catalog_test.cpp
     ui/guide_input_test.cpp

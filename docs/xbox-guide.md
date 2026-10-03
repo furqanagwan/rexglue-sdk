@@ -64,6 +64,14 @@ focus, press and sounds come from the skin visuals' named frames.
   (the gamertag of the Xbox account signed in to Windows; see below). Leave Game asks "Are you sure you want to close
   the game? Any unsaved progress will be lost." first, No focused. Yes closes
   the guide and ends the title through the window's normal close path.
+- Home > Manage Storage (the backward-compatibility Home tab's second entry,
+  `btnManageStorage`; dash command 75 on the console) lists this title's
+  saved games on this PC, the profile's and any shared by every profile
+  (`ContentManager::ListContent`, content type 1), each with its size, in the
+  same Options scene as Manage Game. The right pane shows the size, when it
+  was last saved and whose it is; A deletes it after the skin's message box
+  asks ("It can't be recovered", No focused). A save the game has open is not
+  deleted: the pane says it's in use.
 - Games & Apps > Manage Game lists every add-on the title had in the
   marketplace (its config's `[[dlc]]` entries, described by the catalogue
   built into it; see [code patches](code-patches.md#title-add-ons)), as the
@@ -399,7 +407,14 @@ against the console.
   (`xenonjklatin.xtt`, 20,334 glyphs, has none; `SegoeXbox-Light.xtt` has
   all three). The bundle keeps the `.xtt` files as they are, keyed
   `font/<name>`, and the guide draws its text in `xenonjklatin` ("Xbox JK")
-  when the bundle has it; without it, Segoe UI stands in. Its private-use gamerscore glyph (U+E00A, in `btn_Count_achiev`
+  when the bundle has it; without it, Segoe UI stands in. The atlas is built
+  once (ImGui's legacy mode), so only glyphs in the font's ranges exist: Latin
+  with Extended-A and -B, Greek, Cyrillic, punctuation, euro and trade mark,
+  plus every character of the guide's string tables. The 17559 update's
+  `$flash_xenonjklatin.xttp` (28 KB) and `$flash_xenonclatin.xttp` (96 KB) are
+  patches XAM applies to the console's flash fonts, which no build has; the
+  backward-compatibility `xenonjklatin.xtt` the bundle takes is a whole font,
+  so the patches are not used. Its private-use gamerscore glyph (U+E00A, in `btn_Count_achiev`
   and in the points XAM puts beside achievements) is drawn as an image: the
   shape of sharedres `GScore_white.png` (a white disc with a G cut out, so the
   row's colour shows through) traced at 256 pixels, tinted with the text
