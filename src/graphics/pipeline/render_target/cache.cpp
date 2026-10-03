@@ -28,6 +28,13 @@
 #include <rex/logging.h>
 #include <rex/math.h>
 
+REXCVAR_DEFINE_STRING(resolution_scale_targets, "", "GPU",
+                      "Render target sizes to upscale, as WxH with 0 for any (\"720x0 0x240\"); "
+                      "empty: all. Reported only, see log_resolution_scale_targets (ADR-012)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(log_resolution_scale_targets, false, "GPU",
+                    "Log each new render target size once, with whether "
+                    "resolution_scale_targets would upscale it");
 REXCVAR_DEFINE_BOOL(mrt_edram_used_range_clamp_to_min, true, "GPU",
                     "Clamp MRT EDRAM used range to minimum");
 
@@ -359,6 +366,14 @@ RenderTargetCache::~RenderTargetCache() {
 }
 
 void RenderTargetCache::InitializeCommon() {
+  if (const std::string& list = REXCVAR_GET(resolution_scale_targets); !list.empty()) {
+    std::string bad_entry;
+    if (!scaling_list_.Parse(list, &bad_entry)) {
+      REXGPU_ERROR("resolution_scale_targets: \"{}\" is not WxH; list ignored", bad_entry);
+    } else if (GetPath() == Path::kPixelShaderInterlock) {
+      REXGPU_WARN("resolution_scale_targets: not supported on the ROV path (ADR-012)");
+    }
+  }
   assert_true(ownership_ranges_.empty());
   ownership_ranges_.emplace(std::piecewise_construct, std::forward_as_tuple(uint32_t(0)),
                             std::forward_as_tuple(xenos::kEdramTileCount, RenderTargetKey(),
@@ -669,6 +684,16 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
                        ? REXCVAR_GET(execute_unclipped_draw_vs_on_cpu_for_psi_render_backend)
                        : true,
                    vertex_shader));
+
+  if (REXCVAR_GET(log_resolution_scale_targets) && is_rasterization_done) {
+    const uint64_t size = (uint64_t(pitch_pixels) << 32) | height_used;
+    if (logged_render_target_sizes_.size() < 4096 &&
+        logged_render_target_sizes_.insert(size).second) {
+      REXGPU_INFO("Render target {}x{} ({}x MSAA): {}", pitch_pixels, height_used,
+                  uint32_t(1) << uint32_t(msaa_samples),
+                  scaling_list_.Matches(pitch_pixels, height_used) ? "scaled" : "native");
+    }
+  }
 
   RenderTargetKey rt_keys[1 + xenos::kMaxColorRenderTargets] = {};
   RenderTarget* rts[1 + xenos::kMaxColorRenderTargets] = {};

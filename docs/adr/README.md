@@ -13,3 +13,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [Title compatibility profiles: fix catalog, no database](ADR-009-title-compatibility-profiles.md)
 - [CRT non-local jumps in static code](ADR-010-static-nonlocal-jumps.md)
 - [The Xbox guide runs the console's own XUI scenes](ADR-011-xbox-guide-from-system-xui.md)
+- [Selective render target upscaling and MSAA boost](ADR-012-selective-upscaling-and-msaa-boost.md)
