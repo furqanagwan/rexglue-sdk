@@ -153,7 +153,7 @@ focus, press and sounds come from the skin visuals' named frames.
   `visual`), and Patches, Mods and Cheats below Xbox Settings. Xbox One X
   Settings is renamed Xbox Settings and opens its own scene,
   `XboxOneXSettings` (see [Settings pages](#settings-pages)). Manage Storage
-  stays disabled. Without the emulator scenes (a 17559-only build) the guide
+  opens the title's saves (see below). Without the emulator scenes (a 17559-only build) the guide
   is the 17559 one above.
 - Everything else (Marketplace, My Games, media players, Live features) stays in
   the menu, disabled, as the console's disabled controls behave: they take focus,
