@@ -27,7 +27,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1025](https://github.com/xenia-canary/xenia-canary/pull/1025) | open PR | `abcf2ff1bea480cb6c4cdcafd2c09350826e01d3` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-015 |
 | [xenia-canary/xenia-canary #1077](https://github.com/xenia-canary/xenia-canary/pull/1077) | open PR | `dcd2fff24243b4d2d67c2d08a10d235f04f0de80` | G/H; experimental; not adopted | See scoped record below | RG-GDK-012 |
 | [xenia-canary/xenia-canary #1109](https://github.com/xenia-canary/xenia-canary/pull/1109) | open PR | `95f9f68817c9828ba3a28c144916d45d34d44bd1` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-017 |
-| [xenia-canary/xenia-canary #1111](https://github.com/xenia-canary/xenia-canary/pull/1111) | open PR | `78e06cafaa6429e5464786baa9e1edf252bbe582` | C/H; relevant but pending upstream; experimental; not adopted | See scoped record below; deferred to #65 | RG-GDK-010 |
+| [xenia-canary/xenia-canary #1111](https://github.com/xenia-canary/xenia-canary/pull/1111) | merged | `692cd59cf` | C/H; adopted behind `occlusion_query_viz` (default off) in RG-GDK-010b | See scoped record below | RG-GDK-010 |
 | [xenia-canary/xenia-canary #1182](https://github.com/xenia-canary/xenia-canary/pull/1182) | open PR | `fa6cdaae0f58e9161e5e41ea3683f837b3b112c7` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-004 |
 | [xenia-canary/xenia-canary #1225](https://github.com/xenia-canary/xenia-canary/pull/1225) | open PR | `fe960bf66f98204940a7464ed35b50ef5b7b4cdc` | B/H; relevant but pending upstream; blocked upstream | See scoped record below; never assume absence | RG-GDK-014 |
 | [xenia-canary/xenia-canary #1226](https://github.com/xenia-canary/xenia-canary/pull/1226) | open PR | `c43ea0f9c3e3f3cac600a57d9f464a38c945d808` | B; adapted from the open PR (RG-GDK-017 part 2) | See scoped record below | RG-GDK-017 |
@@ -256,6 +256,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Upstream status: **pending upstream** (still open at the RG-GDK-010 review, 2026-09-24). PR head (not adopted) commit `78e06cafaa6429e5464786baa9e1edf252bbe582`.
 - Scope / reason / applicability: WIP VIZ predication changes query lifecycle, host predicates and ROV counters; local visibility is still faked (every VIZ query reports visible).
 - Classification: relevant but pending upstream; experimental; C/H applicability. **Not adopted.** RG-GDK-010 deferred VIZ to [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65), gated on #1111 settling.
+- Update 2026-10-03: merged into Canary as `692cd59cf` (2026-09-29), which Edge also took. Ported in RG-GDK-010b; see the section at the end of this file.
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
 
 ### xenia-canary/xenia-canary #1077 — [GPU] Clamp depth to valid value if Inf is provided
@@ -1449,3 +1450,26 @@ RG-GDK-063 (2026-10-03): `resolve_downscale_average` averages native resolves
 per byte (a third mode of the resolve downscale shader; owner's choice over
 true MSAA boost) and `resolution_scale_targets=none` makes every resolve
 native, together supersampling at the guest's size. ADR-012 revised.
+
+## RG-GDK-010b: VIZ_QUERY predication (2026-10-03)
+
+Port of xenia-canary #1111 (merged as `692cd59cf`, 2026-09-29; Edge took the
+same commit; class C/H) for [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65).
+Behind `occlusion_query_viz`, default off and requiring a restart, as in Canary.
+Survey draws (`PA_SC_VIZ_QUERY` enabled with `kill_pix_post_hi_z`) run as
+depth-only occlusion query segments shared with the ZPD report machinery
+(native queries on the RTV path, the ZPass counter on ROV); draws carrying a VIZ
+token run under D3D12 `SetPredication` (`EQUAL_ZERO`) from a 64-entry predicate
+buffer, or are culled on the CPU once the answer is resolved. Any unmeasured
+survey (copy mode, kills or alpha to coverage, pipeline still compiling, lost
+segment, exhausted pool) makes its ID visible, and memexport or copy-mode
+consumers are never skipped. Adaptation: ReXGlue names (`OpenQuerySegment`,
+`CloseQuerySegment`, `UpdateZPDSegment`), reports never count survey draws, and
+the `PA_SC_VIZ_QUERY_STATUS` bits still read back as visible. Behaviour change
+with the cvar on: non-survey draws with the kill bit are dropped, as on
+hardware. Pipeline cache description version bumped (`viz_survey` bit).
+Tests: `tests/gpu/viz_fixture_test.cpp` (hidden survey skips its consumer,
+visible keeps it, both with the consumer in the same submission under the
+predicate and after a flush using the resolved answer, RTV and ROV; a survey
+nothing rejects stays visible). Known regressions: none reported upstream at
+the pin; title validation is in the deferred game-run batch.

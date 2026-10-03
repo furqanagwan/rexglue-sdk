@@ -458,7 +458,11 @@ class D3D12CommandProcessor : public CommandProcessor {
   bool IsZPDQueryPoolReady() const override;
   bool CanOpenZPDQuery() const override { return submission_open_; }
   QueryOpenResult OpenZPDQuery(bool can_close_submission) override;
-  bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) override;
+  bool CloseZPDQuery(ReportHandle report_handle, const VIZQueryHandle& viz,
+                     uint64_t& out_submission) override;
+  void AwaitVIZQueryResolve(uint64_t wait_for_submission) override;
+  // The 64 VIZ predicates (one uint64 each) SetPredication reads.
+  bool EnsureVIZPredicateBuffer();
   void PumpQueryResolves() override;
   bool AwaitQueryResolve(ReportHandle report_handle, uint64_t wait_for_submission) override;
   void RecordZPDResolveBatch();
@@ -721,7 +725,12 @@ class D3D12CommandProcessor : public CommandProcessor {
     bool counter = false;
     // Hybrid RTV query: the occlusion query for ZPass, the slot for Total.
     bool hybrid = false;
+    // The VIZ ID the segment measured, if any.
+    VIZQueryHandle viz;
   };
+  Microsoft::WRL::ComPtr<ID3D12Resource> viz_predicate_buffer_;
+  D3D12_RESOURCE_STATES viz_predicate_buffer_state_ = D3D12_RESOURCE_STATE_COMMON;
+  bool viz_predicate_buffer_failed_ = false;
   std::deque<PendingQueryResolve> zpd_resolves_in_flight_;
   // The open query counts in the ROV shaders rather than a D3D12 query.
   bool zpd_active_query_is_rov_ = false;

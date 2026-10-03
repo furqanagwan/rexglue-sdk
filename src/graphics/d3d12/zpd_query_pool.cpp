@@ -268,6 +268,28 @@ void D3D12ZPDQueryPool::ClearCounter(DeferredCommandList& deferred_command_list,
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+void D3D12ZPDQueryPool::ResolveQueryTo(DeferredCommandList& deferred_command_list,
+                                       uint32_t query_index, ID3D12Resource* dest,
+                                       uint64_t dest_offset) const {
+  assert_true(initialized() && query_index < capacity_);
+  deferred_command_list.D3DResolveQueryData(query_heap_.Get(), D3D12_QUERY_TYPE_OCCLUSION,
+                                            query_index, 1, dest, dest_offset);
+}
+
+void D3D12ZPDQueryPool::CopyCounterZPassTo(DeferredCommandList& deferred_command_list,
+                                           uint64_t submission, uint32_t query_index,
+                                           ID3D12Resource* dest, uint64_t dest_offset) {
+  assert_true(counter_initialized() && query_index < capacity_);
+  // Out of UNORDERED_ACCESS orders the copy after the pixel shaders' atomics.
+  TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  deferred_command_list.D3DCopyBufferRegion(
+      dest, dest_offset, counter_buffer_.Get(),
+      uint64_t(query_index) * XenosZPDReport::kCounterSizeBytes +
+          XenosZPDReport::kZPass * sizeof(uint32_t),
+      sizeof(uint32_t));
+  TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
 void D3D12ZPDQueryPool::FlushResolveBatch(DeferredCommandList& deferred_command_list,
                                           uint64_t submission, bool submission_open) {
   if (!submission_open || !has_pending_resolve_batch()) {
