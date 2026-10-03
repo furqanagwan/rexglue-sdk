@@ -76,6 +76,8 @@ struct DrawOptions {
   reg::RB_DEPTHCONTROL depth_control = {};
   // RB_COLOR_MASK bits of color target 0.
   uint32_t color_mask = 0xF;
+  // Of the vertex fetch constant; titles sometimes leave the wrong one.
+  xenos::FetchConstantType fetch_type = xenos::FetchConstantType::kVertex;
 };
 
 // Sets up drawing constant-color rectangles into a color target and a depth
@@ -113,7 +115,7 @@ inline void SetupDraw(GpuFixture& fixture, const Surface& surface, uint32_t widt
   reg::PA_CL_CLIP_CNTL clip_cntl = {};
   clip_cntl.clip_disable = 1;
   xenos::xe_gpu_vertex_fetch_t fetch = {};
-  fetch.type = xenos::FetchConstantType::kVertex;
+  fetch.type = options.fetch_type;
   fetch.address = vertices >> 2;
   fetch.endian = xenos::Endian::k8in32;
   fetch.size = 4 * 4;
