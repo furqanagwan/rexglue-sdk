@@ -1164,6 +1164,24 @@ bool GetResolveInfo(const RegisterFile& regs, const memory::Memory& memory,
   return true;
 }
 
+// The fast resolves are only right when the destination reads the bits the
+// EDRAM view stores: fixed colors as unsigned fractions, float colors as
+// floats. Signed and integer destinations need the full resolve to repack.
+static constexpr bool ColorResolveNumberFormatMatches(xenos::ColorFormat color_format,
+                                                      xenos::SurfaceNumberFormat num_format) {
+  switch (color_format) {
+    case xenos::ColorFormat::k_16_FLOAT:
+    case xenos::ColorFormat::k_16_16_FLOAT:
+    case xenos::ColorFormat::k_16_16_16_16_FLOAT:
+    case xenos::ColorFormat::k_32_FLOAT:
+    case xenos::ColorFormat::k_32_32_FLOAT:
+    case xenos::ColorFormat::k_32_32_32_32_FLOAT:
+      return num_format == xenos::SurfaceNumberFormat::kFloat;
+    default:
+      return num_format == xenos::SurfaceNumberFormat::kUnsignedRepeatingFraction;
+  }
+}
+
 ResolveCopyShaderIndex ResolveInfo::GetCopyShader(uint32_t draw_resolution_scale_x,
                                                   uint32_t draw_resolution_scale_y,
                                                   ResolveCopyShaderConstants& constants_out,
@@ -1173,12 +1191,21 @@ ResolveCopyShaderIndex ResolveInfo::GetCopyShader(uint32_t draw_resolution_scale
   bool is_depth = IsCopyingDepth();
   ResolveEdramInfo edram_info = is_depth ? depth_edram_info : color_edram_info;
   bool source_is_64bpp = !is_depth && color_edram_info.format_is_64bpp != 0;
+  // The fast resolves copy the EDRAM bits. Hardware decodes 8_8_8_8_GAMMA to
+  // linear (a title keeping the encoding re-aliases the surface as 8_8_8_8
+  // first), and a copy_dest_number other than the EDRAM's own interpretation
+  // needs repacking, so both take the full shader (xenia-canary d119505289,
+  // 2ddc5ef737, fc48d37cdc).
+  bool gamma_source = !is_depth && xenos::ColorRenderTargetFormat(color_edram_info.format) ==
+                                       xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA;
   if (is_depth ||
-      (!copy_dest_info.copy_dest_exp_bias &&
+      (!gamma_source && !copy_dest_info.copy_dest_exp_bias &&
        xenos::IsSingleCopySampleSelected(copy_dest_coordinate_info.copy_sample_select) &&
        xenos::IsColorResolveFormatBitwiseEquivalent(
            xenos::ColorRenderTargetFormat(color_edram_info.format),
-           xenos::ColorFormat(copy_dest_info.copy_dest_format)))) {
+           xenos::ColorFormat(copy_dest_info.copy_dest_format)) &&
+       ColorResolveNumberFormatMatches(xenos::ColorFormat(copy_dest_info.copy_dest_format),
+                                       copy_dest_info.copy_dest_number))) {
     if (edram_info.msaa_samples >= xenos::MsaaSamples::k4X) {
       shader = source_is_64bpp ? ResolveCopyShaderIndex::kFast64bpp4xMSAA
                                : ResolveCopyShaderIndex::kFast32bpp4xMSAA;

@@ -36,7 +36,7 @@ entry_inputs_end_code_begin_compute_xe
   }
   uint2_xe pixel_index = in_global_thread_id_xe.xy << uint2_xe(3u, 0u);
   float4_xe pixels_0123, pixels_4567;
-  XeResolveLoad8RedColors(
+  XeResolveLoad8ScalarColors(
       pass_uint_vector_buffer_xe(xe_resolve_edram)
       pass_next_after_uint_vector_buffer_xe
       resolve_info,
@@ -58,7 +58,7 @@ entry_inputs_end_code_begin_compute_xe
   array_buffer_store_xe(
       xe_resolve_dest,
       XeResolveDestPixelAddress(resolve_info, pixel_index, 0u) >> 3u,
-      uint2_xe(XePackR8G8B8A8UNorm(pixels_0123),
-               XePackR8G8B8A8UNorm(pixels_4567)));
+      uint2_xe(XePackR8G8B8A8(pixels_0123, resolve_info.dest_num_format),
+               XePackR8G8B8A8(pixels_4567, resolve_info.dest_num_format)));
 }
 entry_code_end_compute_xe
