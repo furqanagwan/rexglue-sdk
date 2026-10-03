@@ -1566,3 +1566,22 @@ whose DXIL path would carry Edge's version. Tests:
 `tests/gpu/line_scale_fixture_test.cpp` (RTV and ROV, three line positions:
 one guest pixel of coverage at 1x and 2x; half without the expansion, checked
 by disabling it). Known regressions: none at the pin.
+
+## RG-GDK-032 stage 1: DXIL toolchain build (2026-10-03)
+
+has207/xenia-edge `edge` at `0788c561e3` (2026-10-03): the Mesa
+`spirv_to_dxil` build recipe from `third_party/CMakeLists.txt` (meson out of
+tree, release `/MD`, static archives driven by ninja target, the same meson
+option set) and its Mesa pin, has207/mesa `7a1fc756809f3bdc9771b54e6036b156389dfc85`
+("microsoft/compiler: use c99_alloca.h instead of malloc.h"); the DXIL signing
+approach (DXIL.dll `IDxcValidator`, in-place edit, validator version stamped
+from `IDxcVersionInfo`) from `src/xenia/gpu/spirv_to_dxil_compiler.cc`.
+Class C (enabling, no behaviour change). Adaptation: fetched as a SHA-256-checked
+archive instead of a submodule so the default build never clones Mesa;
+ReXGlue's clang build links the cl-built archives; the D3D12 Agility SDK
+(1.618.5) and DXC (1.8.2502.8) come from NuGet, matching the versions in
+Microsoft's Fuzion Frenzy BC package rather than Edge's in-tree
+DirectXShaderCompiler. Tests: `tests/dxil/dxil_smoke_test.cpp` (sign and
+create a pipeline through the Agility runtime). See
+[DXIL shader toolchain](shader-dxil.md). Known regressions: none at the pin;
+Edge's pipeline is still changing, so later stages re-pin.

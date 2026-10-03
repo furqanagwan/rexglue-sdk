@@ -146,6 +146,9 @@ installed `260404` edition and installs a package whose consumers resolve the
 GDK on their own machine; see [GDK toolchain](docs/gdk-toolchain.md) for the
 pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
+`win-amd64-gdk-dxil` adds the opt-in DXIL shader toolchain (Mesa
+`spirv_to_dxil`, D3D12 Agility SDK 1.618.5, DXC 1.8.2502.8, the pairing
+Microsoft's PC backward compatibility ships); see [DXIL shader toolchain](docs/shader-dxil.md).
 GDK builds read pads through GameInput and other builds through XInput
 (`input_backend`): see [GameInput driver](docs/gameinput.md).
 Pads GameInput does not list, such as Bluetooth LE pads, come through
