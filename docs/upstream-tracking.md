@@ -1513,3 +1513,36 @@ same dot product sign and have no `stwcx.` address check.
 Tests: the 40 `#185` entries are gone from `tests/ppc/corpus/known_failures.txt`
 (all 567 corpus files pass); `tests/ppc` and unit tests pass. Title validation
 is in the deferred game-run batch.
+
+## RG-GDK-073: 8_8_8_8_GAMMA resolves and copy_dest_number (2026-10-03)
+
+The resolve half of xenia-canary #1072 (`d119505289`, 2026-07-01) with its
+follow-ups `2ddc5ef737` (2026-07-28, every destination gets linear values, the
+re-encode removed), `fc48d37cdc` (2026-08-10, the cvars removed: the decode and
+the number format check always apply) and `2b3f0cb456` (2026-08-05, k_8 with
+LOW_BLUE selects alpha), for [#189](https://github.com/furqanagwan/rexglue-sdk/issues/189).
+Class A/B (correctness; Canary reports less blowout in at least four titles and
+fixed composites in 5451080D and 4D530808).
+
+- `resolve.xesli`: 8_8_8_8_GAMMA sources decode the PWL curve (RGB only) per
+  sample before MSAA averaging and exponent bias; k_8 destinations with the
+  swap bit read alpha. Hand-ported: ReXGlue's resolve loads use the uint
+  vector buffer and pixel-index addressing, not Canary's byte buffer.
+  Canary's always-on `decode_pwl_gamma` bit is left out; the shader checks the
+  format.
+- `pixel_formats.xesli`, `resolve_full_*.xesli`: fixed packs take the
+  destination number format (`XePackFixed`).
+- `draw_util::ResolveInfo::GetCopyShader`: gamma sources and destinations
+  whose number format isn't the EDRAM's own take the full resolve.
+- Bytecode rebuilt with `scripts/build_shaders.py` (the ten full resolve
+  shaders change).
+- Not taken: `437a7280cf` (Canary #1163, EDRAM single-sample addressing),
+  which touches the same shaders but is a separate render target cache change
+  (RG-GDK-009 row above).
+
+Tests: `tests/gpu/resolve_gamma_fixture_test.cpp` (8_8_8_8_GAMMA at 1x and
+averaged 4x into 8_8_8_8 and 2_10_10_10 on RTV and ROV; 8_8_8_8 into signed
+and unsigned integer destinations). Known regression: Canary #1134 (open),
+D3D12 device loss on a GTX 1660 SUPER in EA titles bisected to `d119505`;
+the FIFA Street and 007 NVIDIA runs are in the deferred game-run batch, and
+AMD and Intel are not run.

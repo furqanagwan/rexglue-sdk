@@ -170,11 +170,19 @@ inline void DrawRect(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1,
                 float(color >> 24) / 255.0f);
 }
 
+// The source and destination formats of Resolve.
+struct ResolveFormat {
+  xenos::ColorRenderTargetFormat source = xenos::ColorRenderTargetFormat::k_8_8_8_8;
+  xenos::ColorFormat dest = xenos::ColorFormat::k_8_8_8_8;
+  xenos::SurfaceNumberFormat dest_number = xenos::SurfaceNumberFormat::kUnsignedRepeatingFraction;
+};
+
 // Resolves (0, 0)-(width, height) of the 32bpp color target at EDRAM base 0,
-// one sample of it with MSAA, to a 32-high k_8_8_8_8 tiled texture.
+// one sample of it with MSAA, to a 32-high k_8_8_8_8 tiled texture (or the
+// formats given).
 inline void Resolve(GpuFixture& fixture, const Surface& surface, uint32_t width, uint32_t height,
                     xenos::CopySampleSelect sample, uint32_t dest, uint32_t dest_pitch = 32,
-                    uint32_t color_base_tiles = 0) {
+                    uint32_t color_base_tiles = 0, const ResolveFormat& format = {}) {
   uint32_t vertices = fixture.AllocPhysical(0x100);
   fixture.WriteDwords(
       vertices, {0, 0, std::bit_cast<uint32_t>(float(width)), 0,
@@ -183,7 +191,7 @@ inline void Resolve(GpuFixture& fixture, const Surface& surface, uint32_t width,
   surface_info.surface_pitch = surface.pitch;
   surface_info.msaa_samples = surface.msaa;
   reg::RB_COLOR_INFO color_info = {};
-  color_info.color_format = xenos::ColorRenderTargetFormat::k_8_8_8_8;
+  color_info.color_format = format.source;
   color_info.color_base = color_base_tiles;
   reg::PA_SC_WINDOW_SCISSOR_TL window_tl = {};
   window_tl.window_offset_disable = 1;
@@ -197,7 +205,8 @@ inline void Resolve(GpuFixture& fixture, const Surface& surface, uint32_t width,
   copy_dest_pitch.copy_dest_height = 32;
   reg::RB_COPY_DEST_INFO dest_info = {};
   dest_info.copy_dest_endian = xenos::Endian128::k8in32;
-  dest_info.copy_dest_format = xenos::ColorFormat::k_8_8_8_8;
+  dest_info.copy_dest_format = format.dest;
+  dest_info.copy_dest_number = format.dest_number;
   xenos::xe_gpu_vertex_fetch_t fetch = {};
   fetch.type = xenos::FetchConstantType::kVertex;
   fetch.address = vertices >> 2;
