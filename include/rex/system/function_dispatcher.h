@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -165,5 +166,11 @@ class FunctionDispatcher : public IModuleRegistrar {
   // Protects dispatcher metadata during module registration and callback dispatch.
   mutable std::recursive_mutex dispatch_mutex_;
 };
+
+/// Adds `guest_address` to the indirect call trace at `path` (RG-GDK-066): a
+/// TOML file whose [functions] table the title's codegen config can include,
+/// so the next codegen registers every target a run found unregistered. The
+/// file keeps what earlier runs recorded. False if it can't be written.
+bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address);
 
 }  // namespace rex::runtime

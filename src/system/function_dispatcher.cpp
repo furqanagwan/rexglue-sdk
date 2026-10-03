@@ -13,7 +13,15 @@
  *              role as a function dispatch table rather than a CPU emulator.
  */
 
+#include <cstdio>
+#include <fstream>
+#include <set>
+#include <string>
+
+#include <fmt/format.h>
+
 #include <rex/assert.h>
+#include <rex/cvar.h>
 #include <rex/dbg.h>
 #include <rex/logging.h>
 #include <rex/perf/counter.h>
@@ -22,6 +30,10 @@
 #include <rex/runtime.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/thread_state.h>
+
+REXCVAR_DEFINE_STRING(indirect_trace, "", "CPU",
+                      "Record indirect call targets with no registered function to this TOML file "
+                      "(a [functions] table for the title's codegen config)");
 
 namespace rex::runtime {
 
@@ -34,7 +46,41 @@ FunctionDispatcher* GetBoundFunctionDispatcher() {
 
 }  // namespace
 
+bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address) {
+  // Keep the targets earlier runs recorded: each run stops at its first one.
+  std::set<uint32_t> targets{guest_address};
+  {
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+      unsigned int address = 0;
+      if (std::sscanf(line.c_str(), "0x%8X = {", &address) == 1) {
+        targets.insert(address);
+      }
+    }
+  }
+  std::ofstream out(path, std::ios::trunc);
+  if (!out) {
+    return false;
+  }
+  out << "# Indirect call targets a run reached with no registered function, recorded\n"
+         "# by --indirect_trace (RG-GDK-066). Add this file to the title manifest's\n"
+         "# includes; the next codegen registers each one as a function.\n"
+         "[functions]\n";
+  for (uint32_t address : targets) {
+    out << fmt::format("0x{:08X} = {{}}\n", address);
+  }
+  return bool(out);
+}
+
 static void InvalidFunctionTrap(PPCContext& ctx, uint8_t* /*base*/) {
+  if (const std::string& trace = REXCVAR_GET(indirect_trace); !trace.empty()) {
+    if (AppendIndirectTrace(trace, ctx.last_indirect_target)) {
+      REXCPU_ERROR("Indirect target 0x{:08X} recorded in {}", ctx.last_indirect_target, trace);
+    } else {
+      REXCPU_ERROR("Indirect trace {} could not be written", trace);
+    }
+  }
   REX_FATAL("Call to invalid or unregistered function at guest address 0x{:08X}",
             ctx.last_indirect_target);
 }
