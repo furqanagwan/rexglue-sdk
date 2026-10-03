@@ -173,6 +173,27 @@ foreach(_cfg IN LISTS CMAKE_CONFIGURATION_TYPES)
     set_target_properties(rex_spirv_to_dxil PROPERTIES IMPORTED_LOCATION_${_cfg_u} "${_rex_s2d_main}")
 endforeach()
 
+# ── glslang (SPIR-V builder for the guest shader translator) ─────────────────
+# The commit xenia-edge pins (16.0.0); only its SPIRV library is used.
+set(REXGLUE_GLSLANG_COMMIT a57276bf558f5cf94d3a9854ebdf5a2236849a5a)
+set(REXGLUE_GLSLANG_SHA256 02f4321a3ed01b9a9a9874f76e2d8ad078825818fcc9aae12dbf2c01674fb8af)
+set(_rex_glslang_root "${_rex_dxil_deps}/glslang")
+_rexglue_dxil_fetch("glslang-${REXGLUE_GLSLANG_COMMIT}.tar.gz"
+    "https://github.com/KhronosGroup/glslang/archive/${REXGLUE_GLSLANG_COMMIT}.tar.gz"
+    ${REXGLUE_GLSLANG_SHA256} "${_rex_glslang_root}")
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+# spv::Builder is subclassed by SpirvBuilder.
+set(ENABLE_RTTI ON CACHE BOOL "" FORCE)
+add_subdirectory("${_rex_glslang_root}/glslang-${REXGLUE_GLSLANG_COMMIT}"
+    "${CMAKE_BINARY_DIR}/glslang" EXCLUDE_FROM_ALL)
+set(REXGLUE_GLSLANG_INCLUDE_DIR "${_rex_glslang_root}/glslang-${REXGLUE_GLSLANG_COMMIT}")
+
+message(STATUS "Shader DXIL: glslang ${REXGLUE_GLSLANG_COMMIT}")
 message(STATUS "Shader DXIL: Mesa ${REXGLUE_MESA_COMMIT}, D3D12 Agility SDK "
     "${REXGLUE_D3D12_AGILITY_VERSION} (D3D12SDKVersion ${REXGLUE_D3D12_SDK_VERSION}), "
     "DXC ${REXGLUE_DXC_VERSION}")

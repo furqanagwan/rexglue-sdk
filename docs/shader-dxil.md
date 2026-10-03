@@ -68,11 +68,36 @@ plain GDK build.
 
 Measured 2026-10-03 on NVIDIA (GDK 260404, Release): both pass.
 
+## Stage 2: the guest shader translator
+
+xenia-edge's SPIR-V translator (`SpirvShaderTranslator`, its builder, built-in
+geometry shaders, FSI system constants and `SpirvToDxilCompiler`, Edge
+`0788c561e3`) is ported into `rex::graphics` under
+`include/rex/graphics/pipeline/shader/spirv*.h` and
+`src/graphics/pipeline/shader/spirv*.cpp`, compiled into the GPU plugin only
+with `REXGLUE_SHADER_DXIL`. glslang (`a57276bf558f`, 16.0.0, Edge's pin)
+provides the SPIR-V builder. The port is mechanical (namespaces, includes,
+logging, cvars); Edge's Vulkan-only parts (`Features` from a Vulkan device, the
+SPIR-V version probe and its two cvars) are dropped. `dxil.dll` is loaded from
+the title's `D3D12\` folder first. The shared shader analysis gained what the
+translator reads (also built for DXBC, which ignores it): registers written
+before a label is re-entered, the subroutine return-point label, and the
+registers used as snappable texture coordinates.
+
+`tests/dxil/spirv_translator_test.cpp` (`spirv_translator_tests`) translates
+the GPU fixture's hand-assembled vertex and pixel shaders, for the RTV and ROV
+paths, with Edge's D3D12 translator configuration, through `spirv_to_dxil`
+with bindless lowering; the pinned `dxil.dll` validates and signs all four.
+
 ## Not yet
 
-Stages 2–6 of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
-Edge's `SpirvShaderTranslator` and `spirv_to_dxil` compiler behind a runtime
-selector, the host shaders, the render target cache, the parity gates and
+The rest of stage 2 of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
+the D3D12 command processor and pipeline cache using the translator behind a
+runtime selector (Edge's Mesa root signature and bindings, the guest shader
+cache), and Edge's shared parsing changes held back so DXBC stays unchanged
+(1D fetches with XY coordinates, the second component of scalar operands of
+three-operand vector ops) together with the wide 1D texture mapping
+`kTexture1DWideMaxRows` belongs to. Then stages 3–6: the host shaders, the render target cache, the parity gates and
 only then a default switch. Titles don't export the Agility symbols yet; that
 comes with the runtime selector. `dxcompiler.dll` (runtime HLSL, which
 Microsoft's BC also ships) isn't deployed: nothing compiles HLSL at runtime.

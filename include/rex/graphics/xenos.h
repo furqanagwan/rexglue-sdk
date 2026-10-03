@@ -1132,6 +1132,9 @@ constexpr uint32_t kTextureSubresourceAlignmentBytes = 1 << kTextureSubresourceA
 // Texture fetch constant size field widths.
 constexpr uint32_t kTexture1DMaxWidthLog2 = 24;
 constexpr uint32_t kTexture1DMaxWidth = 1 << kTexture1DMaxWidthLog2;
+// Emulation cap on rows materialized for wide (> 8192) 1D textures mapped to
+// 2D (xenia-edge). Must match between the texture cache and the translators.
+constexpr uint32_t kTexture1DWideMaxRows = 64;
 constexpr uint32_t kTexture2DCubeMaxWidthHeightLog2 = 13;
 constexpr uint32_t kTexture2DCubeMaxWidthHeight = 1 << kTexture2DCubeMaxWidthHeightLog2;
 constexpr uint32_t kTexture2DMaxStackDepthLog2 = 6;

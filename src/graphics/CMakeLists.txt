@@ -69,6 +69,21 @@ if(REXGLUE_USE_D3D12)
         ${REXGPU_XENOS_D3D12_SOURCES})
 endif()
 
+# The SPIR-V -> DXIL guest shader path (RG-GDK-032), opt-in.
+if(REXGLUE_SHADER_DXIL)
+    list(APPEND REXGPU_XENOS_SOURCES
+        pipeline/shader/spirv.cpp
+        pipeline/shader/spirv_builder.cpp
+        pipeline/shader/spirv_builtin_geometry_shader.cpp
+        pipeline/shader/spirv_fsi_system_constants.cpp
+        pipeline/shader/spirv_to_dxil_compiler.cpp
+        pipeline/shader/spirv_translator.cpp
+        pipeline/shader/spirv_translator_alu.cpp
+        pipeline/shader/spirv_translator_fetch.cpp
+        pipeline/shader/spirv_translator_memexport.cpp
+        pipeline/shader/spirv_translator_rb.cpp)
+endif()
+
 add_library(rexgpu-xenos SHARED ${REXGPU_XENOS_SOURCES})
 add_library(rex::gpu-xenos ALIAS rexgpu-xenos)
 
@@ -110,6 +125,13 @@ target_link_libraries(rexgpu-xenos PRIVATE
     rexruntime
     xxHash::xxhash
 )
+
+if(REXGLUE_SHADER_DXIL)
+    target_link_libraries(rexgpu-xenos PRIVATE glslang::SPIRV rex::spirv_to_dxil)
+    target_include_directories(rexgpu-xenos PRIVATE
+        "${REXGLUE_GLSLANG_INCLUDE_DIR}" "${REXGLUE_DXC_INCLUDE_DIR}")
+    target_compile_definitions(rexgpu-xenos PRIVATE REXGLUE_SHADER_DXIL=1)
+endif()
 
 if(REXGLUE_USE_D3D12)
     target_link_libraries(rexgpu-xenos PRIVATE
