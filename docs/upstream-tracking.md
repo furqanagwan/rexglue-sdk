@@ -1427,3 +1427,13 @@ a codegen `[functions]` include; `REXGLUE_RECOMP_FALLBACK` builds matching
 generated files unoptimised. See
 [indirect function discovery](indirect-function-discovery.md#runtime-trace-and-the-fallback-build-rg-gdk-066).
 The QoS trace round trip is in the deferred game-run batch.
+
+## RG-GDK-062/063: selective upscaling and MSAA boost design (2026-10-03)
+
+No Xenia counterpart (class H). From the launch arguments and symbols of
+Microsoft's PC backward compatibility GPU emulator (`scalingResolutions`,
+`aaBoostOn`, `aaBoostTargetMsaa`; nothing of theirs used). Design in
+[ADR-012](adr/ADR-012-selective-upscaling-and-msaa-boost.md); phase 1 adds
+`resolution_scale_targets` parsing and matching (`ScalingResolutionList`,
+`tests/unit/graphics/scaling_list_test.cpp`) and the
+`log_resolution_scale_targets` report, with no rendering change.

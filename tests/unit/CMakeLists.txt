@@ -25,6 +25,7 @@ add_executable(unit_tests
     graphics/storage_seed_test.cpp
     graphics/fetch_conversion_test.cpp
     graphics/shader_replacements_test.cpp
+    graphics/scaling_list_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
     ppc/nonlocal_jump_test.cpp
