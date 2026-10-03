@@ -23,6 +23,7 @@ add_executable(unit_tests
     graphics/frame_stats_test.cpp
     graphics/vblank_pacer_test.cpp
     graphics/storage_seed_test.cpp
+    graphics/fetch_conversion_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
     ppc/nonlocal_jump_test.cpp

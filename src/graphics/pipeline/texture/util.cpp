@@ -605,4 +605,75 @@ void GetClampModesForDimension(const xenos::xe_gpu_texture_fetch_t& fetch,
   }
 }
 
+// Ported from xenia-canary (d119505289, 2ddc5ef737, 6a45452087, 0c843efb32,
+// c3cd8617b1; RG-GDK-045). The host samples fixed formats normalized; this
+// packs, per output component after the guest swizzle, what the fetch shader
+// needs to give the guest its own result:
+// - num_format 1 (integer): the source component's width and sign, to scale
+//   the sample back to [0, 2^w - 1] (or the signed range);
+// - num_format 0: rounding to 16 fractional bits (bit 24), and for point
+//   sampled 4 to 7 bit unsigned components, the width to rebuild the guest's
+//   n * (2^w + 1) / 2^(2w) conversion;
+// - bit 26 for a point sampled fetch constant, which snaps coordinates to
+//   the texel centre.
+uint32_t GetIntegerScaleBits(const xenos::xe_gpu_texture_fetch_t& fetch, uint8_t swizzled_signs) {
+  const FormatInfo& format_info = *FormatInfo::Get(fetch.format);
+  bool point_sampled = fetch.mag_filter == xenos::TextureFilter::kPoint &&
+                       fetch.min_filter == xenos::TextureFilter::kPoint &&
+                       (fetch.mip_filter == xenos::TextureFilter::kPoint ||
+                        fetch.mip_filter == xenos::TextureFilter::kBaseMap) &&
+                       fetch.aniso_filter == xenos::AnisoFilter::kDisabled;
+  uint32_t scale_bits = point_sampled ? UINT32_C(1) << 26 : 0;
+
+  if (!format_info.fixed) {
+    return scale_bits;
+  }
+
+  if (!fetch.num_format) {
+    scale_bits |= UINT32_C(1) << 24;
+  }
+
+  // Swizzle components past the stored ones read the last stored one.
+  uint32_t last_stored_component = 0;
+  for (uint32_t i = 1; i < 4; ++i) {
+    if (format_info.component_bits[i]) {
+      last_stored_component = i;
+    }
+  }
+
+  for (uint32_t i = 0; i < 4; ++i) {
+    uint32_t source_component = (fetch.swizzle >> (i * 3)) & 0b111;
+    if (source_component >= xenos::XE_GPU_TEXTURE_SWIZZLE_0) {
+      continue;
+    }
+    source_component = std::min(source_component, last_stored_component);
+
+    xenos::TextureSign sign = xenos::TextureSign((swizzled_signs >> (i * 2)) & 0b11);
+
+    uint8_t width = format_info.component_bits[source_component];
+    if (!width || width > 16) {
+      continue;
+    }
+
+    bool carries_width = true;
+    if (sign == xenos::TextureSign::kGamma) {
+      if (fetch.num_format) {
+        continue;
+      }
+      carries_width = false;
+    } else if (!fetch.num_format && sign == xenos::TextureSign::kUnsigned) {
+      carries_width = point_sampled && width >= 4 && width <= 7;
+    }
+
+    uint32_t component_scale = uint32_t(sign) << 4;
+    if (carries_width) {
+      component_scale |= uint32_t(width - 1);
+    }
+
+    scale_bits |= component_scale << (i * 6);
+  }
+
+  return scale_bits;
+}
+
 }  // namespace rex::graphics::texture_util
