@@ -30,9 +30,14 @@
 
 REXCVAR_DEFINE_STRING(resolution_scale_targets, "", "GPU",
                       "Resolve sizes kept upscaled, as WxH with 0 for any (\"720x0 0x240\"); "
-                      "other resolves are written at the guest's size. Empty: all upscaled "
+                      "other resolves are written at the guest's size. Empty: all upscaled; none: "
+                      "none "
                       "(ADR-012)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(resolve_downscale_average, false, "GPU",
+                    "Resolves written at the guest's size average each pixel's upscaled samples "
+                    "(supersampling) instead of taking the center one; formats of 8-bit "
+                    "channels (ADR-012)");
 REXCVAR_DEFINE_BOOL(log_resolution_scale_targets, false, "GPU",
                     "Log each resolved size once, with whether resolution_scale_targets "
                     "keeps it upscaled");
@@ -455,6 +460,32 @@ bool RenderTargetCache::TrackLastUpdateDrawTarget(uint64_t frame) {
 std::string RenderTargetCache::GetLastUpdateDrawTargetName() const {
   return last_update_draw_target_.IsEmpty() ? std::string("no render target")
                                             : last_update_draw_target_.GetDebugName();
+}
+
+bool RenderTargetCache::IsNativeResolveAveraged(const draw_util::ResolveInfo& resolve_info) {
+  if (!REXCVAR_GET(resolve_downscale_average)) {
+    return false;
+  }
+  switch (resolve_info.copy_dest_info.copy_dest_format) {
+    case xenos::ColorFormat::k_8:
+    case xenos::ColorFormat::k_8_A:
+    case xenos::ColorFormat::k_8_B:
+    case xenos::ColorFormat::k_8_8:
+    case xenos::ColorFormat::k_8_8_8_8:
+    case xenos::ColorFormat::k_8_8_8_8_A:
+      return true;
+    default: {
+      static bool logged = false;
+      if (!logged) {
+        logged = true;
+        REXGPU_WARN(
+            "resolve_downscale_average: format {} isn't of 8-bit channels; its resolves take the "
+            "center sample",
+            uint32_t(resolve_info.copy_dest_info.copy_dest_format));
+      }
+      return false;
+    }
+  }
 }
 
 bool RenderTargetCache::IsResolveNative(const draw_util::ResolveInfo& resolve_info) {

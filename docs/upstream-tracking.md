@@ -1444,3 +1444,8 @@ the guest's size through the existing resolve downscale shader (xenia-canary
 memory (`DispatchResolveDownscale`), with `MarkRangeAsNativeResolved` in the
 texture cache; resolve readback reads shared memory for such ranges. ADR-012
 revised accordingly.
+
+RG-GDK-063 (2026-10-03): `resolve_downscale_average` averages native resolves
+per byte (a third mode of the resolve downscale shader; owner's choice over
+true MSAA boost) and `resolution_scale_targets=none` makes every resolve
+native, together supersampling at the guest's size. ADR-012 revised.

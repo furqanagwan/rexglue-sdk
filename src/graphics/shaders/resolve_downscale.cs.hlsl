@@ -7,11 +7,13 @@
  ******************************************************************************
  */
 
-// Downscales scaled resolve buffer data back to 1x resolution for CPU readback.
-// One thread group processes one 32x32 tile of the written extent; each thread
-// produces output dwords. Keeps the top-left host texel of each scale_x *
-// scale_y block, or its (scale/2, scale/2) center when
-// xe_downscale_half_pixel_offset is set.
+// Downscales scaled resolve buffer data back to 1x resolution, for CPU readback
+// and for resolves written at the guest's size (ADR-012). One thread group
+// processes one 32x32 tile of the written extent; each thread produces output
+// dwords. Keeps the top-left host texel of each scale_x * scale_y block, or its
+// (scale/2, scale/2) center, or the average of all of them byte by byte (exact
+// for formats of 8-bit channels, whatever their endian swap), per
+// xe_downscale_mode.
 //
 // The source is not a flat scale_x * scale_y expansion of each guest texel.
 // The resolve shaders in this repository are xenia-canary's from 0b2ffa314
@@ -32,9 +34,9 @@ cbuffer XeResolveDownscaleConstants : register(b0) {
   uint xe_downscale_pixel_size_log2; // 0=8bit, 1=16bit, 2=32bit, 3=64bit
   // Number of 1x dwords to write; the last 32x32 tile may be partial.
   uint xe_downscale_length_dwords;
-  // When non-zero, sample from (scale/2, scale/2) within each scaled block
-  // instead of (0, 0).
-  uint xe_downscale_half_pixel_offset;
+  // 0: the (0, 0) host texel of each scaled block; 1: (scale/2, scale/2);
+  // 2: the average of the block, per byte.
+  uint xe_downscale_mode;
 };
 
 ByteAddressBuffer xe_resolve_source : register(t0);
@@ -79,10 +81,41 @@ void main(uint3 xe_group_id : SV_GroupID,
   // Host sample to keep within each block: top-left, or center when requested.
   uint sample_x = 0u;
   uint sample_y = 0u;
-  [branch] if (xe_downscale_half_pixel_offset != 0u &&
-               scale_x * scale_y > 1u) {
+  [branch] if (xe_downscale_mode == 1u && scale_x * scale_y > 1u) {
     sample_x = scale_x >> 1u;
     sample_y = scale_y >> 1u;
+  }
+
+  [branch] if (xe_downscale_mode == 2u) {
+    // Average: every output byte is the rounded mean of that byte of every
+    // host texel of its block.
+    uint sample_count = scale_x * scale_y;
+    for (uint dword_index = xe_group_thread_index; dword_index < tile_dwords;
+         dword_index += 128u) {
+      uint rel_bytes = (tile_first_dword + dword_index) << 2u;
+      uint packed = 0u;
+      for (uint byte_index = 0u; byte_index < 4u; ++byte_index) {
+        uint byte_rel = rel_bytes + byte_index;
+        uint texel_rel = byte_rel & ~((1u << pixel_size_log2) - 1u);
+        uint byte_in_texel = byte_rel & ((1u << pixel_size_log2) - 1u);
+        uint sum = 0u;
+        for (uint y = 0u; y < scale_y; ++y) {
+          for (uint x = 0u; x < scale_x; ++x) {
+            uint src_bytes = XeDownscaleScaledBlockByte(
+                                 texel_rel, pixel_size_log2, scale_x, scale_y, x,
+                                 y) +
+                             byte_in_texel;
+            sum += (xe_resolve_source.Load(src_bytes & ~3u) >>
+                    ((src_bytes & 3u) << 3u)) &
+                   0xFFu;
+          }
+        }
+        packed |= ((sum + (sample_count >> 1u)) / sample_count)
+                  << (byte_index << 3u);
+      }
+      xe_resolve_dest.Store(rel_bytes, packed);
+    }
+    return;
   }
 
   for (uint dword_index = xe_group_thread_index; dword_index < tile_dwords;

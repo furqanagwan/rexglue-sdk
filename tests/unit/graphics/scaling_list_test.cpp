@@ -45,6 +45,10 @@ TEST_CASE("No list scales everything; a bad entry rejects the list", "[graphics]
   CHECK_FALSE(list.Parse("720", &bad));
   CHECK(bad == "720");
   CHECK_FALSE(list.Parse("720xabc", &bad));
+  // none: every resolve at the guest's size.
+  REQUIRE(list.Parse(" none "));
+  CHECK_FALSE(list.Matches(640, 360));
+  CHECK_FALSE(list.Matches(1280, 720));
   // Commas and tabs separate entries too.
   REQUIRE(list.Parse("720x0,\t0x240"));
   CHECK(list.entries().size() == 2);

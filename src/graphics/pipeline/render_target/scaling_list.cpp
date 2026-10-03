@@ -26,6 +26,15 @@ bool ParseDimension(std::string_view text, uint32_t& value_out) {
 
 bool ScalingResolutionList::Parse(std::string_view text, std::string* error_out) {
   entries_.clear();
+  none_ = false;
+  {
+    const size_t first = text.find_first_not_of(" \t,");
+    const size_t last = text.find_last_not_of(" \t,");
+    if (first != std::string_view::npos && text.substr(first, last - first + 1) == "none") {
+      none_ = true;
+      return true;
+    }
+  }
   std::vector<Entry> entries;
   size_t position = 0;
   while (position < text.size()) {
@@ -55,6 +64,9 @@ bool ScalingResolutionList::Parse(std::string_view text, std::string* error_out)
 }
 
 bool ScalingResolutionList::Matches(uint32_t width, uint32_t height) const {
+  if (none_) {
+    return false;
+  }
   if (entries_.empty()) {
     return true;
   }
