@@ -858,9 +858,10 @@ void XboxGuide::ConfigureMain() {
   }
   HideButtonLetters(backdrop_.get());
   auto handled = [&](std::string_view id) {
-    if (assets_->has_options && (id == "btnPersonalSettings" || id == "btnPatches" ||
-                                 id == "btnMods" || id == "btnCheats" || id == "btnManageGame" ||
-                                 id == "btnTitleUpdates" || id == "btnActiveDownloads")) {
+    if (assets_->has_options &&
+        (id == "btnPersonalSettings" || id == "btnPatches" || id == "btnMods" ||
+         id == "btnCheats" || id == "btnManageGame" || id == "btnTitleUpdates" ||
+         id == "btnActiveDownloads" || id == "btnManageStorage")) {
       return true;
     }
     if (id == "btnXboxOneXSettings") {
