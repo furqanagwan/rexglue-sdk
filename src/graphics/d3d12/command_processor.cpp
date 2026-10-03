@@ -4085,8 +4085,12 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
     system_constants_.ndc_offset[i] = viewport_info.ndc_offset[i];
   }
 
-  // Point size.
-  if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList) {
+  // Point size, and the NDC size of a guest pixel, which the line geometry
+  // shader also uses to widen resolution-scaled lines.
+  if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineList ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineStrip ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineLoop) {
     auto pa_su_point_minmax = regs.Get<reg::PA_SU_POINT_MINMAX>();
     auto pa_su_point_size = regs.Get<reg::PA_SU_POINT_SIZE>();
     float point_vertex_diameter_min = float(pa_su_point_minmax.min_size) * (2.0f / 16.0f);
