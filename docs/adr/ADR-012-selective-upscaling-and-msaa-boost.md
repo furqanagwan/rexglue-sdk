@@ -1,6 +1,6 @@
 # ADR-012: Selective render target upscaling and MSAA boost
 
-Date: 2026-10-03. Status: **accepted design, phases 1 and 2 implemented**
+Date: 2026-10-03. Status: **accepted design, phases 1 to 3 implemented**
 ([RG-GDK-062 #168](https://github.com/furqanagwan/rexglue-sdk/issues/168),
 [RG-GDK-063 #169](https://github.com/furqanagwan/rexglue-sdk/issues/169)).
 Later phases need their own issues before code.
@@ -101,6 +101,20 @@ sub-image needs the sub-image bounds, which the guest doesn't state. It is a
 separate, opt-in fix (`AdjustUv...` in Microsoft's naming), designed when a
 title shows the bleeding.
 
+### Revision, phase 3 (2026-10-03): supersampling instead of MSAA boost
+
+The owner chose antialiasing by supersampling over true MSAA boost (section 5
+below), for its lower risk and because it works on both render target paths.
+`resolve_downscale_average` makes a native resolve average every host sample
+of a guest texel instead of taking the center one: the downscale shader's
+third mode, a per-byte mean, exact for formats of 8-bit channels (`8`, `8_8`,
+`8_8_8_8` and their alpha variants, whatever the endian swap); other formats
+keep the center sample and log once. `resolution_scale_targets=none` makes
+every resolve native, so a title at resolution scale 2 or 3 with both set
+renders supersampled and presents antialiased at the guest's size, costing
+the scale's fill rate. Section 5 stays the design if a title needs MSAA's
+lower cost.
+
 ### 5. MSAA boost (#169): host samples above the guest's for 1x targets
 
 `msaa_boost` (2 or 4; title default by name): on the RTV path, a guest 1x
@@ -129,8 +143,8 @@ color/depth target pair is created with that host sample count.
    `tests/gpu/native_resolve_fixture_test.cpp` resolves a draw whose edge
    falls inside a guest pixel on both paths, listed and not. Render-time
    per-key scale (sections 2 and 3) only if a title needs it.
-3. **MSAA boost** (#169): resource sample count, averaging resolve, transfer
-   reduction; fixture tests at 2x and 4x boost.
+3. **Supersampling** (#169, done instead of MSAA boost): see the revision
+   above; a fixture test checks the averaged edge pixel on both paths.
 4. **Atlas UV clamp**, if a title needs it.
 
 Each phase is gated by the gpu suite, QoS and a second title at scale 2 and 3

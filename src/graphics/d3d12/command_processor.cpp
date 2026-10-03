@@ -3057,7 +3057,8 @@ bool D3D12CommandProcessor::IssueCopy() {
 // keeping each guest texel's top-left host sample, or its center with
 // `center`. Leaves a UAV barrier on `dest` pending.
 bool D3D12CommandProcessor::DispatchResolveDownscale(uint32_t address, uint32_t length,
-                                                     uint32_t pixel_size_log2, bool center,
+                                                     uint32_t pixel_size_log2,
+                                                     ResolveDownscaleMode mode,
                                                      ID3D12Resource* dest, uint64_t dest_offset) {
   if (!resolve_downscale_pipeline_ || !resolve_downscale_root_signature_ || !dest) {
     return false;
@@ -3117,7 +3118,7 @@ bool D3D12CommandProcessor::DispatchResolveDownscale(uint32_t address, uint32_t 
   constants.scale_y = texture_cache_->draw_resolution_scale_y();
   constants.pixel_size_log2 = pixel_size_log2;
   constants.length_dwords = length >> 2;
-  constants.half_pixel_offset = (center && scale_area > 1) ? 1u : 0u;
+  constants.mode = scale_area > 1 ? uint32_t(mode) : uint32_t(ResolveDownscaleMode::kTopLeft);
   deferred_command_list_.D3DSetComputeRoot32BitConstants(
       UINT(ResolveDownscaleRootParameter::kConstants), sizeof(constants) / sizeof(uint32_t),
       &constants, 0);
@@ -3254,7 +3255,9 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     }
 
     if (!DispatchResolveDownscale(written_address, readback_length, pixel_size_log2,
-                                  REXCVAR_GET(readback_resolve_half_pixel_offset),
+                                  REXCVAR_GET(readback_resolve_half_pixel_offset)
+                                      ? ResolveDownscaleMode::kCenter
+                                      : ResolveDownscaleMode::kTopLeft,
                                   resolve_downscale_buffer_.Get(), 0)) {
       return true;
     }

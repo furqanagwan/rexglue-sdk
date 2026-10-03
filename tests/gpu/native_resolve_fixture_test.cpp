@@ -41,9 +41,9 @@ constexpr float kEdge = 8.125f;
 // tests in the process run at the default scale.
 struct RestoreCvars {
   ~RestoreCvars() {
-    for (const char* name :
-         {"draw_resolution_scale_x", "draw_resolution_scale_y", "resolution_scale_targets",
-          "render_target_path_d3d12", "readback_resolve_half_pixel_offset"}) {
+    for (const char* name : {"draw_resolution_scale_x", "draw_resolution_scale_y",
+                             "resolution_scale_targets", "render_target_path_d3d12",
+                             "readback_resolve_half_pixel_offset", "resolve_downscale_average"}) {
       rex::cvar::ResetToDefault(name);
     }
   }
@@ -53,11 +53,13 @@ struct RestoreCvars {
 // kEdge, resolves 32x32 at 2x2 resolution scale with `list` as
 // resolution_scale_targets, and reads the texels back (row by row).
 bool DrawAndResolve(const char* path, const char* list, std::vector<uint32_t>& texels_out,
-                    std::string& error) {
-  auto fixture = GpuFixture::Create(&error, {{"draw_resolution_scale_x", "2"},
-                                             {"draw_resolution_scale_y", "2"},
-                                             {"resolution_scale_targets", list},
-                                             {"render_target_path_d3d12", path}});
+                    std::string& error, bool average = false) {
+  auto fixture =
+      GpuFixture::Create(&error, {{"draw_resolution_scale_x", "2"},
+                                  {"draw_resolution_scale_y", "2"},
+                                  {"resolution_scale_targets", list},
+                                  {"render_target_path_d3d12", path},
+                                  {"resolve_downscale_average", average ? "true" : "false"}});
   if (!fixture) {
     return false;
   }
@@ -147,4 +149,46 @@ TEST_CASE("A resolve the list doesn't name is written at the guest's size",
   CHECK(native[kSize - 1] == kBackground);
   CHECK(differing_columns == 1);
   CHECK(other_differences == 0);
+}
+
+TEST_CASE("Averaged native resolves supersample the upscaled samples", "[gpu][resolve][native]") {
+  const char* path = GENERATE("rtv", "rov");
+  INFO("render_target_path_d3d12 " << path);
+  RestoreCvars restore;
+  std::vector<uint32_t> center, averaged;
+  std::string error;
+  // none: every resolve at the guest's size.
+  if (!DrawAndResolve(path, "none", center, error)) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  REQUIRE(DrawAndResolve(path, "none", averaged, error, true));
+
+  // The edge pixel has 2 of its 4 host samples covered: each byte is the mean
+  // of two foreground and two background bytes. Everywhere else the block is
+  // uniform, so the average is the center sample.
+  const uint32_t foreground = center[0], background = center[kSize - 1];
+  uint32_t mixed = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    const uint32_t f = (foreground >> (i * 8)) & 0xFF, b = (background >> (i * 8)) & 0xFF;
+    mixed |= ((2 * f + 2 * b + 2) / 4) << (i * 8);
+  }
+  uint32_t mixed_columns = 0, mismatches = 0;
+  for (uint32_t x = 0; x < kSize; ++x) {
+    bool column_mixed = true;
+    for (uint32_t y = 0; y < kSize; ++y) {
+      const uint32_t a = averaged[y * kSize + x], c = center[y * kSize + x];
+      if (a != mixed) {
+        column_mixed = false;
+      }
+      if (a != c && a != mixed) {
+        ++mismatches;
+      }
+    }
+    mixed_columns += column_mixed;
+  }
+  INFO("foreground 0x" << std::hex << foreground << ", background 0x" << background
+                       << ", expected mix 0x" << mixed);
+  CHECK(foreground != background);
+  CHECK(mixed_columns == 1);
+  CHECK(mismatches == 0);
 }

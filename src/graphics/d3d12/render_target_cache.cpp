@@ -1336,7 +1336,10 @@ bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMe
             shared_memory.UseForWriting();
             if (command_processor_.DispatchResolveDownscale(
                     resolve_info.copy_dest_extent_start, resolve_info.copy_dest_extent_length,
-                    draw_util::GetResolveDownscalePixelSizeLog2(resolve_info.copy_dest_info), true,
+                    draw_util::GetResolveDownscalePixelSizeLog2(resolve_info.copy_dest_info),
+                    IsNativeResolveAveraged(resolve_info)
+                        ? D3D12CommandProcessor::ResolveDownscaleMode::kAverage
+                        : D3D12CommandProcessor::ResolveDownscaleMode::kCenter,
                     shared_memory.GetBuffer(), resolve_info.copy_dest_extent_start)) {
               shared_memory.MarkUAVWritesCommitNeeded();
               texture_cache.MarkRangeAsNativeResolved(resolve_info.copy_dest_extent_start,

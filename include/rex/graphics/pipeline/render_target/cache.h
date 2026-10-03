@@ -172,6 +172,10 @@ class RenderTargetCache {
   // 64bpp that the resolved rectangle covers, so no texel beside it changes).
   // Logs each resolved size once with log_resolution_scale_targets.
   bool IsResolveNative(const draw_util::ResolveInfo& resolve_info);
+  // Whether a native resolve averages each texel's host block
+  // (resolve_downscale_average, supersampling) rather than taking its center:
+  // only for formats of 8-bit channels, where a per-byte mean is exact.
+  bool IsNativeResolveAveraged(const draw_util::ResolveInfo& resolve_info);
 
   bool IsDrawResolutionScaled() const {
     return draw_resolution_scale_x() > 1 || draw_resolution_scale_y() > 1;

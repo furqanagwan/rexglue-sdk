@@ -71,13 +71,21 @@ class D3D12CommandProcessor : public CommandProcessor {
 
   uint64_t GetCurrentSubmission() const { return submission_current_; }
 
+  // How DispatchResolveDownscale makes a guest texel from its host block.
+  enum class ResolveDownscaleMode : uint32_t {
+    kTopLeft = 0,
+    kCenter = 1,
+    // Per byte: exact for formats of 8-bit channels (supersampling, ADR-012).
+    kAverage = 2,
+  };
+
   // Downscales the scaled resolve of [address, address + length), aligned to
-  // whole scaled addressing groups, into `dest` at `dest_offset`: each guest
-  // texel's top-left host sample, or its center with `center`. For resolve
+  // whole scaled addressing groups, into `dest` at `dest_offset`. For resolve
   // readback and for native resolves (ADR-012). Leaves a UAV barrier on `dest`
   // pending.
   bool DispatchResolveDownscale(uint32_t address, uint32_t length, uint32_t pixel_size_log2,
-                                bool center, ID3D12Resource* dest, uint64_t dest_offset);
+                                ResolveDownscaleMode mode, ID3D12Resource* dest,
+                                uint64_t dest_offset);
   uint64_t GetCompletedSubmission() const override { return submission_completed_; }
 
   // Must be called when a subsystem does something like UpdateTileMappings so
@@ -651,7 +659,7 @@ class D3D12CommandProcessor : public CommandProcessor {
     uint32_t scale_y;
     uint32_t pixel_size_log2;
     uint32_t length_dwords;
-    uint32_t half_pixel_offset;
+    uint32_t mode;  // ResolveDownscaleMode
   };
   enum class ResolveDownscaleRootParameter : UINT {
     kConstants,

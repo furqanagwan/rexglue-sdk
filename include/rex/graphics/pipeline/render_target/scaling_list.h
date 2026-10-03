@@ -18,7 +18,9 @@ namespace rex::graphics {
 /// A title's list of render target sizes to upscale, in the syntax of
 /// Microsoft's backward compatibility launch arguments: space-separated
 /// `WxH`, 0 meaning any (`720x0 844x0 0x240`). A size matches an entry when
-/// every non-zero dimension of the entry is equal.
+/// every non-zero dimension of the entry is equal. `none` matches nothing:
+/// every resolve at the guest's size (with resolve_downscale_average, full
+/// supersampling).
 class ScalingResolutionList {
  public:
   struct Entry {
@@ -31,7 +33,7 @@ class ScalingResolutionList {
   bool Parse(std::string_view text, std::string* error_out = nullptr);
 
   /// Whether a render target of this size is upscaled. An empty list scales
-  /// everything (the behaviour without a list).
+  /// everything (the behaviour without a list); `none` nothing.
   bool Matches(uint32_t width, uint32_t height) const;
 
   bool empty() const { return entries_.empty(); }
@@ -39,6 +41,7 @@ class ScalingResolutionList {
 
  private:
   std::vector<Entry> entries_;
+  bool none_ = false;
 };
 
 }  // namespace rex::graphics
