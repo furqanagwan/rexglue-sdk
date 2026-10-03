@@ -280,6 +280,7 @@ inline void emitAtomicLoadReserve(BuilderContext& ctx, const char* ptr_type, con
   if (ctx.insn.operands[1] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
   ctx.println("{}.u32;", ctx.r(ctx.insn.operands[2]));
+  ctx.println("\t{} = {};", ctx.reserved_address(), ctx.ea());
   ctx.println("\t{}.{} = *({}*)REX_RAW_ADDR({});", ctx.reserved(), reserved_field, ptr_type,
               ctx.ea());
   ctx.println("\t{}.u64 = {}({}.{});", ctx.r(ctx.insn.operands[0]), bswap_func, ctx.reserved(),
@@ -304,11 +305,14 @@ inline void emitAtomicStoreConditional(BuilderContext& ctx, const char* ptr_type
   ctx.println("{}.u32;", ctx.r(ctx.insn.operands[2]));
   ctx.println("\t{}.lt = 0;", ctx.cr(0));
   ctx.println("\t{}.gt = 0;", ctx.cr(0));
+  // Fails without storing unless the reservation is on this address; either
+  // way the reservation is gone afterwards.
   ctx.println(
-      "\t{}.eq = __sync_bool_compare_and_swap(reinterpret_cast<{}*>(REX_RAW_ADDR({})), "
+      "\t{}.eq = {} == {} && __sync_bool_compare_and_swap(reinterpret_cast<{}*>(REX_RAW_ADDR({})), "
       "{}.{}, {}({}.{}));",
-      ctx.cr(0), ptr_type, ctx.ea(), ctx.reserved(), field, bswap_func, ctx.r(ctx.insn.operands[0]),
-      field);
+      ctx.cr(0), ctx.reserved_address(), ctx.ea(), ptr_type, ctx.ea(), ctx.reserved(), field,
+      bswap_func, ctx.r(ctx.insn.operands[0]), field);
+  ctx.println("\t{} = ~uint64_t(0);", ctx.reserved_address());
   ctx.println("\t{}.so = {}.so;", ctx.cr(0), ctx.xer());
 }
 

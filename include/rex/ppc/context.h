@@ -146,6 +146,9 @@ constexpr uint32_t kRoundMask = 0x03;
 
 struct FPSCRRegister {
   uint32_t csr;
+  // FPSCR bits other than RN as the guest last wrote them with mtfsf. Only RN
+  // reaches the host; status bits aren't tracked, so mffs returns these.
+  uint32_t guest_bits = 0;
 
   static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundDown, kRoundUp, kRoundTowardZero};
 
@@ -168,10 +171,11 @@ struct FPSCRRegister {
 
   inline uint32_t loadFromHost() noexcept {
     csr = getcsr();
-    return HostToGuest[(csr & RoundMaskVal) >> RoundShift];
+    return guest_bits | uint32_t(HostToGuest[(csr & RoundMaskVal) >> RoundShift]);
   }
 
   inline void storeFromGuest(uint32_t value) noexcept {
+    guest_bits = value & ~kRoundMask;
     csr &= ~RoundMaskVal;
     csr |= Platform::GuestToHost[value & kRoundMask];
     setcsr(csr);
@@ -308,6 +312,8 @@ struct alignas(0x40) PPCContext {
   PPCRegister ctr;
   PPCXERRegister xer;
   PPCRegister reserved;
+  // The address lwarx/ldarx reserved; all ones when none is held.
+  uint64_t reserved_address = ~uint64_t(0);
   uint32_t msr = 0x200A000;
   PPCCRRegister cr0;
   PPCCRRegister cr1;

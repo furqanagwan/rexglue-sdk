@@ -1484,3 +1484,32 @@ texture-typed vertex fetch constants through, which this adopts in
 `D3D12CommandProcessor::IssueDraw`. Tests: `tests/gpu/invalid_fetch_fixture_test.cpp`
 (drawn with the cvar on, dropped with it off; `DrawOptions::fetch_type` in the
 guest draw helpers). Known regressions: none at the pin.
+
+## RG-GDK-072: PPC corpus wrong results (2026-10-03)
+
+Class A (correctness), from Xbox 360 hardware results in xenia-edge's PPC
+corpus ([#185](https://github.com/furqanagwan/rexglue-sdk/issues/185)).
+Neither Edge (`504cbee7eb`, the latest change to its `ppc_emit_altivec.cc`)
+nor Canary handles any of them: both shift `vsl` by one count, return the
+same dot product sign and have no `stwcx.` address check.
+
+- `vsl`: each byte shifts by its own count (`rex::ppc::simde_mm_vsl`); the
+  128-bit shift stays as the fast path when all counts agree.
+- `vmsum3fp128`/`vmsum4fp128`: a sum that flushes to zero keeps the sign of
+  the unflushed sum (`rex::ppc::simde_mm_vmsumfp`); other results unchanged.
+- `mffs`: returns the FPSCR bits the guest last wrote with `mtfsf`, with RN
+  from the host. Status bits are still not tracked.
+- `stwcx.`/`stdcx.` design note: `lwarx`/`ldarx` record the reserved address
+  (`PPCContext::reserved_address`, or a function local with
+  `reserved_as_local`, as the reserved value already is). The store
+  conditional fails without storing unless that address matches, and always
+  drops the reservation. The compare-and-swap against the reserved value is
+  unchanged, so another thread's store still fails it. A reservation is exact
+  to the address rather than the 128-byte granule, since the swap compares the
+  reserved value; a title pairing a `lwarx` with a `stwcx.` to another address
+  in the same granule would now fail where hardware may succeed. Nothing seen
+  does that. Lock loops that pair them correctly are unaffected.
+
+Tests: the 40 `#185` entries are gone from `tests/ppc/corpus/known_failures.txt`
+(all 567 corpus files pass); `tests/ppc` and unit tests pass. Title validation
+is in the deferred game-run batch.
