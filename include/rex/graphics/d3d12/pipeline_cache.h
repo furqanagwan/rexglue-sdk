@@ -93,7 +93,7 @@ class PipelineCache {
                          D3D12Shader::D3D12Translation* pixel_shader,
                          const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
                          reg::RB_DEPTHCONTROL normalized_depth_control,
-                         uint32_t normalized_color_mask, bool zpd_total,
+                         uint32_t normalized_color_mask, bool zpd_total, bool viz_survey,
                          uint32_t bound_depth_and_color_render_target_bits,
                          const uint32_t* bound_depth_and_color_render_targets_formats,
                          void** pipeline_handle_out, ID3D12RootSignature** root_signature_out);
@@ -222,6 +222,9 @@ class PipelineCache {
     // Hybrid occlusion query draw (RTV + in-shader Total counting). Selects
     // the counting depth-only pixel shader when there is no guest PS.
     uint32_t zpd_total : 1;  // 28
+    // Survey draw for VIZ conditional rendering (ROV + occlusion_query_viz).
+    // Selects the depth-only pixel shader that marks the ZPass lane.
+    uint32_t viz_survey : 1;  // 29
 
     uint32_t stencil_write_mask : 8;                   // 8
     xenos::StencilOp stencil_front_fail_op : 3;        // 11
@@ -235,7 +238,7 @@ class PipelineCache {
 
     PipelineRenderTarget render_targets[xenos::kMaxColorRenderTargets];
 
-    static constexpr uint32_t kVersion = 0x20260929;
+    static constexpr uint32_t kVersion = 0x20261003;
   });
 
   REXPACKEDSTRUCT(PipelineStoredDescription, {
@@ -295,7 +298,7 @@ class PipelineCache {
       D3D12Shader::D3D12Translation* vertex_shader, D3D12Shader::D3D12Translation* pixel_shader,
       const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
       reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask, bool zpd_total,
-      uint32_t bound_depth_and_color_render_target_bits,
+      bool viz_survey, uint32_t bound_depth_and_color_render_target_bits,
       const uint32_t* bound_depth_and_color_render_target_formats,
       PipelineRuntimeDescription& runtime_description_out, bool for_placeholder = false);
 
@@ -366,6 +369,7 @@ class PipelineCache {
   // Depth-only pixel shaders that count coverage into the ZPD Total counter,
   // for hybrid occlusion query draws without a guest pixel shader.
   std::vector<uint8_t> zpd_total_depth_only_pixel_shader_;
+  std::vector<uint8_t> viz_survey_depth_only_pixel_shader_;
   std::vector<uint8_t> zpd_total_float24_truncate_pixel_shader_;
   std::vector<uint8_t> zpd_total_float24_round_pixel_shader_;
 

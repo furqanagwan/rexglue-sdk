@@ -67,6 +67,12 @@ REXCVAR_DEFINE_STRING(occlusion_query, "fast", "GPU",
     .allowed({"fake", "fast", "fast-alt", "strict"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU",
+                    "VIZ_QUERY visibility tests for draws with a VIZ token, the Xbox 360's "
+                    "conditional rendering: occlusion queries over the survey draws predicate "
+                    "the draws that use them, skipping hidden ones on the GPU (xenia-canary "
+                    "#1111). Costs most with ROV")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU",
                     "Also count the samples that fail the depth or stencil test in occlusion "
                     "queries, as the Xbox 360 does. Only the ROV path "
@@ -362,11 +368,13 @@ bool CommandProcessor::Restore(::rex::stream::ByteStream* stream) {
 }
 
 bool CommandProcessor::SetupContext() {
+  ResetVIZState();
   ResetZPDState();
   return true;
 }
 
 void CommandProcessor::ShutdownContext() {
+  ResetVIZState();
   ResetZPDState();
 }
 
@@ -671,6 +679,9 @@ void CommandProcessor::MakeCoherent() {
 void CommandProcessor::PrepareForWait() {
   if (zpd_mode_ == ZPDMode::kStrict && zpd_awaited_report_count_) {
     PrepareZPDForWait();
+  }
+  if (viz_pending_resolves_) {
+    PollCompletedSubmission();
   }
 }
 
@@ -1406,11 +1417,8 @@ bool CommandProcessor::ExecutePacketType3_EVENT_WRITE_ZPD(memory::RingBuffer* re
 bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32_t packet,
                                               const char* opcode_name, uint32_t viz_query_condition,
                                               uint32_t count_remaining) {
-  // if viz_query_condition != 0, this is a conditional draw based on viz query.
-  // This ID matches the one issued in PM4_VIZ_QUERY
-  // uint32_t viz_id = viz_query_condition & 0x3F;
-  // when true, render conditionally based on query result
-  // uint32_t viz_use = viz_query_condition & 0x100;
+  // viz_query_condition is the VIZ token. Bit 8 makes the draw conditional on
+  // the ID's visibility in bits 0:5, from an earlier PM4_VIZ_QUERY.
 
   assert_not_zero(count_remaining);
   if (!count_remaining) {
@@ -1490,17 +1498,15 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
   reader->AdvanceRead(count_remaining * sizeof(uint32_t));
 
   if (draw_succeeded) {
-    auto viz_query = register_file_->Get<reg::PA_SC_VIZ_QUERY>();
-    if (!(viz_query.viz_query_ena && viz_query.kill_pix_post_hi_z)) {
-      // TODO(Triang3l): Don't drop the draw call completely if the vertex
-      // shader has memexport.
-      // TODO(Triang3l || JoelLinn): Handle this properly in the render
-      // backends.
-
+    // A consumer draw whose survey is still outstanding runs under the
+    // backend's predicate instead of blocking. Surveys themselves are ordinary
+    // draws here (draw_util::IsVIZSurveyDraw).
+    if (PrepareVIZDraw(viz_query_condition)) {
       bool major_mode_explicit =
           xenos::IsMajorModeExplicit(vgt_draw_initiator.major_mode, vgt_draw_initiator.prim_type);
       draw_succeeded = IssueDraw(vgt_draw_initiator.prim_type, vgt_draw_initiator.num_indices,
                                  is_indexed ? &index_buffer_info : nullptr, major_mode_explicit);
+      viz_draw_predicate_ = {};
       if (!draw_succeeded) {
         auto vgt_output_path_cntl = register_file_->Get<reg::VGT_OUTPUT_PATH_CNTL>();
         auto vgt_hos_cntl = register_file_->Get<reg::VGT_HOS_CNTL>();
@@ -1517,6 +1523,9 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
     }
   }
 
+  if (!draw_succeeded) {
+    OnVIZSurveyDraw(false);
+  }
   // If read the packed correctly, but merely couldn't execute it (because of,
   // for instance, features not supported by the host), don't terminate command
   // buffer processing as that would leave rendering in a way more inconsistent
@@ -1702,8 +1711,15 @@ bool CommandProcessor::ExecutePacketType3_INVALIDATE_STATE(memory::RingBuffer* r
 
 bool CommandProcessor::ExecutePacketType3_VIZ_QUERY(memory::RingBuffer* reader, uint32_t packet,
                                                     uint32_t count) {
-  // begin/end initiator for viz query extent processing
   // https://www.google.com/patents/US20050195186
+  // VIZ_QUERY is Xenos' GPU-side conditional rendering. It's not an occlusion
+  // query like EVENT_WRITE_ZPD: there are no sample counts for the guest and no
+  // buffer the CPU reads. The scan converter tracks 64 IDs; geometry between
+  // BEGIN and END updates one of them, and later draw packets carrying the ID
+  // are discarded when it saw nothing. As an approximation, host occlusion
+  // queries (or the ROV counter) measure the survey, any passing sample means
+  // visible, and the consumers run under D3D12 predication (xenia-canary
+  // #1111).
   assert_true(count == 1);
 
   uint32_t dword0 = reader->ReadAndSwap<uint32_t>();
@@ -1711,17 +1727,16 @@ bool CommandProcessor::ExecutePacketType3_VIZ_QUERY(memory::RingBuffer* reader, 
   uint32_t id = dword0 & 0x3F;
   uint32_t end = dword0 & 0x100;
   if (!end) {
-    // begin a new viz query @ id
-    // On hardware this clears the internal state of the scan converter (which
-    // is different to the register)
     WriteRegister(XE_GPU_REG_VGT_EVENT_INITIATOR, VIZQUERY_START);
-    REXGPU_INFO("Begin viz query ID {:02X}", id);
+    if (REXCVAR_GET(occlusion_query_viz)) {
+      BeginVIZQuery(id);
+    }
   } else {
-    // end the viz query
     WriteRegister(XE_GPU_REG_VGT_EVENT_INITIATOR, VIZQUERY_END);
-    REXGPU_INFO("End viz query ID {:02X}", id);
-    // The scan converter writes the internal result back to the register here.
-    // We just fake it and say it was visible in case it is read back.
+    if (REXCVAR_GET(occlusion_query_viz)) {
+      EndVIZQuery(id);
+    }
+    // Read back as visible, as before; the predicate decides the draws.
     if (id < 32) {
       register_file_->values[XE_GPU_REG_PA_SC_VIZ_QUERY_STATUS_0] |= uint32_t(1) << id;
     } else {
@@ -1732,10 +1747,128 @@ bool CommandProcessor::ExecutePacketType3_VIZ_QUERY(memory::RingBuffer* reader, 
   return true;
 }
 
+void CommandProcessor::BeginVIZQuery(uint32_t id) {
+  if (zpd_active_segment_.viz.generation != kInvalidVIZGeneration) {
+    CloseQuerySegment();
+    zpd_active_segment_.viz = {};
+  }
+  VIZQuery& query = viz_queries_[id];
+  const uint64_t generation = query.generation + 1;
+  query = {};
+  query.generation = generation;
+  query.resolved = false;
+  query.active = true;
+}
+
+void CommandProcessor::EndVIZQuery(uint32_t id) {
+  VIZQuery& query = viz_queries_[id];
+  if (zpd_active_segment_.viz.id == id && zpd_active_segment_.viz.generation == query.generation) {
+    CloseQuerySegment();
+    zpd_active_segment_.viz = {};
+  }
+  query.active = false;
+  if (query.resolved) {
+    return;
+  }
+  if (!query.surveyed) {
+    // No survey draw ever reached the backend: a real not-visible.
+    query.resolved = true;
+    query.visible = false;
+  } else if (query.fallback || !query.pending_segments) {
+    // Fallbacks are visible, whatever pending segments say.
+    query.resolved = true;
+    query.visible = query.fallback || query.accumulated_visible;
+  }
+}
+
+void CommandProcessor::OnVIZSurveyDraw(bool measured) {
+  const reg::PA_SC_VIZ_QUERY viz_query = register_file_->Get<reg::PA_SC_VIZ_QUERY>();
+  if (!viz_query.viz_query_ena) {
+    return;
+  }
+  VIZQuery& query = viz_queries_[viz_query.viz_query_id];
+  if (!query.active) {
+    return;
+  }
+  query.surveyed = true;
+  if (measured && zpd_active_segment_.segment_active &&
+      zpd_active_segment_.viz.id == viz_query.viz_query_id &&
+      zpd_active_segment_.viz.generation == query.generation) {
+    return;
+  }
+  query.fallback = true;
+}
+
+void CommandProcessor::OnVIZQueryResolved(uint32_t id, uint64_t generation, bool visible) {
+  if (viz_pending_resolves_) {
+    --viz_pending_resolves_;
+  }
+  VIZQuery& query = viz_queries_[id];
+  if (query.generation != generation) {
+    return;
+  }
+  if (query.pending_segments) {
+    --query.pending_segments;
+  }
+  query.accumulated_visible |= visible;
+  // Retire the answer once the query is closed and every segment resolved.
+  if (!query.resolved && !query.active && !query.pending_segments) {
+    query.resolved = true;
+    query.visible = query.fallback || query.accumulated_visible;
+  }
+}
+
+bool CommandProcessor::PrepareVIZDraw(uint32_t token) {
+  viz_draw_predicate_ = {};
+  if (!(token & 0x100)) {
+    return true;
+  }
+  const uint32_t id = token & 0x3F;
+  VIZQuery& query = viz_queries_[id];
+  if (!query.resolved) {
+    // Pick up resolves that already completed.
+    PumpQueryResolves();
+  }
+  if (!query.resolved && query.pending_segments) {
+    // The predicate stands in for the answer only while it covers the whole
+    // query, so not after a fallback or with a segment still open on the ID.
+    if (query.predicate_armed && !query.fallback &&
+        !(zpd_active_segment_.viz.generation != kInvalidVIZGeneration &&
+          zpd_active_segment_.viz.id == id)) {
+      viz_draw_predicate_.id = id;
+      viz_draw_predicate_.generation = query.generation;
+      // Don't wait on an open query.
+    } else if (!query.active) {
+      // Segments resolve in submission order, so the newest is the answer.
+      AwaitVIZQueryResolve(query.last_segment_end_submission);
+    }
+  }
+  const bool draw =
+      viz_draw_predicate_.generation != kInvalidVIZGeneration || !query.resolved || query.visible;
+  if (draw && viz_draw_predicate_.generation == kInvalidVIZGeneration) {
+    return true;
+  }
+  // Only culled or predicated draws pay for the memexport and copy checks.
+  // Any unanalyzed memexport shader might export.
+  const bool memexport_used_vertex =
+      active_vertex_shader_ && (!active_vertex_shader_->is_ucode_analyzed() ||
+                                active_vertex_shader_->memexport_eM_written());
+  const bool memexport_used_pixel =
+      active_pixel_shader_ &&
+      (!active_pixel_shader_->is_ucode_analyzed() || active_pixel_shader_->memexport_eM_written());
+  if (!memexport_used_vertex && !memexport_used_pixel &&
+      register_file_->Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kCopy) {
+    return draw;
+  }
+  viz_draw_predicate_ = {};
+  return true;
+}
 // Only called by EVENT_WRITE_ZPD. This closes the query interval since the last
 // event and queues its counter snapshot.
 void CommandProcessor::QueueZPDReport(uint32_t report_address) {
-  CloseQuerySegment();
+  if (zpd_active_segment_.report) {
+    CloseQuerySegment();
+  }
 
   ZPDReport& report = zpd_current_report_;
   report.address = report_address;
@@ -1771,77 +1904,145 @@ void CommandProcessor::QueueZPDReport(uint32_t report_address) {
   // Report runs without draws between them never use any pool slots.
   zpd_current_report_ = {};
   zpd_current_report_.handle = zpd_next_report_handle_++;
-  zpd_active_segment_ = {};
   zpd_active_segment_.segment_pending_begin = true;
 }
 
 void CommandProcessor::OpenQuerySegment(bool can_close_submission) {
-  if (zpd_current_report_.handle == kInvalidReportHandle ||
-      !zpd_active_segment_.segment_pending_begin || !CanOpenZPDQuery()) {
+  ActiveZPDSegment& segment = zpd_active_segment_;
+  if (segment.segment_active || query_segment_opening_ || !CanOpenZPDQuery()) {
+    return;
+  }
+  const bool report = zpd_current_report_.handle != kInvalidReportHandle &&
+                      segment.segment_pending_begin && !segment.survey;
+  const bool viz = segment.viz.generation != kInvalidVIZGeneration;
+  if (!report && !viz) {
     return;
   }
 
   EnsureZPDQueryResources();
   if (!IsZPDQueryPoolReady()) {
-    // Fall back to fake results for the rest of the session.
-    zpd_force_fake_fallback_ = true;
-    zpd_current_report_ = {};
-    zpd_active_segment_ = {};
+    if (viz) {
+      viz_queries_[segment.viz.id].fallback = true;
+    }
+    if (report) {
+      // Fall back to fake results for the rest of the session.
+      zpd_force_fake_fallback_ = true;
+      zpd_current_report_ = {};
+      segment = {};
+    } else {
+      segment.viz = {};
+    }
     return;
   }
 
   // Frees any slots from completed submissions before asking for new ones.
   PumpQueryResolves();
 
+  segment.report = report;
+  query_segment_opening_ = true;
   QueryOpenResult result = OpenZPDQuery(can_close_submission);
+  query_segment_opening_ = false;
   if (result == QueryOpenResult::kPoolExhausted && zpd_mode_ != ZPDMode::kStrict) {
     // Fast modes favor forward progress over accuracy. Report at least one
     // passing sample instead of waiting for a slot to become available.
-    zpd_current_report_.delta.z_pass = std::max<uint64_t>(zpd_current_report_.delta.z_pass, 1);
-    zpd_active_segment_.segment_pending_begin = false;
+    if (report) {
+      zpd_current_report_.delta.z_pass = std::max<uint64_t>(zpd_current_report_.delta.z_pass, 1);
+      segment.segment_pending_begin = false;
+    }
+    if (viz) {
+      viz_queries_[segment.viz.id].fallback = true;
+    }
+    segment.report = false;
+    segment.viz = {};
     return;
   }
   if (result != QueryOpenResult::kOpened) {
+    segment.report = false;
+    // A deferred segment opens at the next opportunity with these consumers.
+    if (result != QueryOpenResult::kDeferred && viz) {
+      viz_queries_[segment.viz.id].fallback = true;
+      segment.viz = {};
+    }
     return;
   }
-  zpd_active_segment_.segment_active = true;
-  zpd_active_segment_.segment_pending_begin = false;
+  segment.segment_active = true;
+  if (report) {
+    segment.segment_pending_begin = false;
+  }
 }
 
-// Closes the active host segment without ending the report.
+// Closes the active host segment without ending the report or the VIZ ID.
 // BeginQuery/EndQuery can't cross D3D12 command list boundaries. The result
 // accumulates across all pieces.
 void CommandProcessor::CloseQuerySegment() {
-  if (!zpd_active_segment_.segment_active) {
+  ActiveZPDSegment& segment = zpd_active_segment_;
+  if (!segment.segment_active) {
     return;
   }
   uint64_t submission = 0;
-  if (CloseZPDQuery(zpd_current_report_.handle, submission)) {
+  const bool closed = CloseZPDQuery(
+      segment.report ? zpd_current_report_.handle : kInvalidReportHandle, segment.viz, submission);
+  if (segment.report && closed) {
     zpd_current_report_.pending_segments++;
     zpd_current_report_.last_segment_end_submission = submission;
   }
-  zpd_active_segment_ = {};
-  zpd_active_segment_.segment_pending_begin = true;
+  if (segment.viz.generation != kInvalidVIZGeneration) {
+    VIZQuery& query = viz_queries_[segment.viz.id];
+    if (closed) {
+      ++query.pending_segments;
+      query.last_segment_end_submission = submission;
+      ++viz_pending_resolves_;
+    } else {
+      // The segment is lost but its draws ran, so the query stays visible.
+      query.fallback = true;
+    }
+  }
+  // The report resumes at the next opportunity if this segment counted for
+  // it, or if it was still waiting for one around a survey.
+  const bool pending_begin = segment.report || segment.segment_pending_begin;
+  segment = {};
+  segment.segment_pending_begin = pending_begin;
 }
 
-void CommandProcessor::UpdateZPDSegment(uint32_t scale_area, bool count_total) {
-  if (zpd_current_report_.handle == kInvalidReportHandle) {
+void CommandProcessor::UpdateZPDSegment(uint32_t scale_area, bool count_total, bool survey) {
+  ActiveZPDSegment& segment = zpd_active_segment_;
+  const reg::PA_SC_VIZ_QUERY viz_query = register_file_->Get<reg::PA_SC_VIZ_QUERY>();
+  const VIZQuery& viz_active = viz_queries_[viz_query.viz_query_id];
+  const bool viz = REXCVAR_GET(occlusion_query_viz) && viz_query.viz_query_ena && viz_active.active;
+  // Surveys are killed after hi-Z on hardware, so no report counts them.
+  const bool report =
+      zpd_current_report_.handle != kInvalidReportHandle && !survey && segment.report_measuring();
+  if (!segment.report && !report && !viz) {
     return;
   }
-  if (zpd_active_segment_.segment_active &&
-      ((zpd_active_segment_.scale_area && zpd_active_segment_.scale_area != scale_area) ||
-       zpd_active_segment_.count_total != count_total)) {
-    // Draw scale or hybrid Total counting changed in the middle of a report,
-    // so close the segment and start a fresh one for this draw.
+  count_total &= report;
+
+  // Close the segment and start a fresh one for this draw when the draw scale
+  // or hybrid Total counting changed in the middle of a report, when a report
+  // would share a segment with surveys, or when a new ID would inherit earlier
+  // draws. Later draws without the ID only err towards visible.
+  if (segment.segment_active &&
+      ((segment.report && ((segment.scale_area && segment.scale_area != scale_area) ||
+                           segment.count_total != count_total)) ||
+       segment.report != report ||
+       (viz && !(segment.viz.id == viz_query.viz_query_id &&
+                 segment.viz.generation == viz_active.generation)))) {
     CloseQuerySegment();
   }
 
-  zpd_active_segment_.scale_area = scale_area;
-  zpd_active_segment_.count_total = count_total;
+  segment.scale_area = scale_area;
+  segment.count_total = count_total;
 
-  if (zpd_active_segment_.segment_pending_begin) {
-    OpenQuerySegment(false);
+  if (segment.segment_active) {
+    return;
   }
+  segment.survey = survey;
+  segment.viz = {};
+  if (viz) {
+    segment.viz.id = viz_query.viz_query_id;
+    segment.viz.generation = viz_active.generation;
+  }
+  OpenQuerySegment(false);
 }
 
 void CommandProcessor::OnZPDQueryResolved(ReportHandle report_handle,

@@ -43,9 +43,9 @@ REXCVAR_DEFINE_BOOL(resolve_resolution_scale_fill_half_pixel_offset, true, "GPU"
 namespace rex::graphics::draw_util {
 
 bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_polygonal) {
-  // TODO(Triang3l): Investigate EdramMode::kNoOperation better, with respect to
-  // sample counting. Let's assume sample counting is a part of depth / stencil,
-  // thus disabled too.
+  // The sample counters live in the RB with depth/stencil testing.
+  // kNoOperation and kCopy don't count. D3D sits in kCopy during
+  // EVENT_WRITE_ZPD, which only snapshots the running counters.
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
   if (edram_mode != xenos::EdramMode::kColorDepth && edram_mode != xenos::EdramMode::kDepthOnly) {
     return false;
@@ -53,6 +53,11 @@ bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_pol
   if (regs.Get<reg::SQ_PROGRAM_CNTL>().vs_export_mode ==
           xenos::VertexShaderExportMode::kMultipass ||
       !regs.Get<reg::RB_SURFACE_INFO>().surface_pitch) {
+    return false;
+  }
+  // Geometry killed after hi-Z only feeds the VIZ survey. Without an ID,
+  // nothing consumes it (screen-extent queries are not emulated).
+  if (regs.Get<reg::PA_SC_VIZ_QUERY>().kill_pix_post_hi_z && !IsVIZSurveyDraw(regs)) {
     return false;
   }
   if (primitive_polygonal) {
@@ -65,6 +70,12 @@ bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_pol
   return true;
 }
 
+bool IsVIZSurveyDraw(const RegisterFile& regs) {
+  auto pa_sc_viz_query = regs.Get<reg::PA_SC_VIZ_QUERY>();
+  return REXCVAR_GET(occlusion_query_viz) && pa_sc_viz_query.viz_query_ena &&
+         pa_sc_viz_query.kill_pix_post_hi_z;
+}
+
 reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs) {
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
   if (edram_mode != xenos::EdramMode::kColorDepth && edram_mode != xenos::EdramMode::kDepthOnly) {
@@ -74,6 +85,15 @@ reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs) {
     return disabled;
   }
   reg::RB_DEPTHCONTROL depthcontrol = regs.Get<reg::RB_DEPTHCONTROL>();
+  if (IsVIZSurveyDraw(regs)) {
+    // VIZ surveys just test, never write. Nothing rejects them with hi-Z off.
+    depthcontrol.z_write_enable = 0;
+    depthcontrol.stencil_enable = 0;
+    // Surveys use per-sample depth tests when hi-Z is on.
+    if (!regs.Get<reg::RB_HIZCONTROL>().hiz_enable) {
+      depthcontrol.z_enable = 0;
+    }
+  }
   // For more reliable skipping of depth render target management for draws not
   // requiring depth.
   if (depthcontrol.z_enable && !depthcontrol.z_write_enable &&
@@ -125,6 +145,11 @@ bool IsPixelShaderNeededWithRasterization(const Shader& shader, const RegisterFi
   // See xenos::EdramMode for explanation why the pixel shader is only used when
   // it's kColorDepth here.
   if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth) {
+    return false;
+  }
+
+  // Surveys just count coverage; hardware kills them before the shader.
+  if (IsVIZSurveyDraw(regs)) {
     return false;
   }
 
@@ -581,7 +606,8 @@ void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_su
 
 uint32_t GetNormalizedColorMask(const RegisterFile& regs,
                                 uint32_t pixel_shader_writes_color_targets) {
-  if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth) {
+  if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth ||
+      IsVIZSurveyDraw(regs)) {
     return 0;
   }
   uint32_t normalized_color_mask = 0;

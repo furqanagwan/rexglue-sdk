@@ -1687,6 +1687,8 @@ void D3D12CommandProcessor::ShutdownContext() {
   zpd_active_query_index_ = UINT32_MAX;
   zpd_active_query_generation_ = 0;
   zpd_host_query_pool_.reset();
+  viz_predicate_buffer_.Reset();
+  viz_predicate_buffer_failed_ = false;
 
   ui::d3d12::util::ReleaseAndNull(readback_buffer_);
   readback_buffer_size_ = 0;
@@ -2353,9 +2355,17 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   ID3D12Device* device = GetD3D12Provider().GetDevice();
   const RegisterFile& regs = *register_file_;
 
+  // VIZ survey geometry for one of the 64 IDs. draw_util keeps it normalized,
+  // so it only counts coverage here (xenia-canary #1111).
+  const bool viz_survey = draw_util::IsVIZSurveyDraw(regs);
+
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
   if (edram_mode == xenos::EdramMode::kCopy) {
     // Special copy handling.
+    if (viz_survey) {
+      OnVIZSurveyDraw(false);
+      return true;
+    }
     return IssueCopy();
   }
 
@@ -2402,6 +2412,15 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   bool memexport_used_pixel = pixel_shader && (pixel_shader->memexport_eM_written() != 0);
   bool memexport_used = memexport_used_vertex || memexport_used_pixel;
 
+  // A draw contributing to its VIZ ID without the kill bit counts at hi-Z,
+  // before the pixel shader can reject anything, which isn't measured here.
+  if (!viz_survey && pixel_shader &&
+      (pixel_shader->kills_pixels() ||
+       (pixel_shader->writes_color_target(0) &&
+        draw_util::DoesCoverageDependOnAlpha(regs.Get<reg::RB_COLORCONTROL>())))) {
+    OnVIZSurveyDraw(false);
+  }
+
   if (!BeginSubmission(true)) {
     return false;
   }
@@ -2440,11 +2459,10 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   // Hybrid occlusion query draw, counting coverage into the Total counter.
   // Only depth or stencil tested draws without depth writes: scene geometry
   // keeps early depth rejection, and nothing can fail without a test.
-  bool zpd_hybrid =
-      zpd_hybrid_supported_ &&
-      (zpd_active_segment_.segment_active || zpd_active_segment_.segment_pending_begin) &&
-      !normalized_depth_control.z_write_enable &&
-      (normalized_depth_control.z_enable || normalized_depth_control.stencil_enable);
+  // Surveys never count for a report.
+  bool zpd_hybrid = zpd_hybrid_supported_ && zpd_active_segment_.report_measuring() &&
+                    !viz_survey && !normalized_depth_control.z_write_enable &&
+                    (normalized_depth_control.z_enable || normalized_depth_control.stencil_enable);
   // For drawing without the counting while the pipeline is being created.
   DxbcShaderTranslator::Modification pixel_shader_modification_without_zpd =
       pixel_shader_modification;
@@ -2496,7 +2514,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   std::optional<TickAccumulator> pipeline_time(std::in_place, frame_timings_.pipelines);
   if (!pipeline_cache_->ConfigurePipeline(
           vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
-          normalized_depth_control, normalized_color_mask, zpd_hybrid,
+          normalized_depth_control, normalized_color_mask, zpd_hybrid, viz_survey,
           bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
           &pipeline_handle, &root_signature)) {
     return false;
@@ -2534,13 +2552,14 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
       }
       if (!pipeline_cache_->ConfigurePipeline(
               vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
-              normalized_depth_control, normalized_color_mask, false,
+              normalized_depth_control, normalized_color_mask, false, viz_survey,
               bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
               &pipeline_handle, &root_signature)) {
         return false;
       }
     }
     if (pipeline_cache_->GetD3D12PipelineByHandle(pipeline_handle) == nullptr) {
+      OnVIZSurveyDraw(false);
       return true;
     }
   }
@@ -2569,7 +2588,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   // ZPD segments can't mix scales or hybrid Total counting. The resolved
   // sample count is divided by one scale area per segment. Split before the
   // counter index goes into the system constants.
-  UpdateZPDSegment(draw_resolution_scale_x * draw_resolution_scale_y, zpd_hybrid);
+  UpdateZPDSegment(draw_resolution_scale_x * draw_resolution_scale_y, zpd_hybrid, viz_survey);
 
   bool convert_z_to_float24 =
       host_render_targets_used && render_target_cache_->depth_float24_convert_in_pixel_shader();
@@ -2767,7 +2786,20 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   SetPrimitiveTopology(primitive_topology);
   // Must not call anything that may change the primitive topology from now on!
 
+  // Consumer VIZ draws run under SetPredication instead of blocking.
+  // EQUAL_ZERO skips the draw only when the survey saw nothing.
+  ID3D12Resource* predicate_buffer = nullptr;
+  uint64_t predicate_offset = 0;
+  if (viz_predicate_buffer_ && IsVIZPredicateArmed()) {
+    predicate_buffer = viz_predicate_buffer_.Get();
+    predicate_offset = uint64_t(viz_draw_predicate_.id) * sizeof(uint64_t);
+    PushTransitionBarrier(predicate_buffer, viz_predicate_buffer_state_,
+                          D3D12_RESOURCE_STATE_PREDICATION);
+    viz_predicate_buffer_state_ = D3D12_RESOURCE_STATE_PREDICATION;
+  }
+
   // Draw.
+  OnVIZSurveyDraw(true);
   if (primitive_processing_result.index_buffer_type ==
       PrimitiveProcessor::ProcessedIndexBufferType::kNone) {
     if (memexport_used) {
@@ -2778,8 +2810,15 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     SubmitBarriers();
     PROFILE_DRAW_CALL();
     PROFILE_VERTICES(primitive_processing_result.host_draw_vertex_count);
+    if (predicate_buffer) {
+      deferred_command_list_.D3DSetPredication(predicate_buffer, predicate_offset,
+                                               D3D12_PREDICATION_OP_EQUAL_ZERO);
+    }
     deferred_command_list_.D3DDrawInstanced(primitive_processing_result.host_draw_vertex_count, 1,
                                             0, 0);
+    if (predicate_buffer) {
+      deferred_command_list_.D3DSetPredication(nullptr, 0, D3D12_PREDICATION_OP_EQUAL_ZERO);
+    }
   } else {
     D3D12_INDEX_BUFFER_VIEW index_buffer_view;
     index_buffer_view.SizeInBytes = primitive_processing_result.host_draw_vertex_count;
@@ -2837,8 +2876,15 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     SubmitBarriers();
     PROFILE_DRAW_CALL();
     PROFILE_VERTICES(primitive_processing_result.host_draw_vertex_count);
+    if (predicate_buffer) {
+      deferred_command_list_.D3DSetPredication(predicate_buffer, predicate_offset,
+                                               D3D12_PREDICATION_OP_EQUAL_ZERO);
+    }
     deferred_command_list_.D3DDrawIndexedInstanced(
         primitive_processing_result.host_draw_vertex_count, 1, 0, 0, 0);
+    if (predicate_buffer) {
+      deferred_command_list_.D3DSetPredication(nullptr, 0, D3D12_PREDICATION_OP_EQUAL_ZERO);
+    }
     if (scratch_index_buffer != nullptr) {
       ReleaseScratchGPUBuffer(scratch_index_buffer, D3D12_RESOURCE_STATE_INDEX_BUFFER);
     }
@@ -3626,7 +3672,8 @@ bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
 
     // We can't close the command list with an active query - D3D12 requirement.
     // Close the active segment and emit ResolveQueryData before executing.
-    if (zpd_mode_ != ZPDMode::kFake) {
+    // VIZ segments open even when ZPD is faked; both are no-ops without any.
+    {
       CloseQuerySegment();
       RecordZPDResolveBatch();
     }
@@ -5081,7 +5128,9 @@ ID3D12Resource* D3D12CommandProcessor::RequestReadbackBuffer(uint32_t size) {
 }
 
 void D3D12CommandProcessor::EnsureZPDQueryResources() {
-  if (zpd_mode_ == ZPDMode::kFake || !zpd_host_query_pool_ || IsZPDQueryPoolReady()) {
+  // VIZ surveys need the pool even when ZPD reports are faked.
+  if ((zpd_mode_ == ZPDMode::kFake && !REXCVAR_GET(occlusion_query_viz)) || !zpd_host_query_pool_ ||
+      IsZPDQueryPoolReady()) {
     return;
   }
   // Host queries count samples passing the host depth/stencil test. With ROV,
@@ -5173,13 +5222,40 @@ CommandProcessor::QueryOpenResult D3D12CommandProcessor::OpenZPDQuery(bool can_c
   return QueryOpenResult::kOpened;
 }
 
-bool D3D12CommandProcessor::CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) {
+bool D3D12CommandProcessor::CloseZPDQuery(ReportHandle report_handle, const VIZQueryHandle& viz,
+                                          uint64_t& out_submission) {
   if (!zpd_active_query_is_rov_) {
     zpd_host_query_pool_->EndQuery(deferred_command_list_, zpd_active_query_index_);
   }
   zpd_host_query_pool_->QueueQueryResolve(zpd_active_query_index_, zpd_active_query_is_rov_);
   if (zpd_active_query_is_hybrid_) {
     zpd_host_query_pool_->QueueQueryResolve(zpd_active_query_index_, true);
+  }
+
+  // SetPredication can't read the query heap or the counter, so the count is
+  // also staged into the ID's predicate for draws still waiting on an answer.
+  if (viz.generation != kInvalidVIZGeneration) {
+    if (CanArmVIZPredicate(viz.id, viz.generation) && EnsureVIZPredicateBuffer()) {
+      const uint64_t predicate_offset = uint64_t(viz.id) * sizeof(uint64_t);
+      PushTransitionBarrier(viz_predicate_buffer_.Get(), viz_predicate_buffer_state_,
+                            D3D12_RESOURCE_STATE_COPY_DEST);
+      viz_predicate_buffer_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
+      SubmitBarriers();
+      if (zpd_active_query_is_rov_) {
+        // The ZPass lane of the counter slot, written by pixel shader atomics.
+        // Only the low dword is copied; the high one reads zero from the
+        // buffer's zeroed creation or an earlier full resolve.
+        zpd_host_query_pool_->CopyCounterZPassTo(deferred_command_list_, GetCurrentSubmission(),
+                                                 zpd_active_query_index_,
+                                                 viz_predicate_buffer_.Get(), predicate_offset);
+      } else {
+        zpd_host_query_pool_->ResolveQueryTo(deferred_command_list_, zpd_active_query_index_,
+                                             viz_predicate_buffer_.Get(), predicate_offset);
+      }
+      ArmVIZPredicate(viz.id, viz.generation);
+    } else {
+      BlockVIZPredicate(viz.id, viz.generation);
+    }
   }
 
   PendingQueryResolve resolve;
@@ -5190,6 +5266,7 @@ bool D3D12CommandProcessor::CloseZPDQuery(ReportHandle report_handle, uint64_t& 
   resolve.query_generation = zpd_active_query_generation_;
   resolve.scale_area = GetZPDScaleArea();
   resolve.report_handle = report_handle;
+  resolve.viz = viz;
   zpd_resolves_in_flight_.push_back(resolve);
 
   out_submission = resolve.submission;
@@ -5218,7 +5295,12 @@ void D3D12CommandProcessor::PumpQueryResolves() {
               ? zpd_host_query_pool_->GetHybridReadbackValue(resolve.query_index)
               : zpd_host_query_pool_->GetQueryReadbackValue(resolve.query_index, resolve.counter);
       zpd_host_query_pool_->ReleaseQueryIndex(resolve.query_index, resolve.query_generation);
-      OnZPDQueryResolved(resolve.report_handle, raw_counts, resolve.scale_area);
+      if (resolve.report_handle != kInvalidReportHandle) {
+        OnZPDQueryResolved(resolve.report_handle, raw_counts, resolve.scale_area);
+      }
+      if (resolve.viz.generation != kInvalidVIZGeneration) {
+        OnVIZQueryResolved(resolve.viz.id, resolve.viz.generation, raw_counts.z_pass != 0);
+      }
     }
   }
 }
@@ -5248,6 +5330,41 @@ bool D3D12CommandProcessor::AwaitQueryResolve(ReportHandle report_handle,
 
   const ZPDReport* report = FindZPDReport(report_handle);
   return !report || !report->pending_segments;
+}
+
+bool D3D12CommandProcessor::EnsureVIZPredicateBuffer() {
+  if (viz_predicate_buffer_) {
+    return true;
+  }
+  if (viz_predicate_buffer_failed_) {
+    // Don't retry and relog on every close.
+    return false;
+  }
+  D3D12_RESOURCE_DESC buffer_desc;
+  ui::d3d12::util::FillBufferResourceDesc(buffer_desc, sizeof(uint64_t) * viz_queries_.size(),
+                                          D3D12_RESOURCE_FLAG_NONE);
+  // Created zeroed, not with the usual not-zeroed flag: the counter staging
+  // only writes the low dword of a predicate, and predication compares all 64
+  // bits.
+  if (FAILED(GetD3D12Provider().GetDevice()->CreateCommittedResource(
+          &ui::d3d12::util::kHeapPropertiesDefault, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+          D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&viz_predicate_buffer_)))) {
+    REXGPU_ERROR("VIZ/D3D12: Failed to create the predicate buffer");
+    viz_predicate_buffer_failed_ = true;
+    return false;
+  }
+  viz_predicate_buffer_state_ = D3D12_RESOURCE_STATE_COMMON;
+  return true;
+}
+
+void D3D12CommandProcessor::AwaitVIZQueryResolve(uint64_t wait_for_submission) {
+  if (wait_for_submission >= GetCurrentSubmission()) {
+    return;
+  }
+  if (wait_for_submission > GetCompletedSubmission()) {
+    CheckSubmissionFence(wait_for_submission);
+  }
+  PumpQueryResolves();
 }
 
 void D3D12CommandProcessor::RecordZPDResolveBatch() {
