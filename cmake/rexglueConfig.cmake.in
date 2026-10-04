@@ -4,6 +4,10 @@ set(REXGLUE_VERSION_STRING "@REXGLUE_FULL_VERSION@")
 
 set(REXGLUE_SHARE_DIR "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_DATADIR@/rexglue")
 
+# Built with the DXIL shader path (RG-GDK-032): titles ship the Agility SDK.
+set(REXGLUE_SHADER_DXIL @REXGLUE_SHADER_DXIL@)
+set(REXGLUE_D3D12_SDK_VERSION "@REXGLUE_D3D12_SDK_VERSION@")
+
 include(CMakeFindDependencyMacro)
 
 include("${CMAKE_CURRENT_LIST_DIR}/rexglue_helpers.cmake")

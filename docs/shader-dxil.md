@@ -130,6 +130,24 @@ resolves at 2x), depth tests, memexport, ALU behaviour, ring and PM4
 handling, point / line expansion at 2x, invalid fetch constants and VIZ
 consumers; it is not yet a title-scene comparison.
 
+## Titles
+
+With an SDK built with `REXGLUE_SHADER_DXIL`, `rexglue_configure_target`
+compiles `d3d12_agility.cpp` into the title (the `D3D12SDKVersion` and
+`D3D12SDKPath` exports) and copies `D3D12Core.dll`, `d3d12SDKLayers.dll` and
+`dxil.dll` into `<exe>\D3D12\`, the layout of Microsoft's backward
+compatibility packages; the installed SDK carries them in
+`share/rexglue/d3d12`. Every D3D12 device the title makes then uses Agility
+SDK 1.618.5, whichever shader path it draws with. When D3D12 rejects a device,
+the log now has each adapter's result (`0x887E0003` is an Agility setup the
+runtime rejects).
+
+First title run, 2026-10-04 (Quantum of Solace, GDK Release, NVIDIA,
+3840x2160, `gpu_shader_path=dxil`): the in-engine intro renders correctly,
+250 DXIL pipelines, none failing, no errors. Translation, conversion and
+pipeline creation on the draw thread stall it: one 21.7 s frame and 23 fps
+while new shaders keep coming, against 60 fps on DXBC.
+
 ## Not yet
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53): the

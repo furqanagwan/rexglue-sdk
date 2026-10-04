@@ -294,8 +294,15 @@ bool D3D12Provider::Initialize() {
     DXGI_ADAPTER_DESC1 adapter_desc;
     if (SUCCEEDED(adapter->GetDesc1(&adapter_desc))) {
       adapter_is_software = (adapter_desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
-      if (SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),
-                                             nullptr))) {
+      HRESULT create_result =
+          pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr);
+      if (FAILED(create_result)) {
+        REXLOG_WARN("D3D12 adapter {} ({}): device creation failed, 0x{:08X}", adapter_index,
+                    rex::string::to_utf8(std::u16string(
+                        reinterpret_cast<const char16_t*>(adapter_desc.Description))),
+                    uint32_t(create_result));
+      }
+      if (SUCCEEDED(create_result)) {
         if (REXCVAR_GET(d3d12_adapter) >= 0) {
           if (adapter_index == REXCVAR_GET(d3d12_adapter)) {
             break;
