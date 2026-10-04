@@ -1602,3 +1602,21 @@ wide 1D texture work): 1D fetch XY coordinates (545407D4) and the scalar
 second component of three-operand vector ops. Tests:
 `tests/dxil/spirv_translator_test.cpp`; the default GPU and unit suites pass
 unchanged. Known regressions: none at the pin.
+
+## RG-GDK-032 stage 2 (part 2): D3D12 drawing on the DXIL path (2026-10-04)
+
+has207/xenia-edge `0788c561e3`: `guest_spirv_shader_cache` (SPIR-V
+modifications, ported as `GuestSpirvShaderCache`), the Mesa root signature
+and `UpdateBindingsMesa` / `GetOrCreateMesaBindlessSamplerIndex` /
+`SwitchToNewBindlessSamplerHeap` from `d3d12_command_processor.cc`, and the
+translator configuration, geometry shader DXIL and DXIL conversion from
+`d3d12/pipeline_cache.cc`. Class C (opt-in). Adaptation: Edge dropped DXBC,
+so this runs beside ReXGlue's DXBC path per draw (`gpu_shader_path=dxil`,
+fallback for tessellation, DXBC helper pixel shaders, hybrid occlusion
+counting, VIZ surveys, ROV and replaced shaders); the host render target
+path only; no draw-scale threshold or interpreter placeholder; DXIL pipelines
+created synchronously and not stored; separate constant buffer bindings; a
+new [shared SRV, shared UAV] bindless pair; the sampler heap switch also
+invalidates the DXBC descriptor indices. Tests: CTest `gpu.dxil_parity` (all
+52 GPU fixture cases with the DXIL path, strict). Known regressions: none at
+the pin; title scenes not yet compared.

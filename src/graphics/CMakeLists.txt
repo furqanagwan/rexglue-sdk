@@ -76,6 +76,7 @@ if(REXGLUE_SHADER_DXIL)
         pipeline/shader/spirv_builder.cpp
         pipeline/shader/spirv_builtin_geometry_shader.cpp
         pipeline/shader/spirv_fsi_system_constants.cpp
+        pipeline/shader/spirv_shader_cache.cpp
         pipeline/shader/spirv_to_dxil_compiler.cpp
         pipeline/shader/spirv_translator.cpp
         pipeline/shader/spirv_translator_alu.cpp

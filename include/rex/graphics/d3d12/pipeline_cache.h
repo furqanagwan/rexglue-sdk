@@ -41,6 +41,11 @@
 #include <rex/thread.h>
 #include <rex/ui/d3d12/d3d12_api.h>
 
+#if REXGLUE_SHADER_DXIL
+#include <rex/graphics/pipeline/shader/spirv.h>
+#include <rex/graphics/pipeline/shader/spirv_shader_cache.h>
+#endif
+
 namespace rex::graphics::d3d12 {
 
 class D3D12CommandProcessor;
@@ -97,6 +102,30 @@ class PipelineCache {
                          uint32_t bound_depth_and_color_render_target_bits,
                          const uint32_t* bound_depth_and_color_render_targets_formats,
                          void** pipeline_handle_out, ID3D12RootSignature** root_signature_out);
+
+#if REXGLUE_SHADER_DXIL
+  // The SPIR-V -> DXIL guest shader path (RG-GDK-032), chosen with
+  // gpu_shader_path=dxil when supported.
+  bool IsDxilShaderPathEnabled() const { return dxil_shader_cache_ != nullptr; }
+  enum class DxilPipelineResult {
+    kConfigured,
+    // The draw needs something the path doesn't do yet: use DXBC.
+    kUnsupported,
+    // Translation, DXIL conversion or pipeline creation failed.
+    kFailed,
+  };
+  // Configures the draw's pipeline with xenia-edge's SPIR-V translator and
+  // Mesa spirv_to_dxil; the shaders it returns give the draw's bindings.
+  DxilPipelineResult ConfigurePipelineDxil(
+      D3D12Shader::D3D12Translation* dxbc_vertex_shader,
+      D3D12Shader::D3D12Translation* dxbc_pixel_shader,
+      const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
+      uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
+      reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+      uint32_t bound_depth_and_color_render_target_bits,
+      const uint32_t* bound_depth_and_color_render_targets_formats, void** pipeline_handle_out,
+      SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out);
+#endif
 
   // Returns a pipeline with deferred creation by its handle. May return nullptr
   // if failed to create the pipeline.
@@ -227,6 +256,9 @@ class PipelineCache {
     // Survey draw for VIZ conditional rendering (ROV + occlusion_query_viz).
     // Selects the depth-only pixel shader that marks the ZPass lane.
     uint32_t viz_survey : 1;  // 30
+    // SPIR-V -> DXIL guest shaders (RG-GDK-032): the modifications are
+    // SpirvShaderTranslator ones.
+    uint32_t dxil : 1;  // 31
 
     uint32_t stencil_write_mask : 8;                   // 8
     xenos::StencilOp stencil_front_fail_op : 3;        // 11
@@ -240,7 +272,7 @@ class PipelineCache {
 
     PipelineRenderTarget render_targets[xenos::kMaxColorRenderTargets];
 
-    static constexpr uint32_t kVersion = 0x20261004;
+    static constexpr uint32_t kVersion = 0x20261005;
   });
 
   REXPACKEDSTRUCT(PipelineStoredDescription, {
@@ -253,6 +285,11 @@ class PipelineCache {
     D3D12Shader::D3D12Translation* vertex_shader;
     D3D12Shader::D3D12Translation* pixel_shader;
     const std::vector<uint32_t>* geometry_shader;
+    // With description.dxil, the DXIL used instead of the DXBC translations
+    // and geometry shader.
+    const std::vector<uint8_t>* dxil_vertex_shader;
+    const std::vector<uint8_t>* dxil_pixel_shader;
+    const std::vector<uint8_t>* dxil_geometry_shader;
     PipelineDescription description;
   };
 
@@ -372,6 +409,31 @@ class PipelineCache {
   // for hybrid occlusion query draws without a guest pixel shader.
   std::vector<uint8_t> zpd_total_depth_only_pixel_shader_;
   std::vector<uint8_t> viz_survey_depth_only_pixel_shader_;
+
+#if REXGLUE_SHADER_DXIL
+  class DxilShaderCacheHost : public GuestSpirvShaderCache::Host {
+   public:
+    explicit DxilShaderCacheHost(const PipelineCache& pipeline_cache)
+        : pipeline_cache_(pipeline_cache) {}
+    std::unique_ptr<SpirvShaderTranslator> CreateTranslator() const override;
+    bool depth_float24_round() const override;
+    bool depth_float24_convert_in_pixel_shader() const override;
+
+   private:
+    const PipelineCache& pipeline_cache_;
+  };
+  // Twin of a guest shader for the SPIR-V translator, by ucode hash.
+  SpirvShader* GetDxilShader(const Shader& shader);
+  // Translated and signed DXIL, or nullptr (failures are cached).
+  const std::vector<uint8_t>* GetDxilBinary(SpirvShader& shader, uint64_t modification);
+  const std::vector<uint8_t>* GetDxilGeometryShader(GuestSpirvShaderCache::GeometryShaderKey key);
+
+  std::unique_ptr<DxilShaderCacheHost> dxil_shader_cache_host_;
+  std::unique_ptr<GuestSpirvShaderCache> dxil_shader_cache_;
+  std::unordered_map<uint64_t, std::unique_ptr<SpirvShader>> dxil_shaders_;
+  std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<uint8_t>>> dxil_binaries_;
+  std::unordered_map<uint32_t, std::vector<uint8_t>> dxil_geometry_shaders_;
+#endif
   std::vector<uint8_t> zpd_total_float24_truncate_pixel_shader_;
   std::vector<uint8_t> zpd_total_float24_round_pixel_shader_;
 

@@ -33,8 +33,20 @@
 #include <rex/memory/utils.h>
 #include <rex/ui/d3d12/d3d12_presenter.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#if REXGLUE_SHADER_DXIL
+#include <rex/graphics/pipeline/shader/spirv_translator.h>
+#endif
 
 REXCVAR_DEFINE_BOOL(d3d12_bindless, true, "GPU/D3D12", "Use bindless resources where available")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(gpu_shader_path_dxil_strict, false, "GPU/D3D12",
+                    "With gpu_shader_path=dxil, fail a draw whose SPIR-V translation, DXIL "
+                    "conversion or pipeline fails instead of drawing it with DXBC (testing)");
+REXCVAR_DEFINE_STRING(gpu_shader_path, "dxbc", "GPU/D3D12",
+                      "Guest shader translation: dxbc (default), or dxil for xenia-edge's SPIR-V "
+                      "translator through Mesa spirv_to_dxil (builds with REXGLUE_SHADER_DXIL; "
+                      "host render target path, Shader Model 6.6, bindless; draws it can't take "
+                      "yet use DXBC)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_BOOL(d3d12_readback_memexport, false, "GPU/D3D12",
@@ -1190,6 +1202,99 @@ bool D3D12CommandProcessor::SetupContext() {
     }
   }
 
+#if REXGLUE_SHADER_DXIL
+  if (bindless_resources_used_ && REXCVAR_GET(gpu_shader_path) == "dxil" &&
+      provider.GetHighestShaderModel() >= D3D_SHADER_MODEL_6_6) {
+    // xenia-edge's fixed root signature for Mesa spirv_to_dxil output.
+    D3D12_ROOT_PARAMETER root_parameters_dxil[kRootParameter_Dxil_Count] = {};
+    auto set_cbv = [&](uint32_t index, uint32_t shader_register, uint32_t register_space) {
+      auto& parameter = root_parameters_dxil[index];
+      parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+      parameter.Descriptor.ShaderRegister = shader_register;
+      parameter.Descriptor.RegisterSpace = register_space;
+      parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    };
+    set_cbv(kRootParameter_Dxil_SystemConstants, 0, 1);
+    set_cbv(kRootParameter_Dxil_FloatConstantsVertex, 1, 1);
+    set_cbv(kRootParameter_Dxil_FloatConstantsPixel, 2, 1);
+    set_cbv(kRootParameter_Dxil_BoolLoopConstants, 3, 1);
+    set_cbv(kRootParameter_Dxil_FetchConstants, 4, 1);
+    set_cbv(kRootParameter_Dxil_RuntimeData, 0, 31);
+    auto set_srv = [&](uint32_t index, uint32_t shader_register) {
+      auto& parameter = root_parameters_dxil[index];
+      parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+      parameter.Descriptor.ShaderRegister = shader_register;
+      parameter.Descriptor.RegisterSpace = 0;
+      parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    };
+    set_srv(kRootParameter_Dxil_VertexTextureIndices, 2);
+    set_srv(kRootParameter_Dxil_PixelTextureIndices, 3);
+    // Unbounded ranges for the texture / sampler declarations the bindless
+    // lowering leaves behind (never dereferenced).
+    D3D12_DESCRIPTOR_RANGE declaration_ranges[4] = {};
+    auto set_declaration_range = [&](uint32_t index, D3D12_DESCRIPTOR_RANGE_TYPE range_type,
+                                     uint32_t register_space, D3D12_DESCRIPTOR_RANGE& range) {
+      range.RangeType = range_type;
+      range.NumDescriptors = UINT_MAX;
+      range.BaseShaderRegister = 0;
+      range.RegisterSpace = register_space;
+      range.OffsetInDescriptorsFromTableStart = 0;
+      auto& parameter = root_parameters_dxil[index];
+      parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+      parameter.DescriptorTable.NumDescriptorRanges = 1;
+      parameter.DescriptorTable.pDescriptorRanges = &range;
+      parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    };
+    set_declaration_range(kRootParameter_Dxil_VertexTextureRange, D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                          2, declaration_ranges[0]);
+    set_declaration_range(kRootParameter_Dxil_PixelTextureRange, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3,
+                          declaration_ranges[1]);
+    set_declaration_range(kRootParameter_Dxil_VertexSamplerRange,
+                          D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 2, declaration_ranges[2]);
+    set_declaration_range(kRootParameter_Dxil_PixelSamplerRange,
+                          D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 3, declaration_ranges[3]);
+    // Shared memory t0 + u0, then the ZPD counter u1 and EDRAM u2.
+    D3D12_DESCRIPTOR_RANGE shared_memory_ranges[2] = {};
+    shared_memory_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    shared_memory_ranges[0].NumDescriptors = 1;
+    shared_memory_ranges[0].OffsetInDescriptorsFromTableStart = 0;
+    shared_memory_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+    shared_memory_ranges[1].NumDescriptors = 1;
+    shared_memory_ranges[1].OffsetInDescriptorsFromTableStart = 1;
+    {
+      auto& parameter = root_parameters_dxil[kRootParameter_Dxil_SharedMemory];
+      parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+      parameter.DescriptorTable.NumDescriptorRanges = 2;
+      parameter.DescriptorTable.pDescriptorRanges = shared_memory_ranges;
+      parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    }
+    D3D12_DESCRIPTOR_RANGE single_uav_ranges[2] = {};
+    for (uint32_t i = 0; i < 2; ++i) {
+      single_uav_ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+      single_uav_ranges[i].NumDescriptors = 1;
+      single_uav_ranges[i].BaseShaderRegister = 1 + i;
+      auto& parameter =
+          root_parameters_dxil[i ? kRootParameter_Dxil_Edram : kRootParameter_Dxil_ZpdCounter];
+      parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+      parameter.DescriptorTable.NumDescriptorRanges = 1;
+      parameter.DescriptorTable.pDescriptorRanges = &single_uav_ranges[i];
+      parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    }
+    D3D12_ROOT_SIGNATURE_DESC root_signature_dxil_desc = {};
+    root_signature_dxil_desc.NumParameters = kRootParameter_Dxil_Count;
+    root_signature_dxil_desc.pParameters = root_parameters_dxil;
+    // The bindless lowering indexes ResourceDescriptorHeap and
+    // SamplerDescriptorHeap directly.
+    root_signature_dxil_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+                                     D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+                                     D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED;
+    root_signature_dxil_ = ui::d3d12::util::CreateRootSignature(provider, root_signature_dxil_desc);
+    if (!root_signature_dxil_) {
+      REXGPU_WARN("Failed to create the SPIR-V -> DXIL root signature; guest shaders use DXBC");
+    }
+  }
+#endif
+
   primitive_processor_ =
       std::make_unique<D3D12PrimitiveProcessor>(*register_file_, *memory_, *shared_memory_, *this);
   if (!primitive_processor_->Initialize()) {
@@ -1568,6 +1673,11 @@ bool D3D12CommandProcessor::SetupContext() {
     // kSharedMemoryRawUAV.
     shared_memory_->WriteRawUAVDescriptor(provider.OffsetViewDescriptor(
         view_bindless_heap_cpu_start_, uint32_t(SystemBindlessView::kSharedMemoryRawUAV)));
+    // kSharedMemoryRawSRVForUAV and kSharedMemoryRawUAVWithSRV.
+    shared_memory_->WriteRawSRVDescriptor(provider.OffsetViewDescriptor(
+        view_bindless_heap_cpu_start_, uint32_t(SystemBindlessView::kSharedMemoryRawSRVForUAV)));
+    shared_memory_->WriteRawUAVDescriptor(provider.OffsetViewDescriptor(
+        view_bindless_heap_cpu_start_, uint32_t(SystemBindlessView::kSharedMemoryRawUAVWithSRV)));
     // kSharedMemoryR32UintUAV.
     shared_memory_->WriteUintPow2UAVDescriptor(
         provider.OffsetViewDescriptor(view_bindless_heap_cpu_start_,
@@ -1768,6 +1878,7 @@ void D3D12CommandProcessor::ShutdownContext() {
   // the texture cache.
 
   // Root signatures are used by pipelines, thus freed after the pipelines.
+  ui::d3d12::util::ReleaseAndNull(root_signature_dxil_);
   ui::d3d12::util::ReleaseAndNull(root_signature_bindless_ds_);
   ui::d3d12::util::ReleaseAndNull(root_signature_bindless_vs_);
   for (auto it : root_signatures_bindful_) {
@@ -1839,19 +1950,29 @@ void D3D12CommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
             (1ull << (float_constant_index & 63))) {
           cbuffer_binding_float_pixel_.up_to_date = false;
         }
+        if (dxil_float_constant_map_pixel_[float_constant_index >> 6] &
+            (1ull << (float_constant_index & 63))) {
+          cbuffer_binding_dxil_float_pixel_.up_to_date = false;
+        }
       } else {
         if (current_float_constant_map_vertex_[float_constant_index >> 6] &
             (1ull << (float_constant_index & 63))) {
           cbuffer_binding_float_vertex_.up_to_date = false;
+        }
+        if (dxil_float_constant_map_vertex_[float_constant_index >> 6] &
+            (1ull << (float_constant_index & 63))) {
+          cbuffer_binding_dxil_float_vertex_.up_to_date = false;
         }
       }
     }
   } else if (index >= XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031 &&
              index <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31) {
     cbuffer_binding_bool_loop_.up_to_date = false;
+    cbuffer_binding_dxil_bool_loop_.up_to_date = false;
   } else if (index >= XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0 &&
              index <= XE_GPU_REG_SHADER_CONSTANT_FETCH_31_5) {
     cbuffer_binding_fetch_.up_to_date = false;
+    cbuffer_binding_dxil_fetch_.up_to_date = false;
     if (texture_cache_ != nullptr) {
       texture_cache_->TextureFetchConstantWritten((index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0) /
                                                   6);
@@ -1905,6 +2026,10 @@ void D3D12CommandProcessor::WriteRegistersFromMem(uint32_t start_index, uint32_t
                                          last_vertex_constant)) {
           cbuffer_binding_float_vertex_.up_to_date = false;
         }
+        if (range_has_any_constant_usage(dxil_float_constant_map_vertex_, first_float_constant,
+                                         last_vertex_constant)) {
+          cbuffer_binding_dxil_float_vertex_.up_to_date = false;
+        }
       }
       if (last_float_constant >= 256) {
         uint32_t first_pixel_constant =
@@ -1913,6 +2038,10 @@ void D3D12CommandProcessor::WriteRegistersFromMem(uint32_t start_index, uint32_t
         if (range_has_any_constant_usage(current_float_constant_map_pixel_, first_pixel_constant,
                                          last_pixel_constant)) {
           cbuffer_binding_float_pixel_.up_to_date = false;
+        }
+        if (range_has_any_constant_usage(dxil_float_constant_map_pixel_, first_pixel_constant,
+                                         last_pixel_constant)) {
+          cbuffer_binding_dxil_float_pixel_.up_to_date = false;
         }
       }
     }
@@ -1923,6 +2052,7 @@ void D3D12CommandProcessor::WriteRegistersFromMem(uint32_t start_index, uint32_t
       end_index <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31) {
     memory::copy_and_swap(register_file_->values + start_index, base, num_registers);
     cbuffer_binding_bool_loop_.up_to_date = false;
+    cbuffer_binding_dxil_bool_loop_.up_to_date = false;
     return;
   }
 
@@ -1930,6 +2060,7 @@ void D3D12CommandProcessor::WriteRegistersFromMem(uint32_t start_index, uint32_t
       end_index <= XE_GPU_REG_SHADER_CONSTANT_FETCH_31_5) {
     memory::copy_and_swap(register_file_->values + start_index, base, num_registers);
     cbuffer_binding_fetch_.up_to_date = false;
+    cbuffer_binding_dxil_fetch_.up_to_date = false;
     uint32_t first_fetch_dword = start_index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0;
     uint32_t last_fetch_dword = end_index - XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0;
     if (texture_cache_) {
@@ -2512,14 +2643,42 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   void* pipeline_handle;
   ID3D12RootSignature* root_signature;
   std::optional<TickAccumulator> pipeline_time(std::in_place, frame_timings_.pipelines);
-  if (!pipeline_cache_->ConfigurePipeline(
+  bool use_dxil = false;
+#if REXGLUE_SHADER_DXIL
+  // SPIR-V -> DXIL (gpu_shader_path=dxil, RG-GDK-032) when this draw can take
+  // it; the DXBC path otherwise. Occlusion query counting and VIZ surveys stay
+  // on DXBC.
+  const SpirvShader* dxil_vertex_shader = nullptr;
+  const SpirvShader* dxil_pixel_shader = nullptr;
+  if (pipeline_cache_->IsDxilShaderPathEnabled() && !zpd_hybrid && !viz_survey &&
+      host_render_targets_used) {
+    SpirvShader* dxil_vs = nullptr;
+    SpirvShader* dxil_ps = nullptr;
+    PipelineCache::DxilPipelineResult dxil_result = pipeline_cache_->ConfigurePipelineDxil(
+        vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
+        interpolator_mask, ps_param_gen_pos, normalized_depth_control, normalized_color_mask,
+        bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
+        &pipeline_handle, &dxil_vs, &dxil_ps);
+    if (dxil_result == PipelineCache::DxilPipelineResult::kFailed &&
+        REXCVAR_GET(gpu_shader_path_dxil_strict)) {
+      REXGPU_ERROR("gpu_shader_path_dxil_strict: the draw's DXIL pipeline failed");
+      return false;
+    }
+    use_dxil = dxil_result == PipelineCache::DxilPipelineResult::kConfigured;
+    dxil_vertex_shader = dxil_vs;
+    dxil_pixel_shader = dxil_ps;
+    root_signature = use_dxil ? root_signature_dxil_ : nullptr;
+  }
+#endif
+  if (!use_dxil &&
+      !pipeline_cache_->ConfigurePipeline(
           vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
           normalized_depth_control, normalized_color_mask, zpd_hybrid, viz_survey,
           bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
           &pipeline_handle, &root_signature)) {
     return false;
   }
-  if (REXCVAR_GET(async_shader_compilation)) {
+  if (!use_dxil && REXCVAR_GET(async_shader_compilation)) {
     // Skipping a draw while its pipeline compiles is only harmless for a pass
     // redrawn every frame (has207/xenia-edge de8e60601). Wait for the real
     // pipeline instead for a render target not drawn recently (a one-off
@@ -2569,6 +2728,13 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   uint32_t used_texture_mask =
       vertex_shader->GetUsedTextureMaskAfterTranslation() |
       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
+#if REXGLUE_SHADER_DXIL
+  if (use_dxil) {
+    used_texture_mask =
+        dxil_vertex_shader->GetUsedTextureMaskAfterTranslation() |
+        (dxil_pixel_shader ? dxil_pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
+  }
+#endif
   {
     TickAccumulator texture_time(frame_timings_.textures);
     texture_cache_->RequestTextures(used_texture_mask);
@@ -2631,16 +2797,27 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   // Update viewport, scissor, blend factor and stencil reference.
   UpdateFixedFunctionState(viewport_info, scissor, primitive_polygonal, normalized_depth_control);
 
-  // Update system constants before uploading them.
-  // TODO(Triang3l): With ROV, pass the disabled render target mask for safety.
-  UpdateSystemConstantValues(memexport_used, primitive_polygonal,
-                             primitive_processing_result.line_loop_closing_index,
-                             primitive_processing_result.host_shader_index_endian, viewport_info,
-                             used_texture_mask, normalized_depth_control, normalized_color_mask);
+#if REXGLUE_SHADER_DXIL
+  if (use_dxil) {
+    if (!UpdateBindingsDxil(dxil_vertex_shader, dxil_pixel_shader, memexport_used,
+                            primitive_polygonal, primitive_processing_result, viewport_info,
+                            used_texture_mask)) {
+      return false;
+    }
+  } else
+#endif
+  {
+    // Update system constants before uploading them.
+    // TODO(Triang3l): With ROV, pass the disabled render target mask for safety.
+    UpdateSystemConstantValues(memexport_used, primitive_polygonal,
+                               primitive_processing_result.line_loop_closing_index,
+                               primitive_processing_result.host_shader_index_endian, viewport_info,
+                               used_texture_mask, normalized_depth_control, normalized_color_mask);
 
-  // Update constant buffers, descriptors and root parameters.
-  if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {
-    return false;
+    // Update constant buffers, descriptors and root parameters.
+    if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {
+      return false;
+    }
   }
   // Must not call anything that can change the descriptor heap from now on!
 
@@ -3612,10 +3789,19 @@ bool D3D12CommandProcessor::BeginSubmission(bool is_guest_command) {
     std::memset(current_float_constant_map_vertex_, 0, sizeof(current_float_constant_map_vertex_));
     std::memset(current_float_constant_map_pixel_, 0, sizeof(current_float_constant_map_pixel_));
     cbuffer_binding_system_.up_to_date = false;
+    cbuffer_binding_dxil_system_.up_to_date = false;
+    cbuffer_binding_dxil_runtime_data_.up_to_date = false;
+    dxil_system_constants_shadow_.clear();
+    std::memset(dxil_float_constant_map_vertex_, 0, sizeof(dxil_float_constant_map_vertex_));
+    std::memset(dxil_float_constant_map_pixel_, 0, sizeof(dxil_float_constant_map_pixel_));
     cbuffer_binding_float_vertex_.up_to_date = false;
+    cbuffer_binding_dxil_float_vertex_.up_to_date = false;
     cbuffer_binding_float_pixel_.up_to_date = false;
+    cbuffer_binding_dxil_float_pixel_.up_to_date = false;
     cbuffer_binding_bool_loop_.up_to_date = false;
+    cbuffer_binding_dxil_bool_loop_.up_to_date = false;
     cbuffer_binding_fetch_.up_to_date = false;
+    cbuffer_binding_dxil_fetch_.up_to_date = false;
     current_shared_memory_binding_is_uav_.reset();
     if (bindless_resources_used_) {
       cbuffer_binding_descriptor_indices_vertex_.up_to_date = false;
@@ -5407,5 +5593,380 @@ void D3D12CommandProcessor::WriteGammaRampSRV(bool is_pwl,
   }
   device->CreateShaderResourceView(gamma_ramp_buffer_.Get(), &desc, handle);
 }
+
+#if REXGLUE_SHADER_DXIL
+bool D3D12CommandProcessor::UpdateBindingsDxil(
+    const SpirvShader* vertex_shader, const SpirvShader* pixel_shader, bool memexport_used,
+    bool primitive_polygonal,
+    const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
+    const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask) {
+  // xenia-edge's UpdateBindingsMesa for the host render target path.
+  const ui::d3d12::D3D12Provider& provider = GetD3D12Provider();
+  const RegisterFile& regs = *register_file_;
+
+  if (current_graphics_root_signature_ != root_signature_dxil_) {
+    current_graphics_root_signature_ = root_signature_dxil_;
+    current_graphics_root_up_to_date_ = 0;
+    deferred_command_list_.D3DSetGraphicsRootSignature(root_signature_dxil_);
+  }
+  uint32_t draw_resolution_scale_x = texture_cache_->draw_resolution_scale_x();
+  uint32_t draw_resolution_scale_y = texture_cache_->draw_resolution_scale_y();
+
+  SpirvShaderTranslator::SystemConstants sc;
+  std::memset(&sc, 0, sizeof(sc));
+  sc.zpd_fsi_counter_index = UINT32_MAX;
+
+  auto pa_cl_vte_cntl = regs.Get<reg::PA_CL_VTE_CNTL>();
+  auto rb_colorcontrol = regs.Get<reg::RB_COLORCONTROL>();
+  auto rb_depth_info = regs.Get<reg::RB_DEPTH_INFO>();
+  auto vgt_draw_initiator = regs.Get<reg::VGT_DRAW_INITIATOR>();
+
+  uint32_t flags = 0;
+  if (pa_cl_vte_cntl.vtx_xy_fmt) {
+    flags |= SpirvShaderTranslator::kSysFlag_XYDividedByW;
+  }
+  if (pa_cl_vte_cntl.vtx_z_fmt) {
+    flags |= SpirvShaderTranslator::kSysFlag_ZDividedByW;
+  }
+  if (pa_cl_vte_cntl.vtx_w0_fmt) {
+    flags |= SpirvShaderTranslator::kSysFlag_WNotReciprocal;
+  }
+  if (primitive_polygonal) {
+    flags |= SpirvShaderTranslator::kSysFlag_PrimitivePolygonal;
+  }
+  if (draw_util::IsPrimitiveLine(regs)) {
+    flags |= SpirvShaderTranslator::kSysFlag_PrimitiveLine;
+  }
+  if (rb_depth_info.depth_format == xenos::DepthRenderTargetFormat::kD24FS8) {
+    flags |= SpirvShaderTranslator::kSysFlag_DepthFloat24;
+  }
+  xenos::CompareFunction alpha_test_function = rb_colorcontrol.alpha_test_enable
+                                                   ? rb_colorcontrol.alpha_func
+                                                   : xenos::CompareFunction::kAlways;
+  flags |= uint32_t(alpha_test_function) << SpirvShaderTranslator::kSysFlag_AlphaPassIfLess_Shift;
+  if (!render_target_cache_->gamma_render_target_as_unorm16()) {
+    for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
+      if (regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]).color_format ==
+          xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA) {
+        flags |= SpirvShaderTranslator::kSysFlag_ConvertColor0ToGamma << i;
+      }
+    }
+  }
+  sc.flags = flags;
+
+  // The shader endian-swaps SV_VertexID and adds the base index.
+  sc.vertex_index_endian = primitive_processing_result.host_shader_index_endian;
+  sc.vertex_base_index = regs.Get<int32_t>(XE_GPU_REG_VGT_INDX_OFFSET);
+  sc.vertex_index_count = primitive_processing_result.host_draw_vertex_count;
+
+  for (uint32_t i = 0; i < 3; ++i) {
+    sc.ndc_scale[i] = viewport_info.ndc_scale[i];
+    sc.ndc_offset[i] = viewport_info.ndc_offset[i];
+  }
+
+  auto pa_cl_clip_cntl = regs.Get<reg::PA_CL_CLIP_CNTL>();
+  if (!pa_cl_clip_cntl.clip_disable && pa_cl_clip_cntl.ucp_ena) {
+    float* write_ptr = sc.user_clip_planes[0];
+    uint32_t planes_remaining = pa_cl_clip_cntl.ucp_ena;
+    uint32_t plane_index;
+    while (rex::bit_scan_forward(planes_remaining, &plane_index)) {
+      planes_remaining &= ~(uint32_t(1) << plane_index);
+      if (plane_index >= 6) {
+        continue;
+      }
+      std::memcpy(write_ptr, &regs[XE_GPU_REG_PA_CL_UCP_0_X + plane_index * 4], 4 * sizeof(float));
+      write_ptr += 4;
+    }
+  }
+
+  // Point size, and the NDC size of a guest pixel for the line expansion.
+  if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineList ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineStrip ||
+      vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineLoop) {
+    auto pa_su_point_minmax = regs.Get<reg::PA_SU_POINT_MINMAX>();
+    auto pa_su_point_size = regs.Get<reg::PA_SU_POINT_SIZE>();
+    sc.point_vertex_diameter_min = float(pa_su_point_minmax.min_size) * (2.0f / 16.0f);
+    sc.point_vertex_diameter_max = float(pa_su_point_minmax.max_size) * (2.0f / 16.0f);
+    sc.point_constant_diameter[0] = float(pa_su_point_size.width) * (2.0f / 16.0f);
+    sc.point_constant_diameter[1] = float(pa_su_point_size.height) * (2.0f / 16.0f);
+    sc.point_screen_diameter_to_ndc_radius[0] =
+        float(draw_resolution_scale_x) / std::max(viewport_info.xy_extent[0], uint32_t(1));
+    sc.point_screen_diameter_to_ndc_radius[1] =
+        float(draw_resolution_scale_y) / std::max(viewport_info.xy_extent[1], uint32_t(1));
+  }
+
+  sc.alpha_test_reference = regs.Get<float>(XE_GPU_REG_RB_ALPHA_REF);
+  sc.alpha_to_mask =
+      rb_colorcontrol.alpha_to_mask_enable ? (rb_colorcontrol.value >> 24) | (1 << 8) : 0;
+
+  for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
+    auto color_info = regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]);
+    int32_t color_exp_bias = color_info.color_exp_bias;
+    if ((color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16 ||
+         color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16_16_16) &&
+        !render_target_cache_->IsFixed16TruncatedToMinus1To1()) {
+      // Remap from -32...32 to -1...1, getting the full range.
+      color_exp_bias -= 5;
+    }
+    sc.color_exp_bias[i] =
+        rex::memory::Reinterpret<float>(int32_t(0x3F800000 + (color_exp_bias << 23)));
+  }
+
+  // Texture signedness, integer scaling and resolution-scaled resolves.
+  uint32_t textures_resolved = 0;
+  {
+    uint32_t textures_remaining = used_texture_mask;
+    uint32_t texture_index;
+    while (rex::bit_scan_forward(textures_remaining, &texture_index)) {
+      textures_remaining &= ~(UINT32_C(1) << texture_index);
+      sc.texture_swizzled_signs[texture_index >> 2] |=
+          uint32_t(texture_cache_->GetActiveTextureSwizzledSigns(texture_index))
+          << (8 * (texture_index & 3));
+      sc.texture_integer_scale_bits[texture_index] =
+          texture_cache_->GetActiveIntegerScaleBits(texture_index);
+      textures_resolved |= uint32_t(texture_cache_->IsActiveTextureResolutionScaled(texture_index))
+                           << texture_index;
+    }
+  }
+  sc.textures_resolved = textures_resolved;
+
+  // Constant buffers, skipping unchanged ones.
+  if (dxil_system_constants_shadow_.size() != sizeof(sc) ||
+      std::memcmp(dxil_system_constants_shadow_.data(), &sc, sizeof(sc))) {
+    dxil_system_constants_shadow_.assign(reinterpret_cast<const uint8_t*>(&sc),
+                                         reinterpret_cast<const uint8_t*>(&sc) + sizeof(sc));
+    cbuffer_binding_dxil_system_.up_to_date = false;
+  }
+  auto upload = [&](ConstantBufferBinding& binding, uint32_t root_parameter, size_t size,
+                    auto&& fill) -> bool {
+    if (binding.up_to_date) {
+      return true;
+    }
+    uint8_t* mapping = constant_buffer_pool_->Request(
+        frame_current_, uint32_t(size), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, nullptr,
+        nullptr, &binding.address);
+    if (!mapping) {
+      return false;
+    }
+    fill(mapping);
+    binding.up_to_date = true;
+    current_graphics_root_up_to_date_ &= ~(uint32_t(1) << root_parameter);
+    return true;
+  };
+  if (!upload(cbuffer_binding_dxil_system_, kRootParameter_Dxil_SystemConstants, sizeof(sc),
+              [&](uint8_t* mapping) { std::memcpy(mapping, &sc, sizeof(sc)); })) {
+    return false;
+  }
+  // Packed float constants, as in the shaders' used constant maps.
+  auto float_constants = [&](const Shader* shader, uint64_t* tracked_map,
+                             ConstantBufferBinding& binding, uint32_t root_parameter,
+                             uint32_t first_register) -> bool {
+    const uint64_t* map = shader ? shader->constant_register_map().float_bitmap : nullptr;
+    uint32_t count = shader ? shader->constant_register_map().float_count : 0;
+    for (uint32_t i = 0; i < 4; ++i) {
+      uint64_t value = map ? map[i] : 0;
+      if (tracked_map[i] != value) {
+        tracked_map[i] = value;
+        if (count) {
+          binding.up_to_date = false;
+        }
+      }
+    }
+    return upload(binding, root_parameter, sizeof(float) * 4 * std::max(count, uint32_t(1)),
+                  [&](uint8_t* mapping) {
+                    for (uint32_t i = 0; map && i < 4; ++i) {
+                      uint64_t entry = map[i];
+                      uint32_t index;
+                      while (rex::bit_scan_forward(entry, &index)) {
+                        entry &= ~(uint64_t(1) << index);
+                        std::memcpy(mapping, &regs[first_register + (i << 8) + (index << 2)],
+                                    4 * sizeof(float));
+                        mapping += 4 * sizeof(float);
+                      }
+                    }
+                  });
+  };
+  if (!float_constants(vertex_shader, dxil_float_constant_map_vertex_,
+                       cbuffer_binding_dxil_float_vertex_, kRootParameter_Dxil_FloatConstantsVertex,
+                       XE_GPU_REG_SHADER_CONSTANT_000_X) ||
+      !float_constants(pixel_shader, dxil_float_constant_map_pixel_,
+                       cbuffer_binding_dxil_float_pixel_, kRootParameter_Dxil_FloatConstantsPixel,
+                       XE_GPU_REG_SHADER_CONSTANT_256_X)) {
+    return false;
+  }
+  constexpr uint32_t kBoolLoopConstantsSize = (8 + 32) * sizeof(uint32_t);
+  constexpr uint32_t kFetchConstantsSize = 32 * 6 * sizeof(uint32_t);
+  if (!upload(cbuffer_binding_dxil_bool_loop_, kRootParameter_Dxil_BoolLoopConstants,
+              kBoolLoopConstantsSize,
+              [&](uint8_t* mapping) {
+                std::memcpy(mapping, &regs[XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031],
+                            kBoolLoopConstantsSize);
+              }) ||
+      !upload(cbuffer_binding_dxil_fetch_, kRootParameter_Dxil_FetchConstants, kFetchConstantsSize,
+              [&](uint8_t* mapping) {
+                std::memcpy(mapping, &regs[XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0],
+                            kFetchConstantsSize);
+              }) ||
+      // Mesa's runtime data CBV (b0 space31), unused but bound.
+      !upload(cbuffer_binding_dxil_runtime_data_, kRootParameter_Dxil_RuntimeData, 256,
+              [&](uint8_t* mapping) { std::memset(mapping, 0, 256); })) {
+    return false;
+  }
+  auto bind_cbv = [&](uint32_t root_parameter, const ConstantBufferBinding& binding) {
+    uint32_t bit = uint32_t(1) << root_parameter;
+    if (!(current_graphics_root_up_to_date_ & bit)) {
+      deferred_command_list_.D3DSetGraphicsRootConstantBufferView(root_parameter, binding.address);
+      current_graphics_root_up_to_date_ |= bit;
+    }
+  };
+  bind_cbv(kRootParameter_Dxil_SystemConstants, cbuffer_binding_dxil_system_);
+  bind_cbv(kRootParameter_Dxil_FloatConstantsVertex, cbuffer_binding_dxil_float_vertex_);
+  bind_cbv(kRootParameter_Dxil_FloatConstantsPixel, cbuffer_binding_dxil_float_pixel_);
+  bind_cbv(kRootParameter_Dxil_BoolLoopConstants, cbuffer_binding_dxil_bool_loop_);
+  bind_cbv(kRootParameter_Dxil_FetchConstants, cbuffer_binding_dxil_fetch_);
+  bind_cbv(kRootParameter_Dxil_RuntimeData, cbuffer_binding_dxil_runtime_data_);
+
+  // Shared memory t0 + u0: memexport draws also read vertices through t0.
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(
+      kRootParameter_Dxil_SharedMemory,
+      provider.OffsetViewDescriptor(
+          view_bindless_heap_gpu_start_,
+          uint32_t(memexport_used ? SystemBindlessView::kSharedMemoryRawSRVAndRawUAVStart
+                                  : SystemBindlessView::kSharedMemoryRawSRVAndNullRawUAVStart)));
+  // The ZPD counter is a null UAV while no counter exists; EDRAM is only used
+  // on the ROV path.
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(
+      kRootParameter_Dxil_ZpdCounter,
+      provider.OffsetViewDescriptor(view_bindless_heap_gpu_start_,
+                                    uint32_t(SystemBindlessView::kZpdCounterRawUAV)));
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(
+      kRootParameter_Dxil_Edram,
+      provider.OffsetViewDescriptor(view_bindless_heap_gpu_start_,
+                                    uint32_t(SystemBindlessView::kEdramRawUAV)));
+
+  // Per-stage {texture heap index, sampler heap index} buffers in the order of
+  // the SPIR-V bindings, read by the bindless lowering.
+  bool sampler_overflow = false;
+  auto bind_index_buffer = [&](const SpirvShader* shader, uint32_t root_parameter) -> bool {
+    const std::vector<SpirvShader::TextureBinding>* textures =
+        shader ? &shader->GetTextureBindingsAfterTranslation() : nullptr;
+    const std::vector<SpirvShader::SamplerBinding>* samplers =
+        shader ? &shader->GetSamplerBindingsAfterTranslation() : nullptr;
+    size_t texture_count = textures ? textures->size() : 0;
+    size_t sampler_count = samplers ? samplers->size() : 0;
+    size_t buffer_size = std::max(texture_count + sampler_count, size_t(1)) * 2 * sizeof(uint32_t);
+    D3D12_GPU_VIRTUAL_ADDRESS address;
+    auto* mapping = reinterpret_cast<uint32_t*>(constant_buffer_pool_->Request(
+        frame_current_, uint32_t(buffer_size), D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT, nullptr, nullptr,
+        &address));
+    if (!mapping) {
+      return false;
+    }
+    std::memset(mapping, 0, buffer_size);
+    for (size_t i = 0; i < texture_count; ++i) {
+      const SpirvShader::TextureBinding& spirv_binding = (*textures)[i];
+      D3D12Shader::TextureBinding binding = {};
+      binding.fetch_constant = spirv_binding.fetch_constant;
+      binding.dimension = spirv_binding.dimension;
+      binding.is_signed = spirv_binding.is_signed;
+      // ResourceDescriptorHeap is the whole view heap: absolute indices.
+      mapping[i * 2] = texture_cache_->GetActiveTextureBindlessSRVIndex(binding);
+    }
+    for (size_t j = 0; j < sampler_count; ++j) {
+      const SpirvShader::SamplerBinding& spirv_binding = (*samplers)[j];
+      D3D12Shader::SamplerBinding binding = {};
+      binding.fetch_constant = spirv_binding.fetch_constant;
+      binding.mag_filter = spirv_binding.mag_filter;
+      binding.min_filter = spirv_binding.min_filter;
+      binding.mip_filter = spirv_binding.mip_filter;
+      binding.aniso_filter = spirv_binding.aniso_filter;
+      uint32_t sampler_index =
+          GetOrCreateDxilBindlessSamplerIndex(texture_cache_->GetSamplerParameters(binding));
+      if (sampler_index == UINT32_MAX) {
+        sampler_overflow = true;
+        break;
+      }
+      mapping[(texture_count + j) * 2 + 1] = sampler_index;
+    }
+    deferred_command_list_.D3DSetGraphicsRootShaderResourceView(root_parameter, address);
+    return true;
+  };
+  for (uint32_t attempt = 0;; ++attempt) {
+    sampler_overflow = false;
+    if (!bind_index_buffer(vertex_shader, kRootParameter_Dxil_VertexTextureIndices) ||
+        !bind_index_buffer(pixel_shader, kRootParameter_Dxil_PixelTextureIndices)) {
+      return false;
+    }
+    if (!sampler_overflow) {
+      break;
+    }
+    // A single draw's samplers always fit a fresh heap.
+    if (attempt || !SwitchToNewBindlessSamplerHeap()) {
+      return false;
+    }
+  }
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(kRootParameter_Dxil_VertexTextureRange,
+                                                           view_bindless_heap_gpu_start_);
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(kRootParameter_Dxil_PixelTextureRange,
+                                                           view_bindless_heap_gpu_start_);
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(kRootParameter_Dxil_VertexSamplerRange,
+                                                           sampler_bindless_heap_gpu_start_);
+  deferred_command_list_.D3DSetGraphicsRootDescriptorTable(kRootParameter_Dxil_PixelSamplerRange,
+                                                           sampler_bindless_heap_gpu_start_);
+  return true;
+}
+
+uint32_t D3D12CommandProcessor::GetOrCreateDxilBindlessSamplerIndex(
+    D3D12TextureCache::SamplerParameters parameters) {
+  auto it = texture_cache_bindless_sampler_map_.find(parameters.value);
+  if (it != texture_cache_bindless_sampler_map_.end()) {
+    return it->second;
+  }
+  if (sampler_bindless_heap_allocated_ >= kSamplerHeapSize) {
+    return UINT32_MAX;
+  }
+  uint32_t sampler_index = sampler_bindless_heap_allocated_++;
+  texture_cache_->WriteSampler(parameters, GetD3D12Provider().OffsetSamplerDescriptor(
+                                               sampler_bindless_heap_cpu_start_, sampler_index));
+  texture_cache_bindless_sampler_map_.emplace(parameters.value, sampler_index);
+  return sampler_index;
+}
+
+bool D3D12CommandProcessor::SwitchToNewBindlessSamplerHeap() {
+  // Reuse the oldest retired heap once the GPU is done with it.
+  ID3D12DescriptorHeap* sampler_heap_new;
+  if (!sampler_bindless_heaps_overflowed_.empty() &&
+      sampler_bindless_heaps_overflowed_.front().second <= GetCompletedSubmission()) {
+    sampler_heap_new = sampler_bindless_heaps_overflowed_.front().first;
+    sampler_bindless_heaps_overflowed_.pop_front();
+  } else {
+    D3D12_DESCRIPTOR_HEAP_DESC sampler_heap_new_desc;
+    sampler_heap_new_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+    sampler_heap_new_desc.NumDescriptors = kSamplerHeapSize;
+    sampler_heap_new_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    sampler_heap_new_desc.NodeMask = 0;
+    if (FAILED(GetD3D12Provider().GetDevice()->CreateDescriptorHeap(
+            &sampler_heap_new_desc, IID_PPV_ARGS(&sampler_heap_new)))) {
+      REXGPU_ERROR("Failed to create a new bindless sampler descriptor heap after an overflow");
+      return false;
+    }
+  }
+  sampler_bindless_heaps_overflowed_.push_back(
+      std::make_pair(sampler_bindless_heap_current_, GetCurrentSubmission()));
+  sampler_bindless_heap_current_ = sampler_heap_new;
+  sampler_bindless_heap_cpu_start_ =
+      sampler_bindless_heap_current_->GetCPUDescriptorHandleForHeapStart();
+  sampler_bindless_heap_gpu_start_ =
+      sampler_bindless_heap_current_->GetGPUDescriptorHandleForHeapStart();
+  sampler_bindless_heap_allocated_ = 0;
+  texture_cache_bindless_sampler_map_.clear();
+  // The DXBC path's descriptor indices point into the old heap.
+  cbuffer_binding_descriptor_indices_vertex_.up_to_date = false;
+  cbuffer_binding_descriptor_indices_pixel_.up_to_date = false;
+  deferred_command_list_.SetDescriptorHeaps(view_bindless_heap_, sampler_bindless_heap_current_);
+  return true;
+}
+#endif  // REXGLUE_SHADER_DXIL
 
 }  // namespace rex::graphics::d3d12

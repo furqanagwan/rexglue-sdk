@@ -109,6 +109,10 @@ class D3D12CommandProcessor : public CommandProcessor {
   // Finds or creates root signature for a pipeline.
   ID3D12RootSignature* GetRootSignature(const DxbcShader* vertex_shader,
                                         const DxbcShader* pixel_shader, bool tessellated);
+  bool bindless_resources_used() const { return bindless_resources_used_; }
+  // The fixed root signature of the SPIR-V -> DXIL guest shaders (RG-GDK-032),
+  // or nullptr when that path isn't built or available.
+  ID3D12RootSignature* GetDxilRootSignature() const { return root_signature_dxil_; }
 
   ui::d3d12::D3D12UploadBufferPool& GetConstantBufferPool() const { return *constant_buffer_pool_; }
 
@@ -146,6 +150,12 @@ class D3D12CommandProcessor : public CommandProcessor {
     kNullRawSRVAndSharedMemoryRawUAVStart,
     kNullRawSRV = kNullRawSRVAndSharedMemoryRawUAVStart,
     kSharedMemoryRawUAV,
+
+    // SPIR-V -> DXIL memexport draws also read vertices through the SRV
+    // (RG-GDK-032). Bound as one table.
+    kSharedMemoryRawSRVAndRawUAVStart,
+    kSharedMemoryRawSRVForUAV = kSharedMemoryRawSRVAndRawUAVStart,
+    kSharedMemoryRawUAVWithSRV,
 
     kSharedMemoryR32UintSRV,
     kSharedMemoryR32G32UintSRV,
@@ -320,6 +330,30 @@ class D3D12CommandProcessor : public CommandProcessor {
     kRootParameter_Bindless_Count,
   };
 
+  // The fixed root signature of the SPIR-V -> DXIL guest shaders (xenia-edge's
+  // Mesa layout): constant buffers in space1, shared memory in space0 t0/u0,
+  // the ZPD counter and EDRAM at u1/u2, runtime data in space31, and texture /
+  // sampler heap index buffers for the bindless lowering.
+  enum DxilRootParameter : UINT {
+    kRootParameter_Dxil_SystemConstants,
+    kRootParameter_Dxil_FloatConstantsVertex,
+    kRootParameter_Dxil_FloatConstantsPixel,
+    kRootParameter_Dxil_BoolLoopConstants,
+    kRootParameter_Dxil_FetchConstants,
+    kRootParameter_Dxil_RuntimeData,
+    kRootParameter_Dxil_VertexTextureIndices,
+    kRootParameter_Dxil_PixelTextureIndices,
+    kRootParameter_Dxil_VertexTextureRange,
+    kRootParameter_Dxil_PixelTextureRange,
+    kRootParameter_Dxil_VertexSamplerRange,
+    kRootParameter_Dxil_PixelSamplerRange,
+    kRootParameter_Dxil_SharedMemory,
+    kRootParameter_Dxil_ZpdCounter,
+    kRootParameter_Dxil_Edram,
+
+    kRootParameter_Dxil_Count,
+  };
+
   struct RootBindfulExtraParameterIndices {
     uint32_t textures_pixel;
     uint32_t samplers_pixel;
@@ -415,6 +449,17 @@ class D3D12CommandProcessor : public CommandProcessor {
                                   uint32_t normalized_color_mask);
   bool UpdateBindings(const D3D12Shader* vertex_shader, const D3D12Shader* pixel_shader,
                       ID3D12RootSignature* root_signature, bool shared_memory_is_uav);
+#if REXGLUE_SHADER_DXIL
+  // System constants in SpirvShaderTranslator's layout, constant buffers and
+  // bindless index buffers for a SPIR-V -> DXIL draw (xenia-edge
+  // UpdateBindingsMesa, host render target path).
+  bool UpdateBindingsDxil(const SpirvShader* vertex_shader, const SpirvShader* pixel_shader,
+                          bool memexport_used, bool primitive_polygonal,
+                          const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
+                          const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask);
+  uint32_t GetOrCreateDxilBindlessSamplerIndex(D3D12TextureCache::SamplerParameters parameters);
+  bool SwitchToNewBindlessSamplerHeap();
+#endif
   bool IssueCopy_ReadbackResolvePath();
   bool IssueDraw_MemexportReadbackFullPath(uint32_t total_size);
   bool IssueDraw_MemexportReadbackFastPath(uint32_t total_size);
@@ -606,6 +651,7 @@ class D3D12CommandProcessor : public CommandProcessor {
   std::unordered_map<uint32_t, ID3D12RootSignature*> root_signatures_bindful_;
   ID3D12RootSignature* root_signature_bindless_vs_ = nullptr;
   ID3D12RootSignature* root_signature_bindless_ds_ = nullptr;
+  ID3D12RootSignature* root_signature_dxil_ = nullptr;
 
   std::unique_ptr<D3D12PrimitiveProcessor> primitive_processor_;
 
@@ -791,6 +837,17 @@ class D3D12CommandProcessor : public CommandProcessor {
   ConstantBufferBinding cbuffer_binding_fetch_;
   ConstantBufferBinding cbuffer_binding_descriptor_indices_vertex_;
   ConstantBufferBinding cbuffer_binding_descriptor_indices_pixel_;
+  // The SPIR-V -> DXIL path's own (its system constants have another layout,
+  // and draws switch between the paths).
+  ConstantBufferBinding cbuffer_binding_dxil_system_;
+  ConstantBufferBinding cbuffer_binding_dxil_float_vertex_;
+  ConstantBufferBinding cbuffer_binding_dxil_float_pixel_;
+  ConstantBufferBinding cbuffer_binding_dxil_bool_loop_;
+  ConstantBufferBinding cbuffer_binding_dxil_fetch_;
+  ConstantBufferBinding cbuffer_binding_dxil_runtime_data_;
+  std::vector<uint8_t> dxil_system_constants_shadow_;
+  uint64_t dxil_float_constant_map_vertex_[4] = {};
+  uint64_t dxil_float_constant_map_pixel_[4] = {};
 
   // Whether the latest shared memory and EDRAM buffer binding contains the
   // shared memory UAV rather than the SRV.
