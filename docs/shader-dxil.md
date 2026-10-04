@@ -92,8 +92,8 @@ with bindless lowering; the pinned `dxil.dll` validates and signs all four.
 ## Stage 2: drawing with it
 
 `gpu_shader_path=dxil` (GPU/D3D12, default `dxbc`, needs a restart) draws with
-the translator in a `REXGLUE_SHADER_DXIL` build. It needs the host render
-target path, bindless resources, Shader Model 6.6 and a working `dxil.dll`;
+the translator in a `REXGLUE_SHADER_DXIL` build, on both render target paths.
+It needs bindless resources, Shader Model 6.6 and a working `dxil.dll`;
 otherwise the log says why and DXBC is used. Each draw then goes one of two
 ways, so the paths mix freely within a frame:
 
@@ -104,18 +104,35 @@ ways, so the paths mix freely within a frame:
   line geometry shaders as DXIL, and creates the pipeline with the fixed
   root signature from the DXBC path's fixed-function state (a `dxil`
   description bit keeps the two apart). `D3D12CommandProcessor::UpdateBindingsDxil`
-  (xenia-edge's `UpdateBindingsMesa`, host render target path) fills the
-  system constants in the translator's layout, uploads the float, bool/loop,
-  fetch and runtime-data constant buffers (its own, invalidated with the DXBC
-  ones on register writes), binds shared memory (an SRV + UAV pair for
-  memexport), the ZPD counter and EDRAM UAVs, and writes per-stage
-  {texture, sampler} heap index buffers for the bindless lowering.
-- **DXBC**, as before, for what the DXIL path doesn't do yet: tessellation,
-  draws without a guest pixel shader that need a DXBC helper pixel shader
-  (float24 depth conversion, forced rasterization: a pipeline can't mix DXBC
-  and DXIL), hybrid occlusion query counting, VIZ surveys, the ROV path, and
-  shaders a title replaces (replacements are DXBC). A shader that fails to
-  translate or convert, or a failing pipeline, also falls back, logged.
+  (xenia-edge's `UpdateBindingsMesa`) fills the system constants in the
+  translator's layout, uploads the float, bool/loop, fetch and runtime-data
+  constant buffers (its own, invalidated with the DXBC ones on register
+  writes), binds shared memory (an SRV + UAV pair for memexport), the ZPD
+  counter and EDRAM UAVs, and writes per-stage {texture, sampler} heap index
+  buffers for the bindless lowering.
+  - **Tessellation**: the guest shader is the domain shader. Its SPIR-V is
+    linked by `spirv_to_dxil_link` with the host tessellation vertex and hull
+    shaders its modification selects (discrete, continuous, adaptive; triangle
+    and quad domains), so Mesa reconciles the stage signatures. Those host
+    shaders are xenia-edge's GLSL (`src/graphics/shaders/spirv`), compiled at
+    build time by the pinned glslang as Edge does (Vulkan 1.0, SPIR-V 1.0);
+    nothing generated is checked in. The draw fills the tessellation factor
+    range and index constants they read.
+  - **ROV** (`render_target_path_d3d12=rov`): the translator runs the EDRAM
+    render backend in the pixel shader (fragment shader interlock, which
+    Edge's Mesa fork lowers to rasterizer-ordered views), the draw fills its
+    EDRAM constants (`WriteFragmentShaderInterlockSystemConstants`) and counts
+    samples into the active occlusion query's counter slot as the DXBC ROV
+    shaders do.
+  - **No guest pixel shader**: DXIL helper pixel shaders from the translator
+    stand in for the DXBC ones (a pipeline can't mix DXBC and DXIL): the
+    empty shader that keeps draws writing nothing rasterized, float24 depth
+    conversion, and on ROV the EDRAM depth-only and VIZ survey shaders per
+    guest sample count (carried in the description's pixel shader
+    modification, since 2x is drawn as 4x).
+- **DXBC**, as before, for hybrid occlusion query counting and shaders a
+  title replaces (replacements are DXBC). A shader that fails to translate or
+  convert, or a failing pipeline, also falls back, logged.
   `gpu_shader_path_dxil_strict` fails such draws instead (testing).
 
 With `async_shader_compilation`, DXIL pipelines go to the creation threads
@@ -138,6 +155,14 @@ DXBC). That covers clears, resolves (including gamma, 4x MSAA and native
 resolves at 2x), depth tests, memexport, ALU behaviour, ring and PM4
 handling, point / line expansion at 2x, invalid fetch constants and VIZ
 consumers; it is not yet a title-scene comparison.
+
+With tessellation, ROV and the helper pixel shaders (2026-10-04, NVIDIA): the
+suite, now 53 cases with `tessellation_fixture_test` (a hand-assembled domain
+shader placing a quad patch, discrete and continuous, on both render target
+paths), passes in strict mode, and so do the ROV occlusion query and VIZ
+cases on DXIL. The log shows each linked tessellation conversion, and the
+dumped SPIR-V shows the ROV pixel shaders built with their FSI
+modifications. The default build's 58 GPU tests pass too.
 
 ## Titles
 
@@ -167,18 +192,17 @@ Played twice on a fresh cache with the pipeline storage, 2.5 minutes each
 (2026-10-04): the cold run created 713 DXIL pipelines and awaited 211, with a
 16.5 s and a 3.8 s frame; the warm run restored them at startup, awaited
 none, and its longest frame was 385 ms. Its remaining 200-330 ms frames are
-all in swap, the GPU finishing the frame, so in that section the DXIL
-shaders themselves are slower on the GPU than DXBC's 60 fps; not measured
-against DXBC on the same play yet.
+all in swap, the GPU finishing the frame. A DXBC run played through the
+same section (2026-10-04) was no faster: 38-52 fps with 66 frames over
+150 ms in swap (up to 780 ms), against 41-60 fps and 51 for warm DXIL, so
+those long frames are not DXIL-specific.
 
 ## Not yet
 
-The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53): the
-ROV path (EDRAM fragment shader interlock constants), tessellation through
-Mesa's linked stages, DXIL helper pixel shaders, hybrid occlusion counting
-and VIZ surveys, asynchronous creation and storage of DXIL pipelines, titles
-exporting the Agility SDK symbols, and Edge's shared parsing changes held
-back so DXBC stays unchanged (1D fetches with XY coordinates, the second
+The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
+hybrid occlusion counting on DXIL, a tessellating title and a ROV title
+scene on the DXIL path (only fixtures so far), and Edge's shared parsing
+changes held back so DXBC stays unchanged (1D fetches with XY coordinates, the second
 component of scalar operands of three-operand vector ops) with the wide 1D
 texture mapping `kTexture1DWideMaxRows` belongs to. Then stages 3–6: the
 host shaders, the render target cache, title-scene parity and only then a

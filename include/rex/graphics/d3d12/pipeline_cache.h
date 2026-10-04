@@ -126,8 +126,8 @@ class PipelineCache {
       uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
       reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
       uint32_t bound_depth_and_color_render_target_bits,
-      const uint32_t* bound_depth_and_color_render_targets_formats, void** pipeline_handle_out,
-      SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out);
+      const uint32_t* bound_depth_and_color_render_targets_formats, bool viz_survey,
+      void** pipeline_handle_out, SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out);
 #endif
 
   // Returns a pipeline with deferred creation by its handle. May return nullptr
@@ -260,7 +260,8 @@ class PipelineCache {
     // Selects the depth-only pixel shader that marks the ZPass lane.
     uint32_t viz_survey : 1;  // 30
     // SPIR-V -> DXIL guest shaders (RG-GDK-032): the modifications are
-    // SpirvShaderTranslator ones.
+    // SpirvShaderTranslator ones. On the ROV path without a guest pixel
+    // shader, pixel_shader_modification holds the guest sample count.
     uint32_t dxil : 1;  // 31
 
     uint32_t stencil_write_mask : 8;                   // 8
@@ -432,7 +433,22 @@ class PipelineCache {
   Shader::Translation* GetDxilSpirv(SpirvShader& shader, uint64_t modification);
   // Its converted and signed DXIL, or nullptr (failures are cached). Any thread.
   const std::vector<uint8_t>* ConvertDxil(const Shader::Translation& translation);
+  struct DxilTessellation {
+    std::vector<uint8_t> host_vertex;
+    std::vector<uint8_t> host_hull;
+    std::vector<uint8_t> domain;
+  };
+  // A guest domain shader's SPIR-V linked with the host tessellation vertex and
+  // hull shaders its modification selects, so spirv_to_dxil reconciles the
+  // stage signatures; nullptr on failure (cached). Any thread.
+  const DxilTessellation* ConvertDxilTessellation(const Shader::Translation& translation);
   const std::vector<uint8_t>* GetDxilGeometryShader(GuestSpirvShaderCache::GeometryShaderKey key);
+  // Converts the pixel shaders below; false if any can't be made.
+  bool InitializeDxilHelperPixelShaders();
+  // The DXIL pixel shader for a DXIL pipeline without a guest one, or nullptr
+  // for none: as the DXBC helper pixel shaders, from the SPIR-V translator.
+  const std::vector<uint8_t>* GetDxilHelperPixelShader(
+      const PipelineDescription& description) const;
   // Writes a new DXIL pipeline and its guest shaders to the storage files.
   void StoreDxilPipeline(uint64_t hash, const PipelineDescription& description,
                          Shader& vertex_shader, Shader* pixel_shader);
@@ -444,7 +460,19 @@ class PipelineCache {
   std::unordered_map<uint64_t, std::unique_ptr<SpirvShader>> dxil_shaders_;
   std::mutex dxil_binaries_mutex_;
   std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<uint8_t>>> dxil_binaries_;
+  std::unordered_map<uint64_t, std::unordered_map<uint64_t, DxilTessellation>>
+      dxil_tessellation_binaries_;
   std::unordered_map<uint32_t, std::vector<uint8_t>> dxil_geometry_shaders_;
+  // Host render targets: the empty pixel shader that keeps draws writing
+  // nothing rasterized, and float24 depth conversion without a guest shader.
+  std::vector<uint8_t> dxil_depth_only_pixel_shader_;
+  std::vector<uint8_t> dxil_float24_truncate_pixel_shader_;
+  std::vector<uint8_t> dxil_float24_round_pixel_shader_;
+  // ROV: the EDRAM depth / stencil (or VIZ survey) pixel shaders by guest
+  // xenos::MsaaSamples, which a DXIL pipeline without a guest pixel shader
+  // carries in its pixel_shader_modification.
+  std::vector<uint8_t> dxil_rov_depth_only_pixel_shaders_[3];
+  std::vector<uint8_t> dxil_rov_viz_survey_pixel_shaders_[3];
 #endif
   std::vector<uint8_t> zpd_total_float24_truncate_pixel_shader_;
   std::vector<uint8_t> zpd_total_float24_round_pixel_shader_;
