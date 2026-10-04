@@ -124,8 +124,11 @@ bindings), and Mesa's conversion and the pipeline state are made on the
 creation thread. A draw that has to wait (a one-off, small or memexport
 target) now waits for its own pipeline only, creating it itself if no thread
 has started it, instead of for the whole queue; this applies to DXBC too.
-DXIL pipelines aren't written to the pipeline storage yet, so every launch
-starts cold. Pipeline creation failures now log the debug layer's
+DXIL pipelines go to the pipeline storage like DXBC ones, with their guest
+shaders in the shader storage (DXIL draws may never translate them to DXBC);
+at the next launch they're translated to SPIR-V and queued, converted and
+created on the creation threads before play. The storage keeps both kinds; a
+DXBC run skips the DXIL entries. Pipeline creation failures now log the debug layer's
 reasons when `d3d12_debug` is on.
 
 Parity: CTest `gpu.dxil_parity` runs the whole GPU fixture suite with
@@ -159,6 +162,14 @@ SPIR-V translations (they were retranslated on every draw: 136,028
 translations in 40 s, now 304), the same run has 309 conversions (median
 12 ms), the menus at 60 fps and the intro at 25-45 fps with one 5 s frame
 while about 200 new pipelines are awaited from a cold start.
+
+Played twice on a fresh cache with the pipeline storage, 2.5 minutes each
+(2026-10-04): the cold run created 713 DXIL pipelines and awaited 211, with a
+16.5 s and a 3.8 s frame; the warm run restored them at startup, awaited
+none, and its longest frame was 385 ms. Its remaining 200-330 ms frames are
+all in swap, the GPU finishing the frame, so in that section the DXIL
+shaders themselves are slower on the GPU than DXBC's 60 fps; not measured
+against DXBC on the same play yet.
 
 ## Not yet
 

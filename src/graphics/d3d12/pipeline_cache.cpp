@@ -412,7 +412,11 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         // TODO(Triang3l): On Vulkan, skip pipelines requiring unsupported
         // device features (to keep the cache files mostly shareable across
         // devices).
-        // Mark the shader modifications as needed for translation.
+        // Mark the shader modifications as needed for translation; DXIL
+        // pipelines are translated to SPIR-V when they're created below.
+        if (pipeline_stored_description.description.dxil) {
+          continue;
+        }
         shader_translations_needed.emplace(
             pipeline_stored_description.description.vertex_shader_hash,
             pipeline_stored_description.description.vertex_shader_modification);
@@ -674,6 +678,15 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         }
       }
       if (pipeline_found) {
+        continue;
+      }
+
+      if (pipeline_description.dxil) {
+#if REXGLUE_SHADER_DXIL
+        if (CreateStoredDxilPipeline(pipeline_stored_description)) {
+          ++pipelines_created;
+        }
+#endif
         continue;
       }
 
@@ -2961,13 +2974,13 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     const PipelineRuntimeDescription& runtime_description) {
   const PipelineDescription& description = runtime_description.description;
 
-  if (runtime_description.pixel_shader != nullptr) {
-    REXGPU_DEBUG("Creating graphics pipeline with VS {:016X}, PS {:016X}",
-                 runtime_description.vertex_shader->shader().ucode_data_hash(),
-                 runtime_description.pixel_shader->shader().ucode_data_hash());
+  if (description.pixel_shader_hash) {
+    REXGPU_DEBUG("Creating graphics pipeline with VS {:016X}, PS {:016X}{}",
+                 description.vertex_shader_hash, description.pixel_shader_hash,
+                 description.dxil ? " (DXIL)" : "");
   } else {
-    REXGPU_DEBUG("Creating graphics pipeline with VS {:016X}",
-                 runtime_description.vertex_shader->shader().ucode_data_hash());
+    REXGPU_DEBUG("Creating graphics pipeline with VS {:016X}{}", description.vertex_shader_hash,
+                 description.dxil ? " (DXIL)" : "");
   }
 
   D3D12_GRAPHICS_PIPELINE_STATE_DESC state_desc;
@@ -3376,13 +3389,13 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
   ID3D12PipelineState* state;
   if (FAILED(device->CreateGraphicsPipelineState(&state_desc, IID_PPV_ARGS(&state)))) {
-    if (runtime_description.pixel_shader != nullptr) {
-      REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}, PS {:016X}",
-                   runtime_description.vertex_shader->shader().ucode_data_hash(),
-                   runtime_description.pixel_shader->shader().ucode_data_hash());
+    if (description.pixel_shader_hash) {
+      REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}, PS {:016X}{}",
+                   description.vertex_shader_hash, description.pixel_shader_hash,
+                   description.dxil ? " (DXIL)" : "");
     } else {
-      REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}",
-                   runtime_description.vertex_shader->shader().ucode_data_hash());
+      REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}{}",
+                   description.vertex_shader_hash, description.dxil ? " (DXIL)" : "");
     }
     // With the debug layer (d3d12_debug), its reasons.
     ID3D12InfoQueue* info_queue;
@@ -3404,13 +3417,11 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     return nullptr;
   }
   std::u16string name;
-  if (runtime_description.pixel_shader != nullptr) {
+  if (description.pixel_shader_hash) {
     name = rex::string::to_utf16(fmt::format(
-        "VS {:016X}, PS {:016X}", runtime_description.vertex_shader->shader().ucode_data_hash(),
-        runtime_description.pixel_shader->shader().ucode_data_hash()));
+        "VS {:016X}, PS {:016X}", description.vertex_shader_hash, description.pixel_shader_hash));
   } else {
-    name = rex::string::to_utf16(
-        fmt::format("VS {:016X}", runtime_description.vertex_shader->shader().ucode_data_hash()));
+    name = rex::string::to_utf16(fmt::format("VS {:016X}", description.vertex_shader_hash));
   }
   state->SetName(reinterpret_cast<LPCWSTR>(name.c_str()));
   return state;
@@ -3855,13 +3866,15 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     }
   }
   if (!pipeline) {
-    // The DXIL is ready, so creation needs no translation: on the creation
-    // threads with async_shader_compilation, as DXBC pipelines are, else here.
-    // These aren't stored.
+    // The SPIR-V is ready, so creation needs no guest translation: on the
+    // creation threads with async_shader_compilation, as DXBC pipelines are,
+    // else here.
     pipeline = new Pipeline;
     std::memcpy(&pipeline->description, &runtime_description, sizeof(runtime_description));
     pipeline->root_signature.store(runtime_description.root_signature, std::memory_order_release);
     pipelines_.emplace(hash, pipeline);
+    StoreDxilPipeline(hash, description, dxbc_vertex_shader->shader(),
+                      dxbc_pixel_shader ? &dxbc_pixel_shader->shader() : nullptr);
     if (REXCVAR_GET(async_shader_compilation) && !creation_threads_.empty()) {
       pipeline->priority = pipeline_util::CalculatePipelinePriority(
           pipeline_util::GetBoundRTMaskFromNormalizedColorMask(normalized_color_mask),
@@ -3896,6 +3909,102 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
   *vertex_shader_out = vertex_shader;
   *pixel_shader_out = pixel_shader;
   return DxilPipelineResult::kConfigured;
+}
+void PipelineCache::StoreDxilPipeline(uint64_t hash, const PipelineDescription& description,
+                                      Shader& vertex_shader, Shader* pixel_shader) {
+  // The guest shaders go to the shader storage as the DXBC path's translated
+  // ones do; DXIL draws may never translate them to DXBC.
+  if (shader_storage_file_) {
+    for (Shader* shader : {&vertex_shader, pixel_shader}) {
+      if (shader && shader->ucode_storage_index() != shader_storage_index_) {
+        shader->set_ucode_storage_index(shader_storage_index_);
+        shader_storage_file_flush_needed_ = true;
+        {
+          std::lock_guard<std::mutex> storage_lock(storage_write_request_lock_);
+          storage_write_shader_queue_.push_back(shader);
+        }
+        storage_write_request_cond_.notify_all();
+      }
+    }
+  }
+  if (pipeline_storage_file_) {
+    pipeline_storage_file_flush_needed_ = true;
+    {
+      std::lock_guard<std::mutex> lock(storage_write_request_lock_);
+      storage_write_pipeline_queue_.emplace_back();
+      PipelineStoredDescription& stored_description = storage_write_pipeline_queue_.back();
+      stored_description.description_hash = hash;
+      std::memcpy(&stored_description.description, &description, sizeof(description));
+    }
+    storage_write_request_cond_.notify_all();
+  }
+}
+
+bool PipelineCache::CreateStoredDxilPipeline(const PipelineStoredDescription& stored_description) {
+  if (!dxil_shader_cache_) {
+    return false;
+  }
+  const PipelineDescription& description = stored_description.description;
+  auto vertex_shader_it = shaders_.find(description.vertex_shader_hash);
+  if (vertex_shader_it == shaders_.end()) {
+    return false;
+  }
+  SpirvShader* vertex_shader = GetDxilShader(*vertex_shader_it->second);
+  SpirvShader* pixel_shader = nullptr;
+  if (description.pixel_shader_hash) {
+    auto pixel_shader_it = shaders_.find(description.pixel_shader_hash);
+    if (pixel_shader_it == shaders_.end()) {
+      return false;
+    }
+    pixel_shader = GetDxilShader(*pixel_shader_it->second);
+  }
+  PipelineRuntimeDescription runtime_description;
+  std::memset(&runtime_description, 0, sizeof(runtime_description));
+  runtime_description.dxil_vertex_spirv =
+      GetDxilSpirv(*vertex_shader, description.vertex_shader_modification);
+  runtime_description.dxil_pixel_spirv =
+      pixel_shader ? GetDxilSpirv(*pixel_shader, description.pixel_shader_modification) : nullptr;
+  if (!runtime_description.dxil_vertex_spirv ||
+      (pixel_shader && !runtime_description.dxil_pixel_spirv)) {
+    return false;
+  }
+  GuestSpirvShaderCache::GeometryShaderKey geometry_shader_key;
+  if (GuestSpirvShaderCache::GetGeometryShaderKey(
+          rex::graphics::PipelineGeometryShader(uint32_t(description.geometry_shader)),
+          description.vertex_shader_modification, description.pixel_shader_modification,
+          geometry_shader_key)) {
+    runtime_description.dxil_geometry_shader = GetDxilGeometryShader(geometry_shader_key);
+    if (!runtime_description.dxil_geometry_shader) {
+      return false;
+    }
+  }
+  runtime_description.root_signature = command_processor_.GetDxilRootSignature();
+  std::memcpy(&runtime_description.description, &description, sizeof(description));
+
+  Pipeline* pipeline = new Pipeline;
+  std::memcpy(&pipeline->description, &runtime_description, sizeof(runtime_description));
+  pipeline->root_signature.store(runtime_description.root_signature, std::memory_order_release);
+  uint32_t bound_rts = 0;
+  for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
+    if (description.render_targets[i].used) {
+      bound_rts |= uint32_t(1) << i;
+    }
+  }
+  pipeline->priority = pipeline_util::CalculatePipelinePriority(
+      bound_rts, pixel_shader ? pixel_shader->writes_color_targets() : 0,
+      pixel_shader ? pixel_shader->writes_depth() : description.depth_write != 0);
+  pipelines_.emplace(stored_description.description_hash, pipeline);
+  if (!creation_threads_.empty()) {
+    pipeline->creation_pending.store(true, std::memory_order_relaxed);
+    {
+      std::lock_guard<std::mutex> lock(creation_request_lock_);
+      creation_queue_.push(pipeline);
+    }
+    creation_request_cond_.notify_one();
+  } else {
+    pipeline->state.store(CreateD3D12Pipeline(runtime_description), std::memory_order_release);
+  }
+  return true;
 }
 #endif  // REXGLUE_SHADER_DXIL
 

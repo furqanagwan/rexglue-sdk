@@ -433,6 +433,11 @@ class PipelineCache {
   // Its converted and signed DXIL, or nullptr (failures are cached). Any thread.
   const std::vector<uint8_t>* ConvertDxil(const Shader::Translation& translation);
   const std::vector<uint8_t>* GetDxilGeometryShader(GuestSpirvShaderCache::GeometryShaderKey key);
+  // Writes a new DXIL pipeline and its guest shaders to the storage files.
+  void StoreDxilPipeline(uint64_t hash, const PipelineDescription& description,
+                         Shader& vertex_shader, Shader* pixel_shader);
+  // Queues a stored DXIL pipeline for creation; false if it can't be made.
+  bool CreateStoredDxilPipeline(const PipelineStoredDescription& stored_description);
 
   std::unique_ptr<DxilShaderCacheHost> dxil_shader_cache_host_;
   std::unique_ptr<GuestSpirvShaderCache> dxil_shader_cache_;
