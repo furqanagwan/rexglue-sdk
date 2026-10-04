@@ -132,6 +132,38 @@ if(REXGLUE_SHADER_DXIL)
     target_include_directories(rexgpu-xenos PRIVATE
         "${REXGLUE_GLSLANG_INCLUDE_DIR}" "${REXGLUE_DXC_INCLUDE_DIR}")
     target_compile_definitions(rexgpu-xenos PRIVATE REXGLUE_SHADER_DXIL=1)
+
+    # The host tessellation vertex and hull shaders for the SPIR-V -> DXIL
+    # path: xenia-edge's GLSL, compiled as Edge does (Vulkan 1.0, SPIR-V 1.0)
+    # with the pinned glslang. Generated, never checked in.
+    set(_rex_spirv_shader_dir "${CMAKE_CURRENT_SOURCE_DIR}/shaders/spirv")
+    set(_rex_spirv_bytecode_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/spirv_shaders")
+    file(MAKE_DIRECTORY "${_rex_spirv_bytecode_dir}")
+    file(GLOB _rex_spirv_shader_sources CONFIGURE_DEPENDS "${_rex_spirv_shader_dir}/*.glsl")
+    set(_rex_spirv_shader_outputs "")
+    foreach(_src IN LISTS _rex_spirv_shader_sources)
+        get_filename_component(_name "${_src}" NAME)
+        string(REGEX REPLACE "\\.glsl$" "" _id "${_name}")
+        string(REPLACE "." "_" _id "${_id}")
+        # The stage from the name: name.vs.glsl or name.hs.glsl.
+        if(_id MATCHES "_hs$")
+            set(_stage tesc)
+        else()
+            set(_stage vert)
+        endif()
+        set(_out "${_rex_spirv_bytecode_dir}/${_id}.h")
+        add_custom_command(
+            OUTPUT "${_out}"
+            COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.0 -S ${_stage}
+                --vn ${_id} -o "${_out}" "${_src}"
+            DEPENDS "${_src}" "${_rex_spirv_shader_dir}/xenos_draw.glsli" glslang-standalone
+            COMMENT "SPIR-V: ${_name}"
+            VERBATIM)
+        list(APPEND _rex_spirv_shader_outputs "${_out}")
+    endforeach()
+    add_custom_target(rexgpu-spirv-shaders DEPENDS ${_rex_spirv_shader_outputs})
+    add_dependencies(rexgpu-xenos rexgpu-spirv-shaders)
+    target_include_directories(rexgpu-xenos PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 endif()
 
 if(REXGLUE_USE_D3D12)

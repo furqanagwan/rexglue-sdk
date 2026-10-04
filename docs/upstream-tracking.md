@@ -1620,3 +1620,25 @@ new [shared SRV, shared UAV] bindless pair; the sampler heap switch also
 invalidates the DXBC descriptor indices. Tests: CTest `gpu.dxil_parity` (all
 52 GPU fixture cases with the DXIL path, strict). Known regressions: none at
 the pin; title scenes not yet compared.
+
+## RG-GDK-032 stage 2 (part 3): tessellation, ROV and helper pixel shaders on DXIL (2026-10-04)
+
+has207/xenia-edge `0788c561e3`: `ConvertGuestMesaTessellationToDxil` and
+`GetMesaTessHostSpirv`, the Mesa ROV depth-only / VIZ survey and depth-only
+pixel shaders and their selection in `CreateD3D12Pipeline` from
+`d3d12/pipeline_cache.cc`; the tessellation and FSI parts of
+`UpdateBindingsMesa`; the host tessellation GLSL
+(`tessellation_{indexed,adaptive}.vs.glsl`, the ten `*.hs.glsl`,
+`xenos_draw.glsli`, last changed in Edge `68ca6429f2` and `e3d9428071`),
+built as Edge's `xenia-shader-cc` does (glslang, Vulkan 1.0, SPIR-V 1.0,
+without its spirv-opt pass). Class C (opt-in). Adaptation: the GLSL is
+compiled at build time with the pinned glslang's standalone compiler
+instead of a host tool; linked tessellation DXIL is cached per domain shader
+modification and made at pipeline creation; float24 helper shaders are
+translator-built DXIL (Edge binds its precompiled ones); the ROV guest sample
+count rides in the pixel shader modification of PS-less DXIL descriptions
+instead of a new description field; hybrid occlusion counting stays on DXBC.
+Tests: `tests/gpu/tessellation_fixture_test.cpp` (DXBC and, through
+`gpu.dxil_parity`, DXIL; RTV and ROV), the ROV ZPD and VIZ fixtures in strict
+DXIL. Known regressions: none at the pin; no tessellating or ROV title scene
+compared yet.

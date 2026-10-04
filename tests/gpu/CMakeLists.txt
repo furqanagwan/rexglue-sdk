@@ -21,6 +21,7 @@ add_executable(gpu_tests
     invalid_fetch_fixture_test.cpp
     resolve_gamma_fixture_test.cpp
     line_scale_fixture_test.cpp
+    tessellation_fixture_test.cpp
 )
 
 # The replacement shader the fixture swaps in, compiled like a title's

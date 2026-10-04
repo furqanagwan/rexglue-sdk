@@ -174,14 +174,15 @@ foreach(_cfg IN LISTS CMAKE_CONFIGURATION_TYPES)
 endforeach()
 
 # ── glslang (SPIR-V builder for the guest shader translator) ─────────────────
-# The commit xenia-edge pins (16.0.0); only its SPIRV library is used.
+# The commit xenia-edge pins (16.0.0): its SPIRV library, and the standalone
+# compiler for the host tessellation shaders (src/graphics/shaders/spirv).
 set(REXGLUE_GLSLANG_COMMIT a57276bf558f5cf94d3a9854ebdf5a2236849a5a)
 set(REXGLUE_GLSLANG_SHA256 02f4321a3ed01b9a9a9874f76e2d8ad078825818fcc9aae12dbf2c01674fb8af)
 set(_rex_glslang_root "${_rex_dxil_deps}/glslang")
 _rexglue_dxil_fetch("glslang-${REXGLUE_GLSLANG_COMMIT}.tar.gz"
     "https://github.com/KhronosGroup/glslang/archive/${REXGLUE_GLSLANG_COMMIT}.tar.gz"
     ${REXGLUE_GLSLANG_SHA256} "${_rex_glslang_root}")
-set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES ON CACHE BOOL "" FORCE)
 set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
 set(ENABLE_OPT OFF CACHE BOOL "" FORCE)

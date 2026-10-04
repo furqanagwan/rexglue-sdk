@@ -34,6 +34,7 @@
 #include <rex/ui/d3d12/d3d12_presenter.h>
 #include <rex/ui/d3d12/d3d12_util.h>
 #if REXGLUE_SHADER_DXIL
+#include <rex/graphics/pipeline/shader/spirv_fsi_system_constants.h>
 #include <rex/graphics/pipeline/shader/spirv_translator.h>
 #endif
 
@@ -2646,19 +2647,18 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   bool use_dxil = false;
 #if REXGLUE_SHADER_DXIL
   // SPIR-V -> DXIL (gpu_shader_path=dxil, RG-GDK-032) when this draw can take
-  // it; the DXBC path otherwise. Occlusion query counting and VIZ surveys stay
-  // on DXBC.
+  // it; the DXBC path otherwise. Hybrid occlusion query counting stays on
+  // DXBC.
   const SpirvShader* dxil_vertex_shader = nullptr;
   const SpirvShader* dxil_pixel_shader = nullptr;
-  if (pipeline_cache_->IsDxilShaderPathEnabled() && !zpd_hybrid && !viz_survey &&
-      host_render_targets_used) {
+  if (pipeline_cache_->IsDxilShaderPathEnabled() && !zpd_hybrid) {
     SpirvShader* dxil_vs = nullptr;
     SpirvShader* dxil_ps = nullptr;
     PipelineCache::DxilPipelineResult dxil_result = pipeline_cache_->ConfigurePipelineDxil(
         vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
         interpolator_mask, ps_param_gen_pos, normalized_depth_control, normalized_color_mask,
         bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
-        &pipeline_handle, &dxil_vs, &dxil_ps);
+        viz_survey, &pipeline_handle, &dxil_vs, &dxil_ps);
     if (dxil_result == PipelineCache::DxilPipelineResult::kFailed &&
         REXCVAR_GET(gpu_shader_path_dxil_strict)) {
       REXGPU_ERROR("gpu_shader_path_dxil_strict: the draw's DXIL pipeline failed");
@@ -2801,7 +2801,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   if (use_dxil) {
     if (!UpdateBindingsDxil(dxil_vertex_shader, dxil_pixel_shader, memexport_used,
                             primitive_polygonal, primitive_processing_result, viewport_info,
-                            used_texture_mask)) {
+                            used_texture_mask, normalized_depth_control, normalized_color_mask)) {
       return false;
     }
   } else
@@ -5599,8 +5599,9 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     const SpirvShader* vertex_shader, const SpirvShader* pixel_shader, bool memexport_used,
     bool primitive_polygonal,
     const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
-    const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask) {
-  // xenia-edge's UpdateBindingsMesa for the host render target path.
+    const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask,
+    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask) {
+  // xenia-edge's UpdateBindingsMesa.
   const ui::d3d12::D3D12Provider& provider = GetD3D12Provider();
   const RegisterFile& regs = *register_file_;
 
@@ -5637,6 +5638,8 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
   if (draw_util::IsPrimitiveLine(regs)) {
     flags |= SpirvShaderTranslator::kSysFlag_PrimitiveLine;
   }
+  flags |= uint32_t(regs.Get<reg::RB_SURFACE_INFO>().msaa_samples)
+           << SpirvShaderTranslator::kSysFlag_MsaaSamples_Shift;
   if (rb_depth_info.depth_format == xenos::DepthRenderTargetFormat::kD24FS8) {
     flags |= SpirvShaderTranslator::kSysFlag_DepthFloat24;
   }
@@ -5644,7 +5647,10 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
                                                    ? rb_colorcontrol.alpha_func
                                                    : xenos::CompareFunction::kAlways;
   flags |= uint32_t(alpha_test_function) << SpirvShaderTranslator::kSysFlag_AlphaPassIfLess_Shift;
-  if (!render_target_cache_->gamma_render_target_as_unorm16()) {
+  // On the ROV path the EDRAM store encodes gamma.
+  bool edram_rov_used =
+      render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
+  if (!edram_rov_used && !render_target_cache_->gamma_render_target_as_unorm16()) {
     for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
       if (regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]).color_format ==
           xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA) {
@@ -5679,6 +5685,15 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     }
   }
 
+  // Read by the host tessellation shaders.
+  sc.tessellation_factor_range[0] = regs.Get<float>(XE_GPU_REG_VGT_HOS_MIN_TESS_LEVEL) + 1.0f;
+  sc.tessellation_factor_range[1] = regs.Get<float>(XE_GPU_REG_VGT_HOS_MAX_TESS_LEVEL) + 1.0f;
+  sc.tessellation_vertex_index_endian =
+      uint32_t(primitive_processing_result.host_shader_index_endian);
+  sc.tessellation_vertex_index_offset = regs[XE_GPU_REG_VGT_INDX_OFFSET];
+  sc.tessellation_vertex_index_min_max[0] = regs[XE_GPU_REG_VGT_MIN_VTX_INDX];
+  sc.tessellation_vertex_index_min_max[1] = regs[XE_GPU_REG_VGT_MAX_VTX_INDX];
+
   // Point size, and the NDC size of a guest pixel for the line expansion.
   if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList ||
       vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineList ||
@@ -5705,8 +5720,9 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     int32_t color_exp_bias = color_info.color_exp_bias;
     if ((color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16 ||
          color_info.color_format == xenos::ColorRenderTargetFormat::k_16_16_16_16) &&
-        !render_target_cache_->IsFixed16TruncatedToMinus1To1()) {
-      // Remap from -32...32 to -1...1, getting the full range.
+        !edram_rov_used && !render_target_cache_->IsFixed16TruncatedToMinus1To1()) {
+      // Remap from -32...32 to -1...1, getting the full range. The ROV EDRAM
+      // store handles the format itself.
       color_exp_bias -= 5;
     }
     sc.color_exp_bias[i] =
@@ -5730,6 +5746,16 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     }
   }
   sc.textures_resolved = textures_resolved;
+
+  // The ROV path's EDRAM render backend constants, counting samples into the
+  // active occlusion query's counter slot as the DXBC ROV shaders do.
+  if (edram_rov_used) {
+    bool fsi_dirty = false;
+    WriteFragmentShaderInterlockSystemConstants(
+        sc, sc.flags, fsi_dirty, regs, primitive_polygonal, normalized_depth_control,
+        normalized_color_mask, draw_resolution_scale_x, draw_resolution_scale_y,
+        zpd_active_query_is_rov_ ? zpd_active_query_index_ : UINT32_MAX);
+  }
 
   // Constant buffers, skipping unchanged ones.
   if (dxil_system_constants_shadow_.size() != sizeof(sc) ||

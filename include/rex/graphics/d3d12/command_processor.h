@@ -456,7 +456,9 @@ class D3D12CommandProcessor : public CommandProcessor {
   bool UpdateBindingsDxil(const SpirvShader* vertex_shader, const SpirvShader* pixel_shader,
                           bool memexport_used, bool primitive_polygonal,
                           const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
-                          const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask);
+                          const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask,
+                          reg::RB_DEPTHCONTROL normalized_depth_control,
+                          uint32_t normalized_color_mask);
   uint32_t GetOrCreateDxilBindlessSamplerIndex(D3D12TextureCache::SamplerParameters parameters);
   bool SwitchToNewBindlessSamplerHeap();
 #endif
