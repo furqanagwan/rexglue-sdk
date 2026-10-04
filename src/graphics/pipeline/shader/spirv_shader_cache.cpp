@@ -217,8 +217,12 @@ Shader::Translation* GuestSpirvShaderCache::TranslateSpirv(SpirvShaderTranslator
     // ReXGlue translates on one thread per shader here; claiming a translation
     // across threads (xenia-edge TryClaimTranslation) isn't needed.
     (void)use_try_claim;
-    if (should_translate && !translator.TranslateAnalyzedShader(translation)) {
-      return nullptr;
+    if (should_translate) {
+      translator.TranslateAnalyzedShader(translation);
+      // ReXGlue's ShaderTranslator leaves publishing to the backend (the DXBC
+      // path publishes after its replacement step); without it every draw
+      // would translate again. Failures are published too, so they stay.
+      translation.PublishTranslated();
     }
   }
   return translation.is_valid() ? &translation : nullptr;

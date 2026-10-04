@@ -2678,7 +2678,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
           &pipeline_handle, &root_signature)) {
     return false;
   }
-  if (!use_dxil && REXCVAR_GET(async_shader_compilation)) {
+  if (REXCVAR_GET(async_shader_compilation)) {
     // Skipping a draw while its pipeline compiles is only harmless for a pass
     // redrawn every frame (has207/xenia-edge de8e60601). Wait for the real
     // pipeline instead for a render target not drawn recently (a one-off
@@ -2689,7 +2689,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
       bool draw_target_small = render_target_cache_->IsLastUpdateDrawTargetSmall();
       if (!draw_target_recurring || draw_target_small || memexport_used) {
         auto await_start = std::chrono::steady_clock::now();
-        pipeline_cache_->AwaitQueuedPipelines();
+        pipeline_cache_->AwaitPipeline(pipeline_handle);
         REXGPU_DEBUG("Awaited the pipeline for a draw into {} ({}): {:.2f} ms",
                      render_target_cache_->GetLastUpdateDrawTargetName(),
                      draw_target_small        ? "small render target"
