@@ -209,3 +209,20 @@ TEST_CASE("The Agility SDK runtime creates a pipeline from it", "[dxil]") {
   ComPtr<ID3D12PipelineState> pipeline;
   CHECK(SUCCEEDED(device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline))));
 }
+
+TEST_CASE("The Agility SDK survives a probe load and unload of D3D12.dll", "[dxil]") {
+  // D3D12Provider::IsD3D12APIAvailable loads and frees D3D12.dll before the
+  // provider loads it for good.
+  HMODULE probe = LoadLibraryW(L"D3D12.dll");
+  REQUIRE(probe);
+  FreeLibrary(probe);
+  HMODULE d3d12 = LoadLibraryW(L"D3D12.dll");
+  REQUIRE(d3d12);
+  auto create =
+      reinterpret_cast<PFN_D3D12_CREATE_DEVICE>(GetProcAddress(d3d12, "D3D12CreateDevice"));
+  REQUIRE(create);
+  ComPtr<ID3D12Device> device;
+  HRESULT hr = create(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
+  INFO("HRESULT 0x" << std::hex << uint32_t(hr));
+  CHECK(SUCCEEDED(hr));
+}

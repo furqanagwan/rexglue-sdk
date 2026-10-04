@@ -67,6 +67,7 @@ function(rexglue_configure_target target_name)
     if(ARG_SHADER_REPLACEMENTS)
         _rexglue_stage_shader_replacements(${target_name} "${ARG_SHADER_REPLACEMENTS}")
     endif()
+    _rexglue_stage_d3d12_agility(${target_name})
 
     if(WIN32)
         # Stage runtime DLLs (rexruntime, TracyClient, etc.) next to the host
@@ -117,6 +118,39 @@ function(rexglue_configure_target target_name)
         unset(_plugin_target)
     endforeach()
 
+endfunction()
+
+#==========================================================
+# The D3D12 Agility SDK and dxil.dll (RG-GDK-032)
+#
+# With an SDK built with REXGLUE_SHADER_DXIL, a title exports the Agility SDK
+# version (d3d12_agility.cpp) and ships D3D12Core.dll, d3d12SDKLayers.dll and
+# dxil.dll in D3D12\ beside the executable, as Microsoft's PC backward
+# compatibility packages do; gpu_shader_path=dxil needs them.
+#==========================================================
+function(_rexglue_stage_d3d12_agility target_name)
+    if(NOT REXGLUE_SHADER_DXIL)
+        return()
+    endif()
+    if(REXGLUE_D3D12_REDIST_FILES)
+        set(_files ${REXGLUE_D3D12_REDIST_FILES})
+    else()
+        file(GLOB _files "${REXGLUE_SHARE_DIR}/d3d12/*.dll")
+    endif()
+    if(NOT _files)
+        message(FATAL_ERROR "rexglue_configure_target: the SDK was built with REXGLUE_SHADER_DXIL "
+            "but its D3D12 redistributables are missing")
+    endif()
+    target_sources(${target_name} PRIVATE ${REXGLUE_SHARE_DIR}/d3d12_agility.cpp)
+    set_source_files_properties(${REXGLUE_SHARE_DIR}/d3d12_agility.cpp PROPERTIES
+        COMPILE_DEFINITIONS "REXGLUE_D3D12_SDK_VERSION=${REXGLUE_D3D12_SDK_VERSION}"
+        SKIP_PRECOMPILE_HEADERS ON)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/D3D12"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_files}
+            "$<TARGET_FILE_DIR:${target_name}>/D3D12"
+        VERBATIM
+    )
 endfunction()
 
 #==========================================================
