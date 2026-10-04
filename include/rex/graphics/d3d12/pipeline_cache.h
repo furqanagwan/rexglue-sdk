@@ -77,6 +77,9 @@ class PipelineCache {
   // Creates the queued pipelines on this thread too, then waits for the rest:
   // for a draw that can't be skipped while its pipeline compiles.
   void AwaitQueuedPipelines();
+  // Waits for one queued pipeline only, creating it on this thread unless a
+  // creation thread already is.
+  void AwaitPipeline(void* handle);
 
   D3D12Shader* LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
                           uint32_t dword_count);
@@ -285,10 +288,11 @@ class PipelineCache {
     D3D12Shader::D3D12Translation* vertex_shader;
     D3D12Shader::D3D12Translation* pixel_shader;
     const std::vector<uint32_t>* geometry_shader;
-    // With description.dxil, the DXIL used instead of the DXBC translations
-    // and geometry shader.
-    const std::vector<uint8_t>* dxil_vertex_shader;
-    const std::vector<uint8_t>* dxil_pixel_shader;
+    // With description.dxil, the SPIR-V translations converted to DXIL when
+    // the pipeline is created (on a creation thread with async compilation),
+    // and the geometry shader's DXIL, used instead of the DXBC ones.
+    const Shader::Translation* dxil_vertex_spirv;
+    const Shader::Translation* dxil_pixel_spirv;
     const std::vector<uint8_t>* dxil_geometry_shader;
     PipelineDescription description;
   };
@@ -424,13 +428,16 @@ class PipelineCache {
   };
   // Twin of a guest shader for the SPIR-V translator, by ucode hash.
   SpirvShader* GetDxilShader(const Shader& shader);
-  // Translated and signed DXIL, or nullptr (failures are cached).
-  const std::vector<uint8_t>* GetDxilBinary(SpirvShader& shader, uint64_t modification);
+  // The SPIR-V translation (draw thread), or nullptr.
+  Shader::Translation* GetDxilSpirv(SpirvShader& shader, uint64_t modification);
+  // Its converted and signed DXIL, or nullptr (failures are cached). Any thread.
+  const std::vector<uint8_t>* ConvertDxil(const Shader::Translation& translation);
   const std::vector<uint8_t>* GetDxilGeometryShader(GuestSpirvShaderCache::GeometryShaderKey key);
 
   std::unique_ptr<DxilShaderCacheHost> dxil_shader_cache_host_;
   std::unique_ptr<GuestSpirvShaderCache> dxil_shader_cache_;
   std::unordered_map<uint64_t, std::unique_ptr<SpirvShader>> dxil_shaders_;
+  std::mutex dxil_binaries_mutex_;
   std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<uint8_t>>> dxil_binaries_;
   std::unordered_map<uint32_t, std::vector<uint8_t>> dxil_geometry_shaders_;
 #endif
@@ -447,6 +454,9 @@ class PipelineCache {
     uint8_t priority = 0;
     // Queued for asynchronous creation, not created or failed yet.
     std::atomic<bool> creation_pending{false};
+    // Taken by whoever creates a queued pipeline: a creation thread, or the
+    // command processor awaiting this one pipeline.
+    std::atomic<bool> creation_claimed{false};
   };
   struct PipelineCreationPriorityComparator {
     bool operator()(const Pipeline* a, const Pipeline* b) const {

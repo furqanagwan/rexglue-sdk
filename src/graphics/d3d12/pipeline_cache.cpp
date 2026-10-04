@@ -900,6 +900,27 @@ void PipelineCache::EndSubmission() {
   }
 }
 
+void PipelineCache::AwaitPipeline(void* handle) {
+  auto* pipeline = reinterpret_cast<Pipeline*>(handle);
+  if (!pipeline->creation_pending.load(std::memory_order_acquire)) {
+    return;
+  }
+  if (!pipeline->creation_claimed.exchange(true, std::memory_order_acq_rel)) {
+    // Not started: create it here rather than wait for the queue before it.
+    PipelineRuntimeDescription runtime_description;
+    pipeline->state.store(PrepareRuntimeDescriptionForQueuedCreation(pipeline, runtime_description)
+                              ? CreateD3D12Pipeline(runtime_description)
+                              : nullptr,
+                          std::memory_order_release);
+    pipeline->creation_pending.store(false, std::memory_order_release);
+    return;
+  }
+  // A creation thread has it.
+  while (pipeline->creation_pending.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+}
+
 void PipelineCache::AwaitQueuedPipelines() {
   if (creation_threads_.empty()) {
     return;
@@ -2975,12 +2996,23 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   if (description.dxil) {
     // SPIR-V -> DXIL (RG-GDK-032): vertex shaders only, no DXBC helper
     // shaders (a pipeline can't mix DXBC and DXIL).
-    state_desc.VS.pShaderBytecode = runtime_description.dxil_vertex_shader->data();
-    state_desc.VS.BytecodeLength = runtime_description.dxil_vertex_shader->size();
-    if (runtime_description.dxil_pixel_shader) {
-      state_desc.PS.pShaderBytecode = runtime_description.dxil_pixel_shader->data();
-      state_desc.PS.BytecodeLength = runtime_description.dxil_pixel_shader->size();
+#if REXGLUE_SHADER_DXIL
+    const std::vector<uint8_t>* dxil_vertex = ConvertDxil(*runtime_description.dxil_vertex_spirv);
+    const std::vector<uint8_t>* dxil_pixel =
+        runtime_description.dxil_pixel_spirv ? ConvertDxil(*runtime_description.dxil_pixel_spirv)
+                                             : nullptr;
+    if (!dxil_vertex || (runtime_description.dxil_pixel_spirv && !dxil_pixel)) {
+      return nullptr;
     }
+    state_desc.VS.pShaderBytecode = dxil_vertex->data();
+    state_desc.VS.BytecodeLength = dxil_vertex->size();
+    if (dxil_pixel) {
+      state_desc.PS.pShaderBytecode = dxil_pixel->data();
+      state_desc.PS.BytecodeLength = dxil_pixel->size();
+    }
+#else
+    return nullptr;
+#endif
     if (runtime_description.dxil_geometry_shader) {
       state_desc.GS.pShaderBytecode = runtime_description.dxil_geometry_shader->data();
       state_desc.GS.BytecodeLength = runtime_description.dxil_geometry_shader->size();
@@ -3553,6 +3585,10 @@ void PipelineCache::CreationThread(size_t thread_index) {
       // fully created (rather than just started creating).
       pipeline_to_create = creation_queue_.top();
       creation_queue_.pop();
+      if (pipeline_to_create->creation_claimed.exchange(true, std::memory_order_acq_rel)) {
+        // Created by an AwaitPipeline already.
+        continue;
+      }
       ++creation_threads_busy_;
     }
 
@@ -3586,6 +3622,9 @@ void PipelineCache::CreateQueuedPipelinesOnProcessorThread() {
       }
       pipeline_to_create = creation_queue_.top();
       creation_queue_.pop();
+    }
+    if (pipeline_to_create->creation_claimed.exchange(true, std::memory_order_acq_rel)) {
+      continue;
     }
     PipelineRuntimeDescription runtime_description;
     if (!PrepareRuntimeDescriptionForQueuedCreation(pipeline_to_create, runtime_description)) {
@@ -3641,32 +3680,58 @@ SpirvShader* PipelineCache::GetDxilShader(const Shader& shader) {
   return result;
 }
 
-const std::vector<uint8_t>* PipelineCache::GetDxilBinary(SpirvShader& shader,
-                                                         uint64_t modification) {
-  auto& by_modification = dxil_binaries_[shader.ucode_data_hash()];
-  auto it = by_modification.find(modification);
-  if (it != by_modification.end()) {
-    // An empty entry is a cached failure.
-    return it->second.empty() ? nullptr : &it->second;
-  }
-  std::vector<uint8_t> dxil;
+Shader::Translation* PipelineCache::GetDxilSpirv(SpirvShader& shader, uint64_t modification) {
+  bool new_translation = !shader.GetOrCreateTranslation(modification)->is_translated();
+  auto translate_start = std::chrono::steady_clock::now();
   Shader::Translation* translation = dxil_shader_cache_->EnsureAndTranslate(shader, modification);
-  if (translation) {
-    const std::vector<uint8_t>& spirv = translation->translated_binary();
-    dxil = SpirvToDxilCompiler::Translate(
-        reinterpret_cast<const uint32_t*>(spirv.data()), spirv.size() / sizeof(uint32_t),
-        shader.type() == xenos::ShaderType::kVertex ? SpirvToDxilCompiler::Stage::kVertex
-                                                    : SpirvToDxilCompiler::Stage::kPixel,
-        /*lower_to_bindless=*/true);
-    if (!REXCVAR_GET(dump_shaders).empty()) {
-      translation->Dump(REXCVAR_GET(dump_shaders), "spirv");
+  if (new_translation) {
+    REXGPU_DEBUG("SPIR-V translation {:016X}: {:.1f} ms", shader.ucode_data_hash(),
+                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                           translate_start)
+                     .count());
+  }
+  if (!translation) {
+    REXGPU_WARN("Guest shader {:016X} (modification {:016X}): no SPIR-V, using DXBC",
+                shader.ucode_data_hash(), modification);
+    return nullptr;
+  }
+  if (!REXCVAR_GET(dump_shaders).empty()) {
+    translation->Dump(REXCVAR_GET(dump_shaders), "spirv");
+  }
+  return translation;
+}
+
+const std::vector<uint8_t>* PipelineCache::ConvertDxil(const Shader::Translation& translation) {
+  const Shader& shader = translation.shader();
+  {
+    std::lock_guard<std::mutex> lock(dxil_binaries_mutex_);
+    auto& by_modification = dxil_binaries_[shader.ucode_data_hash()];
+    auto it = by_modification.find(translation.modification());
+    if (it != by_modification.end()) {
+      // An empty entry is a cached failure.
+      return it->second.empty() ? nullptr : &it->second;
     }
   }
+  // The conversion is the expensive step, outside the lock; two threads
+  // converting the same shader keep the first result.
+  const std::vector<uint8_t>& spirv = translation.translated_binary();
+  auto convert_start = std::chrono::steady_clock::now();
+  std::vector<uint8_t> dxil = SpirvToDxilCompiler::Translate(
+      reinterpret_cast<const uint32_t*>(spirv.data()), spirv.size() / sizeof(uint32_t),
+      shader.type() == xenos::ShaderType::kVertex ? SpirvToDxilCompiler::Stage::kVertex
+                                                  : SpirvToDxilCompiler::Stage::kPixel,
+      /*lower_to_bindless=*/true);
+  REXGPU_DEBUG(
+      "DXIL conversion {:016X}: {:.1f} ms", shader.ucode_data_hash(),
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - convert_start)
+          .count());
   if (dxil.empty()) {
-    REXGPU_WARN("Guest shader {:016X} (modification {:016X}): no DXIL, using DXBC",
-                shader.ucode_data_hash(), modification);
+    REXGPU_WARN("Guest shader {:016X} (modification {:016X}): no DXIL", shader.ucode_data_hash(),
+                translation.modification());
   }
-  auto emplaced = by_modification.emplace(modification, std::move(dxil));
+  std::lock_guard<std::mutex> lock(dxil_binaries_mutex_);
+  auto emplaced = dxil_binaries_[shader.ucode_data_hash()].try_emplace(translation.modification(),
+                                                                       std::move(dxil));
   return emplaced.first->second.empty() ? nullptr : &emplaced.first->second;
 }
 
@@ -3744,10 +3809,11 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
                                           normalized_depth_control, normalized_color_mask,
                                           /*apply_polygon_offset_in_shader=*/false)
                                     : 0;
-  const std::vector<uint8_t>* vertex_dxil = GetDxilBinary(*vertex_shader, vertex_modification);
-  const std::vector<uint8_t>* pixel_dxil =
-      pixel_shader ? GetDxilBinary(*pixel_shader, pixel_modification) : nullptr;
-  if (!vertex_dxil || (pixel_shader && !pixel_dxil)) {
+  // SPIR-V here for the draw's bindings; DXIL when the pipeline is created.
+  const Shader::Translation* vertex_spirv = GetDxilSpirv(*vertex_shader, vertex_modification);
+  const Shader::Translation* pixel_spirv =
+      pixel_shader ? GetDxilSpirv(*pixel_shader, pixel_modification) : nullptr;
+  if (!vertex_spirv || (pixel_shader && !pixel_spirv)) {
     return DxilPipelineResult::kFailed;
   }
 
@@ -3767,8 +3833,8 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
   description.pixel_shader_modification = pixel_modification;
   runtime_description.root_signature = command_processor_.GetDxilRootSignature();
   runtime_description.geometry_shader = nullptr;
-  runtime_description.dxil_vertex_shader = vertex_dxil;
-  runtime_description.dxil_pixel_shader = pixel_dxil;
+  runtime_description.dxil_vertex_spirv = vertex_spirv;
+  runtime_description.dxil_pixel_spirv = pixel_spirv;
   GuestSpirvShaderCache::GeometryShaderKey geometry_shader_key;
   if (GuestSpirvShaderCache::GetGeometryShaderKey(
           rex::graphics::PipelineGeometryShader(uint32_t(description.geometry_shader)),
@@ -3789,18 +3855,40 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     }
   }
   if (!pipeline) {
-    // Created on this thread: the DXIL is ready, and these aren't stored.
+    // The DXIL is ready, so creation needs no translation: on the creation
+    // threads with async_shader_compilation, as DXBC pipelines are, else here.
+    // These aren't stored.
     pipeline = new Pipeline;
     std::memcpy(&pipeline->description, &runtime_description, sizeof(runtime_description));
     pipeline->root_signature.store(runtime_description.root_signature, std::memory_order_release);
-    pipeline->state.store(CreateD3D12Pipeline(runtime_description), std::memory_order_release);
     pipelines_.emplace(hash, pipeline);
+    if (REXCVAR_GET(async_shader_compilation) && !creation_threads_.empty()) {
+      pipeline->priority = pipeline_util::CalculatePipelinePriority(
+          pipeline_util::GetBoundRTMaskFromNormalizedColorMask(normalized_color_mask),
+          pixel_shader ? pixel_shader->writes_color_targets() : 0,
+          pixel_shader ? pixel_shader->writes_depth()
+                       : normalized_depth_control.z_write_enable != 0);
+      pipeline->creation_pending.store(true, std::memory_order_relaxed);
+      {
+        std::lock_guard<std::mutex> lock(creation_request_lock_);
+        creation_queue_.push(pipeline);
+      }
+      creation_request_cond_.notify_one();
+      current_pipeline_ = pipeline;
+      *pipeline_handle_out = pipeline;
+      *vertex_shader_out = vertex_shader;
+      *pixel_shader_out = pixel_shader;
+      return DxilPipelineResult::kConfigured;
+    }
+    pipeline->state.store(CreateD3D12Pipeline(runtime_description), std::memory_order_release);
     REXGPU_DEBUG("DXIL pipeline: VS {:016X} ({:016X}), PS {:016X} ({:016X}){}",
                  vertex_shader->ucode_data_hash(), vertex_modification,
                  pixel_shader ? pixel_shader->ucode_data_hash() : 0, pixel_modification,
                  pipeline->state.load(std::memory_order_relaxed) ? "" : " - creation failed");
   }
-  if (!pipeline->state.load(std::memory_order_acquire)) {
+  // Still being created on a creation thread: IssueDraw skips or awaits it.
+  if (!pipeline->state.load(std::memory_order_acquire) &&
+      !pipeline->creation_pending.load(std::memory_order_acquire)) {
     return DxilPipelineResult::kFailed;
   }
   current_pipeline_ = pipeline;

@@ -118,8 +118,14 @@ ways, so the paths mix freely within a frame:
   translate or convert, or a failing pipeline, also falls back, logged.
   `gpu_shader_path_dxil_strict` fails such draws instead (testing).
 
-Pipelines on the DXIL path are created on the draw thread and not written to
-the pipeline storage. Pipeline creation failures now log the debug layer's
+With `async_shader_compilation`, DXIL pipelines go to the creation threads
+like DXBC ones: the draw thread only translates to SPIR-V (for the draw's
+bindings), and Mesa's conversion and the pipeline state are made on the
+creation thread. A draw that has to wait (a one-off, small or memexport
+target) now waits for its own pipeline only, creating it itself if no thread
+has started it, instead of for the whole queue; this applies to DXBC too.
+DXIL pipelines aren't written to the pipeline storage yet, so every launch
+starts cold. Pipeline creation failures now log the debug layer's
 reasons when `d3d12_debug` is on.
 
 Parity: CTest `gpu.dxil_parity` runs the whole GPU fixture suite with
@@ -147,6 +153,12 @@ First title run, 2026-10-04 (Quantum of Solace, GDK Release, NVIDIA,
 250 DXIL pipelines, none failing, no errors. Translation, conversion and
 pipeline creation on the draw thread stall it: one 21.7 s frame and 23 fps
 while new shaders keep coming, against 60 fps on DXBC.
+
+After the asynchronous creation, the single-pipeline waits and publishing
+SPIR-V translations (they were retranslated on every draw: 136,028
+translations in 40 s, now 304), the same run has 309 conversions (median
+12 ms), the menus at 60 fps and the intro at 25-45 fps with one 5 s frame
+while about 200 new pipelines are awaited from a cold start.
 
 ## Not yet
 
