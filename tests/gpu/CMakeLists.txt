@@ -58,6 +58,12 @@ set_target_properties(gpu_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>
 )
 
+# With the DXIL shader path built (RG-GDK-032), the plugin signs DXIL with
+# the dxil.dll deployed beside the executable.
+if(REXGLUE_SHADER_DXIL)
+    rexglue_deploy_d3d12_redist(gpu_tests)
+endif()
+
 # The fixture host loads the GPU plugin through the plugin ABI, like a title.
 add_dependencies(gpu_tests rexgpu-xenos)
 add_custom_command(TARGET gpu_tests POST_BUILD
@@ -66,6 +72,18 @@ add_custom_command(TARGET gpu_tests POST_BUILD
         $<TARGET_FILE_DIR:gpu_tests>
     VERBATIM
 )
+
+# The whole suite again with xenia-edge's SPIR-V translator and Mesa
+# spirv_to_dxil drawing every draw that path takes (RG-GDK-032); strict, so a
+# failing DXIL pipeline fails the draw instead of falling back to DXBC.
+if(REXGLUE_SHADER_DXIL)
+    add_test(NAME gpu.dxil_parity COMMAND gpu_tests "[gpu]~[win32]")
+    set_tests_properties(gpu.dxil_parity PROPERTIES
+        LABELS "gpu;dxil"
+        TIMEOUT 600
+        ENVIRONMENT
+            "REXGLUE_GPU_FIXTURE_CVARS=gpu_shader_path=dxil\;gpu_shader_path_dxil_strict=true")
+endif()
 
 include(Catch)
 catch_discover_tests(gpu_tests

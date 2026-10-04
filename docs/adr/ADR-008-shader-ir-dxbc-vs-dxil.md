@@ -45,6 +45,7 @@ The measurements RG-GDK-007 asked for (paired correctness and frame time, cold/w
 | Measurement | DXBC | DXIL | Status |
 | --- | --- | --- | --- |
 | Golden corpus: NaN/Inf/signed zero, rcp/rsq, packed and signed memexport, depth export, ROV, float24 transfer (Edge #198) | — | — | Not run; needs [RG-GDK-006](https://github.com/furqanagwan/rexglue-sdk/issues/6) harness |
+| GPU fixture suite (52 cases: clears, resolves, depth, memexport, ALU, PM4, primitive expansion), host render targets | 52/52 | 52/52 (226 DXIL pipelines, strict, `gpu.dxil_parity`) | 2026-10-04, NVIDIA; ROV cases on DXBC |
 | Cold/warm shader cache time, async compile | — | — | Not run |
 | Paired frame time on pinned title scenes (NVIDIA) | — | — | Not run |
 | AMD / Intel | — | — | Untested, non-blocking (ADR-007) |

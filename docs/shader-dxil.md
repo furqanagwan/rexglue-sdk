@@ -89,15 +89,57 @@ the GPU fixture's hand-assembled vertex and pixel shaders, for the RTV and ROV
 paths, with Edge's D3D12 translator configuration, through `spirv_to_dxil`
 with bindless lowering; the pinned `dxil.dll` validates and signs all four.
 
+## Stage 2: drawing with it
+
+`gpu_shader_path=dxil` (GPU/D3D12, default `dxbc`, needs a restart) draws with
+the translator in a `REXGLUE_SHADER_DXIL` build. It needs the host render
+target path, bindless resources, Shader Model 6.6 and a working `dxil.dll`;
+otherwise the log says why and DXBC is used. Each draw then goes one of two
+ways, so the paths mix freely within a frame:
+
+- **DXIL**: `PipelineCache::ConfigurePipelineDxil` keeps a SPIR-V twin of
+  each guest shader, derives xenia-edge's SPIR-V modifications
+  (`GuestSpirvShaderCache`), translates and converts them (cached per
+  modification, failures too), builds the built-in point / rectangle / quad /
+  line geometry shaders as DXIL, and creates the pipeline with the fixed
+  root signature from the DXBC path's fixed-function state (a `dxil`
+  description bit keeps the two apart). `D3D12CommandProcessor::UpdateBindingsDxil`
+  (xenia-edge's `UpdateBindingsMesa`, host render target path) fills the
+  system constants in the translator's layout, uploads the float, bool/loop,
+  fetch and runtime-data constant buffers (its own, invalidated with the DXBC
+  ones on register writes), binds shared memory (an SRV + UAV pair for
+  memexport), the ZPD counter and EDRAM UAVs, and writes per-stage
+  {texture, sampler} heap index buffers for the bindless lowering.
+- **DXBC**, as before, for what the DXIL path doesn't do yet: tessellation,
+  draws without a guest pixel shader that need a DXBC helper pixel shader
+  (float24 depth conversion, forced rasterization: a pipeline can't mix DXBC
+  and DXIL), hybrid occlusion query counting, VIZ surveys, the ROV path, and
+  shaders a title replaces (replacements are DXBC). A shader that fails to
+  translate or convert, or a failing pipeline, also falls back, logged.
+  `gpu_shader_path_dxil_strict` fails such draws instead (testing).
+
+Pipelines on the DXIL path are created on the draw thread and not written to
+the pipeline storage. Pipeline creation failures now log the debug layer's
+reasons when `d3d12_debug` is on.
+
+Parity: CTest `gpu.dxil_parity` runs the whole GPU fixture suite with
+`gpu_shader_path=dxil` and strict mode. Measured 2026-10-04 on NVIDIA: all
+52 cases pass, with 226 DXIL pipelines and none failing (the ROV cases run on
+DXBC). That covers clears, resolves (including gamma, 4x MSAA and native
+resolves at 2x), depth tests, memexport, ALU behaviour, ring and PM4
+handling, point / line expansion at 2x, invalid fetch constants and VIZ
+consumers; it is not yet a title-scene comparison.
+
 ## Not yet
 
-The rest of stage 2 of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
-the D3D12 command processor and pipeline cache using the translator behind a
-runtime selector (Edge's Mesa root signature and bindings, the guest shader
-cache), and Edge's shared parsing changes held back so DXBC stays unchanged
-(1D fetches with XY coordinates, the second component of scalar operands of
-three-operand vector ops) together with the wide 1D texture mapping
-`kTexture1DWideMaxRows` belongs to. Then stages 3–6: the host shaders, the render target cache, the parity gates and
-only then a default switch. Titles don't export the Agility symbols yet; that
-comes with the runtime selector. `dxcompiler.dll` (runtime HLSL, which
-Microsoft's BC also ships) isn't deployed: nothing compiles HLSL at runtime.
+The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53): the
+ROV path (EDRAM fragment shader interlock constants), tessellation through
+Mesa's linked stages, DXIL helper pixel shaders, hybrid occlusion counting
+and VIZ surveys, asynchronous creation and storage of DXIL pipelines, titles
+exporting the Agility SDK symbols, and Edge's shared parsing changes held
+back so DXBC stays unchanged (1D fetches with XY coordinates, the second
+component of scalar operands of three-operand vector ops) with the wide 1D
+texture mapping `kTexture1DWideMaxRows` belongs to. Then stages 3–6: the
+host shaders, the render target cache, title-scene parity and only then a
+default switch. `dxcompiler.dll` (runtime HLSL, which Microsoft's BC also
+ships) isn't deployed: nothing compiles HLSL at runtime.

@@ -26,6 +26,11 @@
 
 #include <rex/assert.h>
 #include <rex/chrono/clock.h>
+#if REXGLUE_SHADER_DXIL
+#include <rex/graphics/pipeline/shader/spirv_builtin_geometry_shader.h>
+#include <rex/graphics/pipeline/shader/spirv_to_dxil_compiler.h>
+#include <rex/graphics/pipeline/shader/spirv_translator.h>
+#endif
 #include <rex/cvar.h>
 #include <rex/dbg.h>
 #include <rex/perf/counter.h>
@@ -201,6 +206,36 @@ bool PipelineCache::Initialize() {
       creation_threads_.push_back(std::move(creation_thread));
     }
   }
+
+#if REXGLUE_SHADER_DXIL
+  if (REXCVAR_GET(gpu_shader_path) == "dxil") {
+    const char* unsupported = nullptr;
+    if (render_target_cache_.GetPath() != RenderTargetCache::Path::kHostRenderTargets) {
+      unsupported = "the ROV render target path isn't supported yet";
+    } else if (!command_processor_.bindless_resources_used()) {
+      unsupported = "it needs bindless resources";
+    } else if (provider.GetHighestShaderModel() < D3D_SHADER_MODEL_6_6) {
+      unsupported = "the adapter is below Shader Model 6.6";
+    } else if (!command_processor_.GetDxilRootSignature()) {
+      unsupported = "its root signature couldn't be created";
+    } else if (!SpirvToDxilCompiler::IsSignerAvailable()) {
+      unsupported = "dxil.dll can't sign DXIL";
+    }
+    if (unsupported) {
+      REXGPU_WARN("gpu_shader_path=dxil unavailable ({}); using DXBC", unsupported);
+    } else {
+      dxil_shader_cache_host_ = std::make_unique<DxilShaderCacheHost>(*this);
+      dxil_shader_cache_ = std::make_unique<GuestSpirvShaderCache>(
+          *dxil_shader_cache_host_, register_file_, render_target_cache_);
+      if (!dxil_shader_cache_->Initialize()) {
+        REXGPU_WARN("gpu_shader_path=dxil: no SPIR-V translator; using DXBC");
+        dxil_shader_cache_.reset();
+      } else {
+        REXGPU_INFO("Guest shaders: SPIR-V -> DXIL (xenia-edge translator, Mesa spirv_to_dxil)");
+      }
+    }
+  }
+#endif
   return true;
 }
 
@@ -2937,122 +2972,151 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   }
 
   // Primitive topology, vertex, hull, domain and geometry shaders.
-  if (!runtime_description.vertex_shader->is_translated()) {
-    REXGPU_ERROR("Vertex shader {:016X} not translated",
-                 runtime_description.vertex_shader->shader().ucode_data_hash());
-    assert_always();
-    return nullptr;
-  }
-  Shader::HostVertexShaderType host_vertex_shader_type =
-      DxbcShaderTranslator::Modification(runtime_description.vertex_shader->modification())
-          .vertex.host_vertex_shader_type;
-  if (Shader::IsHostVertexShaderTypeDomain(host_vertex_shader_type)) {
-    state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
-    xenos::TessellationMode tessellation_mode =
-        xenos::TessellationMode(description.primitive_topology_type_or_tessellation_mode);
-    if (tessellation_mode == xenos::TessellationMode::kAdaptive) {
-      state_desc.VS.pShaderBytecode = shaders::tessellation_adaptive_vs;
-      state_desc.VS.BytecodeLength = sizeof(shaders::tessellation_adaptive_vs);
-    } else {
-      state_desc.VS.pShaderBytecode = shaders::tessellation_indexed_vs;
-      state_desc.VS.BytecodeLength = sizeof(shaders::tessellation_indexed_vs);
+  if (description.dxil) {
+    // SPIR-V -> DXIL (RG-GDK-032): vertex shaders only, no DXBC helper
+    // shaders (a pipeline can't mix DXBC and DXIL).
+    state_desc.VS.pShaderBytecode = runtime_description.dxil_vertex_shader->data();
+    state_desc.VS.BytecodeLength = runtime_description.dxil_vertex_shader->size();
+    if (runtime_description.dxil_pixel_shader) {
+      state_desc.PS.pShaderBytecode = runtime_description.dxil_pixel_shader->data();
+      state_desc.PS.BytecodeLength = runtime_description.dxil_pixel_shader->size();
     }
-    switch (tessellation_mode) {
-      case xenos::TessellationMode::kDiscrete:
-        switch (host_vertex_shader_type) {
-          case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
-            state_desc.HS.pShaderBytecode = shaders::discrete_triangle_3cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::discrete_triangle_3cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::discrete_triangle_1cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::discrete_triangle_1cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kQuadDomainCPIndexed:
-            state_desc.HS.pShaderBytecode = shaders::discrete_quad_4cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::discrete_quad_4cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::discrete_quad_1cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::discrete_quad_1cp_hs);
-            break;
-          default:
-            assert_unhandled_case(host_vertex_shader_type);
-            return nullptr;
-        }
-        break;
-      case xenos::TessellationMode::kContinuous:
-        switch (host_vertex_shader_type) {
-          case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
-            state_desc.HS.pShaderBytecode = shaders::continuous_triangle_3cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::continuous_triangle_3cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::continuous_triangle_1cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::continuous_triangle_1cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kQuadDomainCPIndexed:
-            state_desc.HS.pShaderBytecode = shaders::continuous_quad_4cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::continuous_quad_4cp_hs);
-            break;
-          case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::continuous_quad_1cp_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::continuous_quad_1cp_hs);
-            break;
-          default:
-            assert_unhandled_case(host_vertex_shader_type);
-            return nullptr;
-        }
-        break;
-      case xenos::TessellationMode::kAdaptive:
-        switch (host_vertex_shader_type) {
-          case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::adaptive_triangle_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::adaptive_triangle_hs);
-            break;
-          case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
-            state_desc.HS.pShaderBytecode = shaders::adaptive_quad_hs;
-            state_desc.HS.BytecodeLength = sizeof(shaders::adaptive_quad_hs);
-            break;
-          default:
-            assert_unhandled_case(host_vertex_shader_type);
-            return nullptr;
-        }
-        break;
-      default:
-        assert_unhandled_case(tessellation_mode);
-        return nullptr;
+    if (runtime_description.dxil_geometry_shader) {
+      state_desc.GS.pShaderBytecode = runtime_description.dxil_geometry_shader->data();
+      state_desc.GS.BytecodeLength = runtime_description.dxil_geometry_shader->size();
     }
-    state_desc.DS.pShaderBytecode = runtime_description.vertex_shader->translated_binary().data();
-    state_desc.DS.BytecodeLength = runtime_description.vertex_shader->translated_binary().size();
-  } else {
-    assert_true(host_vertex_shader_type == Shader::HostVertexShaderType::kVertex);
-    if (host_vertex_shader_type != Shader::HostVertexShaderType::kVertex) {
-      // Fallback vertex shaders are not needed on Direct3D 12.
-      return nullptr;
-    }
-    state_desc.VS.pShaderBytecode = runtime_description.vertex_shader->translated_binary().data();
-    state_desc.VS.BytecodeLength = runtime_description.vertex_shader->translated_binary().size();
-    PipelinePrimitiveTopologyType primitive_topology_type =
-        PipelinePrimitiveTopologyType(description.primitive_topology_type_or_tessellation_mode);
-    switch (primitive_topology_type) {
+    switch (
+        PipelinePrimitiveTopologyType(description.primitive_topology_type_or_tessellation_mode)) {
       case PipelinePrimitiveTopologyType::kPoint:
         state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
         break;
       case PipelinePrimitiveTopologyType::kLine:
         state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
         break;
-      case PipelinePrimitiveTopologyType::kTriangle:
+      default:
         state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         break;
-      default:
-        assert_unhandled_case(primitive_topology_type);
+    }
+  } else if (!runtime_description.vertex_shader->is_translated()) {
+    REXGPU_ERROR("Vertex shader {:016X} not translated",
+                 runtime_description.vertex_shader->shader().ucode_data_hash());
+    assert_always();
+    return nullptr;
+  }
+  if (!description.dxil) {
+    Shader::HostVertexShaderType host_vertex_shader_type =
+        DxbcShaderTranslator::Modification(runtime_description.vertex_shader->modification())
+            .vertex.host_vertex_shader_type;
+    if (Shader::IsHostVertexShaderTypeDomain(host_vertex_shader_type)) {
+      state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+      xenos::TessellationMode tessellation_mode =
+          xenos::TessellationMode(description.primitive_topology_type_or_tessellation_mode);
+      if (tessellation_mode == xenos::TessellationMode::kAdaptive) {
+        state_desc.VS.pShaderBytecode = shaders::tessellation_adaptive_vs;
+        state_desc.VS.BytecodeLength = sizeof(shaders::tessellation_adaptive_vs);
+      } else {
+        state_desc.VS.pShaderBytecode = shaders::tessellation_indexed_vs;
+        state_desc.VS.BytecodeLength = sizeof(shaders::tessellation_indexed_vs);
+      }
+      switch (tessellation_mode) {
+        case xenos::TessellationMode::kDiscrete:
+          switch (host_vertex_shader_type) {
+            case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
+              state_desc.HS.pShaderBytecode = shaders::discrete_triangle_3cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::discrete_triangle_3cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::discrete_triangle_1cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::discrete_triangle_1cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kQuadDomainCPIndexed:
+              state_desc.HS.pShaderBytecode = shaders::discrete_quad_4cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::discrete_quad_4cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::discrete_quad_1cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::discrete_quad_1cp_hs);
+              break;
+            default:
+              assert_unhandled_case(host_vertex_shader_type);
+              return nullptr;
+          }
+          break;
+        case xenos::TessellationMode::kContinuous:
+          switch (host_vertex_shader_type) {
+            case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
+              state_desc.HS.pShaderBytecode = shaders::continuous_triangle_3cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::continuous_triangle_3cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::continuous_triangle_1cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::continuous_triangle_1cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kQuadDomainCPIndexed:
+              state_desc.HS.pShaderBytecode = shaders::continuous_quad_4cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::continuous_quad_4cp_hs);
+              break;
+            case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::continuous_quad_1cp_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::continuous_quad_1cp_hs);
+              break;
+            default:
+              assert_unhandled_case(host_vertex_shader_type);
+              return nullptr;
+          }
+          break;
+        case xenos::TessellationMode::kAdaptive:
+          switch (host_vertex_shader_type) {
+            case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::adaptive_triangle_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::adaptive_triangle_hs);
+              break;
+            case Shader::HostVertexShaderType::kQuadDomainPatchIndexed:
+              state_desc.HS.pShaderBytecode = shaders::adaptive_quad_hs;
+              state_desc.HS.BytecodeLength = sizeof(shaders::adaptive_quad_hs);
+              break;
+            default:
+              assert_unhandled_case(host_vertex_shader_type);
+              return nullptr;
+          }
+          break;
+        default:
+          assert_unhandled_case(tessellation_mode);
+          return nullptr;
+      }
+      state_desc.DS.pShaderBytecode = runtime_description.vertex_shader->translated_binary().data();
+      state_desc.DS.BytecodeLength = runtime_description.vertex_shader->translated_binary().size();
+    } else {
+      assert_true(host_vertex_shader_type == Shader::HostVertexShaderType::kVertex);
+      if (host_vertex_shader_type != Shader::HostVertexShaderType::kVertex) {
+        // Fallback vertex shaders are not needed on Direct3D 12.
         return nullptr;
+      }
+      state_desc.VS.pShaderBytecode = runtime_description.vertex_shader->translated_binary().data();
+      state_desc.VS.BytecodeLength = runtime_description.vertex_shader->translated_binary().size();
+      PipelinePrimitiveTopologyType primitive_topology_type =
+          PipelinePrimitiveTopologyType(description.primitive_topology_type_or_tessellation_mode);
+      switch (primitive_topology_type) {
+        case PipelinePrimitiveTopologyType::kPoint:
+          state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+          break;
+        case PipelinePrimitiveTopologyType::kLine:
+          state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+          break;
+        case PipelinePrimitiveTopologyType::kTriangle:
+          state_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+          break;
+        default:
+          assert_unhandled_case(primitive_topology_type);
+          return nullptr;
+      }
     }
   }
 
   // Pixel shader.
-  if (runtime_description.pixel_shader != nullptr) {
+  if (description.dxil) {
+    // Set above.
+  } else if (runtime_description.pixel_shader != nullptr) {
     if (!runtime_description.pixel_shader->is_translated()) {
       REXGPU_ERROR("Pixel shader {:016X} not translated",
                    runtime_description.pixel_shader->shader().ucode_data_hash());
@@ -3103,7 +3167,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   }
 
   // Geometry shader.
-  if (runtime_description.geometry_shader != nullptr) {
+  if (!description.dxil && runtime_description.geometry_shader != nullptr) {
     state_desc.GS.pShaderBytecode = runtime_description.geometry_shader->data();
     state_desc.GS.BytecodeLength = sizeof(*runtime_description.geometry_shader->data()) *
                                    runtime_description.geometry_shader->size();
@@ -3287,6 +3351,23 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     } else {
       REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}",
                    runtime_description.vertex_shader->shader().ucode_data_hash());
+    }
+    // With the debug layer (d3d12_debug), its reasons.
+    ID3D12InfoQueue* info_queue;
+    if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
+      UINT64 message_count = info_queue->GetNumStoredMessages();
+      for (UINT64 i = message_count > 8 ? message_count - 8 : 0; i < message_count; ++i) {
+        SIZE_T length = 0;
+        info_queue->GetMessage(i, nullptr, &length);
+        std::vector<uint8_t> storage(length);
+        auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+        if (length && SUCCEEDED(info_queue->GetMessage(i, message, &length))) {
+          REXGPU_ERROR("  D3D12: {}",
+                       std::string_view(message->pDescription, message->DescriptionByteLength));
+        }
+      }
+      info_queue->ClearStoredMessages();
+      info_queue->Release();
     }
     return nullptr;
   }
@@ -3516,5 +3597,218 @@ void PipelineCache::CreateQueuedPipelinesOnProcessorThread() {
     pipeline_to_create->creation_pending.store(false, std::memory_order_release);
   }
 }
+
+#if REXGLUE_SHADER_DXIL
+std::unique_ptr<SpirvShaderTranslator> PipelineCache::DxilShaderCacheHost::CreateTranslator()
+    const {
+  // As xenia-edge's D3D12 pipeline cache configures it for Mesa spirv_to_dxil.
+  SpirvShaderTranslator::Features features(/*all=*/true);
+  // Pixel (not sample) interlock: D3D12's rasterizer-ordered views.
+  features.fragment_shader_sample_interlock = false;
+  // Manual barycentric interpolation through SV_Barycentrics.
+  features.fragment_shader_barycentric = true;
+  features.signed_zero_inf_nan_preserve_float32 = false;
+  features.denorm_flush_to_zero_float32 = true;
+  features.rounding_mode_rte_float32 = false;
+  const auto& render_target_cache = pipeline_cache_.render_target_cache_;
+  return std::make_unique<SpirvShaderTranslator>(
+      features, render_target_cache.msaa_2x_supported(),
+      /*native_2x_msaa_no_attachments=*/false,
+      render_target_cache.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock,
+      /*precise_interpolation=*/false, render_target_cache.draw_resolution_scale_x(),
+      render_target_cache.draw_resolution_scale_y());
+}
+
+bool PipelineCache::DxilShaderCacheHost::depth_float24_round() const {
+  return pipeline_cache_.render_target_cache_.depth_float24_round();
+}
+
+bool PipelineCache::DxilShaderCacheHost::depth_float24_convert_in_pixel_shader() const {
+  return pipeline_cache_.render_target_cache_.depth_float24_convert_in_pixel_shader();
+}
+
+SpirvShader* PipelineCache::GetDxilShader(const Shader& shader) {
+  auto it = dxil_shaders_.find(shader.ucode_data_hash());
+  if (it != dxil_shaders_.end()) {
+    return it->second.get();
+  }
+  auto twin =
+      std::make_unique<SpirvShader>(shader.type(), shader.ucode_data_hash(), shader.ucode_dwords(),
+                                    shader.ucode_dword_count(), std::endian::native);
+  twin->AnalyzeUcode(ucode_disasm_buffer_);
+  SpirvShader* result = twin.get();
+  dxil_shaders_.emplace(shader.ucode_data_hash(), std::move(twin));
+  return result;
+}
+
+const std::vector<uint8_t>* PipelineCache::GetDxilBinary(SpirvShader& shader,
+                                                         uint64_t modification) {
+  auto& by_modification = dxil_binaries_[shader.ucode_data_hash()];
+  auto it = by_modification.find(modification);
+  if (it != by_modification.end()) {
+    // An empty entry is a cached failure.
+    return it->second.empty() ? nullptr : &it->second;
+  }
+  std::vector<uint8_t> dxil;
+  Shader::Translation* translation = dxil_shader_cache_->EnsureAndTranslate(shader, modification);
+  if (translation) {
+    const std::vector<uint8_t>& spirv = translation->translated_binary();
+    dxil = SpirvToDxilCompiler::Translate(
+        reinterpret_cast<const uint32_t*>(spirv.data()), spirv.size() / sizeof(uint32_t),
+        shader.type() == xenos::ShaderType::kVertex ? SpirvToDxilCompiler::Stage::kVertex
+                                                    : SpirvToDxilCompiler::Stage::kPixel,
+        /*lower_to_bindless=*/true);
+    if (!REXCVAR_GET(dump_shaders).empty()) {
+      translation->Dump(REXCVAR_GET(dump_shaders), "spirv");
+    }
+  }
+  if (dxil.empty()) {
+    REXGPU_WARN("Guest shader {:016X} (modification {:016X}): no DXIL, using DXBC",
+                shader.ucode_data_hash(), modification);
+  }
+  auto emplaced = by_modification.emplace(modification, std::move(dxil));
+  return emplaced.first->second.empty() ? nullptr : &emplaced.first->second;
+}
+
+const std::vector<uint8_t>* PipelineCache::GetDxilGeometryShader(
+    GuestSpirvShaderCache::GeometryShaderKey key) {
+  auto it = dxil_geometry_shaders_.find(key.key);
+  if (it != dxil_geometry_shaders_.end()) {
+    return it->second.empty() ? nullptr : &it->second;
+  }
+  // The same SPIR-V version and float controls as the guest shaders, so the
+  // stages link.
+  const SpirvShaderTranslator::Features& features = dxil_shader_cache_->translator().features();
+  std::vector<unsigned int> spirv = BuildGuestPrimitiveGeometryShaderSpirv(
+      BuiltinGeometryShaderType(uint32_t(key.type)), key.interpolator_count,
+      key.user_clip_plane_count, key.user_clip_plane_cull, key.has_vertex_kill_and,
+      key.has_point_size, key.has_point_coordinates, features.spirv_version,
+      features.denorm_flush_to_zero_float32, features.signed_zero_inf_nan_preserve_float32,
+      features.rounding_mode_rte_float32);
+  std::vector<uint8_t> dxil = SpirvToDxilCompiler::Translate(
+      spirv.data(), spirv.size(), SpirvToDxilCompiler::Stage::kGeometry,
+      /*lower_to_bindless=*/true, key.user_clip_plane_cull ? 0 : key.user_clip_plane_count);
+  auto emplaced = dxil_geometry_shaders_.emplace(key.key, std::move(dxil));
+  return emplaced.first->second.empty() ? nullptr : &emplaced.first->second;
+}
+
+PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
+    D3D12Shader::D3D12Translation* dxbc_vertex_shader,
+    D3D12Shader::D3D12Translation* dxbc_pixel_shader,
+    const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
+    uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
+    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+    uint32_t bound_depth_and_color_render_target_bits,
+    const uint32_t* bound_depth_and_color_render_target_formats, void** pipeline_handle_out,
+    SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out) {
+  if (!dxil_shader_cache_ || primitive_processing_result.IsTessellated() ||
+      primitive_processing_result.host_vertex_shader_type !=
+          Shader::HostVertexShaderType::kVertex) {
+    return DxilPipelineResult::kUnsupported;
+  }
+  if (!dxbc_pixel_shader) {
+    // Without a guest pixel shader the DXBC path binds DXBC helper pixel
+    // shaders (float24 depth, forcing rasterization), which can't join DXIL.
+    bool float24_in_shader = render_target_cache_.depth_float24_convert_in_pixel_shader() &&
+                             normalized_depth_control.z_enable &&
+                             register_file_.Get<reg::RB_DEPTH_INFO>().depth_format ==
+                                 xenos::DepthRenderTargetFormat::kD24FS8;
+    if (float24_in_shader ||
+        (!normalized_depth_control.z_write_enable && !normalized_depth_control.stencil_enable)) {
+      return DxilPipelineResult::kUnsupported;
+    }
+  }
+
+  // A title's replacement shaders are DXBC: their draws stay on that path.
+  if (!shader_replacements_.empty()) {
+    auto replaced = [&](const D3D12Shader::D3D12Translation& translation,
+                        ShaderReplacements::Stage stage) {
+      return shader_replacements_.Find(translation.shader().ucode_data_hash(), stage,
+                                       translation.modification()) != nullptr;
+    };
+    if (replaced(*dxbc_vertex_shader, ShaderReplacements::Stage::kVertex) ||
+        (dxbc_pixel_shader && replaced(*dxbc_pixel_shader, ShaderReplacements::Stage::kPixelRtv))) {
+      return DxilPipelineResult::kUnsupported;
+    }
+  }
+
+  SpirvShader* vertex_shader = GetDxilShader(dxbc_vertex_shader->shader());
+  SpirvShader* pixel_shader =
+      dxbc_pixel_shader ? GetDxilShader(dxbc_pixel_shader->shader()) : nullptr;
+  uint64_t vertex_modification = dxil_shader_cache_->GetVertexShaderModification(
+      *vertex_shader, primitive_processing_result.host_vertex_shader_type, interpolator_mask,
+      /*ps_param_gen_used=*/false);
+  uint64_t pixel_modification = pixel_shader
+                                    ? dxil_shader_cache_->GetPixelShaderModification(
+                                          *pixel_shader, interpolator_mask, ps_param_gen_pos,
+                                          normalized_depth_control, normalized_color_mask,
+                                          /*apply_polygon_offset_in_shader=*/false)
+                                    : 0;
+  const std::vector<uint8_t>* vertex_dxil = GetDxilBinary(*vertex_shader, vertex_modification);
+  const std::vector<uint8_t>* pixel_dxil =
+      pixel_shader ? GetDxilBinary(*pixel_shader, pixel_modification) : nullptr;
+  if (!vertex_dxil || (pixel_shader && !pixel_dxil)) {
+    return DxilPipelineResult::kFailed;
+  }
+
+  // The fixed function state as for DXBC, then the DXIL shaders.
+  PipelineRuntimeDescription runtime_description;
+  if (!GetCurrentStateDescription(dxbc_vertex_shader, dxbc_pixel_shader,
+                                  primitive_processing_result, normalized_depth_control,
+                                  normalized_color_mask, false, false,
+                                  bound_depth_and_color_render_target_bits,
+                                  bound_depth_and_color_render_target_formats, runtime_description,
+                                  /*for_placeholder=*/true)) {
+    return DxilPipelineResult::kFailed;
+  }
+  PipelineDescription& description = runtime_description.description;
+  description.dxil = 1;
+  description.vertex_shader_modification = vertex_modification;
+  description.pixel_shader_modification = pixel_modification;
+  runtime_description.root_signature = command_processor_.GetDxilRootSignature();
+  runtime_description.geometry_shader = nullptr;
+  runtime_description.dxil_vertex_shader = vertex_dxil;
+  runtime_description.dxil_pixel_shader = pixel_dxil;
+  GuestSpirvShaderCache::GeometryShaderKey geometry_shader_key;
+  if (GuestSpirvShaderCache::GetGeometryShaderKey(
+          rex::graphics::PipelineGeometryShader(uint32_t(description.geometry_shader)),
+          vertex_modification, pixel_modification, geometry_shader_key)) {
+    runtime_description.dxil_geometry_shader = GetDxilGeometryShader(geometry_shader_key);
+    if (!runtime_description.dxil_geometry_shader) {
+      return DxilPipelineResult::kFailed;
+    }
+  }
+
+  uint64_t hash = XXH3_64bits(&description, sizeof(description));
+  Pipeline* pipeline = nullptr;
+  auto found_range = pipelines_.equal_range(hash);
+  for (auto it = found_range.first; it != found_range.second; ++it) {
+    if (!std::memcmp(&it->second->description.description, &description, sizeof(description))) {
+      pipeline = it->second;
+      break;
+    }
+  }
+  if (!pipeline) {
+    // Created on this thread: the DXIL is ready, and these aren't stored.
+    pipeline = new Pipeline;
+    std::memcpy(&pipeline->description, &runtime_description, sizeof(runtime_description));
+    pipeline->root_signature.store(runtime_description.root_signature, std::memory_order_release);
+    pipeline->state.store(CreateD3D12Pipeline(runtime_description), std::memory_order_release);
+    pipelines_.emplace(hash, pipeline);
+    REXGPU_DEBUG("DXIL pipeline: VS {:016X} ({:016X}), PS {:016X} ({:016X}){}",
+                 vertex_shader->ucode_data_hash(), vertex_modification,
+                 pixel_shader ? pixel_shader->ucode_data_hash() : 0, pixel_modification,
+                 pipeline->state.load(std::memory_order_relaxed) ? "" : " - creation failed");
+  }
+  if (!pipeline->state.load(std::memory_order_acquire)) {
+    return DxilPipelineResult::kFailed;
+  }
+  current_pipeline_ = pipeline;
+  *pipeline_handle_out = pipeline;
+  *vertex_shader_out = vertex_shader;
+  *pixel_shader_out = pixel_shader;
+  return DxilPipelineResult::kConfigured;
+}
+#endif  // REXGLUE_SHADER_DXIL
 
 }  // namespace rex::graphics::d3d12
