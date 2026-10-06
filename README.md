@@ -8,13 +8,14 @@ across compatible AMD, NVIDIA and Intel GPUs.
 **Status:** early-development modernization of upstream ReXGlue v0.10.0
 (`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518`). Windows is the only supported
 host (Linux and macOS retired by RG-GDK-024) and Direct3D 12 is the only
-graphics backend (Vulkan removed by RG-GDK-023). The SDK builds and tests on
+graphics backend (Vulkan removed by RG-GDK-023). The SDK builds on
 Windows x64 with and without the April 2026 GDK. One title (Quantum of Solace)
 runs its recorded scene on NVIDIA. GDK packaging works for a minimal title. The
 native Win32 window, XAudio2 and GameInput (XInput outside GDK builds) are the
 only backends; SDL3 was removed (RG-GDK-033). AMD/Intel GPUs,
 other titles and fresh machines are not validated. Each claim and its evidence
-is in [release evidence](docs/release-evidence.md). Public APIs may change.
+is in [release evidence](docs/release-evidence.md), including the current Debug
+tessellation fixture failure. Public APIs may change.
 
 ## Purpose and architecture
 
@@ -54,6 +55,9 @@ See [architecture plan](docs/architecture-plan.md) and [decisions](docs/adr/READ
   [Edge](https://github.com/has207/xenia-edge) are compatibility research sources.
 * [furqanagwan/xenia-edge](https://github.com/furqanagwan/xenia-edge) is a
   controlled reference/experiment fork, not a dependency required to run ReXGlue.
+* [furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide) owns the
+  Guide and native XUI layer. This SDK pins its sources as a submodule and
+  supplies the complete Guide's host services.
 * Title repositories, such as [furqanagwan/007](https://github.com/furqanagwan/007),
   hold each game's configuration and investigation records, never game files.
   New ones follow the [title repository standard](docs/title-repo-standard.md).
@@ -213,6 +217,13 @@ package and its own config: a manifest `[[title_update]]` entry
 ([title updates](docs/title-updates.md)).
 
 ### Xbox guide
+
+The Guide is maintained in [furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide),
+with its own issues and reusable XUI scene target. This SDK consumes a pinned
+`thirdparty/xbox-guide` submodule; use `git submodule update --init --recursive`
+after updating. The complete Guide uses ReXGlue services; other recomp SDKs can
+reuse the scene layer and adapt the host services. See the
+[extraction and issue ownership](docs/xbox-guide-extraction.md).
 
 Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
 the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward

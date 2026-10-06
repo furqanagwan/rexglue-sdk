@@ -1230,7 +1230,19 @@ package validated locally has SHA-256
 `8119312192ad3ac41345336c6302a97bc471af2ab6689f04ffe92e9e07bc7c45`
 (`su20076000_00000000`). Design: [ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md);
 record: [Xbox guide](xbox-guide.md); tracking:
-[SDK issue #127](https://github.com/furqanagwan/rexglue-sdk/issues/127).
+[Guide issue #1](https://github.com/furqanagwan/xbox-guide/issues/1)
+(transferred from SDK #127).
+
+Source ownership moved on 2026-10-06 to
+[xbox-guide](https://github.com/furqanagwan/xbox-guide), pinned by this SDK's
+Guide submodule. Extraction source: local SDK
+`d1a87b4ef0a09c7a7813ab2a2b27976de01de203`; classification B (source/host
+organization, no upstream subsystem import). Source notices and an affected
+commit-history record are preserved. `ResolveFile` moves to a separate adapter
+translation unit without changing lookup behavior, allowing standalone scene
+linkage. The Guide suite matches the baseline; private asset/title/pad checks
+remain blocked. [Extraction evidence](xbox-guide-extraction.md) gives the pin,
+issue transfers and full validation.
 
 ### furqanagwan/xenia-edge fork sync of 2026-09-30 (reviewed 2026-09-30)
 
