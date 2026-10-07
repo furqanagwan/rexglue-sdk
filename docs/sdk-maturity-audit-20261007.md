@@ -42,8 +42,10 @@ by its submodule; a Guide merge SHA alone does not require a pin change.
 | P1 | The full Debug PPC corpus attempt aborts on `instr_mtmsrd`; its generated standalone instruction calls the global-lock release without a matching acquisition | Keep the incomplete run visible; review the test/codegen contract with #149 rather than disabling the assertion or claiming a full Debug corpus pass |
 
 The GDK/workflow/ownership/tooling fixes form the current maintenance change.
-The two new GPU behavior gaps are reviewed and queued separately; this audit
-does not claim to implement or validate them.
+The two GPU behavior gaps were identified against the pinned review base.
+The subsequent `gpu-primitive-cache-invalidation` branch adapts the cache fix
+with regression tests; its own ledger and release evidence distinguish that
+follow-up from the maintenance change. `getBCF` remains queued.
 
 ## Existing strengths to preserve
 

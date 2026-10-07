@@ -445,3 +445,63 @@ fixture: `TEMP` and the CTest working directory are on different drives, so
 relative-path fixture under the CTest working directory and require a fresh
 directory before writing. No production source validation is weakened and no
 test is excluded. The corrected workflow needs a subsequent complete run.
+
+## Primitive conversion cache correctness, 2026-10-07
+
+Branch `gpu-primitive-cache-invalidation` builds on GDK-policy commit
+`99d4c0a8db459f2203dffc7049ced534576d3ad2`. Exact Edge source, associated-PR/comment
+review, classification and the local locking adaptation are in
+[the tracking ledger](upstream-tracking.md#primitive-conversion-cache-invalidation-2026-10-07).
+The production patch affects only cache overlap/in-flight insertion, shared
+by the D3D12 shader paths; no shader/default/guest execution rewrite.
+
+Baseline CPU tests fail four of six initial cases against the original converter.
+Final seven cases pass **494 assertions** each in Debug and Release, both through
+isolated CTest and the dedicated single-memory test binary. They cover exact
+overlap shapes, 16/32-bit and two-bucket ranges, coarse writes, in-flight writes,
+unrelated/adjacent/empty controls, separate entries in one bucket and actual
+physical-memory callback dispatch with changed converted contents.
+
+On NVIDIA RTX 5080 Laptop / driver **32.0.16.1742**, the new triangle-fan GPU
+readback fails with the original source on **both RTV and ROV**: after writing
+degenerate indices, the result stays `0xFFFFFFFF` rather than background
+`0xFF0000FF`. With the patch it passes both paths in Debug and Release. Existing
+GPU selections also pass: **57 Release**, **56 Debug**; Debug explicitly excludes
+the previously recorded quad-tessellation assertion. PIX capture is excluded;
+DXIL parity is a separate gate. AMD/Intel remain untested per ADR-007.
+The optional GDK/DXIL Release plugin also builds and the new readback case
+passes both paths with `gpu_shader_path=dxil` and
+`gpu_shader_path_dxil_strict=true` (18 assertions); this is the affected case,
+not a fresh full DXIL parity run. Its initial CTest discovery hit an older
+unit executable with exit `0xc0000139` after the runtime rebuild; rebuilding
+that tree's unit/primitive targets fixes discovery and the final CTest passes.
+During the temporary baseline swap, restoring an older source timestamp initially
+left Ninja's old plugin in place; refreshing the timestamp and rebuilding both
+configurations restores the passing candidate. No production assertion is disabled.
+
+Focused Clang-Tidy analysis of the new CPU adapter exposed naming and widened
+allocation arithmetic, which were corrected. The final run has seven
+`bugprone-throwing-static-initialization` diagnostics from Catch2's registration
+macros; this is not a repository-wide clean analyzer baseline. Formatting,
+roadmap and handoff-document checks pass.
+
+The three private 007 staging projects rebuild once against the candidate GDK
+installation: QoS (its existing TU2 build target also links), Blood Stone and
+Legends. Existing generated code is reused because this fix does not change
+codegen. The configured dashboard source path was no longer present; private
+modules recovered from the retained console-only bundle allow the rebuild
+without substituting BC assets. All three rebuilt Guide bundles retain SHA-256
+`d6aec228966231e6f5a4de2926507e23a5a2c48ffca9989bd9896e50d51bba30`.
+
+One candidate instance per title stays alive for a **30-second** startup smoke,
+uses a borderless fullscreen window matching the **1280x720** monitor
+(`0x16000000`, no caption/frame), and closes through the owned window with status
+zero. No fatal/assert/missing-function/device-removal diagnostics were found;
+combined runtime diagnostics total **2,470 bytes**. Settings/cache/user data are
+isolated, game-relative writes disabled, and existing saves/patch choices are
+preserved. Fullscreen/startup is established; painted scenes, Guide exit,
+physical controller, gameplay and save/load are not established by this smoke.
+
+Compact private rebuild/input/hash/smoke records are in
+`out/primitive-title-batch`; validation logs initially use `out/primitive-*`.
+There is no measured performance superiority claim and no issue closure.
