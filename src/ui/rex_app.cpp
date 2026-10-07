@@ -1324,6 +1324,11 @@ void ReXApp::SetupGuide() {
   });
   // Reading the system update decompresses XAM; keep it off the UI thread.
   guide_loader_ = std::thread([this] {
+#if defined(REXGLUE_GUIDE_ORIGINAL_XBOX)
+    constexpr auto presentation = ui::guide::GuidePresentation::OriginalXbox;
+#else
+    constexpr auto presentation = ui::guide::GuidePresentation::Xbox360;
+#endif
     std::string errors;
     // The guide the title build embedded comes first, unless a system update
     // was named explicitly.
@@ -1331,7 +1336,7 @@ void ReXApp::SetupGuide() {
         !bundle.empty() && REXCVAR_GET(xbox_guide_system_update).empty()) {
       std::string error;
       std::shared_ptr<const ui::guide::GuideAssets> assets =
-          ui::guide::GuideAssets::LoadBundle(bundle, &error);
+          ui::guide::GuideAssets::LoadBundle(bundle, &error, presentation);
       if (assets) {
         REXLOG_INFO("Xbox guide: using the guide built into the title ({} KiB)",
                     bundle.size() / 1024);
@@ -1348,7 +1353,7 @@ void ReXApp::SetupGuide() {
       }
       std::string error;
       std::shared_ptr<const ui::guide::GuideAssets> assets =
-          ui::guide::GuideAssets::Load(location, &error);
+          ui::guide::GuideAssets::Load(location, &error, presentation);
       if (assets) {
         REXLOG_INFO("Xbox guide: using the system update at {}", location.string());
         std::lock_guard<std::mutex> lock(guide_mutex_);

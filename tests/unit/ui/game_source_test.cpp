@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <windows.h>
 #include <fstream>
 #include <thread>
@@ -225,15 +226,20 @@ TEST_CASE("Source and recovery controller navigation releases disconnected and d
 
 TEST_CASE("Source and recovery dialogs use the private console message-box controls",
           "[ui][game_source][message_box][local]") {
-  const char* path = std::getenv("REXGLUE_GUIDE_FLASH");
+  const bool original_xbox = GENERATE(false, true);
+  const char* asset_variable = original_xbox ? "REXGLUE_GUIDE_FLASH" : "REXGLUE_SYSTEM_UPDATE";
+  const char* path = std::getenv(asset_variable);
+  INFO(asset_variable);
   if (!path || !*path)
-    SKIP("REXGLUE_GUIDE_FLASH is not set");
+    SKIP("Selected private Guide assets are not set");
   std::string error;
   auto modules = rex::ui::xui::SystemUpdate::ReadModules(std::filesystem::path(path), &error);
   REQUIRE(modules);
   std::shared_ptr<const rex::ui::guide::GuideAssets> assets =
       rex::ui::guide::GuideAssets::FromUpdate(
-          rex::ui::xui::SystemUpdate::FromModules(*modules, &error), &error);
+          rex::ui::xui::SystemUpdate::FromModules(*modules, &error), &error,
+          original_xbox ? rex::ui::guide::GuidePresentation::OriginalXbox
+                        : rex::ui::guide::GuidePresentation::Xbox360);
   REQUIRE(assets);
   rex::ui::GameSourceVisualsProvider visuals = [assets] {
     return std::optional(rex::ui::GameSourceVisuals{assets, {}, {}});

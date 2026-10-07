@@ -318,3 +318,57 @@ The initial disposable QoS process is no longer running. Interactive testing
 was stopped at the owner's correction; no painted Guide or gameplay pass is
 claimed. Existing installations and saves were not replaced or modified.
 See the [presentation contract](pc-backward-compatibility.md#presentation-contract).
+
+
+## Guide selection by title host, 2026-10-07
+
+[ADR-015](adr/ADR-015-guide-presentation-by-title.md) records the explicit
+Xbox 360/Original Xbox presentation contract. The Guide defaults to Xbox 360
+rather than choosing emulator scenes from available assets. The SDK target
+helper selects and embeds the corresponding source; BC Flash no longer affects
+360 builds. Both embedded and external asset loads retain the host's selection.
+
+The GDK Release SDK builds successfully. Final targeted offline tests pass in
+standard and GDK Debug/Release: **49 cases**, **826 assertions in Release** and
+**824 in Debug** for each SDK variant. Source/recovery controls and empty/running
+activity scene models are exercised with both private asset sets. Standalone
+Guide Debug/Release each pass one CTest containing five cases / 48 assertions.
+An initial broader concurrent run included the live Unity test and encountered
+a shared temporary-directory file lock. Final suites run sequentially and
+exclude `[.network]` in every comma-separated Catch filter clause; this does not
+establish a live-download gate. Logs are in `out/guide-platform-20261007`.
+
+Installed-SDK consumers configure and link for both presentations. Bundle hashes
+match separately generated console-only and BC-plus-console reference bundles;
+target definitions select Original Xbox only for the explicit BC host. Invalid
+presentation and missing BC Flash configurations are rejected. The reusable
+consumer is `tests/consumer/guide_presentation`, with the cache option
+`TEST_GUIDE_PRESENTATION`; its inherited launcher probe is a linking fixture,
+not an original Xbox title execution test.
+
+All five local staging projects explicitly select Xbox 360 and rebuild
+successfully, including QoS TU2 and FIFA guest modules. Original Guide bundles
+and direct-launch config overrides remain in their six EXEs' folders; matching
+runtime DLLs are copied into the disposable test folders. Prior installations
+and saves remain unchanged. Rebuild logs are in
+`out/guide-platform-20261007/title-rebuild`.
+
+A disposable QoS run mounts the full `baseline/extracted-20260923` game directory
+read-only and uses isolated settings/cache/user data. Its original XEX hash
+matches the codegen input. The earlier probe incorrectly mounted the codegen-only
+`material-20260923` directory, causing missing-content/self-relaunch termination;
+correcting the test mount resolves that setup error. On NVIDIA RTX 5080 Laptop,
+driver **32.0.16.1742**, client captures verify original Guide opening/tab
+navigation, a populated 50-achievement grid, exit confirmation and empty Active
+Downloads. Testing exposed notification controls left visible when the activity
+count initially equals zero; shared scene preparation fixes this and the painted
+recheck passes. Screenshots/logs remain private under
+`out/title-ui-validation-20261007/quantumofsolace`. Software key events are not a
+physical-controller acceptance test. This driver differs from the earlier
+32.0.16.1714 baseline. Other title playthroughs, TU2 execution, physical input,
+AMD/Intel and 8K checks are not established here. Owned test processes were closed.
+
+Original Xbox presentation uses owner's BC scenes but is not a 1:1 fidelity
+claim or an execution backend. Original Xbox CPU/kernel/media execution, Xbox
+account linking, entitlements, cloud saves and live services still require their
+separate implementation/design/deployment gates. No issue is closed by this work.

@@ -1754,3 +1754,24 @@ Known tested regressions: none after resolving navigation/fixture issues
 before publication; the pre-existing Debug GPU assertion remains. Painted
 controller/title/media-removal gates and friendly mismatch names remain open.
 No Microsoft assets or installed game service identity are included.
+
+
+## Explicit title Guide selection and empty activity preparation, 2026-10-07
+
+SDK branch `guide-by-title-platform` consumes Guide commit
+`5e75b86` on `explicit-guide-presentation`, based on SDK `8cfb449` and Guide
+`db55a4d347c9edc74a17632fd7f71311ea1e7410`. Class A: avoid automatic BC scene/source
+selection for a 360 title, and hide reused notification controls even when the
+initial Active Downloads row count is zero. No upstream port or Microsoft code
+is incorporated. The issue boundary remains [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1).
+
+The owner explicitly requires the prior 360 Guide for 360 titles, and BC scenes
+for original Xbox presentation. The SDK supplies per-target selection and shared
+host services; the Guide owns typed scene loading and template preparation.
+Actual QoS captures exposed the empty activity regression, which was confirmed
+and repaired through shared preparation rather than a title-specific workaround.
+Both asset sets, standard/GDK Debug/Release, standalone builds and installed
+consumer configurations are tested. Exact counts, title rebuilds, private capture
+locations and the initial test orchestration/file-lock failure are recorded in
+[release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
+Original Xbox execution and 1:1 online/visual parity remain unestablished.
