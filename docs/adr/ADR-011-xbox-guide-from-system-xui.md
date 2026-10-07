@@ -1,7 +1,10 @@
 # ADR-011: The Xbox guide runs the console's own XUI scenes
 
+Source ownership moved to [xbox-guide](https://github.com/furqanagwan/xbox-guide)
+under [ADR-013](ADR-013-xbox-guide-repository.md); the scene decision still applies.
+
 Date: 2026-09-30. Status: implemented (format layer, runtime, guide); owner pad session pending in
-[RG-GDK-041](https://github.com/furqanagwan/rexglue-sdk/issues/127).
+[RG-GDK-041](https://github.com/furqanagwan/xbox-guide/issues/1).
 
 ## Context
 

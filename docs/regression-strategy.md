@@ -514,6 +514,34 @@ logs/images/PIX as appropriate, upstream links, suspect change, workaround and
 acceptance test. Label `regression` plus subsystem/vendor labels. Triage at each
 port/release and during the monthly upstream review.
 
+## Debug tessellation fixture, 2026-10-06
+
+Found while validating the [Guide extraction](xbox-guide-extraction.md).
+Standard Windows x64 Debug, Clang 22.1.8, VS 2026 Community, NVIDIA on the
+development machine. `gpu.A tessellated quad patch covers the domain the shader maps`
+fails at `src/graphics/pipeline/shader/dxbc_translator.cpp:551`, asserting
+`register_count() >= 2` for the patch-indexed quad domain shader. Release
+passes this fixture with assertions disabled; that does not validate the Debug
+contract. No game assets are involved.
+
+Reproduction: build Debug and run `gpu_tests.exe "[tessellation]"`, or the full
+Debug CTest preset. Full extracted-suite result: 2,078 discovered, 2,066 passed,
+11 skipped, one failed. The Guide-specific Debug suite passes 51 cases with
+six private-asset cases skipped.
+
+The same assertion independently reproduces after archiving and freshly
+building pre-extraction SDK commit `d1a87b4ef0a09c7a7813ab2a2b27976de01de203`
+with the standard preset's `-march=x86-64-v2` flags and original dependency
+pins. This establishes an existing fixture/translator failure, rather than a
+new Guide extraction regression. First bad and last good Debug revisions are
+unknown. No assertion or GPU behavior was changed to hide it.
+
+Local logs: `out/guide-ctest-debug.log`, `out/guide-original-debug-build.log`
+and `out/guide-original-debug-tessellation.log`. Follow-up must reconcile the
+fixture's domain shader register use with the translator's two-register
+contract and pass the same test in Debug and Release. It stays unresolved;
+the Guide extraction does not close or claim to fix it.
+
 ## Initial Windows D3D12 baseline results (RG-GDK-001)
 
 This file records issue [RG-GDK-001](https://github.com/furqanagwan/rexglue-sdk/issues/1)

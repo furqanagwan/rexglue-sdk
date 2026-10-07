@@ -17,7 +17,7 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 
 | Configuration | Status | Evidence | Limitations |
 | --- | --- | --- | --- |
-| SDK build and tests, `win-amd64` Debug/Release | Supported | Fresh checkout following README commands (below); `ctest` 1,823/1,823 at `6223f54` | One machine; four BitStream tests skip by design |
+| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [Guide extraction checks](xbox-guide-extraction.md#validation-2026-10-06): Release 2,067 passed / 11 skipped, Debug 2,066 passed / 11 skipped / one failed | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
 | SDK build and tests, `win-amd64-gdk` Debug/Release | Supported (opt-in preset) | `ctest` 1,839/1,839 at `6223f54`; [GDK toolchain](gdk-toolchain.md) | VS Community only (Microsoft names Professional/Enterprise); GPU fixtures run serially |
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
@@ -36,6 +36,19 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 | ARM64 host | Blocked | No ARM64 MSVC libraries (RG-GDK-030/031) | — |
 | DirectStorage | Not started | RG-GDK-029 | — |
 | Fresh machine | Blocked | Only the development machine was available | The fresh-checkout run models a new clone, not a new PC |
+
+## Guide extraction (2026-10-06)
+
+For the source/issue split on 2026-10-06, the
+[Guide extraction record](xbox-guide-extraction.md#validation-2026-10-06)
+records the component pin, matching before/after Guide suites, full standard
+Debug/Release builds and CTest, GDK Release Guide checks, an isolated Release
+install and installed consumer, and standalone Windows CI without an SDK.
+The existing Debug tessellation assertion remains open in the
+[regression record](regression-strategy.md#debug-tessellation-fixture-2026-10-06).
+Private Guide assets and an owner pad/title session were unavailable; no
+current title compatibility claim is added. GDK testing still uses VS Community
+and does not establish Microsoft's supported toolchain pairing.
 
 ## Fresh checkout (2026-09-27)
 

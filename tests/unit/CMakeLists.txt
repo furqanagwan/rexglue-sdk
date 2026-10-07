@@ -47,14 +47,6 @@ add_executable(unit_tests
     input/gamepad_devices_test.cpp
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
-    ui/xui_format_test.cpp
-    ui/xtt_font_test.cpp
-    ui/guide_font_test.cpp
-    ui/xui_runtime_test.cpp
-    ui/dlc_catalog_test.cpp
-    ui/guide_input_test.cpp
-    ui/virtual_keyboard_test.cpp
-    ui/title_update_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/function_table_layout_test.cpp
     codegen/output_partition_test.cpp
@@ -68,6 +60,8 @@ add_executable(unit_tests
     codegen/indirect_trace_test.cpp
     rexglue/app_name_test.cpp
 )
+
+xbox_guide_attach_tests(unit_tests)
 
 if(WIN32)
     target_sources(unit_tests PRIVATE audio/xaudio2_driver_test.cpp)

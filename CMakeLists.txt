@@ -195,6 +195,14 @@ add_compile_options(
 
 include_directories(${REXGLUE_ROOT}/include)
 
+# The Guide has its own repository; keep its pinned adapter in rexruntime.
+set(XBOX_GUIDE_SOURCE_DIR "${REXGLUE_ROOT}/thirdparty/xbox-guide")
+if(NOT EXISTS "${XBOX_GUIDE_SOURCE_DIR}/cmake/rexglue.cmake")
+    message(FATAL_ERROR "Xbox Guide submodule is missing; run git submodule update --init --recursive")
+endif()
+include("${XBOX_GUIDE_SOURCE_DIR}/cmake/rexglue.cmake")
+include_directories("${XBOX_GUIDE_SOURCE_DIR}/include")
+
 add_subdirectory(src/core)
 add_subdirectory(src/filesystem)
 add_subdirectory(src/ui)
