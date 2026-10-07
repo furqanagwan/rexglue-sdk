@@ -297,3 +297,24 @@ shader cache. All six baseline EXE hashes are unchanged. Results and output
 locations are recorded in the linked audit. No staged game was launched;
 existing title status and gameplay/vendor gates
 remain unchanged by compilation.
+
+
+## Guide presentation correction, 2026-10-07
+
+The owner clarified that the original Xbox 360 Guide appearance must remain,
+with PC compatibility features added behind it. The staged builds had enabled
+the optional ImGui launch settings and preferred the installed Fuzion Frenzy
+Flash assets. Both choices were outside that presentation requirement.
+
+All five staging projects were reconfigured with `REXGLUE_GUIDE_FLASH` empty
+and rebuilt successfully, including both QoS executable variants. They now embed
+the original 2.0.17559 system-update assets. Adjacent settings for the six staged
+EXEs and disposable test copies explicitly set `launch_menu=false`; the compiled
+experimental title default remains overridable. The local probe defaults to
+direct launch and requires `--menu` to request the experimental settings screen.
+Logs/results are in `out/guide-presentation-restore-20261007`.
+
+The initial disposable QoS process is no longer running. Interactive testing
+was stopped at the owner's correction; no painted Guide or gameplay pass is
+claimed. Existing installations and saves were not replaced or modified.
+See the [presentation contract](pc-backward-compatibility.md#presentation-contract).

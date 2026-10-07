@@ -221,8 +221,9 @@ package and its own config: a manifest `[[title_update]]` entry
 
 ### PC launch and game sources
 
-Use `--launch_menu=true` for graphics, audio and language settings before
-launch. Regenerated titles also validate the original source executable and
+The existing Xbox 360 Guide remains the presentation for in-game features.
+An optional host settings screen is available with `--launch_menu=true` for
+graphics, audio and language settings before launch. Regenerated titles also validate the original source executable and
 offer a first-run folder/ISO/disc selector, optional cancellable extraction
 and Retry/Leave Game on media read failure. Sources use checked file I/O;
 source/recovery choices and copy progress use the console scenes when Guide

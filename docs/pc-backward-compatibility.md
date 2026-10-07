@@ -9,6 +9,21 @@ record which implementation issues are closed and corroborate the installed
 XeFu/Xbox 360 compatibility layers. The reference's native translation details
 are research findings, not an official architectural specification.
 
+## Presentation contract
+
+The owner's 2026-10-07 clarification keeps the existing Xbox 360 Guide's
+appearance, scenes and navigation. Microsoft PC backward-compatibility research
+informs host features and service behaviour; it does not authorize replacing
+the Guide or selecting a different visual asset set. New guest-facing features
+should use the existing console scenes where available.
+
+The experimental ImGui pre-launch settings screen remains opt-in. The five
+local staged title projects now use the original 2.0.17559 system-update bundle
+without the Fuzion Frenzy Flash override, and adjacent disposable settings
+explicitly disable `launch_menu`. Existing installations and saves are unchanged.
+This restores asset selection and direct launch; painted fidelity still needs
+owner verification. Do not resume interactive title testing during this pause.
+
 ## Reference and evidence
 
 Microsoft describes resolution scaling, VSync, window modes, filtering,
