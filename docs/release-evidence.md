@@ -386,3 +386,88 @@ same private evidence folder. All owned processes are closed. The current
 [Guide draft PR](https://github.com/furqanagwan/xbox-guide/pull/9) Windows CI checks
 pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
 format checks; these do not replace the missing owner/hardware/service gates.
+
+## PPC instruction coverage follow-up, 2026-10-07
+
+Candidate source: `b8d57d4845052d603d0532944f56af57b37a55d3`, PR #162,
+integrating main `5dad97248d70126c901d2425ce942e5dc9694a28`. Windows x64,
+VS Community 18.10.3, Clang 22.1.8, April 2026 GDK 260404; NVIDIA RTX 5080
+Laptop, driver 32.0.16.1742 for the existing GPU fixtures and title starts.
+This is CPU instruction work; no shader path/default or vendor support changes.
+
+- Standard Release full build/CTest: 2,214 discovered, 2,199 passed,
+  15 skipped, zero failures, 216.88 s. Logs: `out/ppc149-standard-release-ctest.log`
+  and `out/ppc149-win-amd64-release-retry-build.log`.
+- Standard Debug full build/CTest: 2,214 discovered, 2,199 passed,
+  14 skipped and the previously reproduced quad tessellation assertion,
+  236.18 s. All discovered unit and ordinary PPC tests pass or skip.
+  Logs: `out/ppc149-standard-debug-{build,ctest}.log`.
+- GDK Debug and Release full builds, then unit/PPC/corpus CTest selection:
+  each discovers 2,693 entries, 2,679 passed, 14 skipped, zero failures
+  (125.14 s Debug, 87.94 s Release). These are CPU/unit selections, not
+  new full GDK GPU/deployment results. Logs:
+  `out/ppc149-gdk-{debug,release}-ctest.log` and associated build logs.
+- Direct ordinary PPC checks pass 1,575 cases / 6,518 assertions in both
+  GDK configurations and the final standard Release recheck. The pinned
+  corpus generator emits 169,459 cases, reports 917 skipped, and all 563
+  active Catch2 file groups pass. Four wholly skipped files account for the
+  difference from the 567 registered CTest file entries. All 3,333 #149
+  expected-failure entries are removed; eight hand-written corpus errors
+  remain expected. The corpus and skip-list source pin are unchanged.
+- CPU/context unit selection passes 23 cases / 99 assertions. Non-volatile
+  restoration now verifies that guest-written FPSCR bits survive alongside
+  the host-backed control word. MSR tests cover both write instructions,
+  nested disable/restore, repeated enables and case isolation. The new
+  `mcrfs` checks retain RN and result flags while clearing exception flags.
+
+An exploratory all-in-one GDK Debug `unit_tests.exe` invocation aborts at
+`Memory::Memory`'s `active_memory_ == 0` assertion. A baseline combined run was
+not established, so it is not classified as a pre-existing regression. The
+supported CTest invocation isolates each unit case in its own process and all
+551 GDK unit entries pass or skip. The abort is retained in
+`out/ppc149-gdk-debug-unit.log`; it is not reported as a passing combined run.
+An initial filtered CTest attempt also encountered stale kernel test imports
+after rebuilding only selected targets; the subsequent full GDK Debug build
+and successful discovery/run above replace that incomplete-build result.
+
+Fresh title generation/builds use separate `recompiled-ppc149-20261007`
+projects and the isolated SDK install `out/ppc149-title-sdk`. The original
+five XEX inputs and six existing installed EXEs match their prior recorded
+SHA-256 values (`out/ppc149-original-artifact-checks.json`). Previous staging
+builds are kept for paired startup checks. Each process receives a read-only
+game root, separate user/cache/log paths and `launch_menu=false`.
+Private logs and generated/game material are not distributed.
+
+Title results are recorded under `out/ppc149-title-rebuild` and
+`out/ppc149-title-soaks`. Paired runs observe startup, advancing GPU-frame
+reports and controlled closure; they are not gameplay, save/load, visual
+comparison or performance benchmarks. Concurrent build activity means frame
+counts cannot establish a performance improvement. The QoS TU2 executable is
+a build result, not a validated TU2 playthrough.
+
+| Title | Fresh generation/configure/build | Previous/candidate startup |
+| --- | --- | --- |
+| Quantum of Solace (base and TU2 built) | Pass | Base: both 90 seconds, advancing frames |
+| Blood Stone | Pass | Both 90 seconds, advancing frames |
+| 007 Legends | Pass | Both 90 seconds, advancing frames |
+| FIFA Street (including two guest DLLs) | Pass | Both 90 seconds, advancing frames |
+| NHL Legacy Edition | Pass | Both 90 seconds, advancing frames |
+
+All ten runs retain a visible window through the observation interval, exit
+with status zero after controlled closure, and require no forced cleanup.
+The log scan finds no fatal error, unimplemented PPC instruction, missing
+function or device-removal message during these intervals. This does not
+establish that unvisited code paths are supported. FIFA Street's generation
+retains its previous unresolved-function/heap warnings; NHL retains its
+previous large-function warning. Known FIFA crowd-colour and NHL RTV rendering
+issues are not claimed resolved. QoS TU2's previously recorded missing
+function remains outside the base-title run. The private paired frame record
+is `out/ppc149-title-soaks/frame-evidence.json`.
+
+Arithmetic-produced FPSCR exception causes and derived summary bits remain
+unimplemented; `mcrfs` is verified for guest-written fields. The existing
+modeled MSR mask and critical-region adapter are not a complete guest interrupt
+controller. These limits and representative gameplay gates keep #149 open;
+instruction-corpus success does not certify every title or opcode. The
+provenance and reviewed upstream regression are in
+[the tracking ledger](upstream-tracking.md#rg-gdk-053-main-integration-and-corpus-follow-up-2026-10-07).
