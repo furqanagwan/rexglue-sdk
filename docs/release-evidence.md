@@ -436,3 +436,12 @@ for this non-GPU change. No issue is closed by this batch. Public-payload
 download/extraction and hosted CI require their own run; the local setup check
 uses the installed GDK and does not prove that download path. Helix hardware
 support is not established.
+
+The first hosted run, [37690858740](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37690858740),
+successfully downloads, digest-checks and extracts the public GDK, configures,
+builds Debug and runs 2,017 software selections. It reports one failing identity
+fixture: `TEMP` and the CTest working directory are on different drives, so
+`std::filesystem::relative` cannot represent the fixture's path. Keep that
+relative-path fixture under the CTest working directory and require a fresh
+directory before writing. No production source validation is weakened and no
+test is excluded. The corrected workflow needs a subsequent complete run.
