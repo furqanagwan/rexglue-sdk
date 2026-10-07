@@ -76,6 +76,7 @@ class GameMediaRecoveryDialog : public ImGuiDialog {
 
  private:
   bool optical_, retry_ = false;
+  bool focus_leave_ = true;
   std::string error_;
   std::function<void(bool)> completed_;
   LaunchPadSource pad_source_;

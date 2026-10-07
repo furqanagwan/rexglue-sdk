@@ -143,12 +143,16 @@ TEST_CASE("Media recovery UI completes Retry or Leave once, but shutdown never r
   SourceHarness h;
   int completed = 0;
   bool retry = false;
+  rex::ui::LaunchPadState pad;
   rex::ui::GameMediaRecoveryDialog* dialog = nullptr;
-  dialog = new rex::ui::GameMediaRecoveryDialog(h.drawer.get(), false, "", [&](bool chosen) {
-    dialog = nullptr;
-    ++completed;
-    retry = chosen;
-  });
+  dialog = new rex::ui::GameMediaRecoveryDialog(
+      h.drawer.get(), false, "",
+      [&](bool chosen) {
+        dialog = nullptr;
+        ++completed;
+        retry = chosen;
+      },
+      [&pad] { return std::optional(pad); });
   h.Frame(dialog);
   h.Frame(dialog);
   auto* window = ImGui::FindWindowByName("Game source unavailable");
@@ -165,12 +169,20 @@ TEST_CASE("Media recovery UI completes Retry or Leave once, but shutdown never r
     CHECK(completed == 1);
     CHECK_FALSE(retry);
   }
+  SECTION("Controller A starts with Leave in the fallback too") {
+    pad.activate = true;
+    for (int i = 0; i < 4 && dialog; ++i)
+      h.Frame(dialog);
+    CHECK(completed == 1);
+    CHECK_FALSE(retry);
+  }
   SECTION("Shutdown") {
     delete dialog;
     dialog = nullptr;
     CHECK(completed == 0);
   }
   CHECK(dialog == nullptr);
+  delete dialog;
 }
 
 TEST_CASE("Source and recovery controller navigation releases disconnected and disposed pads",

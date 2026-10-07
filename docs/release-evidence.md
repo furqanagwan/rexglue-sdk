@@ -167,6 +167,13 @@ the standalone scene target without SDK runtime dependencies.
   the three source choices, recovery default focus/controller A activation,
   native Disc/Retry selection and Active Downloads template. A synthetic ISO
   also exercises UI extraction, local-folder handoff and completed-copy history.
+- Follow-up fallback default-focus check: the ImGui recovery fallback also
+  starts on Leave Game. Source/disc/launch/TU/private filters pass 41 cases
+  in Debug (590 assertions) and Release (591 assertions), with unchanged
+  case counts. GDK Release passes 55 cases / 667 assertions. Logs:
+  `out/source-scenes-fallback-{Debug,Release,gdk}-tests.log`.
+  This narrow UI follow-up uses the full-suite baseline above; it does not
+  change GPU/PPC behaviour.
 - Isolated installed consumer compiles and links the updated ReXApp host
   adapter (`out/source-scenes-install.log`, `out/source-scenes-consumer.log`).
   Installed headers include the neutral scene APIs; the isolated CMake package

@@ -446,10 +446,14 @@ void GameMediaRecoveryDialog::OnDraw(ImGuiIO& io) {
     retry_ = true;
     Close();
   }
-  if (!console_box_)
+  if (!console_box_) {
     ImGui::SameLine();
+    if (focus_leave_)
+      ImGui::SetKeyboardFocusHere();
+  }
   if ((console_box_ && chosen == 1) || (!console_box_ && ImGui::Button("Leave Game")))
     Close();
+  focus_leave_ = false;
   ImGui::End();
 }
 void GameMediaRecoveryDialog::OnClose() {

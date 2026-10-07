@@ -627,3 +627,6 @@ before publication. A temporary fixture collision during concurrent SDK test
 processes was resolved with per-process source/disc fixture paths; final full
 Debug and Release suites run sequentially. This is a test-fixture correction,
 not a title compatibility claim.
+
+The recovery fallback additionally tests first controller A on the initial
+Leave Game choice, so absent Guide assets preserve the same safe default.
