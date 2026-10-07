@@ -1712,3 +1712,31 @@ synthetic cases. Physical drive/removal, controller interaction, real-title
 launch, friendly mismatch names and console message-box/Active Downloads gates
 remain unverified; #154 stays open. The pre-existing Debug tessellation fixture
 failure is unchanged.
+
+## RG-GDK-058: standalone host scenes and source adapter (2026-10-07)
+
+Source: original Guide component work, base `3d5ea575a0f6a6ceb9f0c39c097d5c06c59b72aa`,
+head `db55a4d`; [Guide PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)
+is open/draft, not merged. SDK adapter base `98f006b`, topic
+`pc-guide-source-scenes`. Class B for neutral message-box/activity models and
+host source/progress/history integration; class A for reading terminal
+TitleUpdateJob state before non-atomic errors and using the displayed activity
+snapshot for cancellation. No upstream subsystem was copied.
+
+Context-bearing scene models own their contexts and prohibit value moves;
+hosts retain private documents and supply resource/input/action callbacks.
+SDK source/disc services stay in the SDK. GuideHost accepts immutable host
+activity snapshots; existing title-update jobs remain visible and completed
+source copies retain history. Media prompts publish XAM system-UI state,
+consume held input and use existing termination semantics. Polling enables
+ImGui navigation activation on the first controller A press without needing
+a prior direction change; custom hit targets explicitly enable navigation.
+
+Tests: standalone Debug/Release, private installed-reference skin controls,
+controller initial activation, synthetic ISO extraction/history and affected
+SDK UI/source/TU/disc suites in Debug, Release and GDK Release. Full SDK and
+installed-consumer results are in [release evidence](release-evidence.md).
+Known tested regressions: none after resolving navigation/fixture issues
+before publication; the pre-existing Debug GPU assertion remains. Painted
+controller/title/media-removal gates and friendly mismatch names remain open.
+No Microsoft assets or installed game service identity are included.

@@ -225,7 +225,8 @@ Use `--launch_menu=true` for graphics, audio and language settings before
 launch. Regenerated titles also validate the original source executable and
 offer a first-run folder/ISO/disc selector, optional cancellable extraction
 and Retry/Leave Game on media read failure. Sources use checked file I/O;
-physical drives and full console-scene integration still need validation.
+source/recovery choices and copy progress use the console scenes when Guide
+assets are available. Physical drive, painted scene and real-title checks remain.
 See [PC experience and remaining gates](docs/pc-backward-compatibility.md).
 
 ### Xbox guide
