@@ -1801,3 +1801,44 @@ consumer configurations are tested. Exact counts, title rebuilds, private captur
 locations and the initial test orchestration/file-lock failure are recorded in
 [release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
 Original Xbox execution and 1:1 online/visual parity remain unestablished.
+
+## RG-GDK-053: main integration and corpus follow-up, 2026-10-07
+
+PR #162 is updated from its `91ffc711` head against SDK main
+`5dad97248d70126c901d2425ce942e5dc9694a28`, preserving main's guest FPSCR
+storage, FP helpers, reservations and table-driven test generator. The existing
+`b5cc59e854020f8406c0b3a96eff6a3d036a514b` corpus exposes additional `lmw` and
+VMX128 cache-hint aliases. These use the existing memory/vector semantics;
+five unchanged source test files are also copied into the ordinary PPC suite.
+`lmw` snapshots its effective address, sign-extends its displacement and
+zero-extends each big-endian word. Local tests cover a negative displacement.
+
+Re-review of Edge's `ppc_emit_fpu.cc` history found the follow-up
+[`a5532a0d193130af1b5dd821c8c83daec27f6d11`](https://github.com/has207/xenia-edge/commit/a5532a0d193130af1b5dd821c8c83daec27f6d11)
+(2026-10-05), "Clear only the exception bits in mcrfs". Class A/B: the original
+`f4af1e2a7` implementation cleared control/status bits, losing XeFu's rounding
+mode when reading field 7. Adapted the exception-only mask to static generation;
+RN is read from the host-backed FPSCR rather than its RN-free `guest_bits`.
+Local assembly tests check CR transfer, exception clearing, preserved rounding
+and result flags. IBM's [mcrfs description](https://www.ibm.com/docs/en/aix/7.2.0?topic=set-mcrfs-move-condition-register-from-fpscr-instruction)
+corroborates selective clearing. No XeFu execution result is claimed.
+
+The complete ordinary instruction run exposed a second integration regression:
+the existing `mtmsrd` lowering treated r13 as lock entry and every other GPR
+as lock exit. Mapping `mtmsr` to it made standalone writes decrement an unheld
+lock, contaminating subsequent `mfmsr` cases; Debug asserts on this path.
+The modeled MSR mask and host critical-region mechanism remain, but locking
+now follows EE transitions, allowing nested disable/restore pairs and repeated
+enable writes. Generated test scopes release interrupt locks on case exit,
+including exception paths; this is test isolation, not a title runtime reset.
+Local assembly checks exercise both instructions and the enabled/disabled
+`mfmsr` values. This does not implement a complete guest interrupt controller.
+
+The reviewed Release corpus run removes all 3,333 #149 mismatches; the eight
+previously classified hand-written corpus errors remain expected. Tests still
+use the pinned corpus and skip list, not the newer upstream corpus. Arithmetic
+exception causes and derived FPSCR summary bits remain a separate incomplete
+runtime contract: `mcrfs` is validated for guest-written fields, not full
+floating-point exception production. Final configuration/title evidence belongs
+in [release evidence](release-evidence.md); no compatibility issue is closed
+from the corpus result alone.

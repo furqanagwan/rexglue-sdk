@@ -242,6 +242,7 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       {PPC_INST_LWAUX, build_lwaux},
       {PPC_INST_LWAX, build_lwax},
       {PPC_INST_LWZ, build_lwz},
+      {PPC_INST_LMW, build_lmw},
       {PPC_INST_LWZU, build_lwzu},
       {PPC_INST_LWZUX, build_lwzux},
       {PPC_INST_LWZX, build_lwzx},
@@ -306,8 +307,10 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       {PPC_INST_LVXL128, build_lvx},
       {PPC_INST_LVLX, build_lvlx},
       {PPC_INST_LVLX128, build_lvlx},
+      {PPC_INST_LVLXL128, build_lvlx},
       {PPC_INST_LVRX, build_lvrx},
       {PPC_INST_LVRX128, build_lvrx},
+      {PPC_INST_LVRXL128, build_lvrx},
       {PPC_INST_LVSL, build_lvsl},
       {PPC_INST_LVSL128, build_lvsl},
       {PPC_INST_LVSR, build_lvsr},
@@ -329,9 +332,11 @@ static const std::unordered_map<int, Builder>& GetDispatchTable() {
       {PPC_INST_STVLXL128, build_stvlx},
       {PPC_INST_STVRX, build_stvrx},
       {PPC_INST_STVRX128, build_stvrx},
+      {PPC_INST_STVRXL128, build_stvrx},
       {PPC_INST_STVX, build_stvx},
       {PPC_INST_STVX128, build_stvx},
       {PPC_INST_STVXL, build_stvx},
+      {PPC_INST_STVXL128, build_stvx},
 
       //=====================================================================
       // System

@@ -262,8 +262,8 @@ nlohmann::json SerializeRegisters(const std::vector<RegValue>& regs) {
   for (const auto& rv : regs) {
     nlohmann::json reg;
     reg["reg"] = rv.reg;
-    if (rv.reg == "cr" || rv.reg == "xer") {
-      reg["type"] = rv.reg;
+    if (rv.reg == "cr") {
+      reg["type"] = "cr";
       reg["value"] = rv.value;
     } else if (rv.reg == "xer") {
       reg["type"] = "xer";  // SO, OV and CA are bits 31, 30 and 29

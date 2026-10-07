@@ -311,6 +311,7 @@ bool build_lwaux(BuilderContext& ctx);
 bool build_lwax(BuilderContext& ctx);
 bool build_lwbrx(BuilderContext& ctx);
 bool build_lwz(BuilderContext& ctx);
+bool build_lmw(BuilderContext& ctx);
 bool build_lwzu(BuilderContext& ctx);
 bool build_lwzux(BuilderContext& ctx);
 bool build_lwzx(BuilderContext& ctx);

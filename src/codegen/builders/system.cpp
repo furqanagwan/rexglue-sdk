@@ -214,9 +214,17 @@ bool build_mcrf(BuilderContext& ctx) {
 
 bool build_mcrfs(BuilderContext& ctx) {
   const uint32_t shift = 4 * (7 - ctx.insn.operands[1]);
-  ctx.println("\t{}.set_raw((ctx.fpscr.loadFromHost() >> {}) & 0xF);", ctx.cr(ctx.insn.operands[0]),
-              shift);
-  ctx.println("\tctx.fpscr.storeFromGuest(ctx.fpscr.guest_bits & 0x{:08X});", ~(0xFu << shift));
+  // Only exception flags are cleared; rounding, enables and result flags survive.
+  // In particular, clearing a field must not reset RN through guest_bits, which
+  // intentionally excludes the host-backed rounding bits.
+  constexpr uint32_t kExceptionFlags = 0x9FF80700;
+  const uint32_t clear_mask = (0xFu << shift) & kExceptionFlags;
+  ctx.println("\t{{");
+  ctx.println("\t\tconst uint32_t fpscr = ctx.fpscr.loadFromHost();");
+  ctx.println("\t\t{}.set_raw((fpscr >> {}) & 0xF);", ctx.cr(ctx.insn.operands[0]), shift);
+  if (clear_mask)
+    ctx.println("\t\tctx.fpscr.storeFromGuest(fpscr & 0x{:08X});", ~clear_mask);
+  ctx.println("\t}}");
   return true;
 }
 
@@ -339,18 +347,18 @@ bool build_mtmsrd(BuilderContext& ctx) {
   if (!ctx.config().skipMsr) {
     // Memory barrier for MSR write
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
-    // Update MSR bits
-    ctx.println("\tctx.msr = ({}.u32 & 0x8020) | (ctx.msr & ~0x8020);",
+    // Preserve the modeled MSR mask, but change the interrupt lock only when
+    // EE changes. Register identity cannot identify an interrupt transition:
+    // ordinary mtmsr writes and nested save/restore pairs use arbitrary GPRs.
+    ctx.println("\t{{");
+    ctx.println("\t\tconst uint32_t next_msr = ({}.u32 & 0x8020) | (ctx.msr & ~0x8020);",
                 ctx.r(ctx.insn.operands[0]));
-    // Global lock mechanism:
-    // R13 = enter lock (disable interrupts)
-    // Other = leave lock (enable interrupts)
-    uint32_t src_reg = ctx.insn.operands[0];
-    if (src_reg == 13) {
-      ctx.println("\tREX_ENTER_GLOBAL_LOCK();");
-    } else {
-      ctx.println("\tREX_LEAVE_GLOBAL_LOCK();");
-    }
+    ctx.println("\t\tif ((ctx.msr ^ next_msr) & 0x8000) {{");
+    ctx.println("\t\t\tif (next_msr & 0x8000) {{ REX_LEAVE_GLOBAL_LOCK(); }}");
+    ctx.println("\t\t\telse {{ REX_ENTER_GLOBAL_LOCK(); }}");
+    ctx.println("\t\t}}");
+    ctx.println("\t\tctx.msr = next_msr;");
+    ctx.println("\t}}");
   }
   return true;
 }
