@@ -17,7 +17,7 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 
 | Configuration | Status | Evidence | Limitations |
 | --- | --- | --- | --- |
-| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [PC host checks](#pc-host-experience-2026-10-07): Release 2,076 passed / 11 skipped; Debug 2,075 passed / 11 skipped / one failed | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
+| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [game-source checks](#checked-game-sources-2026-10-07): Release 2,098 passed / 11 skipped; Debug baseline failure recorded below | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
 | SDK build and tests, `win-amd64-gdk` Debug/Release | Supported (opt-in preset) | `ctest` 1,839/1,839 at `6223f54`; [GDK toolchain](gdk-toolchain.md) | VS Community only (Microsoft names Professional/Enterprise); GPU fixtures run serially |
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
@@ -98,6 +98,46 @@ The existing Debug tessellation assertion remains open in the
 Private Guide assets and an owner pad/title session were unavailable; no
 current title compatibility claim is added. GDK testing still uses VS Community
 and does not establish Microsoft's supported toolchain pairing.
+
+## Checked game sources (2026-10-07)
+
+Revision: topic `pc-game-source`, based on `799a5ea`, with the Guide pin above.
+[ADR-014](adr/ADR-014-game-source-and-media-recovery.md) records the source and
+media recovery contract. Same development machine as the PC host checks.
+
+- Standard Release full build/CTest: 2,109 discovered, 2,098 passed,
+  11 skipped, zero failures (176.51 s), including 534 unit and 1,473 PPC cases.
+  Logs: `out/source-release-final-build.log`,
+  `out/source-release-final-ctest.log`.
+- Debug targeted source/disc/codegen/launch UI: 36 cases / 499 assertions pass.
+  Log: `out/source-debug-final-tests.log`.
+- Standard Debug full build/CTest: 2,109 discovered, 2,097 passed, 11 skipped
+  and the single pre-existing GPU tessellation fixture failure (212.15 s).
+  All 534 unit cases pass or skip. Logs: `out/source-debug-final-build.log`,
+  `out/source-debug-final-ctest.log`.
+- GDK Release runtime/unit build and source/disc/codegen/launch/GDK filter:
+  50 cases / 575 assertions pass. Logs: `out/source-gdk-final-build.log`,
+  `out/source-gdk-final-tests.log`. This is targeted GDK evidence.
+- Final review added entrypoint path validation and rechecked Release:
+  36 cases / 511 assertions pass in both standard Debug and Release
+  (`out/source-debug-reviewed-tests.log`, `out/source-release-reviewed-tests.log`).
+  Final GDK Release review passes 50 cases / 587 assertions
+  (`out/source-gdk-reviewed-tests.log`). The installed ReXApp consumer
+  also compiles the entrypoint override check
+  and the shared controller adapter (`out/source-consumer.log`).
+- Isolated Release installation and external launcher consumer build/link
+  pass. Native art regression passes against the installed CMake helper
+  (`out/source-install.log`, `out/source-installed-art.log`). The isolated
+  CMake package registry entry was removed; existing title installs are intact.
+
+Synthetic tests cover sector-aligned reads, actual image truncation on open
+handles, malformed directories, source identity, game:/d: mounting, atomic
+extraction, cancellation, concurrent same-media recovery, UI-thread reads and
+shutdown. Dialog tests draw ImGui without GPU frames; controller events are
+injected. Physical pad/optical media, substituted-drive removal, original/TU
+real-title launch and rendered interactive presentation remain unverified.
+Console XuiMessageBox3, Active Downloads and friendly mismatch names remain
+open. Issue #154 is not closed and whole-experience parity is not claimed.
 
 ## Fresh checkout (2026-09-27)
 

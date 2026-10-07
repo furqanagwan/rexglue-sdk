@@ -15,3 +15,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [The Xbox guide runs the console's own XUI scenes](ADR-011-xbox-guide-from-system-xui.md)
 - [Selective render target upscaling and MSAA boost](ADR-012-selective-upscaling-and-msaa-boost.md)
 - [Xbox Guide source and issue repository](ADR-013-xbox-guide-repository.md)
+- [Checked game sources and media recovery](ADR-014-game-source-and-media-recovery.md)

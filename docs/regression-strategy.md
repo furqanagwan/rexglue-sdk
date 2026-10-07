@@ -591,3 +591,28 @@ GPU coverage does not block local completion.
 The known generated branch from `0x824A287C` to `0x821C1BF8` emits `REX_FATAL`.
 The observed boot crash is an illegal instruction at a different generated code
 offset; its cause is still unknown. Keep these as separate investigation items.
+
+## Game-source and removable-media regression gates (2026-10-07)
+
+[ADR-014](adr/ADR-014-game-source-and-media-recovery.md) replaces mapped image
+pages with checked reads. Synthetic disc tests reject malformed headers,
+cycles, unsafe names and out-of-range payloads; alignment fakes enforce sector
+and buffer requirements. Actual image truncation exercises failure on an
+already-open handle. Concurrent recovery keeps existing entry pointers,
+rejects changed layouts and never blocks a UI-thread read on its own dialog.
+Cancellation releases waiting workers, including during retry validation.
+
+Game-source tests cover executable fingerprints, custom guest paths, original
+inputs for TU builds, extraction completion/cancellation/read failure,
+existing destination preservation and game:/d: runtime mounts. ImGui tests
+cover validation-before-launch, persistence, mismatch rejection, Leave Game,
+shutdown without launch, and controller disconnect/disposal. Leave Game uses
+the same window-close path as the Guide; UI-only tests do not prove title
+termination or painted GPU presentation.
+
+Before closing #154, run each real first-run choice, source-original/TU
+launches, image removal on a substituted/removable drive and physical optical
+media removal/reinsert with the same and a different disc. Preserve saves and
+use disposable copies for failure injection. Console XuiMessageBox3/Active
+Downloads and physical pad checks remain open. Results and the existing Debug
+GPU assertion are recorded in [release evidence](release-evidence.md).

@@ -20,6 +20,9 @@ struct LaunchPadState {
   bool next_tab = false;
 };
 using LaunchPadSource = std::function<std::optional<LaunchPadState>()>;
+// Shared ImGui navigation for host menus. Release before disposing the reader.
+LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source);
+void ReleaseLaunchPad(ImGuiIO& io);
 
 // Self-owned dialog, like ShowMessageBox. Its completion callback runs only
 // after Play/Exit; destroying it during app shutdown does not launch a title.

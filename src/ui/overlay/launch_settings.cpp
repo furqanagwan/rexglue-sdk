@@ -22,21 +22,23 @@ LaunchSettingsDialog::LaunchSettingsDialog(ImGuiDrawer* drawer, std::string titl
       pad_source_(std::move(pad_source)) {}
 
 LaunchSettingsDialog::~LaunchSettingsDialog() {
-  if (pad_source_) {
-    auto& io = GetIO();
-    io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-    for (const auto key :
-         {ImGuiKey_GamepadFaceDown, ImGuiKey_GamepadFaceRight, ImGuiKey_GamepadDpadLeft,
-          ImGuiKey_GamepadDpadRight, ImGuiKey_GamepadDpadUp, ImGuiKey_GamepadDpadDown}) {
-      io.AddKeyEvent(key, false);
-    }
+  if (pad_source_)
+    ReleaseLaunchPad(GetIO());
+}
+
+void ReleaseLaunchPad(ImGuiIO& io) {
+  io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+  for (const auto key :
+       {ImGuiKey_GamepadFaceDown, ImGuiKey_GamepadFaceRight, ImGuiKey_GamepadDpadLeft,
+        ImGuiKey_GamepadDpadRight, ImGuiKey_GamepadDpadUp, ImGuiKey_GamepadDpadDown}) {
+    io.AddKeyEvent(key, false);
   }
 }
 
-void LaunchSettingsDialog::PollGamepad(ImGuiIO& io) {
-  if (!pad_source_)
-    return;
-  const auto pad = pad_source_();
+LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source) {
+  if (!source)
+    return {};
+  const auto pad = source();
   const auto state = pad.value_or(LaunchPadState{});
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
   if (pad)
@@ -53,6 +55,11 @@ void LaunchSettingsDialog::PollGamepad(ImGuiIO& io) {
   direction(ImGuiKey_GamepadDpadRight, state.x);
   direction(ImGuiKey_GamepadDpadUp, state.y);
   direction(ImGuiKey_GamepadDpadDown, -state.y);
+  return state;
+}
+
+void LaunchSettingsDialog::PollGamepad(ImGuiIO& io) {
+  const auto state = PollLaunchPad(io, pad_source_);
   if (state.next_tab && !previous_pad_.next_tab)
     requested_tab_ = (selected_tab_ + 1) % 3;
   else if (state.previous_tab && !previous_pad_.previous_tab)

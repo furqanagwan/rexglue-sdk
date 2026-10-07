@@ -10,6 +10,7 @@ add_executable(unit_tests
     core/filesystem_test.cpp
     core/data_locations_test.cpp
     filesystem/stfs_container_test.cpp
+    filesystem/disc_image_test.cpp
     core/vfs_overwrite_test.cpp
     core/hash_test.cpp
     core/stream_test.cpp
@@ -36,6 +37,8 @@ add_executable(unit_tests
     system/gaming_runtime_test.cpp
     system/title_display_name_test.cpp
     system/user_language_test.cpp
+    system/game_source_test.cpp
+    system/game_media_recovery_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp
@@ -49,6 +52,7 @@ add_executable(unit_tests
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
     ui/launch_settings_test.cpp
+    ui/game_source_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/function_table_layout_test.cpp
     codegen/output_partition_test.cpp

@@ -219,6 +219,15 @@ A title update is built as a second executable, `<title>_tu<version>`, from its
 package and its own config: a manifest `[[title_update]]` entry
 ([title updates](docs/title-updates.md)).
 
+### PC launch and game sources
+
+Use `--launch_menu=true` for graphics, audio and language settings before
+launch. Regenerated titles also validate the original source executable and
+offer a first-run folder/ISO/disc selector, optional cancellable extraction
+and Retry/Leave Game on media read failure. Sources use checked file I/O;
+physical drives and full console-scene integration still need validation.
+See [PC experience and remaining gates](docs/pc-backward-compatibility.md).
+
 ### Xbox guide
 
 The Guide is maintained in [furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide),

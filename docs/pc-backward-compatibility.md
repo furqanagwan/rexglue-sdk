@@ -42,7 +42,7 @@ prove parity with the installed reference or compatibility with every game.
 | Language | One resolver now supplies XGetLanguage, XConfig and XDBF title/achievement metadata. `user_language=0` follows Windows; explicit IDs 1–12 remain supported. Title language availability still depends on the game. |
 | Native EXE art | `title-art` and the CMake icon helper now generate/embed multi-size title icons. [SDK #164](https://github.com/furqanagwan/rexglue-sdk/issues/164) stays open: existing title installations and Xbox app cached artwork have not been updated/verified. |
 | Xbox library / packaging | Existing gameconfig and library-art tools produce package metadata and library tiles. Loose config and an EXE icon do not register a Store product. Own package registration and Xbox app presentation remain deployment gates. |
-| First-run game source | Folder-based runtime paths exist. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for the ISO/disc/folder wizard and source validation. |
+| First-run game source | Checked ISO/disc/folder selection, persisted sources, cancellable extraction and Retry/Leave Game recovery now exist in the SDK. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for console scenes, Active Downloads and physical-drive/title validation; see [ADR-014](adr/ADR-014-game-source-and-media-recovery.md). |
 | Original / title update launch | Existing separate static executables and update manifest preserve generated-code boundaries; see [title updates](title-updates.md). End-to-end original/TU switching needs representative-title evidence. |
 | Guide / notifications / keyboard | Sources and issues belong to [xbox-guide](https://github.com/furqanagwan/xbox-guide). [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1) remains open for complete console scene support; closed fidelity work still has owner checks. Private assets are required for real scene tests. |
 | Profiles / local achievements | Existing guest profiles, local achievement persistence and Guide presentation. These are local guest services; Xbox account linking and service achievements remain separate integration work. |
@@ -54,8 +54,9 @@ prove parity with the installed reference or compatibility with every game.
 | Startup / shader stutter | Existing shipped shader cache and shader replacements. [SDK #120](https://github.com/furqanagwan/rexglue-sdk/issues/120) remains open for gameplay hitches. No arbitrary frame-rate unlock is promised. |
 | Native ARM64 / storage | [SDK #45](https://github.com/furqanagwan/rexglue-sdk/issues/45), [#46](https://github.com/furqanagwan/rexglue-sdk/issues/46) and [#42](https://github.com/furqanagwan/rexglue-sdk/issues/42) remain host/deployment work, with hardware and representative-title gates. |
 
-Complete local launch/settings/art first; preserve the runtime's per-user save
-contract while first-run source selection is implemented. Account/cloud work
+Local launch/settings/art and the source/I/O foundation are implemented, with
+interactive and deployment gates still open. Preserve the runtime's per-user
+save contract when integrating source selection with console scenes. Account/cloud work
 needs a settled guest-to-host service design and an independently registered
 title. Each integration must document failure, cancellation, offline behaviour
 and account switching before claiming parity.
@@ -95,6 +96,43 @@ locale selection or IDs 1 English, 2 Japanese, 3 German, 4 French, 5 Spanish,
 11 Polish, 12 Russian. Unsupported Windows locales fall back to English;
 Chinese script overrides region. XDBF metadata falls back to the title's own
 available language; this does not manufacture translated game content.
+
+## Game sources and media recovery
+
+Regenerate a title's code to embed the original XEX title ID, full-file checksum
+and guest-relative executable path. Title-update builds identify the original
+source before applying their update. Older generated hosts retain folder
+launching; they need regeneration for checked image selection.
+
+A new host checks its configured source before constructing the guest. If
+missing or mismatched, Choose game files offers an extracted folder, ISO or
+optical drive. Check source verifies the XDVDFS structures and exact executable
+identity. Remember source persists an absolute `game_source` path; an explicit
+`--game_data_root` takes precedence. These choices preserve save/profile paths.
+
+An image can run directly or use Extract to this PC. Copying runs in the
+background, reports byte progress, supports cancellation between reads and
+switches to a new local folder only after completion. Existing destinations
+are never overwritten. Failure removes only the operation's owned staging
+folder. Closing before launch cancels source checks/copying without starting
+the guest.
+
+Image reads use checked file I/O. Optical reads use sector-aligned unbuffered
+I/O restricted to optical drive-letter devices. A missing game partition
+explains the need for a compatible Kreon-style drive; no firmware operation or
+alternate access method is attempted. Physical drive compatibility is pending.
+
+A failed guest media read offers Retry or Leave Game. Retry checks the original
+executable and directory layout before reconnecting existing handles. Leave
+uses the Guide's window-close/termination path. Shutdown releases waiting I/O;
+UI-thread reads return errors instead of waiting for their own dialog.
+
+Both dialogs support physical-controller navigation, with disconnected/held
+input released before guest handoff. Tests draw ImGui; physical pad behaviour
+and painted presentation are still unverified. The current dialogs are host
+fallbacks. The console's XuiMessageBox3 and Active Downloads integration,
+friendly mismatch game names, original/TU title launches and real media-removal
+checks remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).
 
 ## Native title art
 

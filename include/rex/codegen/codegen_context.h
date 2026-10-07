@@ -157,6 +157,8 @@ class CodegenContext {
 
   const std::filesystem::path& configDir() const { return configDir_; }
   void setConfigDir(const std::filesystem::path& dir) { configDir_ = dir; }
+  const std::string& sourceGuestPath() const { return source_guest_path_; }
+  void setSourceGuestPath(std::string path) { source_guest_path_ = std::move(path); }
 
   void setDllModule(bool is_dll) { is_dll_module_ = is_dll; }
   bool isDllModule() const { return is_dll_module_; }
@@ -183,7 +185,8 @@ class CodegenContext {
   AnalysisState analysisState_;             ///< Analysis state (populated during analysis)
   std::unique_ptr<DecodedBinary> decoded_;  ///< Decoded instructions (created via initDecoded())
   runtime::ExportResolver* resolver_ = nullptr;  ///< For runtime resolution (borrowed)
-  std::filesystem::path configDir_;   ///< Directory containing config file (for relative paths)
+  std::filesystem::path configDir_;  ///< Directory containing config file (for relative paths)
+  std::string source_guest_path_;
   bool is_dll_module_ = false;        ///< True if this module is a DLL (shared library output)
   bool has_dll_modules_ = false;      ///< True if the project has DLL modules (multi-binary)
   uint32_t function_table_base_ = 0;  ///< Dispatch table address; 0 for image base + size

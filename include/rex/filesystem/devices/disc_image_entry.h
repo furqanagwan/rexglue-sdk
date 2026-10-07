@@ -23,15 +23,13 @@ class DiscImageDevice;
 
 class DiscImageEntry : public Entry {
  public:
-  DiscImageEntry(Device* device, Entry* parent, const std::string_view path,
-                 memory::MappedMemory* mmap);
+  DiscImageEntry(DiscImageDevice* device, Entry* parent, const std::string_view path);
   ~DiscImageEntry() override;
 
-  static std::unique_ptr<DiscImageEntry> Create(Device* device, Entry* parent,
-                                                const std::string_view name,
-                                                memory::MappedMemory* mmap);
+  static std::unique_ptr<DiscImageEntry> Create(DiscImageDevice* device, Entry* parent,
+                                                const std::string_view name);
 
-  memory::MappedMemory* mmap() const { return mmap_; }
+  bool ReadBytes(size_t offset, std::span<uint8_t> bytes);
   size_t data_offset() const { return data_offset_; }
   size_t data_size() const { return data_size_; }
 
@@ -44,7 +42,7 @@ class DiscImageEntry : public Entry {
  private:
   friend class DiscImageDevice;
 
-  memory::MappedMemory* mmap_;
+  DiscImageDevice* disc_;
   size_t data_offset_;
   size_t data_size_;
 };
