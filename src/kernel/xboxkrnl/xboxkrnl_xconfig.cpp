@@ -21,6 +21,7 @@
 #include <rex/system/flags.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
+#include <rex/system/user_language.h>
 #include <rex/system/xtypes.h>
 
 namespace rex::kernel::xboxkrnl {
@@ -62,7 +63,7 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
           break;
         case 0x0009:  // XCONFIG_USER_LANGUAGE
           setting_size = 4;
-          memory::store_and_swap<uint32_t>(value, REXCVAR_GET(user_language));
+          memory::store_and_swap<uint32_t>(value, uint32_t(system::GetUserLanguage()));
           break;
         case 0x000A:  // XCONFIG_USER_VIDEO_FLAGS
           setting_size = 4;

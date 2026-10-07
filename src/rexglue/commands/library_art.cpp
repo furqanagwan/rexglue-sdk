@@ -12,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <fmt/format.h>
 
@@ -22,6 +23,82 @@
 // clang-format on
 
 namespace rexglue::cli {
+
+std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* error) {
+  if (image.width <= 0 || image.height <= 0 ||
+      image.pixels.size() != size_t(image.width) * size_t(image.height) * 4) {
+    if (error)
+      *error = "invalid title image dimensions or pixel count";
+    return std::nullopt;
+  }
+  constexpr std::array<int, 7> sizes = {16, 24, 32, 48, 64, 128, 256};
+  std::vector<uint8_t> result(6 + sizes.size() * 16, 0);
+  auto put16 = [&result](size_t offset, uint16_t value) {
+    result[offset] = uint8_t(value);
+    result[offset + 1] = uint8_t(value >> 8);
+  };
+  auto put32 = [&result](size_t offset, uint32_t value) {
+    for (int i = 0; i < 4; ++i)
+      result[offset + i] = uint8_t(value >> (8 * i));
+  };
+  put16(2, 1);  // ICONDIR type: icon, not cursor.
+  put16(4, uint16_t(sizes.size()));
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    const auto resized = Cover(image, sizes[i], sizes[i]);
+    std::vector<uint8_t> frame;
+    if (sizes[i] == 256) {
+      const auto png = EncodePng(resized, error);
+      if (!png)
+        return std::nullopt;
+      frame = *png;
+    } else {
+      const int size = sizes[i];
+      const size_t mask_stride = size_t((size + 31) / 32) * 4;
+      frame.resize(40 + size_t(size) * size * 4 + mask_stride * size, 0);
+      auto frame32 = [&frame](size_t offset, uint32_t value) {
+        for (int j = 0; j < 4; ++j)
+          frame[offset + j] = uint8_t(value >> (8 * j));
+      };
+      frame32(0, 40);  // BITMAPINFOHEADER, with XOR and AND planes stacked.
+      frame32(4, size);
+      frame32(8, size * 2);
+      frame[12] = 1;
+      frame[14] = 32;
+      frame32(20, uint32_t(frame.size() - 40));
+      for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+          const auto* pixel = resized.at(x, y);
+          const size_t row = size_t(size - y - 1);
+          auto* dest = frame.data() + 40 + (row * size + x) * 4;
+          // Icon DIBs store straight BGRA, unlike our premultiplied images.
+          for (int c = 0; c < 3; ++c) {
+            dest[c] =
+                pixel[3]
+                    ? uint8_t(std::min(255u, (uint32_t(pixel[c]) * 255 + pixel[3] / 2) / pixel[3]))
+                    : 0;
+          }
+          dest[3] = pixel[3];
+          if (!pixel[3]) {
+            frame[40 + size_t(size) * size * 4 + row * mask_stride + x / 8] |=
+                uint8_t(0x80 >> (x % 8));
+          }
+        }
+      }
+    }
+    if (result.size() + frame.size() > std::numeric_limits<uint32_t>::max()) {
+      return std::nullopt;
+    }
+    const size_t entry = 6 + i * 16;
+    result[entry] = result[entry + 1] = uint8_t(sizes[i]);  // 0 denotes 256.
+    put16(entry + 4, 1);
+    put16(entry + 6, 32);
+    put32(entry + 8, uint32_t(frame.size()));
+    put32(entry + 12, uint32_t(result.size()));
+    result.insert(result.end(), frame.begin(), frame.end());
+  }
+  return result;
+}
+
 namespace {
 
 using Microsoft::WRL::ComPtr;

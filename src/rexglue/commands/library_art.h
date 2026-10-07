@@ -30,6 +30,10 @@ struct Image {
 std::optional<Image> DecodeImage(std::span<const uint8_t> bytes, std::string* error);
 /// Encodes `image` as a PNG (straight alpha, as PNG stores it).
 std::optional<std::vector<uint8_t>> EncodePng(const Image& image, std::string* error);
+/// A Windows ICO at 16, 24, 32, 48, 64, 128 and 256 pixels (PNG at 256,
+/// bitmap frames below 256 for native Shell extraction).
+/// Uses title art directly, preserving alpha, independently of library tiles.
+std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* error);
 /// `image` scaled to `width` x `height` with high-quality cubic filtering.
 Image Resize(const Image& image, int width, int height);
 

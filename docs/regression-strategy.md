@@ -1,5 +1,21 @@
 # Compatibility baseline and regression strategy
 
+## CTest configuration discovery (2026-10-07)
+
+During PC host validation, a Release CTest run invoked Debug GPU executables
+after a Debug build. Vendored Catch2's POST_BUILD discovery writes a shared
+test file in this multi-configuration build. This made the known Debug
+tessellation assertion appear to be a Release regression and invalidated
+that run as Release evidence.
+
+The SDK selects Catch2's existing PRE_TEST discovery mode. Each configuration
+then receives its own discovered test file. Validation must inspect CTest's
+`--show-only=json-v1` inventory as well as the test count: every SDK executable
+argument, including nested PowerShell invocations, must match Debug or Release
+as requested. The corrected full Release suite passes; the baseline Debug
+tessellation fixture failure remains independently reproducible and open.
+Current counts and limitations are in [release evidence](release-evidence.md).
+
 ## Current baseline
 
 As of 2026-09-27 (RG-GDK-001 closed):

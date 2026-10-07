@@ -17,7 +17,7 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 
 | Configuration | Status | Evidence | Limitations |
 | --- | --- | --- | --- |
-| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [Guide extraction checks](xbox-guide-extraction.md#validation-2026-10-06): Release 2,067 passed / 11 skipped, Debug 2,066 passed / 11 skipped / one failed | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
+| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [PC host checks](#pc-host-experience-2026-10-07): Release 2,076 passed / 11 skipped; Debug 2,075 passed / 11 skipped / one failed | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
 | SDK build and tests, `win-amd64-gdk` Debug/Release | Supported (opt-in preset) | `ctest` 1,839/1,839 at `6223f54`; [GDK toolchain](gdk-toolchain.md) | VS Community only (Microsoft names Professional/Enterprise); GPU fixtures run serially |
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
@@ -36,6 +36,55 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 | ARM64 host | Blocked | No ARM64 MSVC libraries (RG-GDK-030/031) | — |
 | DirectStorage | Not started | RG-GDK-029 | — |
 | Fresh machine | Blocked | Only the development machine was available | The fresh-checkout run models a new clone, not a new PC |
+
+## PC host experience (2026-10-07)
+
+Revision: topic branch `pc-backcompat-experience`, based on `248d6c3`, Guide
+submodule `3d5ea575a0f6a6ceb9f0c39c097d5c06c59b72aa`. The runs below test the
+changes included in this commit; the logged environment now has VS Community
+18.10.3, with the same Clang, Windows SDK, GDK and NVIDIA device recorded above.
+See [coverage and remaining gates](pc-backward-compatibility.md).
+
+- Standard Release: full build and CTest, 2,087 discovered, 2,076 passed,
+  11 skipped, zero failures (170.89 s). Includes shader reproducibility and
+  1,473 generated PPC cases. Logs: `out/bc-release-final-build.log` and
+  `out/bc-release-final-ctest.log`.
+- Standard Debug: full build and CTest, 2,087 discovered, 2,075 passed,
+  11 skipped and the one baseline tessellation assertion (200.76 s). All 512
+  unit cases pass or skip; the failure is in the GPU fixture. Logs:
+  `out/bc-debug-final-build.log` and `out/bc-debug-final-ctest.log`.
+- CTest inventories: Debug and Release each discover 2,087 tests; all 2,085
+  SDK executable arguments per configuration, including nested PowerShell
+  commands, match the requested configuration. This validates the
+  [discovery fix](regression-strategy.md#ctest-configuration-discovery-2026-10-07).
+  Logs: `out/bc-final-test-configuration-check.log` and corresponding
+  `out/bc-*-final-discovery.json`.
+- GDK Release: runtime/unit target build and the combined
+  `[launch_settings],[language],[library_art],[cvar],[input],[gdk]` filter passed
+  89 cases / 765 assertions. Log: `out/bc-gdk-final-targeted.log`. This is
+  targeted evidence, not a new full GDK or service compatibility claim.
+- Private reference Flash: three-tab backward-compatibility Guide and font
+  conversion tests passed 2 cases / 28 assertions each in standard Debug,
+  standard Release and GDK Release. The tests read the locally installed
+  Fuzion Frenzy Flash directory; no assets were copied or redistributed.
+  Logs: `out/bc-reference-guide-tests.log`,
+  `out/bc-reference-guide-debug-tests.log`,
+  `out/bc-reference-guide-gdk-tests.log`.
+- Isolated Release install `out/bc-install`: the installed launcher consumer
+  builds and links with the shipped ReXApp source and GPU plugin. Native art
+  checks pass against the installed CMake helper for separate base/TU EXEs:
+  RT_ICON, RT_GROUP_ICON, retained manifest, large/small Shell extraction,
+  five PNG dimensions, collision protection and preserved config identity.
+  Logs: `out/bc-final-consumer.log`, `out/bc-final-installed-art.log`.
+  The isolated CMake user-package registry entry was removed afterwards.
+
+The launcher unit cases draw ImGui without submitting GPU frames. A hidden
+consumer window did not paint; interactive rendered launch/Play flow, physical
+controller navigation/handoff, real-title settings and Xbox app registration
+remain pending. Existing 007/NHL installations were not changed. Account,
+cloud and service achievements require independent title/service registration
+and failure/offline/account-switch validation. No whole-experience parity,
+original Xbox execution or additional vendor support is claimed.
 
 ## Guide extraction (2026-10-06)
 

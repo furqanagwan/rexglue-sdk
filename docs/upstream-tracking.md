@@ -1,5 +1,39 @@
 # Upstream tracking and compatibility provenance
 
+## PC host experience, 2026-10-06
+
+Based on local SDK `248d6c3` after the Guide extraction, with read-only package
+observations and Microsoft's July 2026 announcement recorded in
+[PC backward compatibility coverage](pc-backward-compatibility.md). This is
+original host adapter work (class B), not an upstream source port: no Xenia
+commit or PR is imported, and no Microsoft implementation/assets are copied.
+SDK [#164](https://github.com/furqanagwan/rexglue-sdk/issues/164) is the related
+native-art issue and remains open for title deployment/Xbox app gates.
+
+The pre-existing XGetLanguage stub always returned English through a hardcoded
+NTSC-U region. A shared resolver now respects configured guest language and an
+opt-in Windows locale. XConfig packing/status and XDBF language fallback remain
+unchanged. Startup controls use existing cvar contracts before guest setup;
+native art uses local supplied images and additive icon resources. Regression
+risk is language selection in titles, launcher completion/lifetime and resource
+loading; tests cover guest API agreement, locale mapping, UI actions/persistence,
+controller navigation/disconnect, icon encoding and native consumer extraction.
+The temporary physical-only input reader reuses existing drivers; guest input
+factories keep their previous synthetic fallback behaviour. Held input is
+consumed through the existing UI handoff contract before guest execution.
+Whole-experience parity, real
+title/GPU-rendered launcher checks and service integration remain unverified.
+
+No upstream regressions are inferred from this research. The SDK baseline's
+known Debug tessellation fixture assertion remains unrelated and open; see
+[release evidence](release-evidence.md).
+
+Validation also exposed configuration mixing in vendored Catch2
+`88abf9bf325c798c33f54f6b9220ef885b267f4f`: POST_BUILD discovery overwrote a
+shared test file with the last-built configuration's executable. The SDK now
+selects its existing PRE_TEST discovery mode, without modifying vendored code.
+See the [regression record](regression-strategy.md#ctest-configuration-discovery-2026-10-07).
+
 Snapshot: 2026-09-23. These are evaluated candidates, not imported patches. A–H classifications are defined in [the investigation](investigation.md). “Unknown” regressions means none verified during this review, not proven absence. Issue/PR comments contain upstream observations; no local title outcome is inferred. See [roadmap](roadmap.md) for live ReXGlue issue links.
 
 ## Compact upstream-to-roadmap index

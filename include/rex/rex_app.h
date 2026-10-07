@@ -53,6 +53,7 @@ namespace ui {
 class AchievementNotificationDialog;
 class ConsoleDialog;
 class SettingsDialog;
+class LaunchSettingsDialog;
 namespace guide {
 struct GuideAssets;
 class GuideMedia;
@@ -283,6 +284,7 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
 
  private:
   std::function<void(PathConfig)> MakeResumeCallback();
+  bool BeginLaunch(PathConfig paths);
 
   // Runs the gaming_runtime startup policy; false stops the launch.
   bool InitializeGamingRuntime();
@@ -338,6 +340,7 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   std::unique_ptr<ui::DebugOverlayDialog> debug_overlay_;
   std::unique_ptr<ui::ConsoleDialog> console_overlay_;
   std::unique_ptr<ui::SettingsDialog> settings_overlay_;
+  ui::LaunchSettingsDialog* launch_settings_ = nullptr;  // self-owned on normal close
   std::unique_ptr<ui::ImGuiDialog> achievements_overlay_;
   std::shared_ptr<ui::AchievementNotificationDialog> achievement_notification_;
   uint64_t achievement_notification_listener_ = 0;

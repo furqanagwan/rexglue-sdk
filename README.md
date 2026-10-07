@@ -203,6 +203,9 @@ Both paths are optional: by default the title finds its game files in a `game`
 folder beside the executable (or the executable's own folder), keeps saves in
 `Saved Games\<name>` and caches, logs and settings in `%LOCALAPPDATA%\<name>`,
 as an Xbox PC game does ([data locations](docs/data-locations.md)).
+Rebuilt hosts can opt into pre-launch graphics/audio/language settings with
+`--launch_menu=true`. `rexglue title-art` generates native EXE icons and GDK
+images from local title art; see [PC backward compatibility coverage and gates](docs/pc-backward-compatibility.md).
 This is how the Quantum of Solace baseline runs. Add `--input_backend=gameinput`,
 `--ui_backend=win32` and `--audio_backend=xaudio2` for the native paths (GameInput
 needs a GDK build). `rexglue init gameconfig` adds a `MicrosoftGame.config` for

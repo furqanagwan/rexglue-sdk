@@ -754,10 +754,14 @@ bool IsFinalized() {
 }
 
 void SaveConfig(const std::filesystem::path& config_path) {
+  (void)TrySaveConfig(config_path);
+}
+
+bool TrySaveConfig(const std::filesystem::path& config_path) {
   std::string content = SerializeToTOML();
   if (content.empty()) {
     REXLOG_DEBUG("SaveConfig: no modified flags to save");
-    return;
+    return true;
   }
 
   try {
@@ -769,13 +773,19 @@ void SaveConfig(const std::filesystem::path& config_path) {
     std::ofstream file(config_path);
     if (!file) {
       REXLOG_ERROR("SaveConfig: failed to open {}", config_path.string());
-      return;
+      return false;
     }
     file << "# Auto-generated cvar configuration\n";
     file << content;
+    if (!file.flush()) {
+      REXLOG_ERROR("SaveConfig: failed to write {}", config_path.string());
+      return false;
+    }
     REXLOG_INFO("Saved config to {}", config_path.string());
+    return true;
   } catch (const std::exception& e) {
     REXLOG_ERROR("SaveConfig: {}", e.what());
+    return false;
   }
 }
 
