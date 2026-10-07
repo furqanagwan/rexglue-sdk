@@ -8,10 +8,12 @@ across compatible AMD, NVIDIA and Intel GPUs.
 **Status:** early-development modernization of upstream ReXGlue v0.10.0
 (`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518`). Windows is the only supported
 host (Linux and macOS retired by RG-GDK-024) and Direct3D 12 is the only
-graphics backend (Vulkan removed by RG-GDK-023). The SDK builds on
-Windows x64 with and without the April 2026 GDK. One title (Quantum of Solace)
+graphics backend (Vulkan removed by RG-GDK-023). The SDK requires Windows x64
+and the April 2026 PC GDK (260404); GDK-free builds are retired by
+[ADR-016](docs/adr/ADR-016-required-pc-gdk.md). Project Helix is a future
+validation target. One title (Quantum of Solace)
 runs its recorded scene on NVIDIA. GDK packaging works for a minimal title. The
-native Win32 window, XAudio2 and GameInput (XInput outside GDK builds) are the
+native Win32 window, XAudio2 and GameInput (with XInput for compatible pads) are the
 only backends; SDL3 was removed (RG-GDK-033). AMD/Intel GPUs,
 other titles and fresh machines are not validated. Each claim and its evidence
 is in [release evidence](docs/release-evidence.md), including the current Debug
@@ -71,6 +73,9 @@ a scene result, not gameplay: interactive progress is tracked in the 007
 repository.
 For the April 2026 GDK PC capability map and issue ownership, see the
 [GDK capability audit](docs/gdk-2604-capability-audit.md).
+For contributor boundaries, review gates and the current SDK work queue, see
+[development guidance](docs/development.md) and the
+[ecosystem maturity audit](docs/sdk-maturity-audit-20261007.md).
 Only NVIDIA GPU testing is available locally; AMD and Intel coverage is
 non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md).
 
@@ -119,17 +124,18 @@ From an x64 Visual Studio developer shell:
 git clone --recurse-submodules https://github.com/furqanagwan/rexglue-sdk.git
 cd rexglue-sdk
 git submodule update --init --recursive
-cmake --preset win-amd64 -DREXGLUE_USE_D3D12=ON -DREXGLUE_USE_VULKAN=OFF -DREXGLUE_BUILD_TESTS=ON
-cmake --build --preset win-amd64-debug
-ctest --preset win-amd64-debug --output-on-failure
-cmake --build --preset win-amd64-release
-ctest --preset win-amd64-release --output-on-failure
-cmake --install out/build/win-amd64 --config Release
+cmake --preset win-amd64-gdk -DREXGLUE_BUILD_TESTS=ON
+cmake --build --preset win-amd64-gdk-debug
+ctest --preset win-amd64-gdk-debug --output-on-failure --no-tests=error
+cmake --build --preset win-amd64-gdk-release
+ctest --preset win-amd64-gdk-release --output-on-failure --no-tests=error
+cmake --install out/build/win-amd64-gdk --config Release
 ```
 
-Install prefix defaults to `out/install/win-amd64`. These exact commands were
-run from a fresh clone in a new developer shell on 2026-09-27; the result is in
-[release evidence](docs/release-evidence.md#fresh-checkout-2026-09-27). The D3D12
+Install prefix defaults to `out/install/win-amd64-gdk`. The historical
+[fresh-checkout evidence](docs/release-evidence.md#fresh-checkout-2026-09-27)
+predates the GDK-only policy; it does not establish a fresh GDK installation.
+The D3D12
 and Vulkan flags are accepted for compatibility: D3D12 is always on, and
 turning Vulkan on stops configuration. Unit tests are disabled unless
 `REXGLUE_BUILD_TESTS=ON`; CTest discovering zero tests is not validation.
@@ -145,15 +151,16 @@ names VS 2026 Professional/Enterprise support; the
 distinguish PC GDK from console extensions. Do not infer toolchain support from
 an installed directory alone.
 
-The opt-in `win-amd64-gdk` preset builds and tests the SDK against the
+The required `win-amd64-gdk` preset builds and tests the SDK against the
 installed `260404` edition and installs a package whose consumers resolve the
 GDK on their own machine; see [GDK toolchain](docs/gdk-toolchain.md) for the
 pinned versions, commands, results and what is not yet established (supported
-VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
+VS edition, clean machine). `win-amd64` is now a compatibility alias pointing
+to the same GDK build/install directories. `REXGLUE_USE_GDK=OFF` is rejected.
 `win-amd64-gdk-dxil` adds the opt-in DXIL shader toolchain (Mesa
 `spirv_to_dxil`, D3D12 Agility SDK 1.618.5, DXC 1.8.2502.8, the pairing
 Microsoft's PC backward compatibility ships); see [DXIL shader toolchain](docs/shader-dxil.md).
-GDK builds read pads through GameInput and other builds through XInput
+The SDK reads pads through GameInput
 (`input_backend`): see [GameInput driver](docs/gameinput.md).
 Pads GameInput does not list, such as Bluetooth LE pads, come through
 XInput beside it, and the guide shows a wireless pad's battery level.

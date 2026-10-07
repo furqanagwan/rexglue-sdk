@@ -386,3 +386,53 @@ same private evidence folder. All owned processes are closed. The current
 [Guide draft PR](https://github.com/furqanagwan/xbox-guide/pull/9) Windows CI checks
 pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
 format checks; these do not replace the missing owner/hardware/service gates.
+
+## Required GDK maintenance and ecosystem audit, 2026-10-07
+
+Branch `sdk-gdk-only-maturity` starts at SDK main
+`5dad97248d70126c901d2425ce942e5dc9694a28`, without the separate PPC PR #162.
+[ADR-016](adr/ADR-016-required-pc-gdk.md) requires PC GDK 260404 and makes
+`win-amd64` an alias of the canonical GDK build/install directories. This is
+a build-policy/CI/ownership/handoff change, not a GPU port or title compatibility
+improvement. The [six-repository audit](sdk-maturity-audit-20261007.md) and
+[Edge GPU comparison](edge-gpu-review-20261007.md) pin their review scope.
+
+Local toolchain: Windows x64, installed PC GDK 260404, Clang 22.1.8,
+VS Community 2026 18.10.3 developer shell, Windows SDK 10.0.26100.0, Ninja
+Multi-Config. Community remains observed compatibility, not a Microsoft-supported
+pairing. Configure and full builds succeed in Debug and Release.
+
+- Release CTest `-L 'unit|ppc'`: 2,591 selections, 2,577 passed, 14 skipped,
+  zero failures, 74.54 seconds. Includes the 567-file corpus and installed-runtime
+  cases. Existing expected-failure/unsupported corpus lists still apply; this
+  result does not mean all hardware instruction expectations pass.
+- Debug CTest `-L '^(unit|ppc)$'`: 2,024 selections, 2,010 passed, 14 skipped,
+  zero failures, 83.99 seconds. Includes installed-runtime cases. The seven
+  installed-runtime tests retain their local gate; hosted CI excludes that label
+  while keeping pure GDK ABI/mapping tests.
+- The initial broader Debug selection did **not** complete. It stopped at
+  `ppc_corpus.instr_mtmsrd` after 2,313 completed selections with a runtime
+  `abort()` dialog. The generated instruction releases the global lock with no
+  matching acquisition in its standalone fixture; the test template asserts
+  that contract. This is a likely cause, not a debugger-confirmed stack trace.
+  Owned CTest/child processes were terminated. No assertion is removed, no
+  corpus skip is added, and no full Debug corpus pass is claimed.
+- GDK-off, nonexistent-root and wrong-edition configurations reject with the
+  expected diagnostics. The compatibility alias configures the GDK tree and
+  emits `compile_commands.json`. An initial alias check overlapped the Debug
+  build and hit Ninja's file lock; the serialized retry succeeds.
+- A fresh Release installation configures and links the external
+  `tests/consumer/launch_settings` consumer against its own GDK selection, with
+  CMake package-registry search disabled. Missing consumer GDK is rejected.
+  Only the disposable install's registry entry was removed afterward.
+- `scripts/setup_gdk.ps1 -InstalledOnly` and PowerShell parsing pass. Formatter
+  20.1.8 checks the changed C++ files. Script suite: 13 tests plus nine subtests
+  pass. Roadmap validation, handoff links and `git diff --check` pass.
+
+Private logs use the `out/maturity-*` prefix. No new game execution, GPU/vendor,
+deployment, physical-controller or save/load gate is established. The prior
+Debug GPU quad-tessellation assertion remains unresolved and was not rerun
+for this non-GPU change. No issue is closed by this batch. Public-payload
+download/extraction and hosted CI require their own run; the local setup check
+uses the installed GDK and does not prove that download path. Helix hardware
+support is not established.

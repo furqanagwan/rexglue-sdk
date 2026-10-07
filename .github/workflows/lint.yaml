@@ -33,3 +33,8 @@ jobs:
       - name: Run script tests
         run: python -m pytest scripts/tests -v
 
+      - name: Check development handoffs
+        run: |
+          python scripts/validate_roadmap.py
+          python scripts/check_docs.py
+

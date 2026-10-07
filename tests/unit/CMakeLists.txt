@@ -133,6 +133,7 @@ set_target_properties(unit_tests PROPERTIES
 include(Catch)
 catch_discover_tests(unit_tests
     TEST_PREFIX "unit."
+    ADD_TAGS_AS_LABELS
     PROPERTIES
         LABELS "unit"
         TIMEOUT 60

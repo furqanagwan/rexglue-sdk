@@ -69,7 +69,7 @@ jobs:
     if: needs.check.outputs.should_build == 'true'
     uses: ./.github/workflows/_build-platform.yaml
     with:
-      platform: win-amd64
+      platform: win-amd64-gdk
       ref: ${{ needs.check.outputs.dev_sha }}
       publish_mode: artifact
       artifact_name: nightly-win-amd64

@@ -39,7 +39,7 @@ TEST_CASE("The pinned GDK edition is selected", "[gdk]") {
   CHECK(REXGLUE_GDK_EDITION == 260404);
 }
 
-TEST_CASE("Gaming Runtime initializes in an unpackaged SDK process", "[gdk]") {
+TEST_CASE("Gaming Runtime initializes in an unpackaged SDK process", "[gdk][installed_runtime]") {
   HRESULT hr = XGameRuntimeInitialize();
   INFO("XGameRuntimeInitialize: 0x" << std::hex << uint32_t(hr));
   REQUIRE(SUCCEEDED(hr));
@@ -57,7 +57,8 @@ TEST_CASE("C++ exceptions unwind through rexruntime under the GDK toolchain", "[
   }
 }
 
-TEST_CASE("GamingRuntime drives the installed Gaming Runtime", "[gdk][gaming_runtime]") {
+TEST_CASE("GamingRuntime drives the installed Gaming Runtime",
+          "[gdk][gaming_runtime][installed_runtime]") {
   rex::system::GamingRuntime runtime;
   auto result = runtime.Initialize();
   INFO(result.message);
@@ -67,7 +68,7 @@ TEST_CASE("GamingRuntime drives the installed Gaming Runtime", "[gdk][gaming_run
 }
 
 TEST_CASE("The installed runtime rejects a malformed or missing MicrosoftGame.config",
-          "[gdk][gaming_runtime]") {
+          "[gdk][gaming_runtime][installed_runtime]") {
   const auto dir = std::filesystem::temp_directory_path() /
                    ("rexglue_gameconfig_" + std::to_string(GetCurrentProcessId()));
   std::filesystem::create_directories(dir);
@@ -91,7 +92,7 @@ TEST_CASE("The installed runtime rejects a malformed or missing MicrosoftGame.co
 }
 
 TEST_CASE("The installed runtime accepts a generated MicrosoftGame.config",
-          "[gdk][gaming_runtime][gameconfig]") {
+          "[gdk][gaming_runtime][gameconfig][installed_runtime]") {
   rex::codegen::GameConfigIdentity id;
   id.name = "ReXGlue.GdkRuntimeTest";
   id.publisher = "CN=ReXGlue Tests";

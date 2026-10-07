@@ -1,6 +1,19 @@
 # April 2026 PC GDK toolchain (RG-GDK-002)
 
-The SDK can be built against the Microsoft GDK for PC as an **opt-in**. The standard `win-amd64` preset does not need, find or use a GDK, and nothing in this repository contains GDK headers, libraries or redistributables.
+The April 2026 PC GDK, edition `260404`, is **required** by
+[ADR-016](adr/ADR-016-required-pc-gdk.md), effective 2026-10-07.
+`win-amd64-gdk` is canonical; `win-amd64` is an alias for the same build/install
+directories. `REXGLUE_USE_GDK=OFF` is rejected. Nothing in this repository
+contains GDK headers, libraries or redistributables. Existing results below
+describe the original opt-in migration and remain historical evidence.
+
+`scripts/setup_gdk.ps1 -InstalledOnly` validates the selected local edition.
+CI can extract the pinned public PC payload with the same script; its release
+asset digest is checked before extraction. This provides headers/libraries for
+software builds, not Gaming Services deployment or console certification.
+Installed-runtime unit cases carry `installed_runtime` labels: local supported
+CTest runs include them; hosted software CI excludes them explicitly and does
+not certify hardware, packages, saves or title compatibility.
 
 ## Pinned toolchain
 

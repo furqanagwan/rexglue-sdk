@@ -1,5 +1,5 @@
 #==========================================================
-# rexglue_gdk.cmake - Opt-in Microsoft GDK (PC) toolchain selection
+# rexglue_gdk.cmake - Required Microsoft GDK (PC) toolchain selection
 #
 # rexglue_find_gdk(ROOT <edition directory> EDITION <yymmqq>)
 #
