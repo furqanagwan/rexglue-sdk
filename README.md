@@ -237,6 +237,8 @@ with its own issues and reusable XUI scene target. This SDK consumes a pinned
 after updating. The complete Guide uses ReXGlue services; other recomp SDKs can
 reuse the scene layer and adapt the host services. See the
 [extraction and issue ownership](docs/xbox-guide-extraction.md).
+The [2026-10-07 issue audit](docs/guide-issue-audit-20261007.md) distinguishes
+closed Guide work from outstanding acceptance checks and title rebuild evidence.
 
 Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
 the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward

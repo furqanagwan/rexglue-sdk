@@ -4,6 +4,10 @@ This work covers the host experience as well as the in-game Guide. It does
 not certify title compatibility. Fuzion Frenzy is an original Xbox title;
 matching its PC host experience does not add original Xbox execution to this
 static Xbox 360 SDK.
+The [Guide issue audit and package-layer checks](guide-issue-audit-20261007.md)
+record which implementation issues are closed and corroborate the installed
+XeFu/Xbox 360 compatibility layers. The reference's native translation details
+are research findings, not an official architectural specification.
 
 ## Reference and evidence
 

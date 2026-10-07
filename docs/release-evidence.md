@@ -266,3 +266,34 @@ PRs and a new ADR.
 - Unit, PPC, GPU fixture, kernel and GDK tests therefore run on the development
   machine, as recorded in each issue. Adding CTest to CI would need a Windows
   runner with the bundled PPC toolchain and, for GDK tests, a GDK installation.
+
+## Guide audit and title rebuilds, 2026-10-07
+
+The [issue audit and rebuild record](guide-issue-audit-20261007.md) records
+current Guide issue states and private package-layer checks. SDK source
+`34ab1402c5e0428679a8cc239747211a865f1549` with Guide
+`db55a4d347c9edc74a17632fd7f71311ea1e7410` builds completely in GDK 260404
+Release on the existing Windows x64 / Clang 22.1.8 / VS Community machine.
+The SDK was installed to an isolated `out/bc-title-sdk-gdk` prefix; its temporary
+CMake user-registry entry was removed without changing other registrations.
+
+Targeted GDK tests with the owner's BC Flash resources pass 54 cases / 662
+assertions, covering reusable message boxes, sources/media, title-update
+validation, launch settings and GDK adapters. A separate run including the
+live Xbox Unity download case fails on WinHTTP timeout `12002`; 52 cases pass,
+two asset cases skip and one network case fails. The offline rerun explicitly
+excludes `[.network]` and enables the asset cases. The live service failure is
+not treated as a passed download gate or evidence of a code regression.
+Logs are under `out/bc-title-rebuild-20261007`.
+
+Five title projects were regenerated and built in isolated local staging
+folders, including Quantum of Solace TU2 and FIFA Street's two guest modules.
+The old source XEX hashes match the title repository records; prior executable
+hashes are captured in `inputs-and-baselines.json`. All five generation,
+configuration and build results are zero. Artifact checks pass for six EXEs:
+large/small Windows icons, matching SDK runtime/GPU DLL hashes, source identities,
+Guide bundles, launch defaults, both FIFA guest modules and the retained QoS
+shader cache. All six baseline EXE hashes are unchanged. Results and output
+locations are recorded in the linked audit. No staged game was launched;
+existing title status and gameplay/vendor gates
+remain unchanged by compilation.

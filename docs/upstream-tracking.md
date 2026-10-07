@@ -1,5 +1,19 @@
 # Upstream tracking and compatibility provenance
 
+## Fuzion Frenzy package-layer verification, 2026-10-07
+
+Read-only reference:
+[stocktaylor/Xbox-BC-for-PC-Research b3609bc](https://github.com/stocktaylor/Xbox-BC-for-PC-Research/blob/b3609bc2385860d17d9bc0f8f8eb8020ab84f434/TECHNICAL_FINDINGS.md).
+This is class B architecture/host-experience research, with no code port and
+no source PR imported. Direct checks of the owner's installed Fuzion Frenzy
+package corroborate XEX2 XeFu modules and AMD64 native compatibility DLLs.
+The research's missing Emu.exe observation does not apply to this installation.
+The [audit record](guide-issue-audit-20261007.md) separates direct header evidence
+from inferred translation details and records title scope: 007, FIFA Street
+and NHL are Xbox 360 projects, so no original Xbox execution layer is added.
+No upstream regression history is inferred from package metadata; no runtime
+dependency or proprietary implementation is imported.
+
 ## PC host experience, 2026-10-06
 
 Based on local SDK `248d6c3` after the Guide extraction, with read-only package
