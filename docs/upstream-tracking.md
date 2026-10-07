@@ -1,5 +1,19 @@
 # Upstream tracking and compatibility provenance
 
+## Fuzion Frenzy package-layer verification, 2026-10-07
+
+Read-only reference:
+[stocktaylor/Xbox-BC-for-PC-Research b3609bc](https://github.com/stocktaylor/Xbox-BC-for-PC-Research/blob/b3609bc2385860d17d9bc0f8f8eb8020ab84f434/TECHNICAL_FINDINGS.md).
+This is class B architecture/host-experience research, with no code port and
+no source PR imported. Direct checks of the owner's installed Fuzion Frenzy
+package corroborate XEX2 XeFu modules and AMD64 native compatibility DLLs.
+The research's missing Emu.exe observation does not apply to this installation.
+The [audit record](guide-issue-audit-20261007.md) separates direct header evidence
+from inferred translation details and records title scope: 007, FIFA Street
+and NHL are Xbox 360 projects, so no original Xbox execution layer is added.
+No upstream regression history is inferred from package metadata; no runtime
+dependency or proprietary implementation is imported.
+
 ## PC host experience, 2026-10-06
 
 Based on local SDK `248d6c3` after the Guide extraction, with read-only package
@@ -1740,3 +1754,24 @@ Known tested regressions: none after resolving navigation/fixture issues
 before publication; the pre-existing Debug GPU assertion remains. Painted
 controller/title/media-removal gates and friendly mismatch names remain open.
 No Microsoft assets or installed game service identity are included.
+
+
+## Explicit title Guide selection and empty activity preparation, 2026-10-07
+
+SDK branch `guide-by-title-platform` consumes Guide commit
+`5e75b86` on `explicit-guide-presentation`, based on SDK `8cfb449` and Guide
+`db55a4d347c9edc74a17632fd7f71311ea1e7410`. Class A: avoid automatic BC scene/source
+selection for a 360 title, and hide reused notification controls even when the
+initial Active Downloads row count is zero. No upstream port or Microsoft code
+is incorporated. The issue boundary remains [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1).
+
+The owner explicitly requires the prior 360 Guide for 360 titles, and BC scenes
+for original Xbox presentation. The SDK supplies per-target selection and shared
+host services; the Guide owns typed scene loading and template preparation.
+Actual QoS captures exposed the empty activity regression, which was confirmed
+and repaired through shared preparation rather than a title-specific workaround.
+Both asset sets, standard/GDK Debug/Release, standalone builds and installed
+consumer configurations are tested. Exact counts, title rebuilds, private capture
+locations and the initial test orchestration/file-lock failure are recorded in
+[release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
+Original Xbox execution and 1:1 online/visual parity remain unestablished.

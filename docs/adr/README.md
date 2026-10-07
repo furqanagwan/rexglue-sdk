@@ -16,3 +16,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [Selective render target upscaling and MSAA boost](ADR-012-selective-upscaling-and-msaa-boost.md)
 - [Xbox Guide source and issue repository](ADR-013-xbox-guide-repository.md)
 - [Checked game sources and media recovery](ADR-014-game-source-and-media-recovery.md)
+- [Guide presentation by title host](ADR-015-guide-presentation-by-title.md)

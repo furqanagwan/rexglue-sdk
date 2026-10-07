@@ -33,6 +33,7 @@ endfunction()
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
 #   - The shipped shader cache (SHADER_CACHE <dir>, or ./shader_cache).
+#   - GUIDE_PRESENTATION xbox360 (default) or original-xbox selects its Guide scenes.
 #   - The title's cvar defaults (CVAR_DEFAULTS "name=value" ...).
 #   - The title's replacement shaders (SHADER_REPLACEMENTS <dir>): HLSL
 #     compiled with FXC, or DXBC, staged in shader_replacements beside the
@@ -40,8 +41,17 @@ endfunction()
 #     (docs/shader-replacements.md).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS;ICON" "GPU_PLUGINS;CVAR_DEFAULTS"
-        ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS;ICON;GUIDE_PRESENTATION"
+        "GPU_PLUGINS;CVAR_DEFAULTS" ${ARGN})
+    if(NOT ARG_GUIDE_PRESENTATION)
+        set(ARG_GUIDE_PRESENTATION xbox360)
+    endif()
+    if(NOT ARG_GUIDE_PRESENTATION MATCHES "^(xbox360|original-xbox)$")
+        message(FATAL_ERROR "GUIDE_PRESENTATION must be xbox360 or original-xbox")
+    endif()
+    if(ARG_GUIDE_PRESENTATION STREQUAL "original-xbox")
+        target_compile_definitions(${target_name} PRIVATE REXGLUE_GUIDE_ORIGINAL_XBOX=1)
+    endif()
     if(ARG_ICON)
         rexglue_embed_title_icon(${target_name} "${ARG_ICON}")
     elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gdk/Title.ico")
@@ -66,7 +76,7 @@ function(rexglue_configure_target target_name)
     endif()
 
     rexglue_apply_target_settings(${target_name})
-    _rexglue_embed_xbox_guide(${target_name})
+    _rexglue_embed_xbox_guide(${target_name} "${ARG_GUIDE_PRESENTATION}")
     _rexglue_embed_dlc_catalog(${target_name})
     _rexglue_stage_shader_cache(${target_name} "${ARG_SHADER_CACHE}")
     if(ARG_SHADER_REPLACEMENTS)
@@ -285,9 +295,9 @@ endfunction()
 # console system update (like the game files, never shipped with the SDK),
 # named by REXGLUE_SYSTEM_UPDATE or the environment variable of that name.
 # REXGLUE_GUIDE_FLASH optionally names an Xbox PC backward-compatibility
-# game's Content/Flash folder, whose newer guide modules and fonts take
-# precedence (RG-GDK-061). `rexglue guide-bundle` takes the four modules the
-# guide reads and the console fonts, and the executable embeds them, so
+# game's Content/Flash folder, used only by GUIDE_PRESENTATION original-xbox.
+# Xbox 360 titles retain the console system-update bundle even when Flash is set.
+# `rexglue guide-bundle` takes the modules the guide reads and the console fonts, and the executable embeds them, so
 # players need nothing for the guide.
 #==========================================================
 set(REXGLUE_SYSTEM_UPDATE "$ENV{REXGLUE_SYSTEM_UPDATE}" CACHE PATH
@@ -295,13 +305,16 @@ set(REXGLUE_SYSTEM_UPDATE "$ENV{REXGLUE_SYSTEM_UPDATE}" CACHE PATH
 set(REXGLUE_GUIDE_FLASH "$ENV{REXGLUE_GUIDE_FLASH}" CACHE PATH
     "Optional Xbox PC backward-compatibility Content/Flash folder for the Xbox guide")
 
-function(_rexglue_embed_xbox_guide target_name)
-    if(NOT REXGLUE_SYSTEM_UPDATE)
+function(_rexglue_embed_xbox_guide target_name presentation)
+    if(presentation STREQUAL "original-xbox" AND NOT REXGLUE_GUIDE_FLASH)
+        message(FATAL_ERROR "Original Xbox Guide requires REXGLUE_GUIDE_FLASH")
+    endif()
+    if(NOT REXGLUE_SYSTEM_UPDATE AND NOT presentation STREQUAL "original-xbox")
         message(STATUS "${target_name}: Xbox guide not built in; set REXGLUE_SYSTEM_UPDATE "
                        "to the console's $SystemUpdate folder")
         return()
     endif()
-    if(NOT EXISTS "${REXGLUE_SYSTEM_UPDATE}")
+    if(REXGLUE_SYSTEM_UPDATE AND NOT EXISTS "${REXGLUE_SYSTEM_UPDATE}")
         message(FATAL_ERROR "REXGLUE_SYSTEM_UPDATE: '${REXGLUE_SYSTEM_UPDATE}' does not exist")
     endif()
     if(TARGET rexglue)
@@ -315,11 +328,13 @@ function(_rexglue_embed_xbox_guide target_name)
     set(_bundle "${_dir}/${_id}_xbox_guide.bin")
     set(_source "${_dir}/${_id}_xbox_guide.cpp")
     set(_sources "${REXGLUE_SYSTEM_UPDATE}")
-    if(REXGLUE_GUIDE_FLASH)
+    if(presentation STREQUAL "original-xbox")
         if(NOT IS_DIRECTORY "${REXGLUE_GUIDE_FLASH}")
             message(FATAL_ERROR "REXGLUE_GUIDE_FLASH: '${REXGLUE_GUIDE_FLASH}' is not a folder")
         endif()
         list(PREPEND _sources "${REXGLUE_GUIDE_FLASH}")
+    elseif(REXGLUE_GUIDE_FLASH)
+        message(STATUS "${target_name}: ignoring BC Flash override for Xbox 360 Guide")
     endif()
     set(_inputs "")
     foreach(_src IN LISTS _sources)

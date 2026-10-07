@@ -4,6 +4,29 @@ This work covers the host experience as well as the in-game Guide. It does
 not certify title compatibility. Fuzion Frenzy is an original Xbox title;
 matching its PC host experience does not add original Xbox execution to this
 static Xbox 360 SDK.
+The [Guide issue audit and package-layer checks](guide-issue-audit-20261007.md)
+record which implementation issues are closed and corroborate the installed
+XeFu/Xbox 360 compatibility layers. The reference's native translation details
+are research findings, not an official architectural specification.
+
+## Presentation contract
+
+The owner's 2026-10-07 clarification requires two presentations: existing
+Xbox 360 Guide scenes for 360 recompilations, and Microsoft's BC Guide scenes
+for original Xbox titles. PC features share host services beneath those UIs.
+Asset availability never identifies the title's platform.
+
+`rexglue_configure_target(my_title GUIDE_PRESENTATION xbox360)` is the default.
+It embeds the owner's `REXGLUE_SYSTEM_UPDATE` and ignores `REXGLUE_GUIDE_FLASH`.
+An original Xbox host explicitly requests `GUIDE_PRESENTATION original-xbox`
+and supplies its own BC Flash folder. Missing emulator scenes report an error;
+there is no silent switch between presentations. Runtime asset-path overrides
+retain the selected presentation. See [ADR-015](adr/ADR-015-guide-presentation-by-title.md).
+
+The experimental ImGui pre-launch settings screen remains opt-in. Local staged
+360 titles use the original 2.0.17559 bundle and direct launch. Original Xbox
+presentation is an asset/UI integration, not original Xbox execution support or
+a claim of 1:1 service fidelity. That execution layer remains separate work.
 
 ## Reference and evidence
 

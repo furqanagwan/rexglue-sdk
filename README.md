@@ -221,8 +221,9 @@ package and its own config: a manifest `[[title_update]]` entry
 
 ### PC launch and game sources
 
-Use `--launch_menu=true` for graphics, audio and language settings before
-launch. Regenerated titles also validate the original source executable and
+The existing Xbox 360 Guide remains the presentation for in-game features.
+An optional host settings screen is available with `--launch_menu=true` for
+graphics, audio and language settings before launch. Regenerated titles also validate the original source executable and
 offer a first-run folder/ISO/disc selector, optional cancellable extraction
 and Retry/Leave Game on media read failure. Sources use checked file I/O;
 source/recovery choices and copy progress use the console scenes when Guide
@@ -237,6 +238,8 @@ with its own issues and reusable XUI scene target. This SDK consumes a pinned
 after updating. The complete Guide uses ReXGlue services; other recomp SDKs can
 reuse the scene layer and adapt the host services. See the
 [extraction and issue ownership](docs/xbox-guide-extraction.md).
+The [2026-10-07 issue audit](docs/guide-issue-audit-20261007.md) distinguishes
+closed Guide work from outstanding acceptance checks and title rebuild evidence.
 
 Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
 the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward
@@ -244,10 +247,11 @@ compatibility does. The Xbox button is left to Windows for Game Bar. The guide i
 from your own dashboard 2.0.17559 system update, and nothing from it ships with
 the SDK. Set `REXGLUE_SYSTEM_UPDATE` to that `$SystemUpdate` folder when you
 build a title (CMake variable or environment variable) and the guide is built into
-the executable: players need nothing and it works offline. Optionally set
-`REXGLUE_GUIDE_FLASH` to an Xbox PC backward-compatibility game's
-`Content/Flash` folder as well: its newer guide files and the console's own
-font are built in ahead of the update's ([Xbox guide](docs/xbox-guide.md)).
+the executable: players need nothing and it works offline. Xbox 360 presentation
+is the default and ignores a configured `REXGLUE_GUIDE_FLASH` path. An original
+Xbox host explicitly selects `GUIDE_PRESENTATION original-xbox` and supplies its
+own BC `Content/Flash` assets. The Guide mode does not add original Xbox game
+execution; see [Guide presentation](docs/adr/ADR-015-guide-presentation-by-title.md).
 Games & Apps has the title's achievements (grid and details) and Manage Game,
 which lists the title's marketplace add-ons (its config's `[[dlc]]`; the build
 fetches their names, descriptions and art) and installs them from packages on
