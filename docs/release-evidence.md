@@ -17,7 +17,7 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 
 | Configuration | Status | Evidence | Limitations |
 | --- | --- | --- | --- |
-| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [game-source checks](#checked-game-sources-2026-10-07): Release 2,098 passed / 11 skipped; Debug baseline failure recorded below | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
+| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [console source checks](#console-source-scenes-2026-10-07): Release 2,098 passed / 13 skipped; Debug baseline failure recorded below | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
 | SDK build and tests, `win-amd64-gdk` Debug/Release | Supported (opt-in preset) | `ctest` 1,839/1,839 at `6223f54`; [GDK toolchain](gdk-toolchain.md) | VS Community only (Microsoft names Professional/Enterprise); GPU fixtures run serially |
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
@@ -138,6 +138,48 @@ injected. Physical pad/optical media, substituted-drive removal, original/TU
 real-title launch and rendered interactive presentation remain unverified.
 Console XuiMessageBox3, Active Downloads and friendly mismatch names remain
 open. Issue #154 is not closed and whole-experience parity is not claimed.
+
+## Console source scenes (2026-10-07)
+
+Revision: topic `pc-guide-source-scenes`, based on `98f006b`; Guide
+`db55a4d` ([component PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)).
+The SDK supplies file picking/I/O, resources and immutable copy-history
+snapshots. Guide-owned message-box and activity models remain usable through
+the standalone scene target without SDK runtime dependencies.
+
+- Standalone Guide Debug/Release build and CTest pass: one CTest entry runs
+  five synthetic cases / 48 assertions. Logs:
+  `out/message-box-core-{debug,release}-{build,tests}.log`.
+- Standard Release final full build/CTest: 2,111 discovered, 2,098 passed,
+  13 skipped, zero failures (179.00 s). Logs:
+  `out/source-scenes-final-release-build.log`,
+  `out/source-scenes-final-release-ctest.log`.
+- Standard Debug final full build/CTest: 2,111 discovered, 2,097 passed,
+  13 skipped and the one baseline GPU tessellation assertion (205.93 s).
+  All 536 unit cases pass or skip. Logs:
+  `out/source-scenes-final-debug-build.log`,
+  `out/source-scenes-final-debug-ctest.log`.
+- Final private/source/disc/launch/TU checks: standard Debug 41 cases /
+  582 assertions, standard Release 41 cases / 583 assertions, GDK Release
+  55 cases / 659 assertions, all passing. Logs:
+  `out/source-scenes-private-{debug,release,gdk}-tests.log`.
+  These use the locally installed Fuzion Frenzy Flash directory, including
+  the three source choices, recovery default focus/controller A activation,
+  native Disc/Retry selection and Active Downloads template. A synthetic ISO
+  also exercises UI extraction, local-folder handoff and completed-copy history.
+- Isolated installed consumer compiles and links the updated ReXApp host
+  adapter (`out/source-scenes-install.log`, `out/source-scenes-consumer.log`).
+  Installed headers include the neutral scene APIs; the isolated CMake package
+  registry entry is removed afterwards.
+
+Two additional private cases account for the skipped-count increase from 11
+to 13 in asset-free full CTest. Private checks pass separately. UI tests draw
+ImGui without GPU frames and inject controller state; painted/physical pad
+validation remains open. Images/optical media removal, friendly mismatch
+names and real original/TU title launches remain #154 gates. Media dialogs
+pair guest input blocking with XAM system-UI state/notifications and release
+it on action or shutdown; that host lifecycle needs a real-title check.
+No whole PC parity, service entitlement or original Xbox execution is claimed.
 
 ## Fresh checkout (2026-09-27)
 

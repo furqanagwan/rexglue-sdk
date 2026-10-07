@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
 #include <catch2/catch_test_macros.hpp>
+#include <windows.h>
 
 #include <array>
 #include <cstring>
@@ -174,7 +175,8 @@ TEST_CASE("XDVDFS rejects truncated headers and invalid directory trees", "[file
 
 TEST_CASE("XDVDFS physical file truncation returns an error without mapped-file faults",
           "[filesystem][disc]") {
-  const auto path = std::filesystem::temp_directory_path() / "rex-disc-read-test.iso";
+  const auto path = std::filesystem::temp_directory_path() /
+                    ("rex-disc-read-test-" + std::to_string(GetCurrentProcessId()) + ".iso");
   struct Cleanup {
     std::filesystem::path path;
     ~Cleanup() {

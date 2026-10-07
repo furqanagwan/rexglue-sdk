@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
 #include <catch2/catch_test_macros.hpp>
+#include <windows.h>
 #include <fstream>
 #include <thread>
 #include <imgui.h>
@@ -23,7 +24,8 @@ struct SourceHarness {
     io.DisplaySize = ImVec2(800, 600);
     io.DeltaTime = 1.0f / 60;
     REQUIRE(io.Fonts->Build());
-    root = std::filesystem::temp_directory_path() / "rex-source-ui-test";
+    root = std::filesystem::temp_directory_path() /
+           ("rex-source-ui-test-" + std::to_string(GetCurrentProcessId()));
     REQUIRE_FALSE(std::filesystem::exists(root));
     std::filesystem::create_directory(root);
     std::array<uint8_t, 128> xex{};
@@ -46,10 +48,17 @@ struct SourceHarness {
     std::error_code ec;
     std::filesystem::remove(root / "default.xex", ec);
     std::filesystem::remove(root / "settings.toml", ec);
+    std::filesystem::remove(root / "source.iso", ec);
+    const auto extracted = root / "extracted";
+    // This child belongs to this newly created fixture; resolve before deletion.
+    if (!std::filesystem::is_symlink(extracted, ec) &&
+        std::filesystem::weakly_canonical(extracted, ec).parent_path() ==
+            std::filesystem::weakly_canonical(root, ec))
+      std::filesystem::remove_all(extracted, ec);
     std::filesystem::remove(root, ec);
     rex::cvar::testing::ResetAllForTesting();
   }
-  void Show(rex::ui::LaunchPadSource pad = {}) {
+  void Show(rex::ui::LaunchPadSource pad = {}, rex::ui::GameSourceVisualsProvider visuals = {}) {
     dialog = new rex::ui::GameSourceDialog(
         drawer.get(), expected, root / "settings.toml",
         [this](std::filesystem::path source) {
@@ -57,7 +66,7 @@ struct SourceHarness {
           ++completed;
           selected = std::move(source);
         },
-        root, "", "default.xex", {}, std::move(pad));
+        root, "", "default.xex", {}, std::move(pad), std::move(visuals));
     Frame();
     Frame();
   }
@@ -200,4 +209,127 @@ TEST_CASE("Source and recovery controller navigation releases disconnected and d
   frame();
   CHECK_FALSE(ImGui::IsKeyDown(ImGuiKey_GamepadDpadLeft));
   CHECK(h.completed == 0);
+}
+
+TEST_CASE("Source and recovery dialogs use the private console message-box controls",
+          "[ui][game_source][message_box][local]") {
+  const char* path = std::getenv("REXGLUE_GUIDE_FLASH");
+  if (!path || !*path)
+    SKIP("REXGLUE_GUIDE_FLASH is not set");
+  std::string error;
+  auto modules = rex::ui::xui::SystemUpdate::ReadModules(std::filesystem::path(path), &error);
+  REQUIRE(modules);
+  std::shared_ptr<const rex::ui::guide::GuideAssets> assets =
+      rex::ui::guide::GuideAssets::FromUpdate(
+          rex::ui::xui::SystemUpdate::FromModules(*modules, &error), &error);
+  REQUIRE(assets);
+  rex::ui::GameSourceVisualsProvider visuals = [assets] {
+    return std::optional(rex::ui::GameSourceVisuals{assets, {}, {}});
+  };
+  SourceHarness h;
+  SECTION("Source choice uses the console's third-button visual") {
+    h.Show({}, visuals);
+    auto* window = ImGui::FindWindowByName("Choose game files");
+    REQUIRE(window);
+    const auto seed = window->GetID("Console choices");
+    ImGui::ActivateItemByID(ImHashStr("Button1", 0, seed));
+    h.Frame();
+    CHECK_FALSE(GImGui->OpenPopupStack.empty());  // native Disc choice reached the drive picker
+    CHECK(h.completed == 0);
+  }
+  SECTION("Extraction uses Active Downloads and publishes completed copy history") {
+    std::vector<uint8_t> iso(128 * 2048);
+    const std::string magic = "MICROSOFT*XBOX*MEDIA";
+    auto put32 = [&](size_t at, uint32_t value) {
+      for (int byte = 0; byte < 4; ++byte)
+        iso[at + byte] = uint8_t(value >> (byte * 8));
+    };
+    std::memcpy(iso.data() + 32 * 2048, magic.data(), magic.size());
+    std::memcpy(iso.data() + 33 * 2048 - magic.size(), magic.data(), magic.size());
+    put32(32 * 2048 + 20, 34);
+    put32(32 * 2048 + 24, 28);
+    put32(34 * 2048 + 4, 35);
+    put32(34 * 2048 + 8, 128);
+    iso[34 * 2048 + 13] = 11;
+    std::memcpy(iso.data() + 34 * 2048 + 14, "default.xex", 11);
+    {
+      std::ifstream xex(h.root / "default.xex", std::ios::binary);
+      xex.read(reinterpret_cast<char*>(iso.data() + 35 * 2048), 128);
+    }
+    {
+      std::ofstream file(h.root / "source.iso", std::ios::binary);
+      file.write(reinterpret_cast<const char*>(iso.data()), iso.size());
+    }
+    std::vector<rex::ui::guide::GuideActivity> history;
+    h.dialog = new rex::ui::GameSourceDialog(
+        h.drawer.get(), h.expected, h.root / "settings.toml",
+        [&](std::filesystem::path source) {
+          h.dialog = nullptr;
+          ++h.completed;
+          h.selected = std::move(source);
+        },
+        h.root / "source.iso", "", "default.xex", h.root / "extracted", {}, visuals,
+        [&](rex::ui::guide::GuideActivity item) { history.push_back(std::move(item)); });
+    h.Frame();
+    h.Frame();
+    h.Press("Check source");
+    for (int i = 0; i < 1000 && history.empty(); ++i) {
+      h.Frame();
+      h.Press("Extract to this PC");
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(history.size() == 1);
+    CHECK(history[0].status == "Completed");
+    CHECK_FALSE(history[0].cancel);
+    CHECK(h.completed == 0);
+    const auto copied = h.root / "extracted" / ("game-" + h.expected.executable_checksum);
+    CHECK(std::filesystem::is_regular_file(copied / "default.xex"));
+    h.Press("Use this source");
+    CHECK(h.completed == 1);
+    CHECK(h.selected == copied);
+  }
+  SECTION("Controller A uses the recovery dialog's safe initial Leave choice") {
+    rex::ui::LaunchPadState pad;
+    bool completed = false, retried = true;
+    rex::ui::GameMediaRecoveryDialog* dialog = nullptr;
+    dialog = new rex::ui::GameMediaRecoveryDialog(
+        h.drawer.get(), true, "",
+        [&](bool retry) {
+          completed = true;
+          retried = retry;
+          dialog = nullptr;
+        },
+        [&] { return std::optional(pad); }, visuals);
+    for (int i = 0; i < 4; ++i)
+      h.Frame(dialog);
+    pad.activate = true;
+    for (int i = 0; i < 4 && dialog; ++i)
+      h.Frame(dialog);
+    CHECK(completed);
+    CHECK_FALSE(retried);
+    CHECK(dialog == nullptr);
+    delete dialog;
+  }
+  SECTION("Recovery chooses Retry through the console visual") {
+    bool retried = false;
+    rex::ui::GameMediaRecoveryDialog* dialog = nullptr;
+    dialog = new rex::ui::GameMediaRecoveryDialog(
+        h.drawer.get(), true, "",
+        [&](bool retry) {
+          retried = retry;
+          dialog = nullptr;
+        },
+        {}, visuals);
+    h.Frame(dialog);
+    h.Frame(dialog);
+    auto* window = ImGui::FindWindowByName("Game source unavailable");
+    REQUIRE(window);
+    const auto seed = window->GetID("Console choices");
+    CHECK(GImGui->NavId == ImHashStr("Button1", 0, seed));  // safe initial Leave choice
+    ImGui::ActivateItemByID(ImHashStr("Button0", 0, seed));
+    h.Frame(dialog);
+    CHECK(retried);
+    CHECK(dialog == nullptr);
+    delete dialog;
+  }
 }

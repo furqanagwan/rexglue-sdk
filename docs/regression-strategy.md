@@ -613,6 +613,17 @@ termination or painted GPU presentation.
 Before closing #154, run each real first-run choice, source-original/TU
 launches, image removal on a substituted/removable drive and physical optical
 media removal/reinsert with the same and a different disc. Preserve saves and
-use disposable copies for failure injection. Console XuiMessageBox3/Active
+use disposable copies for failure injection. Painted XuiMessageBox3/Active
 Downloads and physical pad checks remain open. Results and the existing Debug
 GPU assertion are recorded in [release evidence](release-evidence.md).
+
+The scene adapter additionally tests the private reference's native choice
+controls and Active Downloads template, safe initial Leave focus, controller
+A activation without a prior directional input, extraction completion history
+and local-folder handoff. Invisible ImGui hit targets must explicitly opt in
+to navigation. Controller activation must make the navigation cursor visible;
+otherwise ImGui ignores the first A press. Both gaps were caught and fixed
+before publication. A temporary fixture collision during concurrent SDK test
+processes was resolved with per-process source/disc fixture paths; final full
+Debug and Release suites run sequentially. This is a test-fixture correction,
+not a title compatibility claim.

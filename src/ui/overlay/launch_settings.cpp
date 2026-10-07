@@ -40,6 +40,10 @@ LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source) {
     return {};
   const auto pad = source();
   const auto state = pad.value_or(LaunchPadState{});
+  // ImGui ignores activation while its navigation cursor is hidden. Make the
+  // first A press usable without requiring a directional input beforehand.
+  if (state.activate || state.cancel || std::abs(state.x) > 0.25f || std::abs(state.y) > 0.25f)
+    ImGui::SetNavCursorVisible(true);
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
   if (pad)
     io.BackendFlags |= ImGuiBackendFlags_HasGamepad;

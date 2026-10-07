@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
 #include <catch2/catch_test_macros.hpp>
+#include <windows.h>
 #include <fstream>
 #include <array>
 #include <rex/hash.h>
@@ -45,7 +46,8 @@ std::vector<uint8_t> SourceIso() {
 
 TEST_CASE("Game source extraction commits a matching folder and preserves existing data",
           "[game_source][disc]") {
-  const auto root = std::filesystem::temp_directory_path() / "rex-source-extraction-test";
+  const auto root = std::filesystem::temp_directory_path() /
+                    ("rex-source-extraction-test-" + std::to_string(GetCurrentProcessId()));
   REQUIRE_FALSE(std::filesystem::exists(root));
   std::filesystem::create_directory(root);
   struct Clean {
@@ -141,7 +143,8 @@ TEST_CASE("Game source extraction commits a matching folder and preserves existi
 
 TEST_CASE("Game source identity checks the original XEX header and full-file checksum",
           "[game_source]") {
-  const auto root = std::filesystem::temp_directory_path() / "rex-source-identity-test";
+  const auto root = std::filesystem::temp_directory_path() /
+                    ("rex-source-identity-test-" + std::to_string(GetCurrentProcessId()));
   std::filesystem::create_directories(root);
   struct Clean {
     std::filesystem::path root;

@@ -371,7 +371,10 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
           });
         },
         paths.game_data_root, std::move(source_error), executable, local_dir_ / "games",
-        CreateHostPadSource());
+        CreateHostPadSource(), [this] { return GetGameSourceVisuals(); },
+        [this](ui::guide::GuideActivity activity) {
+          source_activities_.push_back(std::move(activity));
+        });
     return true;
   }
   if (REXCVAR_GET(launch_menu) && !imgui_drawer_) {
@@ -781,6 +784,38 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   return true;
 }
 
+std::optional<ui::GameSourceVisuals> ReXApp::GetGameSourceVisuals() {
+  if (!REXCVAR_GET(xbox_guide) || shutting_down_.load())
+    return std::nullopt;
+  std::shared_ptr<const ui::guide::GuideAssets> assets;
+  {
+    std::lock_guard lock(guide_mutex_);
+    assets = guide_assets_;
+  }
+  if (!assets)
+    return std::nullopt;
+  if (!guide_media_)
+    guide_media_ = std::make_unique<ui::guide::GuideMedia>(immediate_drawer_.get(), assets);
+  ui::GameSourceVisuals visuals;
+  visuals.assets = std::move(assets);
+  visuals.resources.regular_font = guide_font_regular_;
+  visuals.resources.bold_font = guide_font_bold_;
+  visuals.resources.texture = [this](std::string_view path, std::string_view package, int* width,
+                                     int* height) {
+    return guide_media_ ? guide_media_->Texture(path, package, width, height) : ImTextureID{};
+  };
+  visuals.resources.vector_image = [this](ImDrawList& list, std::string_view path,
+                                          const std::function<ImVec2(ImVec2)>& to_screen,
+                                          float opacity) {
+    return ui::guide::DrawGuideVectorImage(list, path, to_screen, opacity, guide_font_bold_);
+  };
+  visuals.play_sound = [this](std::string_view file, std::string_view package) {
+    if (guide_media_)
+      guide_media_->PlaySound(file, package);
+  };
+  return visuals;
+}
+
 void ReXApp::InstallMediaRecovery(std::string executable) {
   if (!imgui_drawer_)
     return;
@@ -808,35 +843,54 @@ void ReXApp::InstallMediaRecovery(std::string executable) {
         return replacement && disc->ReconnectFrom(*replacement);
       },
       [this, optical = filesystem::IsOpticalDiscPath(source_path)](std::string error) {
-        if (!app_context().CallInUIThreadDeferred([this, optical,
-                                                   error = std::move(error)]() mutable {
-              if (shutting_down_.load(std::memory_order_acquire)) {
-                media_recovery_->Cancel();
-                return;
-              }
-              auto recovery = media_recovery_;
-              auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system());
-              if (input)
-                input->AddUIInputBlocker();
-              media_recovery_dialog_ = new ui::GameMediaRecoveryDialog(
-                  imgui_drawer_.get(), optical, std::move(error),
-                  [this, recovery](bool retry) {
-                    media_recovery_dialog_ = nullptr;
-                    if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system()))
-                      input->RemoveUIInputBlocker();
-                    recovery->Choose(retry);
-                    if (!retry)
-                      app_context().CallInUIThreadDeferred([this] {
-                        if (window_)
-                          window_->RequestClose();
-                      });
-                  },
-                  CreateHostPadSource());
-            }))
+        if (!app_context().CallInUIThreadDeferred(
+                [this, optical, error = std::move(error)]() mutable {
+                  if (shutting_down_.load(std::memory_order_acquire)) {
+                    media_recovery_->Cancel();
+                    return;
+                  }
+                  auto recovery = media_recovery_;
+                  if (guide_) {
+                    delete guide_;
+                    guide_ = nullptr;
+                  }
+                  auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system());
+                  if (input)
+                    input->AddUIInputBlocker();
+                  kernel::xam::xeXamAddSystemUI();
+                  runtime_->kernel_state()->BroadcastNotification(0x00000009, 1);  // XN_SYS_UI
+                  media_system_ui_ = true;
+                  media_recovery_dialog_ = new ui::GameMediaRecoveryDialog(
+                      imgui_drawer_.get(), optical, std::move(error),
+                      [this, recovery](bool retry) {
+                        media_recovery_dialog_ = nullptr;
+                        ReleaseMediaRecoveryUi();
+                        recovery->Choose(retry);
+                        if (!retry)
+                          app_context().CallInUIThreadDeferred([this] {
+                            if (window_)
+                              window_->RequestClose();
+                          });
+                      },
+                      CreateHostPadSource(), [this] { return GetGameSourceVisuals(); });
+                }))
           media_recovery_->Cancel();
       });
   disc->SetFailureHandler([recovery = media_recovery_] { return recovery->Recover(); },
                           [this] { return !app_context().IsInUIThread(); });
+}
+
+void ReXApp::ReleaseMediaRecoveryUi() {
+  if (!media_system_ui_)
+    return;
+  media_system_ui_ = false;
+  kernel::xam::xeXamRemoveSystemUI();
+  if (runtime_) {
+    if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system()))
+      input->RemoveUIInputBlocker();
+    if (runtime_->kernel_state())
+      runtime_->kernel_state()->BroadcastNotification(0x00000009, 0);  // XN_SYS_UI
+  }
 }
 
 bool ReXApp::SetupPresentation() {
@@ -1156,6 +1210,7 @@ void ReXApp::OnDestroy() {
   shutting_down_.store(true, std::memory_order_release);
   if (media_recovery_)
     media_recovery_->Cancel();
+  ReleaseMediaRecoveryUi();
   // Notify subclass before cleanup
   OnShutdown();
 
@@ -1359,6 +1414,8 @@ void ReXApp::StopGuide() {
 }
 
 void ReXApp::ToggleGuide() {
+  if (media_recovery_dialog_)
+    return;
   if (!REXCVAR_GET(xbox_guide) || !imgui_drawer_ || shutting_down_.load() || !runtime_ ||
       !runtime_->kernel_state()) {
     return;
@@ -1412,6 +1469,10 @@ void ReXApp::ToggleGuide() {
   host.restart_title = [this] { restart_on_exit_ = true; };
   host.display_scale = DisplayScale(DisplayHeight(window_.get()));
   host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
+  host.activities = [this] {
+    return std::vector<ui::guide::GuideActivity>(source_activities_.rbegin(),
+                                                 source_activities_.rend());
+  };
   host.on_closed = [this](bool exit_title) {
     guide_ = nullptr;
     if (exit_title) {

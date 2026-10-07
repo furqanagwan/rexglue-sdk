@@ -1,7 +1,7 @@
 # ADR-014: Checked game sources and recoverable media I/O
 
 Date: 2026-10-07. Status: accepted for the SDK source/I/O implementation;
-console scene integration and physical drive/title validation remain pending.
+console scenes are integrated; physical drive/title and interactive validation remain pending.
 
 ## Context
 
@@ -15,8 +15,11 @@ mapped pages rather than return an ordinary guest I/O error.
 
 Keep sources and guest VFS services in the SDK. The Guide repository owns
 console XUI presentation, as required by ADR-013. First-run host controls
-provide a usable ImGui fallback before guest construction; they do not claim
-the issue's XuiMessageBox3 or Active Downloads integration is complete.
+use the reusable Guide message-box and Active Downloads scene models before
+guest construction when private assets are available, and retain an ImGui
+fallback while loading or without the assets. File picking, validation and
+copying stay in the SDK. The Guide takes immutable host activity snapshots;
+completed copy results remain visible alongside title-update jobs.
 
 Use positioned file reads for images and sector-aligned unbuffered reads for
 explicit optical drive-letter devices. Permit only optical drives in the raw
@@ -68,9 +71,10 @@ tests bind the raw XEX and guest path, including TU metadata. ImGui tests cover
 source validation, persistence, rejection, cancellation and recovery actions.
 
 Keep #154 open until real-title original/TU launching, physical drive removal
-and same-disc retry, interactive/controller presentation, console message-box
-scenes and Active Downloads integration meet the issue's gates. No ISO,
-Microsoft asset or game executable is distributed.
+and same-disc retry, painted/controller scene presentation and friendly
+mismatch names meet the issue's gates. Console templates and source-progress
+integration have synthetic/private scene tests, not an owner play session.
+No ISO, Microsoft asset or game executable is distributed.
 
 References: Microsoft [file buffering/alignment](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering)
 and [CD-ROM geometry](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddcdrm/ni-ntddcdrm-ioctl_cdrom_get_drive_geometry_ex).
