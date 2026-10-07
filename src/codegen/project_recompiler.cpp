@@ -391,6 +391,7 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
     auto ctx = CodegenContext::Create(std::move(bv), std::move(cfg));
     ctx.setResolver(resolver);
     ctx.setConfigDir(configDir);
+    ctx.setSourceGuestPath(entryRel.generic_string());
     ctx.analysisState().format = "xex";
     ctx.analysisState().loadAddress = ctx.binary().baseAddress();
     ctx.analysisState().entryPoint = ctx.binary().entryPoint();

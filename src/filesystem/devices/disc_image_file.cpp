@@ -27,12 +27,15 @@ void DiscImageFile::Destroy() {
 
 X_STATUS DiscImageFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offset,
                                  size_t* out_bytes_read) {
+  *out_bytes_read = 0;
+  if (buffer.empty())
+    return X_STATUS_SUCCESS;
   if (byte_offset >= entry_->size()) {
     return X_STATUS_END_OF_FILE;
   }
-  size_t real_offset = entry_->data_offset() + byte_offset;
   size_t real_length = std::min(buffer.size(), entry_->data_size() - byte_offset);
-  std::memcpy(buffer.data(), entry_->mmap()->data() + real_offset, real_length);
+  if (!entry_->ReadBytes(byte_offset, buffer.first(real_length)))
+    return X_STATUS_UNEXPECTED_IO_ERROR;
   *out_bytes_read = real_length;
   return X_STATUS_SUCCESS;
 }

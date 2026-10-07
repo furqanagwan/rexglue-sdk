@@ -12,6 +12,8 @@
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/filesystem/devices/host_path_device.h>
+#include <rex/filesystem/devices/disc_image_device.h>
+#include <rex/filesystem/devices/optical_disc_reader.h>
 #include <rex/filesystem/devices/null_device.h>
 #include <rex/filesystem/devices/stfs_container_device.h>
 #include <rex/filesystem/vfs.h>
@@ -34,6 +36,8 @@
 #include <windows.h>
 
 REXCVAR_DEFINE_STRING(game_data_root, "", "Runtime", "Override game data path");
+REXCVAR_DEFINE_STRING(game_source, "", "Runtime", "First-run game folder or XDVDFS image")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
 REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
 REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
@@ -347,15 +351,22 @@ bool Runtime::SetupVfs() {
   }
 
   auto abs_game_root = std::filesystem::absolute(game_data_root_);
-  if (!std::filesystem::exists(abs_game_root)) {
+  if (!rex::filesystem::IsOpticalDiscPath(abs_game_root) &&
+      !std::filesystem::exists(abs_game_root)) {
     REXSYS_ERROR("Runtime::SetupVfs: game_data_root does not exist: {}", abs_game_root.string());
     return false;
   }
 
   // Mount game_data_root as \Device\Harddisk0\Partition1
   auto mount_path = "\\Device\\Harddisk0\\Partition1";
-  auto device = std::make_unique<rex::filesystem::HostPathDevice>(
-      mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes));
+  std::unique_ptr<rex::filesystem::Device> device;
+  if (rex::filesystem::IsOpticalDiscPath(abs_game_root) ||
+      std::filesystem::is_regular_file(abs_game_root)) {
+    device = std::make_unique<rex::filesystem::DiscImageDevice>(mount_path, abs_game_root);
+  } else {
+    device = std::make_unique<rex::filesystem::HostPathDevice>(
+        mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes));
+  }
   if (!device->Initialize()) {
     REXSYS_ERROR("Runtime::SetupVfs: Failed to initialize host path device");
     return false;

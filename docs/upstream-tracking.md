@@ -1688,3 +1688,27 @@ Tests: `tests/gpu/tessellation_fixture_test.cpp` (DXBC and, through
 `gpu.dxil_parity`, DXIL; RTV and ROV), the ROV ZPD and VIZ fixtures in strict
 DXIL. Known regressions: none at the pin; no tessellating or ROV title scene
 compared yet.
+
+## RG-GDK-058: checked sources and media recovery (2026-10-07)
+
+Source: this implementation fork, base `799a5ea`, topic `pc-game-source`;
+[SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154). Original SDK
+work, not an upstream port; no upstream PR head/merge state applies. Class A
+for XDVDFS range/cycle checks and read-error handling, class B for source/host
+integration. Existing reader notices and candidate partition locations are
+retained. The fingerprint is XXH3-128, not authentication. No guest JIT,
+graphics algorithm or restricted asset is introduced.
+
+Architecture: [ADR-014](adr/ADR-014-game-source-and-media-recovery.md).
+Primary references are Microsoft
+[file buffering](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering)
+and [CD-ROM geometry](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddcdrm/ni-ntddcdrm-ioctl_cdrom_get_drive_geometry_ex).
+Tests cover malformed synthetic images, sector alignment, image truncation,
+still-open handles, concurrent/rejected retry, UI-thread recovery avoidance,
+shutdown cancellation, extraction ownership, generated original/TU identity,
+runtime aliases and first-run/controller UI. Results belong in
+[release evidence](release-evidence.md). Known new regressions: none in tested
+synthetic cases. Physical drive/removal, controller interaction, real-title
+launch, friendly mismatch names and console message-box/Active Downloads gates
+remain unverified; #154 stays open. The pre-existing Debug tessellation fixture
+failure is unchanged.

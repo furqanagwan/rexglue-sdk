@@ -22,6 +22,8 @@ set(REXSYSTEM_SOURCES
     xmodule.cpp
     guest_path.cpp
     user_language.cpp
+    game_source.cpp
+    game_media_recovery.cpp
     gaming_runtime.cpp
 
     # Utilities

@@ -28,6 +28,7 @@ set(REXUI_OVERLAY_SOURCES
     overlay/console_commands.cpp
     overlay/settings_overlay.cpp
     overlay/launch_settings.cpp
+    overlay/game_source.cpp
 )
 
 # D3D12 UI backend

@@ -99,6 +99,11 @@ struct PPCImageInfo {
   u32 title_update = 0;
   /// The title updates the title had, ended by a zero version; null when none.
   const PPCTitleUpdate* title_updates = nullptr;
+  /// Raw source XEX identity for first-run source validation. Empty for older
+  /// generated code. A TU build fingerprints its original, unpatched input XEX.
+  u32 source_title_id = 0;
+  const char* source_executable_checksum = "";
+  const char* source_executable_path = "default.xex";
 };
 
 }  // namespace rex

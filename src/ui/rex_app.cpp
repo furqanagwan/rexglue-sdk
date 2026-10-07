@@ -30,6 +30,10 @@
 #include <rex/ui/overlay/debug_overlay.h>
 #include <rex/ui/overlay/settings_overlay.h>
 #include <rex/ui/overlay/launch_settings.h>
+#include <rex/ui/overlay/game_source.h>
+#include <rex/filesystem/devices/optical_disc_reader.h>
+#include <rex/filesystem/devices/disc_image_device.h>
+#include <rex/system/game_media_recovery.h>
 #include <rex/audio/audio_backend.h>
 #include <rex/audio/audio_system.h>
 #include <rex/audio/downmix.h>
@@ -88,6 +92,51 @@ REXCVAR_DEFINE_INT32(gaming_runtime_timeout_ms, 10000, "GDK",
 namespace rex {
 
 namespace {
+
+// Physical controllers only; this reader ends with its host dialog.
+ui::LaunchPadSource CreateHostPadSource() {
+  auto physical_input = rex::input::CreatePhysicalInputSystem();
+  physical_input->Setup();
+  auto pad_input = std::shared_ptr<rex::input::InputSystem>(physical_input.release(),
+                                                            [](rex::input::InputSystem* input) {
+                                                              input->Shutdown();
+                                                              delete input;
+                                                            });
+  return [pad_input]() -> std::optional<ui::LaunchPadState> {
+    using namespace rex::input;
+    std::array<std::optional<X_INPUT_STATE>, 4> states;
+    int first = -1;
+    for (uint32_t user = 0; user < states.size(); ++user) {
+      X_INPUT_STATE state = {};
+      if (pad_input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
+        states[user] = state;
+        if (first < 0)
+          first = int(user);
+      }
+    }
+    if (first < 0)
+      return std::nullopt;
+    const auto last = pad_input->GetLastUsedUser();
+    const auto& gamepad = states[last < states.size() && states[last] ? last : first]->gamepad;
+    const uint16_t buttons = gamepad.buttons;
+    ui::LaunchPadState result;
+    result.x = float(int16_t(gamepad.thumb_lx)) / 32768.0f;
+    result.y = float(int16_t(gamepad.thumb_ly)) / 32768.0f;
+    if (buttons & (X_INPUT_GAMEPAD_DPAD_LEFT | X_INPUT_GAMEPAD_DPAD_RIGHT)) {
+      result.x = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_RIGHT)) -
+                 float(bool(buttons & X_INPUT_GAMEPAD_DPAD_LEFT));
+    }
+    if (buttons & (X_INPUT_GAMEPAD_DPAD_UP | X_INPUT_GAMEPAD_DPAD_DOWN)) {
+      result.y = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_UP)) -
+                 float(bool(buttons & X_INPUT_GAMEPAD_DPAD_DOWN));
+    }
+    result.activate = buttons & X_INPUT_GAMEPAD_A;
+    result.cancel = buttons & X_INPUT_GAMEPAD_B;
+    result.previous_tab = buttons & X_INPUT_GAMEPAD_LEFT_SHOULDER;
+    result.next_tab = buttons & X_INPUT_GAMEPAD_RIGHT_SHOULDER;
+    return result;
+  };
+}
 
 // The height in pixels of the display the window is on, in its current
 // mode (not scaled by the desktop's DPI setting); 0 when unknown.
@@ -284,6 +333,47 @@ bool ReXApp::OnInitialize() {
 }
 
 bool ReXApp::BeginLaunch(PathConfig paths) {
+  const std::string configured_source = cvar::GetFlagByName("game_source");
+  const bool explicit_root = cvar::GetFlagSource("game_data_root") == cvar::Source::kCommandLine;
+  if (!explicit_root && !configured_source.empty())
+    paths.game_data_root = rex::to_path(configured_source);
+  const system::GameSourceIdentity expected{
+      ppc_info_.source_title_id,
+      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : ""};
+  std::string source_error;
+  const std::string executable =
+      ppc_info_.source_executable_path ? ppc_info_.source_executable_path : "default.xex";
+  const bool identified = expected.title_id && !expected.executable_checksum.empty();
+  bool needs_source = paths.game_data_root.empty();
+  if (identified && !needs_source) {
+    auto source = system::InspectGameSource(paths.game_data_root, executable, expected);
+    needs_source = !source;
+    source_error = std::move(source.error);
+  } else if (!needs_source && !std::filesystem::is_directory(paths.game_data_root)) {
+    needs_source = true;
+    source_error = "Regenerate this build to validate a disc image's executable identity.";
+  }
+  if (needs_source) {
+    if (!imgui_drawer_) {
+      REXLOG_ERROR("Game source selection needs an ImGui presentation drawer: {}", source_error);
+      return false;
+    }
+    game_source_dialog_ = new ui::GameSourceDialog(
+        imgui_drawer_.get(), expected, config_path_,
+        [this, paths](std::filesystem::path source) mutable {
+          game_source_dialog_ = nullptr;
+          app_context().CallInUIThreadDeferred([this, paths, source = std::move(source)]() mutable {
+            if (shutting_down_.load(std::memory_order_acquire))
+              return;
+            paths.game_data_root = std::move(source);
+            if (paths.game_data_root.empty() || !BeginLaunch(std::move(paths)))
+              app_context().QuitFromUIThread();
+          });
+        },
+        paths.game_data_root, std::move(source_error), executable, local_dir_ / "games",
+        CreateHostPadSource());
+    return true;
+  }
   if (REXCVAR_GET(launch_menu) && !imgui_drawer_) {
     REXLOG_ERROR("Launch menu requested without an ImGui presentation drawer");
     return false;
@@ -291,47 +381,7 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
   if (REXCVAR_GET(launch_menu) && imgui_drawer_) {
     // This reader is for the host menu, with no synthetic guest controllers.
     // Its lifetime ends with the dialog, before runtime input is constructed.
-    auto physical_input = rex::input::CreatePhysicalInputSystem();
-    physical_input->Setup();
-    auto pad_input = std::shared_ptr<rex::input::InputSystem>(physical_input.release(),
-                                                              [](rex::input::InputSystem* input) {
-                                                                input->Shutdown();
-                                                                delete input;
-                                                              });
-    ui::LaunchPadSource pad_source = [pad_input]() -> std::optional<ui::LaunchPadState> {
-      using namespace rex::input;
-      std::array<std::optional<X_INPUT_STATE>, 4> states;
-      int first = -1;
-      for (uint32_t user = 0; user < states.size(); ++user) {
-        X_INPUT_STATE state = {};
-        if (pad_input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
-          states[user] = state;
-          if (first < 0)
-            first = int(user);
-        }
-      }
-      if (first < 0)
-        return std::nullopt;
-      const auto last = pad_input->GetLastUsedUser();
-      const auto& gamepad = states[last < states.size() && states[last] ? last : first]->gamepad;
-      const uint16_t buttons = gamepad.buttons;
-      ui::LaunchPadState result;
-      result.x = float(int16_t(gamepad.thumb_lx)) / 32768.0f;
-      result.y = float(int16_t(gamepad.thumb_ly)) / 32768.0f;
-      if (buttons & (X_INPUT_GAMEPAD_DPAD_LEFT | X_INPUT_GAMEPAD_DPAD_RIGHT)) {
-        result.x = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_RIGHT)) -
-                   float(bool(buttons & X_INPUT_GAMEPAD_DPAD_LEFT));
-      }
-      if (buttons & (X_INPUT_GAMEPAD_DPAD_UP | X_INPUT_GAMEPAD_DPAD_DOWN)) {
-        result.y = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_UP)) -
-                   float(bool(buttons & X_INPUT_GAMEPAD_DPAD_DOWN));
-      }
-      result.activate = buttons & X_INPUT_GAMEPAD_A;
-      result.cancel = buttons & X_INPUT_GAMEPAD_B;
-      result.previous_tab = buttons & X_INPUT_GAMEPAD_LEFT_SHOULDER;
-      result.next_tab = buttons & X_INPUT_GAMEPAD_RIGHT_SHOULDER;
-      return result;
-    };
+    auto pad_source = CreateHostPadSource();
     launch_settings_ = new ui::LaunchSettingsDialog(
         imgui_drawer_.get(), std::string(GetName()), config_path_,
         [this, paths = std::move(paths)](bool play) mutable {
@@ -343,12 +393,6 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
             if (!play || !ConstructRuntime(std::move(paths))) {
               app_context().QuitFromUIThread();
               return;
-            }
-            if (auto* input = dynamic_cast<rex::input::InputSystem*>(runtime_->input_system())) {
-              // Consume held buttons/keystrokes before the guest starts, using
-              // the same handoff contract as the in-game Guide/keyboard.
-              input->AddUIInputBlocker();
-              input->RemoveUIInputBlocker();
             }
             LaunchModule();
           });
@@ -581,7 +625,9 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
     return false;
   }
-  if (!std::filesystem::is_directory(paths.game_data_root)) {
+  if (!std::filesystem::is_directory(paths.game_data_root) &&
+      !std::filesystem::is_regular_file(paths.game_data_root) &&
+      !rex::filesystem::IsOpticalDiscPath(paths.game_data_root)) {
     auto msg = fmt::format("--game_data_root does not exist: {}", paths.game_data_root.string());
     REXLOG_ERROR("{}", msg);
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
@@ -643,7 +689,9 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     });
   }
 
-  std::string xex_image = "game:\\default.xex";
+  std::string xex_image =
+      "game:\\" + std::string(ppc_info_.source_executable_path ? ppc_info_.source_executable_path
+                                                               : "default.xex");
   OnLoadXexImage(xex_image);
 
   // Mirrors the game:\ / d:\ -> game_data_root mapping in Runtime::SetupVfs.
@@ -658,8 +706,24 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     }
     std::string host_tail{tail};
     std::replace(host_tail.begin(), host_tail.end(), '\\', '/');
+    std::string generated_tail =
+        ppc_info_.source_executable_path ? ppc_info_.source_executable_path : "default.xex";
+    std::replace(generated_tail.begin(), generated_tail.end(), '\\', '/');
+    if (host_tail != generated_tail && ppc_info_.source_title_id &&
+        ppc_info_.source_executable_checksum && *ppc_info_.source_executable_checksum) {
+      const system::GameSourceIdentity expected{ppc_info_.source_title_id,
+                                                ppc_info_.source_executable_checksum};
+      auto source = system::InspectGameSource(paths.game_data_root, host_tail, expected);
+      if (!source) {
+        REXLOG_ERROR("Entrypoint override does not match this build: {}", source.error);
+        rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, source.error);
+        return false;
+      }
+    }
     auto xex_host = paths.game_data_root / host_tail;
-    if (!std::filesystem::is_regular_file(xex_host)) {
+    if (!std::filesystem::is_regular_file(paths.game_data_root) &&
+        !rex::filesystem::IsOpticalDiscPath(paths.game_data_root) &&
+        !std::filesystem::is_regular_file(xex_host)) {
       auto msg = fmt::format("Entrypoint XEX not found: {}", xex_host.string());
       REXLOG_ERROR("{}", msg);
       rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
@@ -712,8 +776,67 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   }
 
   OnPostSetup();
+  InstallMediaRecovery(xex_image);
 
   return true;
+}
+
+void ReXApp::InstallMediaRecovery(std::string executable) {
+  if (!imgui_drawer_)
+    return;
+  auto* root = runtime_->file_system()->ResolvePath("game:\\");
+  auto* disc = root ? dynamic_cast<filesystem::DiscImageDevice*>(root->device()) : nullptr;
+  if (!disc)
+    return;
+  if (executable.starts_with("game:\\"))
+    executable.erase(0, 6);
+  else if (executable.starts_with("d:\\"))
+    executable.erase(0, 3);
+  const auto source_path = game_data_root_;
+  const system::GameSourceIdentity expected{
+      ppc_info_.source_title_id,
+      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : ""};
+  // Legacy/custom hosts without a pinned source fingerprint retain ordinary
+  // read errors; they cannot certify replacement media is the same disc.
+  if (!expected.title_id || expected.executable_checksum.empty())
+    return;
+  media_recovery_ = std::make_shared<system::GameMediaRecovery>(
+      [disc, source_path, executable, expected] {
+        auto source = system::InspectGameSource(source_path, executable, expected);
+        auto* replacement =
+            source ? dynamic_cast<filesystem::DiscImageDevice*>(source.device.get()) : nullptr;
+        return replacement && disc->ReconnectFrom(*replacement);
+      },
+      [this, optical = filesystem::IsOpticalDiscPath(source_path)](std::string error) {
+        if (!app_context().CallInUIThreadDeferred([this, optical,
+                                                   error = std::move(error)]() mutable {
+              if (shutting_down_.load(std::memory_order_acquire)) {
+                media_recovery_->Cancel();
+                return;
+              }
+              auto recovery = media_recovery_;
+              auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system());
+              if (input)
+                input->AddUIInputBlocker();
+              media_recovery_dialog_ = new ui::GameMediaRecoveryDialog(
+                  imgui_drawer_.get(), optical, std::move(error),
+                  [this, recovery](bool retry) {
+                    media_recovery_dialog_ = nullptr;
+                    if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system()))
+                      input->RemoveUIInputBlocker();
+                    recovery->Choose(retry);
+                    if (!retry)
+                      app_context().CallInUIThreadDeferred([this] {
+                        if (window_)
+                          window_->RequestClose();
+                      });
+                  },
+                  CreateHostPadSource());
+            }))
+          media_recovery_->Cancel();
+      });
+  disc->SetFailureHandler([recovery = media_recovery_] { return recovery->Recover(); },
+                          [this] { return !app_context().IsInUIThread(); });
 }
 
 bool ReXApp::SetupPresentation() {
@@ -881,6 +1004,11 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
 }
 
 void ReXApp::LaunchModule() {
+  // Consume buttons held while selecting a source or using a host menu.
+  if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system())) {
+    input->AddUIInputBlocker();
+    input->RemoveUIInputBlocker();
+  }
   app_context().CallInUIThreadDeferred([this]() {
     // Register the achievement notification callback now that the runtime and
     // KernelState are guaranteed to exist. Done here (not OnCreateDialogs)
@@ -956,6 +1084,12 @@ void ReXApp::OnClosing(ui::UIEvent& e) {
   (void)e;
   REXLOG_INFO("Window closing, shutting down...");
   shutting_down_.store(true, std::memory_order_release);
+  if (media_recovery_)
+    media_recovery_->Cancel();
+  if (!runtime_) {
+    app_context().QuitFromUIThread();
+    return;
+  }
   if (runtime_ && runtime_->kernel_state()) {
     runtime_->kernel_state()->TerminateTitle();
   }
@@ -1019,6 +1153,9 @@ void ReXApp::OnRestored(ui::UIEvent& e) {
 }
 
 void ReXApp::OnDestroy() {
+  shutting_down_.store(true, std::memory_order_release);
+  if (media_recovery_)
+    media_recovery_->Cancel();
   // Notify subclass before cleanup
   OnShutdown();
 
@@ -1042,6 +1179,10 @@ void ReXApp::OnDestroy() {
   settings_overlay_.reset();
   delete launch_settings_;
   launch_settings_ = nullptr;
+  delete game_source_dialog_;
+  game_source_dialog_ = nullptr;
+  delete media_recovery_dialog_;
+  media_recovery_dialog_ = nullptr;
   console_overlay_.reset();
   debug_overlay_.reset();
   if (imgui_drawer_) {
