@@ -1,0 +1,14 @@
+# Corpus files the bundled binutils (tools/binutils) cannot assemble; Edge
+# builds them with Xenia's own binutils. Left out of the build. ReXGlue's own
+# suite (tests/ppc/asm) has assemblable versions of the last three.
+instr_dcbz128      dcbz128 is not a known opcode
+instr_mftb         mftb is not a known opcode with -mpower7 or -many
+instr_lvx128       v100 is not a register name (VMX128's 128 registers)
+instr_stvx128      v100 is not a register name
+instr_vspltisw128  VMX128 register numbers out of range
+instr_vupkhsh128   VMX128 register numbers out of range
+instr_vupklsh128   VMX128 register numbers out of range
+instr_lvx_permute  vpermwi128's permute operand out of range
+instr_vpermwi128   permute operand out of range (0 to 8 accepted)
+instr_vpkd3d128    vpkd3d128 operands out of range
+instr_vrlimi128    vrlimi128 operands out of range

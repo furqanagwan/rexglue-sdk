@@ -41,6 +41,11 @@ std::string NormalizeGuestPath(std::string_view path) {
   return result;
 }
 
+bool GuestPathEndsWithModule(std::string_view path, std::string_view module_path) {
+  return !module_path.empty() && path.size() > module_path.size() && path.ends_with(module_path) &&
+         path[path.size() - module_path.size() - 1] == '/';
+}
+
 std::optional<std::string> NormalizeDosDevicesRelativePath(std::string_view path) {
   if (path.empty() || path.front() == '\\' || path.front() == '/' ||
       path.find(':') != std::string_view::npos) {

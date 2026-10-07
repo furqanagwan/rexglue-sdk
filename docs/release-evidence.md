@@ -17,7 +17,7 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 
 | Configuration | Status | Evidence | Limitations |
 | --- | --- | --- | --- |
-| SDK build and tests, `win-amd64` Debug/Release | Supported | Fresh checkout following README commands (below); `ctest` 1,823/1,823 at `6223f54` | One machine; four BitStream tests skip by design |
+| SDK build and tests, `win-amd64` Debug/Release | Builds; Release suite passes; Debug has one known fixture failure | Historical fresh checkout below; current [console source checks](#console-source-scenes-2026-10-07): Release 2,098 passed / 13 skipped; Debug baseline failure recorded below | One machine; the Debug tessellation assertion also reproduces before extraction; private Guide asset cases skip |
 | SDK build and tests, `win-amd64-gdk` Debug/Release | Supported (opt-in preset) | `ctest` 1,839/1,839 at `6223f54`; [GDK toolchain](gdk-toolchain.md) | VS Community only (Microsoft names Professional/Enterprise); GPU fixtures run serially |
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
@@ -36,6 +36,157 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 | ARM64 host | Blocked | No ARM64 MSVC libraries (RG-GDK-030/031) | — |
 | DirectStorage | Not started | RG-GDK-029 | — |
 | Fresh machine | Blocked | Only the development machine was available | The fresh-checkout run models a new clone, not a new PC |
+
+## PC host experience (2026-10-07)
+
+Revision: topic branch `pc-backcompat-experience`, based on `248d6c3`, Guide
+submodule `3d5ea575a0f6a6ceb9f0c39c097d5c06c59b72aa`. The runs below test the
+changes included in this commit; the logged environment now has VS Community
+18.10.3, with the same Clang, Windows SDK, GDK and NVIDIA device recorded above.
+See [coverage and remaining gates](pc-backward-compatibility.md).
+
+- Standard Release: full build and CTest, 2,087 discovered, 2,076 passed,
+  11 skipped, zero failures (170.89 s). Includes shader reproducibility and
+  1,473 generated PPC cases. Logs: `out/bc-release-final-build.log` and
+  `out/bc-release-final-ctest.log`.
+- Standard Debug: full build and CTest, 2,087 discovered, 2,075 passed,
+  11 skipped and the one baseline tessellation assertion (200.76 s). All 512
+  unit cases pass or skip; the failure is in the GPU fixture. Logs:
+  `out/bc-debug-final-build.log` and `out/bc-debug-final-ctest.log`.
+- CTest inventories: Debug and Release each discover 2,087 tests; all 2,085
+  SDK executable arguments per configuration, including nested PowerShell
+  commands, match the requested configuration. This validates the
+  [discovery fix](regression-strategy.md#ctest-configuration-discovery-2026-10-07).
+  Logs: `out/bc-final-test-configuration-check.log` and corresponding
+  `out/bc-*-final-discovery.json`.
+- GDK Release: runtime/unit target build and the combined
+  `[launch_settings],[language],[library_art],[cvar],[input],[gdk]` filter passed
+  89 cases / 765 assertions. Log: `out/bc-gdk-final-targeted.log`. This is
+  targeted evidence, not a new full GDK or service compatibility claim.
+- Private reference Flash: three-tab backward-compatibility Guide and font
+  conversion tests passed 2 cases / 28 assertions each in standard Debug,
+  standard Release and GDK Release. The tests read the locally installed
+  Fuzion Frenzy Flash directory; no assets were copied or redistributed.
+  Logs: `out/bc-reference-guide-tests.log`,
+  `out/bc-reference-guide-debug-tests.log`,
+  `out/bc-reference-guide-gdk-tests.log`.
+- Isolated Release install `out/bc-install`: the installed launcher consumer
+  builds and links with the shipped ReXApp source and GPU plugin. Native art
+  checks pass against the installed CMake helper for separate base/TU EXEs:
+  RT_ICON, RT_GROUP_ICON, retained manifest, large/small Shell extraction,
+  five PNG dimensions, collision protection and preserved config identity.
+  Logs: `out/bc-final-consumer.log`, `out/bc-final-installed-art.log`.
+  The isolated CMake user-package registry entry was removed afterwards.
+
+The launcher unit cases draw ImGui without submitting GPU frames. A hidden
+consumer window did not paint; interactive rendered launch/Play flow, physical
+controller navigation/handoff, real-title settings and Xbox app registration
+remain pending. Existing 007/NHL installations were not changed. Account,
+cloud and service achievements require independent title/service registration
+and failure/offline/account-switch validation. No whole-experience parity,
+original Xbox execution or additional vendor support is claimed.
+
+## Guide extraction (2026-10-06)
+
+For the source/issue split on 2026-10-06, the
+[Guide extraction record](xbox-guide-extraction.md#validation-2026-10-06)
+records the component pin, matching before/after Guide suites, full standard
+Debug/Release builds and CTest, GDK Release Guide checks, an isolated Release
+install and installed consumer, and standalone Windows CI without an SDK.
+The existing Debug tessellation assertion remains open in the
+[regression record](regression-strategy.md#debug-tessellation-fixture-2026-10-06).
+Private Guide assets and an owner pad/title session were unavailable; no
+current title compatibility claim is added. GDK testing still uses VS Community
+and does not establish Microsoft's supported toolchain pairing.
+
+## Checked game sources (2026-10-07)
+
+Revision: topic `pc-game-source`, based on `799a5ea`, with the Guide pin above.
+[ADR-014](adr/ADR-014-game-source-and-media-recovery.md) records the source and
+media recovery contract. Same development machine as the PC host checks.
+
+- Standard Release full build/CTest: 2,109 discovered, 2,098 passed,
+  11 skipped, zero failures (176.51 s), including 534 unit and 1,473 PPC cases.
+  Logs: `out/source-release-final-build.log`,
+  `out/source-release-final-ctest.log`.
+- Debug targeted source/disc/codegen/launch UI: 36 cases / 499 assertions pass.
+  Log: `out/source-debug-final-tests.log`.
+- Standard Debug full build/CTest: 2,109 discovered, 2,097 passed, 11 skipped
+  and the single pre-existing GPU tessellation fixture failure (212.15 s).
+  All 534 unit cases pass or skip. Logs: `out/source-debug-final-build.log`,
+  `out/source-debug-final-ctest.log`.
+- GDK Release runtime/unit build and source/disc/codegen/launch/GDK filter:
+  50 cases / 575 assertions pass. Logs: `out/source-gdk-final-build.log`,
+  `out/source-gdk-final-tests.log`. This is targeted GDK evidence.
+- Final review added entrypoint path validation and rechecked Release:
+  36 cases / 511 assertions pass in both standard Debug and Release
+  (`out/source-debug-reviewed-tests.log`, `out/source-release-reviewed-tests.log`).
+  Final GDK Release review passes 50 cases / 587 assertions
+  (`out/source-gdk-reviewed-tests.log`). The installed ReXApp consumer
+  also compiles the entrypoint override check
+  and the shared controller adapter (`out/source-consumer.log`).
+- Isolated Release installation and external launcher consumer build/link
+  pass. Native art regression passes against the installed CMake helper
+  (`out/source-install.log`, `out/source-installed-art.log`). The isolated
+  CMake package registry entry was removed; existing title installs are intact.
+
+Synthetic tests cover sector-aligned reads, actual image truncation on open
+handles, malformed directories, source identity, game:/d: mounting, atomic
+extraction, cancellation, concurrent same-media recovery, UI-thread reads and
+shutdown. Dialog tests draw ImGui without GPU frames; controller events are
+injected. Physical pad/optical media, substituted-drive removal, original/TU
+real-title launch and rendered interactive presentation remain unverified.
+Console XuiMessageBox3, Active Downloads and friendly mismatch names remain
+open. Issue #154 is not closed and whole-experience parity is not claimed.
+
+## Console source scenes (2026-10-07)
+
+Revision: topic `pc-guide-source-scenes`, based on `98f006b`; Guide
+`db55a4d` ([component PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)).
+The SDK supplies file picking/I/O, resources and immutable copy-history
+snapshots. Guide-owned message-box and activity models remain usable through
+the standalone scene target without SDK runtime dependencies.
+
+- Standalone Guide Debug/Release build and CTest pass: one CTest entry runs
+  five synthetic cases / 48 assertions. Logs:
+  `out/message-box-core-{debug,release}-{build,tests}.log`.
+- Standard Release final full build/CTest: 2,111 discovered, 2,098 passed,
+  13 skipped, zero failures (179.00 s). Logs:
+  `out/source-scenes-final-release-build.log`,
+  `out/source-scenes-final-release-ctest.log`.
+- Standard Debug final full build/CTest: 2,111 discovered, 2,097 passed,
+  13 skipped and the one baseline GPU tessellation assertion (205.93 s).
+  All 536 unit cases pass or skip. Logs:
+  `out/source-scenes-final-debug-build.log`,
+  `out/source-scenes-final-debug-ctest.log`.
+- Final private/source/disc/launch/TU checks: standard Debug 41 cases /
+  582 assertions, standard Release 41 cases / 583 assertions, GDK Release
+  55 cases / 659 assertions, all passing. Logs:
+  `out/source-scenes-private-{debug,release,gdk}-tests.log`.
+  These use the locally installed Fuzion Frenzy Flash directory, including
+  the three source choices, recovery default focus/controller A activation,
+  native Disc/Retry selection and Active Downloads template. A synthetic ISO
+  also exercises UI extraction, local-folder handoff and completed-copy history.
+- Follow-up fallback default-focus check: the ImGui recovery fallback also
+  starts on Leave Game. Source/disc/launch/TU/private filters pass 41 cases
+  in Debug (590 assertions) and Release (591 assertions), with unchanged
+  case counts. GDK Release passes 55 cases / 667 assertions. Logs:
+  `out/source-scenes-fallback-{Debug,Release,gdk}-tests.log`.
+  This narrow UI follow-up uses the full-suite baseline above; it does not
+  change GPU/PPC behaviour.
+- Isolated installed consumer compiles and links the updated ReXApp host
+  adapter (`out/source-scenes-install.log`, `out/source-scenes-consumer.log`).
+  Installed headers include the neutral scene APIs; the isolated CMake package
+  registry entry is removed afterwards.
+
+Two additional private cases account for the skipped-count increase from 11
+to 13 in asset-free full CTest. Private checks pass separately. UI tests draw
+ImGui without GPU frames and inject controller state; painted/physical pad
+validation remains open. Images/optical media removal, friendly mismatch
+names and real original/TU title launches remain #154 gates. Media dialogs
+pair guest input blocking with XAM system-UI state/notifications and release
+it on action or shutdown; that host lifecycle needs a real-title check.
+No whole PC parity, service entitlement or original Xbox execution is claimed.
 
 ## Fresh checkout (2026-09-27)
 
@@ -115,3 +266,123 @@ PRs and a new ADR.
 - Unit, PPC, GPU fixture, kernel and GDK tests therefore run on the development
   machine, as recorded in each issue. Adding CTest to CI would need a Windows
   runner with the bundled PPC toolchain and, for GDK tests, a GDK installation.
+
+## Guide audit and title rebuilds, 2026-10-07
+
+The [issue audit and rebuild record](guide-issue-audit-20261007.md) records
+current Guide issue states and private package-layer checks. SDK source
+`34ab1402c5e0428679a8cc239747211a865f1549` with Guide
+`db55a4d347c9edc74a17632fd7f71311ea1e7410` builds completely in GDK 260404
+Release on the existing Windows x64 / Clang 22.1.8 / VS Community machine.
+The SDK was installed to an isolated `out/bc-title-sdk-gdk` prefix; its temporary
+CMake user-registry entry was removed without changing other registrations.
+
+Targeted GDK tests with the owner's BC Flash resources pass 54 cases / 662
+assertions, covering reusable message boxes, sources/media, title-update
+validation, launch settings and GDK adapters. A separate run including the
+live Xbox Unity download case fails on WinHTTP timeout `12002`; 52 cases pass,
+two asset cases skip and one network case fails. The offline rerun explicitly
+excludes `[.network]` and enables the asset cases. The live service failure is
+not treated as a passed download gate or evidence of a code regression.
+Logs are under `out/bc-title-rebuild-20261007`.
+
+Five title projects were regenerated and built in isolated local staging
+folders, including Quantum of Solace TU2 and FIFA Street's two guest modules.
+The old source XEX hashes match the title repository records; prior executable
+hashes are captured in `inputs-and-baselines.json`. All five generation,
+configuration and build results are zero. Artifact checks pass for six EXEs:
+large/small Windows icons, matching SDK runtime/GPU DLL hashes, source identities,
+Guide bundles, launch defaults, both FIFA guest modules and the retained QoS
+shader cache. All six baseline EXE hashes are unchanged. Results and output
+locations are recorded in the linked audit. No staged game was launched;
+existing title status and gameplay/vendor gates
+remain unchanged by compilation.
+
+
+## Guide presentation correction, 2026-10-07
+
+The owner clarified that the original Xbox 360 Guide appearance must remain,
+with PC compatibility features added behind it. The staged builds had enabled
+the optional ImGui launch settings and preferred the installed Fuzion Frenzy
+Flash assets. Both choices were outside that presentation requirement.
+
+All five staging projects were reconfigured with `REXGLUE_GUIDE_FLASH` empty
+and rebuilt successfully, including both QoS executable variants. They now embed
+the original 2.0.17559 system-update assets. Adjacent settings for the six staged
+EXEs and disposable test copies explicitly set `launch_menu=false`; the compiled
+experimental title default remains overridable. The local probe defaults to
+direct launch and requires `--menu` to request the experimental settings screen.
+Logs/results are in `out/guide-presentation-restore-20261007`.
+
+The initial disposable QoS process is no longer running. Interactive testing
+was stopped at the owner's correction; no painted Guide or gameplay pass is
+claimed. Existing installations and saves were not replaced or modified.
+See the [presentation contract](pc-backward-compatibility.md#presentation-contract).
+
+
+## Guide selection by title host, 2026-10-07
+
+[ADR-015](adr/ADR-015-guide-presentation-by-title.md) records the explicit
+Xbox 360/Original Xbox presentation contract. The Guide defaults to Xbox 360
+rather than choosing emulator scenes from available assets. The SDK target
+helper selects and embeds the corresponding source; BC Flash no longer affects
+360 builds. Both embedded and external asset loads retain the host's selection.
+
+The GDK Release SDK builds successfully. Final targeted offline tests pass in
+standard and GDK Debug/Release: **49 cases**, **826 assertions in Release** and
+**824 in Debug** for each SDK variant. Source/recovery controls and empty/running
+activity scene models are exercised with both private asset sets. Standalone
+Guide Debug/Release each pass one CTest containing five cases / 48 assertions.
+An initial broader concurrent run included the live Unity test and encountered
+a shared temporary-directory file lock. Final suites run sequentially and
+exclude `[.network]` in every comma-separated Catch filter clause; this does not
+establish a live-download gate. Logs are in `out/guide-platform-20261007`.
+
+Installed-SDK consumers configure and link for both presentations. Bundle hashes
+match separately generated console-only and BC-plus-console reference bundles;
+target definitions select Original Xbox only for the explicit BC host. Invalid
+presentation and missing BC Flash configurations are rejected. The reusable
+consumer is `tests/consumer/guide_presentation`, with the cache option
+`TEST_GUIDE_PRESENTATION`; its inherited launcher probe is a linking fixture,
+not an original Xbox title execution test.
+
+All five local staging projects explicitly select Xbox 360 and rebuild
+successfully, including QoS TU2 and FIFA guest modules. Original Guide bundles
+and direct-launch config overrides remain in their six EXEs' folders; matching
+runtime DLLs are copied into the disposable test folders. Prior installations
+and saves remain unchanged. Rebuild logs are in
+`out/guide-platform-20261007/title-rebuild`.
+
+A disposable QoS run mounts the full `baseline/extracted-20260923` game directory
+read-only and uses isolated settings/cache/user data. Its original XEX hash
+matches the codegen input. The earlier probe incorrectly mounted the codegen-only
+`material-20260923` directory, causing missing-content/self-relaunch termination;
+correcting the test mount resolves that setup error. On NVIDIA RTX 5080 Laptop,
+driver **32.0.16.1742**, client captures verify original Guide opening/tab
+navigation, a populated 50-achievement grid, exit confirmation and empty Active
+Downloads. Testing exposed notification controls left visible when the activity
+count initially equals zero; shared scene preparation fixes this and the painted
+recheck passes. Screenshots/logs remain private under
+`out/title-ui-validation-20261007/quantumofsolace`. Software key events are not a
+physical-controller acceptance test. This driver differs from the earlier
+32.0.16.1714 baseline. Other title playthroughs, TU2 execution, physical input,
+AMD/Intel and 8K checks are not established here. Owned test processes were closed.
+
+Original Xbox presentation uses owner's BC scenes but is not a 1:1 fidelity
+claim or an execution backend. Original Xbox CPU/kernel/media execution, Xbox
+account linking, entitlements, cloud saves and live services still require their
+separate implementation/design/deployment gates. No issue is closed by this work.
+
+
+Follow-up staged window probes also launch Blood Stone, Legends, FIFA Street
+and NHL with disposable data. Blood Stone's original Guide is visibly present.
+Legends' initial captured Guide is partially clipped during the startup probe;
+its settled/fidelity result is unresolved. Earlier four-second captures were
+black startup frames and are not passes. Subsequent Legends/FIFA/NHL capture
+attempts cannot acquire the owned foreground window and therefore refuse
+input/screenshots. No painted pass is claimed for those three titles. Capture
+records are `title-window-checks.json` and `title-window-checks-final.json` in the
+same private evidence folder. All owned processes are closed. The current
+[Guide draft PR](https://github.com/furqanagwan/xbox-guide/pull/9) Windows CI checks
+pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
+format checks; these do not replace the missing owner/hardware/service gates.

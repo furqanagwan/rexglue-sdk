@@ -15,7 +15,30 @@ add_executable(gpu_tests
     win32_present_test.cpp
     pix_capture_fixture_test.cpp
     async_draw_fixture_test.cpp
+    shader_replacement_fixture_test.cpp
+    native_resolve_fixture_test.cpp
+    viz_fixture_test.cpp
+    invalid_fetch_fixture_test.cpp
+    resolve_gamma_fixture_test.cpp
+    line_scale_fixture_test.cpp
+    tessellation_fixture_test.cpp
 )
+
+# The replacement shader the fixture swaps in, compiled like a title's
+# (rexglue_configure_target SHADER_REPLACEMENTS).
+file(GLOB _gpu_test_fxc "$ENV{ProgramFiles\(x86\)}/Windows Kits/10/bin/*/x64/fxc.exe")
+list(SORT _gpu_test_fxc COMPARE NATURAL ORDER DESCENDING)
+list(GET _gpu_test_fxc 0 _gpu_test_fxc)
+set(_replacement_dxbc "${CMAKE_CURRENT_BINARY_DIR}/replacement_magenta.ps.dxbc")
+add_custom_command(OUTPUT "${_replacement_dxbc}"
+    COMMAND "${_gpu_test_fxc}" /nologo /T ps_5_1 /E main /Fo "${_replacement_dxbc}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/replacement_magenta.ps.hlsl"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/replacement_magenta.ps.hlsl"
+    VERBATIM)
+target_sources(gpu_tests PRIVATE "${_replacement_dxbc}")
+set_source_files_properties("${_replacement_dxbc}" PROPERTIES HEADER_FILE_ONLY TRUE)
+target_compile_definitions(gpu_tests PRIVATE
+    REXGLUE_TEST_REPLACEMENT_DXBC="${_replacement_dxbc}")
 
 target_include_directories(gpu_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
@@ -36,6 +59,12 @@ set_target_properties(gpu_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>
 )
 
+# With the DXIL shader path built (RG-GDK-032), the plugin signs DXIL with
+# the dxil.dll deployed beside the executable.
+if(REXGLUE_SHADER_DXIL)
+    rexglue_deploy_d3d12_redist(gpu_tests)
+endif()
+
 # The fixture host loads the GPU plugin through the plugin ABI, like a title.
 add_dependencies(gpu_tests rexgpu-xenos)
 add_custom_command(TARGET gpu_tests POST_BUILD
@@ -44,6 +73,18 @@ add_custom_command(TARGET gpu_tests POST_BUILD
         $<TARGET_FILE_DIR:gpu_tests>
     VERBATIM
 )
+
+# The whole suite again with xenia-edge's SPIR-V translator and Mesa
+# spirv_to_dxil drawing every draw that path takes (RG-GDK-032); strict, so a
+# failing DXIL pipeline fails the draw instead of falling back to DXBC.
+if(REXGLUE_SHADER_DXIL)
+    add_test(NAME gpu.dxil_parity COMMAND gpu_tests "[gpu]~[win32]")
+    set_tests_properties(gpu.dxil_parity PROPERTIES
+        LABELS "gpu;dxil"
+        TIMEOUT 600
+        ENVIRONMENT
+            "REXGLUE_GPU_FIXTURE_CVARS=gpu_shader_path=dxil\;gpu_shader_path_dxil_strict=true")
+endif()
 
 include(Catch)
 catch_discover_tests(gpu_tests

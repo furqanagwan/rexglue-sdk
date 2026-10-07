@@ -21,6 +21,9 @@ set(REXSYSTEM_SOURCES
     xobject.cpp
     xmodule.cpp
     guest_path.cpp
+    user_language.cpp
+    game_source.cpp
+    game_media_recovery.cpp
     gaming_runtime.cpp
 
     # Utilities
@@ -44,6 +47,7 @@ set(REXSYSTEM_SOURCES
     map_parser.cpp
     module.cpp
     function_dispatcher.cpp
+    ppc_fp.cpp
     gpu_plugin_loader.cpp
     thread.cpp
     thread_state.cpp
@@ -72,6 +76,7 @@ rex_target_pch(rexruntime
 
 target_include_directories(rexruntime PUBLIC
     $<BUILD_INTERFACE:${REXGLUE_ROOT}/include>
+    $<BUILD_INTERFACE:${XBOX_GUIDE_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

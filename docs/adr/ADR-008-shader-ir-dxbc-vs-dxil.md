@@ -35,7 +35,7 @@ Since #51 ([RG-GDK-023](https://github.com/furqanagwan/rexglue-sdk/issues/23)), 
 ## Capability floor and rollback
 
 - DXBC path: SM 5.1 (current).
-- DXIL path: SM 6.6, D3D12 Agility SDK as pinned by RG-GDK-002, and `dxil.dll` shipped beside the title. Hardware below SM 6.6 falls back to DXBC.
+- DXIL path: SM 6.6, D3D12 Agility SDK 1.618.5 and DXC 1.8.2502.8's `dxil.dll` shipped in the title's `D3D12\` folder (pinned by RG-GDK-032 stage 1 to the versions Microsoft's PC backward compatibility ships; see [DXIL shader toolchain](../shader-dxil.md)). Hardware below SM 6.6 falls back to DXBC.
 - Rollback: a runtime selector returns to DXBC per run. The build option removes the DXIL path entirely. Stages land as separate PRs, and no PR both adds a path and switches the default.
 
 ## Measured results
@@ -45,6 +45,7 @@ The measurements RG-GDK-007 asked for (paired correctness and frame time, cold/w
 | Measurement | DXBC | DXIL | Status |
 | --- | --- | --- | --- |
 | Golden corpus: NaN/Inf/signed zero, rcp/rsq, packed and signed memexport, depth export, ROV, float24 transfer (Edge #198) | — | — | Not run; needs [RG-GDK-006](https://github.com/furqanagwan/rexglue-sdk/issues/6) harness |
+| GPU fixture suite (52 cases: clears, resolves, depth, memexport, ALU, PM4, primitive expansion), host render targets | 52/52 | 52/52 (226 DXIL pipelines, strict, `gpu.dxil_parity`) | 2026-10-04, NVIDIA; ROV cases on DXBC |
 | Cold/warm shader cache time, async compile | — | — | Not run |
 | Paired frame time on pinned title scenes (NVIDIA) | — | — | Not run |
 | AMD / Intel | — | — | Untested, non-blocking (ADR-007) |

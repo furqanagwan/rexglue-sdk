@@ -125,6 +125,8 @@ void ApplyEnvironment();
 void FinalizeInit();
 bool IsFinalized();
 void SaveConfig(const std::filesystem::path& config_path);
+// As SaveConfig, reporting a write/flush failure to interactive callers.
+bool TrySaveConfig(const std::filesystem::path& config_path);
 
 //=============================================================================
 // Flag Registry
@@ -194,6 +196,12 @@ std::optional<size_t> RegisterFlag(FlagEntry entry);
 void UnregisterFlag(std::string_view name);
 
 bool SetFlagByName(std::string_view name, std::string_view value);
+
+// A title's own default for a flag (rexglue_configure_target CVAR_DEFAULTS):
+// replaces the compiled-in default, so the config file, environment, command
+// line and runtime changes still win and SaveConfig does not write it. False
+// when the flag is unknown or the value is rejected.
+bool SetTitleDefault(std::string_view name, std::string_view value);
 
 // Applies a value parsed off the command line. Returns false only when the
 // value is rejected (unparseable, or outside the flag's constraints); a value

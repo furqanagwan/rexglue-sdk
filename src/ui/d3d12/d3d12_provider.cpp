@@ -20,6 +20,8 @@
 
 #include <malloc.h>
 
+#include <filesystem>
+
 REXCVAR_DEFINE_BOOL(d3d12_debug, false, "UI/D3D12", "Enable Direct3D 12 and DXGI debug layer")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
@@ -36,6 +38,11 @@ REXCVAR_DEFINE_BOOL(d3d12_break_on_warning, false, "UI/D3D12",
 
 REXCVAR_DEFINE_INT32(d3d12_adapter, -1, "UI/D3D12",
                      "Index of the DXGI adapter to use (-1 for any physical, -2 for WARP)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+REXCVAR_DEFINE_BOOL(pix_gpu_capturer, false, "UI/D3D12",
+                    "Load PIX's GPU capturer (the newest installed PIX) so pixtool or PIX can "
+                    "attach and capture frames")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 REXCVAR_DEFINE_INT32(d3d12_queue_priority, 1, "UI/D3D12",
@@ -126,6 +133,26 @@ bool D3D12Provider::EnableIncreaseBasePriorityPrivilege() {
 }
 
 bool D3D12Provider::Initialize() {
+  // PIX's capturer must be in the process before D3D12.dll is.
+  if (REXCVAR_GET(pix_gpu_capturer)) {
+    wchar_t program_files[MAX_PATH] = {};
+    GetEnvironmentVariableW(L"ProgramFiles", program_files, MAX_PATH);
+    std::filesystem::path newest;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(
+             std::filesystem::path(program_files) / L"Microsoft PIX", ec)) {
+      if (std::filesystem::exists(entry.path() / L"WinPixGpuCapturer.dll", ec) &&
+          entry.path().filename() > newest.filename()) {
+        newest = entry.path();
+      }
+    }
+    if (newest.empty() || !LoadLibraryW((newest / L"WinPixGpuCapturer.dll").c_str())) {
+      REXLOG_WARN("pix_gpu_capturer: no PIX installation's WinPixGpuCapturer.dll could be loaded");
+    } else {
+      REXLOG_INFO("pix_gpu_capturer: loaded from {}", newest.string());
+    }
+  }
+
   // Load the core libraries.
   library_dxgi_ = LoadLibraryW(L"dxgi.dll");
   library_d3d12_ = LoadLibraryW(L"D3D12.dll");
@@ -267,8 +294,15 @@ bool D3D12Provider::Initialize() {
     DXGI_ADAPTER_DESC1 adapter_desc;
     if (SUCCEEDED(adapter->GetDesc1(&adapter_desc))) {
       adapter_is_software = (adapter_desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
-      if (SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),
-                                             nullptr))) {
+      HRESULT create_result =
+          pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr);
+      if (FAILED(create_result)) {
+        REXLOG_WARN("D3D12 adapter {} ({}): device creation failed, 0x{:08X}", adapter_index,
+                    rex::string::to_utf8(std::u16string(
+                        reinterpret_cast<const char16_t*>(adapter_desc.Description))),
+                    uint32_t(create_result));
+      }
+      if (SUCCEEDED(create_result)) {
         if (REXCVAR_GET(d3d12_adapter) >= 0) {
           if (adapter_index == REXCVAR_GET(d3d12_adapter)) {
             break;

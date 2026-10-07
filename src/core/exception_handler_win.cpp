@@ -17,6 +17,7 @@
 
 #include <rex/assert.h>
 #include <rex/math.h>
+#include <rex/platform/fpscr.h>
 
 namespace rex::arch {
 
@@ -76,6 +77,22 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
       // Unknown/unhandled type.
       return EXCEPTION_CONTINUE_SEARCH;
   }
+
+  // The handlers (MMIO, the GPU's register writes) are host code, but the
+  // faulting thread may be in the guest's rounding and flush mode. Continuing
+  // restores the context record's own control register.
+  using FpPlatform = rex::platform::FPSCRPlatform;
+  constexpr uint32_t kGuestFpBits = uint32_t(FpPlatform::RoundMaskVal | FpPlatform::FlushMask);
+  const uint32_t fp_mode = FpPlatform::getcsr();
+  if (fp_mode & kGuestFpBits)
+    FpPlatform::setcsr(fp_mode & ~kGuestFpBits);
+  struct RestoreFpMode {
+    uint32_t mode;
+    ~RestoreFpMode() {
+      if (FpPlatform::getcsr() != mode)
+        FpPlatform::setcsr(mode);
+    }
+  } restore_fp_mode{fp_mode};
 
   for (size_t i = 0; i < rex::countof(handlers_) && handlers_[i].first; ++i) {
     if (handlers_[i].first(&ex, handlers_[i].second)) {

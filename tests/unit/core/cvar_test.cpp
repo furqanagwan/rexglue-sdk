@@ -369,6 +369,63 @@ TEST_CASE("cvar precedence holds for flags registered after startup", "[cvar]") 
   rex::cvar::testing::ResetAllForTesting();
 }
 
+TEST_CASE("cvar title defaults sit under every other source", "[cvar]") {
+  rex::cvar::testing::ResetAllForTesting();
+  char argv0[] = "cvar_test";
+  char* argv[] = {argv0};
+  rex::cvar::Init(1, argv);
+
+  // Registered: the title's default replaces the compiled-in one.
+  CHECK(rex::cvar::SetTitleDefault("test_string_flag", "title"));
+  CHECK(REXCVAR_GET(test_string_flag) == "title");
+  CHECK(rex::cvar::GetFlagSource("test_string_flag") == rex::cvar::Source::kDefault);
+  CHECK_FALSE(rex::cvar::HasNonDefaultValue("test_string_flag"));
+  // A user's choice wins; a title default after it changes nothing.
+  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "7"));
+  CHECK(rex::cvar::SetTitleDefault("test_int32_flag", "9"));
+  CHECK(REXCVAR_GET(test_int32_flag) == 7);
+  // Unknown values and out-of-range ones are refused.
+  CHECK_FALSE(rex::cvar::SetTitleDefault("test_ranged_flag", "50"));
+  CHECK(REXCVAR_GET(test_ranged_flag) == 5);
+
+  // A runtime-loaded module's flag: applied as it registers, under the
+  // config file.
+  auto config_path = std::filesystem::temp_directory_path() / "test_title_default.toml";
+  {
+    std::ofstream file(config_path);
+    file << "test_title_config_flag = \"from config\"\n";
+  }
+  rex::cvar::LoadConfig(config_path);
+  CHECK(rex::cvar::SetTitleDefault("test_title_late_flag", "title"));
+  CHECK(rex::cvar::SetTitleDefault("test_title_config_flag", "title"));
+  std::string late = "default", configured = "default";
+  auto make = [](const char* name, std::string& value) {
+    return rex::cvar::FlagEntry{
+        .name = name,
+        .type = rex::cvar::FlagType::String,
+        .category = "Test",
+        .description = "Late registered flag",
+        .setter =
+            [&value](std::string_view new_value) {
+              value = new_value;
+              return true;
+            },
+        .getter = [&value]() { return value; },
+        .default_value = "default",
+    };
+  };
+  {
+    rex::cvar::FlagRegistrar a(make("test_title_late_flag", late));
+    rex::cvar::FlagRegistrar b(make("test_title_config_flag", configured));
+    CHECK(late == "title");
+    CHECK(configured == "from config");
+  }
+  std::filesystem::remove(config_path);
+  rex::cvar::testing::ResetAllForTesting();
+  // Put the compiled-in default back for the tests after this one.
+  CHECK(rex::cvar::SetTitleDefault("test_string_flag", "default"));
+}
+
 TEST_CASE("cvar range validation", "[cvar]") {
   SECTION("Value within range succeeds") {
     REQUIRE(rex::cvar::SetFlagByName("test_ranged_flag", "5"));

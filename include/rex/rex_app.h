@@ -20,6 +20,8 @@
 #include <optional>
 #include <string_view>
 #include <thread>
+#include <vector>
+#include <rex/ui/guide/active_downloads.h>
 
 #include <rex/image_info.h>
 #include <rex/logging/types.h>
@@ -36,6 +38,9 @@
 namespace rex {
 
 class LogCaptureSink;
+namespace system {
+class GameMediaRecovery;
+}
 
 /// Content path configuration, passed to OnConfigurePaths().
 /// All paths start with sensible defaults derived from CLI args and cvars.
@@ -53,6 +58,10 @@ namespace ui {
 class AchievementNotificationDialog;
 class ConsoleDialog;
 class SettingsDialog;
+class LaunchSettingsDialog;
+class GameSourceDialog;
+class GameMediaRecoveryDialog;
+struct GameSourceVisuals;
 namespace guide {
 struct GuideAssets;
 class GuideMedia;
@@ -283,6 +292,10 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
 
  private:
   std::function<void(PathConfig)> MakeResumeCallback();
+  bool BeginLaunch(PathConfig paths);
+  void InstallMediaRecovery(std::string executable);
+  void ReleaseMediaRecoveryUi();
+  std::optional<ui::GameSourceVisuals> GetGameSourceVisuals();
 
   // Runs the gaming_runtime startup policy; false stops the launch.
   bool InitializeGamingRuntime();
@@ -338,6 +351,12 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   std::unique_ptr<ui::DebugOverlayDialog> debug_overlay_;
   std::unique_ptr<ui::ConsoleDialog> console_overlay_;
   std::unique_ptr<ui::SettingsDialog> settings_overlay_;
+  ui::LaunchSettingsDialog* launch_settings_ = nullptr;  // self-owned on normal close
+  ui::GameSourceDialog* game_source_dialog_ = nullptr;   // self-owned on normal close
+  ui::GameMediaRecoveryDialog* media_recovery_dialog_ = nullptr;
+  std::shared_ptr<system::GameMediaRecovery> media_recovery_;
+  bool media_system_ui_ = false;
+  std::vector<ui::guide::GuideActivity> source_activities_;  // UI-thread snapshots
   std::unique_ptr<ui::ImGuiDialog> achievements_overlay_;
   std::shared_ptr<ui::AchievementNotificationDialog> achievement_notification_;
   uint64_t achievement_notification_listener_ = 0;

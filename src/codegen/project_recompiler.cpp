@@ -9,6 +9,7 @@
  *              See LICENSE file in the project root for full license text.
  */
 
+#include <rex/codegen/function_table_layout.h>
 #include <rex/codegen/project_recompiler.h>
 
 #include <algorithm>
@@ -390,6 +391,7 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
     auto ctx = CodegenContext::Create(std::move(bv), std::move(cfg));
     ctx.setResolver(resolver);
     ctx.setConfigDir(configDir);
+    ctx.setSourceGuestPath(entryRel.generic_string());
     ctx.analysisState().format = "xex";
     ctx.analysisState().loadAddress = ctx.binary().baseAddress();
     ctx.analysisState().entryPoint = ctx.binary().entryPoint();
@@ -482,6 +484,22 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
                          fmt::format("Module '{}' [{:08X}, {:08X}) overlaps '{}' [{:08X}, {:08X})",
                                      contexts[i].module->targetName, a_base, a_end,
                                      contexts[j].module->targetName, b_base, b_end));
+      }
+    }
+  }
+
+  // Each module's dispatch table, clear of every module's image (RG-GDK-070).
+  {
+    std::vector<ModuleImage> images;
+    for (const auto& entry : contexts) {
+      images.push_back({entry.ctx.binary().baseAddress(), entry.ctx.binary().imageSize()});
+    }
+    const auto tables = PlaceFunctionTables(images, 0x10000u);
+    for (size_t i = 0; i < contexts.size(); ++i) {
+      contexts[i].ctx.setFunctionTableBase(tables[i]);
+      if (tables[i] != images[i].base + images[i].size) {
+        REXLOG_INFO("'{}': function table at {:08X}, clear of the other modules' images",
+                    contexts[i].module->targetName, tables[i]);
       }
     }
   }

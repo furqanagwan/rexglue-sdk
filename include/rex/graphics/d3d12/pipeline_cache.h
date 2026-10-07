@@ -30,6 +30,7 @@
 #include <rex/graphics/d3d12/shader.h>
 #include <rex/graphics/flags.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
+#include <rex/graphics/pipeline/shader/replacements.h>
 #include <rex/graphics/primitive_processor.h>
 #include <rex/graphics/register_file.h>
 #include <rex/graphics/registers.h>
@@ -39,6 +40,11 @@
 #include <rex/string/buffer.h>
 #include <rex/thread.h>
 #include <rex/ui/d3d12/d3d12_api.h>
+
+#if REXGLUE_SHADER_DXIL
+#include <rex/graphics/pipeline/shader/spirv.h>
+#include <rex/graphics/pipeline/shader/spirv_shader_cache.h>
+#endif
 
 namespace rex::graphics::d3d12 {
 
@@ -71,6 +77,9 @@ class PipelineCache {
   // Creates the queued pipelines on this thread too, then waits for the rest:
   // for a draw that can't be skipped while its pipeline compiles.
   void AwaitQueuedPipelines();
+  // Waits for one queued pipeline only, creating it on this thread unless a
+  // creation thread already is.
+  void AwaitPipeline(void* handle);
 
   D3D12Shader* LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
                           uint32_t dword_count);
@@ -92,10 +101,34 @@ class PipelineCache {
                          D3D12Shader::D3D12Translation* pixel_shader,
                          const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
                          reg::RB_DEPTHCONTROL normalized_depth_control,
-                         uint32_t normalized_color_mask, bool zpd_total,
+                         uint32_t normalized_color_mask, bool zpd_total, bool viz_survey,
                          uint32_t bound_depth_and_color_render_target_bits,
                          const uint32_t* bound_depth_and_color_render_targets_formats,
                          void** pipeline_handle_out, ID3D12RootSignature** root_signature_out);
+
+#if REXGLUE_SHADER_DXIL
+  // The SPIR-V -> DXIL guest shader path (RG-GDK-032), chosen with
+  // gpu_shader_path=dxil when supported.
+  bool IsDxilShaderPathEnabled() const { return dxil_shader_cache_ != nullptr; }
+  enum class DxilPipelineResult {
+    kConfigured,
+    // The draw needs something the path doesn't do yet: use DXBC.
+    kUnsupported,
+    // Translation, DXIL conversion or pipeline creation failed.
+    kFailed,
+  };
+  // Configures the draw's pipeline with xenia-edge's SPIR-V translator and
+  // Mesa spirv_to_dxil; the shaders it returns give the draw's bindings.
+  DxilPipelineResult ConfigurePipelineDxil(
+      D3D12Shader::D3D12Translation* dxbc_vertex_shader,
+      D3D12Shader::D3D12Translation* dxbc_pixel_shader,
+      const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
+      uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
+      reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+      uint32_t bound_depth_and_color_render_target_bits,
+      const uint32_t* bound_depth_and_color_render_targets_formats, bool viz_survey,
+      void** pipeline_handle_out, SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out);
+#endif
 
   // Returns a pipeline with deferred creation by its handle. May return nullptr
   // if failed to create the pipeline.
@@ -153,6 +186,8 @@ class PipelineCache {
     kPointList,
     kRectangleList,
     kQuadList,
+    // Lines expanded to 1 guest pixel wide for resolution-scaled draws.
+    kLineList,
   };
 
   enum class PipelineCullMode : uint32_t {
@@ -207,20 +242,27 @@ class PipelineCache {
     // xenos::TessellationMode for a domain shader.
     uint32_t primitive_topology_type_or_tessellation_mode : 2;  // 4
     // Zero for non-kVertex host_vertex_shader_type.
-    PipelineGeometryShader geometry_shader : 2;       // 6
-    uint32_t fill_mode_wireframe : 1;                 // 7
-    PipelineCullMode cull_mode : 2;                   // 9
-    uint32_t front_counter_clockwise : 1;             // 10
-    uint32_t depth_clip : 1;                          // 11
-    xenos::MsaaSamples host_msaa_samples : 2;         // 13
-    xenos::DepthRenderTargetFormat depth_format : 1;  // 14
-    xenos::CompareFunction depth_func : 3;            // 17
-    uint32_t depth_write : 1;                         // 18
-    uint32_t stencil_enable : 1;                      // 19
-    uint32_t stencil_read_mask : 8;                   // 27
+    PipelineGeometryShader geometry_shader : 3;       // 7
+    uint32_t fill_mode_wireframe : 1;                 // 8
+    PipelineCullMode cull_mode : 2;                   // 10
+    uint32_t front_counter_clockwise : 1;             // 11
+    uint32_t depth_clip : 1;                          // 12
+    xenos::MsaaSamples host_msaa_samples : 2;         // 14
+    xenos::DepthRenderTargetFormat depth_format : 1;  // 15
+    xenos::CompareFunction depth_func : 3;            // 18
+    uint32_t depth_write : 1;                         // 19
+    uint32_t stencil_enable : 1;                      // 20
+    uint32_t stencil_read_mask : 8;                   // 28
     // Hybrid occlusion query draw (RTV + in-shader Total counting). Selects
     // the counting depth-only pixel shader when there is no guest PS.
-    uint32_t zpd_total : 1;  // 28
+    uint32_t zpd_total : 1;  // 29
+    // Survey draw for VIZ conditional rendering (ROV + occlusion_query_viz).
+    // Selects the depth-only pixel shader that marks the ZPass lane.
+    uint32_t viz_survey : 1;  // 30
+    // SPIR-V -> DXIL guest shaders (RG-GDK-032): the modifications are
+    // SpirvShaderTranslator ones. On the ROV path without a guest pixel
+    // shader, pixel_shader_modification holds the guest sample count.
+    uint32_t dxil : 1;  // 31
 
     uint32_t stencil_write_mask : 8;                   // 8
     xenos::StencilOp stencil_front_fail_op : 3;        // 11
@@ -234,7 +276,7 @@ class PipelineCache {
 
     PipelineRenderTarget render_targets[xenos::kMaxColorRenderTargets];
 
-    static constexpr uint32_t kVersion = 0x20260929;
+    static constexpr uint32_t kVersion = 0x20261005;
   });
 
   REXPACKEDSTRUCT(PipelineStoredDescription, {
@@ -247,6 +289,12 @@ class PipelineCache {
     D3D12Shader::D3D12Translation* vertex_shader;
     D3D12Shader::D3D12Translation* pixel_shader;
     const std::vector<uint32_t>* geometry_shader;
+    // With description.dxil, the SPIR-V translations converted to DXIL when
+    // the pipeline is created (on a creation thread with async compilation),
+    // and the geometry shader's DXIL, used instead of the DXBC ones.
+    const Shader::Translation* dxil_vertex_spirv;
+    const Shader::Translation* dxil_pixel_spirv;
+    const std::vector<uint8_t>* dxil_geometry_shader;
     PipelineDescription description;
   };
 
@@ -255,7 +303,7 @@ class PipelineCache {
   union GeometryShaderKey {
     uint32_t key;
     struct {
-      PipelineGeometryShader type : 2;
+      PipelineGeometryShader type : 3;
       uint32_t interpolator_count : 5;
       uint32_t user_clip_plane_count : 3;
       uint32_t user_clip_plane_cull : 1;
@@ -294,7 +342,7 @@ class PipelineCache {
       D3D12Shader::D3D12Translation* vertex_shader, D3D12Shader::D3D12Translation* pixel_shader,
       const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
       reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask, bool zpd_total,
-      uint32_t bound_depth_and_color_render_target_bits,
+      bool viz_survey, uint32_t bound_depth_and_color_render_target_bits,
       const uint32_t* bound_depth_and_color_render_target_formats,
       PipelineRuntimeDescription& runtime_description_out, bool for_placeholder = false);
 
@@ -319,6 +367,9 @@ class PipelineCache {
   string::StringBuffer ucode_disasm_buffer_;
   // Reusable shader translator for the processor thread.
   std::unique_ptr<DxbcShaderTranslator> shader_translator_;
+
+  // The title's replacement shaders, read once at startup (RG-GDK-067).
+  ShaderReplacements shader_replacements_;
   std::mutex translation_request_lock_;
 
   // Command processor thread DXIL conversion/disassembly interfaces, if DXIL
@@ -362,6 +413,67 @@ class PipelineCache {
   // Depth-only pixel shaders that count coverage into the ZPD Total counter,
   // for hybrid occlusion query draws without a guest pixel shader.
   std::vector<uint8_t> zpd_total_depth_only_pixel_shader_;
+  std::vector<uint8_t> viz_survey_depth_only_pixel_shader_;
+
+#if REXGLUE_SHADER_DXIL
+  class DxilShaderCacheHost : public GuestSpirvShaderCache::Host {
+   public:
+    explicit DxilShaderCacheHost(const PipelineCache& pipeline_cache)
+        : pipeline_cache_(pipeline_cache) {}
+    std::unique_ptr<SpirvShaderTranslator> CreateTranslator() const override;
+    bool depth_float24_round() const override;
+    bool depth_float24_convert_in_pixel_shader() const override;
+
+   private:
+    const PipelineCache& pipeline_cache_;
+  };
+  // Twin of a guest shader for the SPIR-V translator, by ucode hash.
+  SpirvShader* GetDxilShader(const Shader& shader);
+  // The SPIR-V translation (draw thread), or nullptr.
+  Shader::Translation* GetDxilSpirv(SpirvShader& shader, uint64_t modification);
+  // Its converted and signed DXIL, or nullptr (failures are cached). Any thread.
+  const std::vector<uint8_t>* ConvertDxil(const Shader::Translation& translation);
+  struct DxilTessellation {
+    std::vector<uint8_t> host_vertex;
+    std::vector<uint8_t> host_hull;
+    std::vector<uint8_t> domain;
+  };
+  // A guest domain shader's SPIR-V linked with the host tessellation vertex and
+  // hull shaders its modification selects, so spirv_to_dxil reconciles the
+  // stage signatures; nullptr on failure (cached). Any thread.
+  const DxilTessellation* ConvertDxilTessellation(const Shader::Translation& translation);
+  const std::vector<uint8_t>* GetDxilGeometryShader(GuestSpirvShaderCache::GeometryShaderKey key);
+  // Converts the pixel shaders below; false if any can't be made.
+  bool InitializeDxilHelperPixelShaders();
+  // The DXIL pixel shader for a DXIL pipeline without a guest one, or nullptr
+  // for none: as the DXBC helper pixel shaders, from the SPIR-V translator.
+  const std::vector<uint8_t>* GetDxilHelperPixelShader(
+      const PipelineDescription& description) const;
+  // Writes a new DXIL pipeline and its guest shaders to the storage files.
+  void StoreDxilPipeline(uint64_t hash, const PipelineDescription& description,
+                         Shader& vertex_shader, Shader* pixel_shader);
+  // Queues a stored DXIL pipeline for creation; false if it can't be made.
+  bool CreateStoredDxilPipeline(const PipelineStoredDescription& stored_description);
+
+  std::unique_ptr<DxilShaderCacheHost> dxil_shader_cache_host_;
+  std::unique_ptr<GuestSpirvShaderCache> dxil_shader_cache_;
+  std::unordered_map<uint64_t, std::unique_ptr<SpirvShader>> dxil_shaders_;
+  std::mutex dxil_binaries_mutex_;
+  std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<uint8_t>>> dxil_binaries_;
+  std::unordered_map<uint64_t, std::unordered_map<uint64_t, DxilTessellation>>
+      dxil_tessellation_binaries_;
+  std::unordered_map<uint32_t, std::vector<uint8_t>> dxil_geometry_shaders_;
+  // Host render targets: the empty pixel shader that keeps draws writing
+  // nothing rasterized, and float24 depth conversion without a guest shader.
+  std::vector<uint8_t> dxil_depth_only_pixel_shader_;
+  std::vector<uint8_t> dxil_float24_truncate_pixel_shader_;
+  std::vector<uint8_t> dxil_float24_round_pixel_shader_;
+  // ROV: the EDRAM depth / stencil (or VIZ survey) pixel shaders by guest
+  // xenos::MsaaSamples, which a DXIL pipeline without a guest pixel shader
+  // carries in its pixel_shader_modification.
+  std::vector<uint8_t> dxil_rov_depth_only_pixel_shaders_[3];
+  std::vector<uint8_t> dxil_rov_viz_survey_pixel_shaders_[3];
+#endif
   std::vector<uint8_t> zpd_total_float24_truncate_pixel_shader_;
   std::vector<uint8_t> zpd_total_float24_round_pixel_shader_;
 
@@ -375,6 +487,9 @@ class PipelineCache {
     uint8_t priority = 0;
     // Queued for asynchronous creation, not created or failed yet.
     std::atomic<bool> creation_pending{false};
+    // Taken by whoever creates a queued pipeline: a creation thread, or the
+    // command processor awaiting this one pipeline.
+    std::atomic<bool> creation_claimed{false};
   };
   struct PipelineCreationPriorityComparator {
     bool operator()(const Pipeline* a, const Pipeline* b) const {

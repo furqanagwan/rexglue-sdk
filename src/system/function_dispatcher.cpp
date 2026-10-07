@@ -13,7 +13,15 @@
  *              role as a function dispatch table rather than a CPU emulator.
  */
 
+#include <cstdio>
+#include <fstream>
+#include <set>
+#include <string>
+
+#include <fmt/format.h>
+
 #include <rex/assert.h>
+#include <rex/cvar.h>
 #include <rex/dbg.h>
 #include <rex/logging.h>
 #include <rex/perf/counter.h>
@@ -22,6 +30,10 @@
 #include <rex/runtime.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/thread_state.h>
+
+REXCVAR_DEFINE_STRING(indirect_trace, "", "CPU",
+                      "Record indirect call targets with no registered function to this TOML file "
+                      "(a [functions] table for the title's codegen config)");
 
 namespace rex::runtime {
 
@@ -34,7 +46,41 @@ FunctionDispatcher* GetBoundFunctionDispatcher() {
 
 }  // namespace
 
+bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address) {
+  // Keep the targets earlier runs recorded: each run stops at its first one.
+  std::set<uint32_t> targets{guest_address};
+  {
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+      unsigned int address = 0;
+      if (std::sscanf(line.c_str(), "0x%8X = {", &address) == 1) {
+        targets.insert(address);
+      }
+    }
+  }
+  std::ofstream out(path, std::ios::trunc);
+  if (!out) {
+    return false;
+  }
+  out << "# Indirect call targets a run reached with no registered function, recorded\n"
+         "# by --indirect_trace (RG-GDK-066). Add this file to the title manifest's\n"
+         "# includes; the next codegen registers each one as a function.\n"
+         "[functions]\n";
+  for (uint32_t address : targets) {
+    out << fmt::format("0x{:08X} = {{}}\n", address);
+  }
+  return bool(out);
+}
+
 static void InvalidFunctionTrap(PPCContext& ctx, uint8_t* /*base*/) {
+  if (const std::string& trace = REXCVAR_GET(indirect_trace); !trace.empty()) {
+    if (AppendIndirectTrace(trace, ctx.last_indirect_target)) {
+      REXCPU_ERROR("Indirect target 0x{:08X} recorded in {}", ctx.last_indirect_target, trace);
+    } else {
+      REXCPU_ERROR("Indirect trace {} could not be written", trace);
+    }
+  }
   REX_FATAL("Call to invalid or unregistered function at guest address 0x{:08X}",
             ctx.last_indirect_target);
 }
@@ -79,7 +125,11 @@ bool FunctionDispatcher::Execute(ThreadState* thread_state, uint32_t address) {
   uint64_t previous_lr = ctx->lr;
   ctx->lr = 0xBCBCBCBC;
 
-  fn(*ctx, memory_->virtual_membase());
+  {
+    // Guest code finds its own FP mode, and the host gets its own back.
+    rex::ppc::GuestFpScope guest_fp(ctx->fpscr);
+    fn(*ctx, memory_->virtual_membase());
+  }
 
   ctx->lr = previous_lr;
   ctx->r1.u64 += 64 + 112;
@@ -181,7 +231,7 @@ uint64_t FunctionDispatcher::ExecuteInterrupt(ThreadState* thread_state, uint32_
 
 bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t code_size,
                                                  uint32_t image_base, uint32_t image_size,
-                                                 bool is_entrypoint) {
+                                                 bool is_entrypoint, uint32_t table_base) {
   std::lock_guard<std::recursive_mutex> lock(dispatch_mutex_);
 
   if (is_entrypoint && entrypoint_code_base_ != 0) {
@@ -190,15 +240,30 @@ bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t co
     return false;
   }
 
-  uint32_t new_table_end = image_base + image_size + (code_size + kThunkReserveSize) * 2;
+  if (!table_base) {
+    table_base = image_base + image_size;
+  }
+  const uint64_t new_table_end = uint64_t(table_base) + (code_size + kThunkReserveSize) * 2;
+  const uint64_t new_image_end = uint64_t(image_base) + image_size;
   uint32_t new_code_end = code_base + code_size + kThunkReserveSize;
+  auto overlap = [](uint64_t a, uint64_t a_end, uint64_t b, uint64_t b_end) {
+    return a < b_end && b < a_end;
+  };
   for (const auto& existing : module_tables_) {
-    uint32_t existing_table_end =
-        existing.image_base + existing.image_size + (existing.code_size + kThunkReserveSize) * 2;
-    uint32_t existing_code_end = existing.code_base + existing.code_size + kThunkReserveSize;
-    if (image_base < existing_table_end && new_table_end > existing.image_base) {
-      REXLOG_ERROR("Module image range [{:08X}, {:08X}) overlaps existing [{:08X}, {:08X})",
-                   image_base, new_table_end, existing.image_base, existing_table_end);
+    const uint64_t existing_table_end =
+        uint64_t(existing.table_base) + (existing.code_size + kThunkReserveSize) * 2;
+    const uint64_t existing_image_end = uint64_t(existing.image_base) + existing.image_size;
+    const uint32_t existing_code_end = existing.code_base + existing.code_size + kThunkReserveSize;
+    // Images and tables may not overlap one another, in any pairing.
+    if (overlap(image_base, new_image_end, existing.image_base, existing_image_end) ||
+        overlap(image_base, new_image_end, existing.table_base, existing_table_end) ||
+        overlap(table_base, new_table_end, existing.image_base, existing_image_end) ||
+        overlap(table_base, new_table_end, existing.table_base, existing_table_end)) {
+      REXLOG_ERROR(
+          "Module image [{:08X}, {:08X}) or table [{:08X}, {:08X}) overlaps existing image "
+          "[{:08X}, {:08X}) or table [{:08X}, {:08X})",
+          image_base, new_image_end, table_base, new_table_end, existing.image_base,
+          existing_image_end, existing.table_base, existing_table_end);
       return false;
     }
     if (code_base < existing_code_end && new_code_end > existing.code_base) {
@@ -208,7 +273,7 @@ bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t co
     }
   }
 
-  if (!memory_->InitializeFunctionTable(code_base, code_size, image_base, image_size)) {
+  if (!memory_->InitializeFunctionTable(code_base, code_size, table_base)) {
     REXLOG_ERROR("Failed to initialize guest memory function table");
     return false;
   }
@@ -218,6 +283,7 @@ bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t co
       .code_size = code_size,
       .image_base = image_base,
       .image_size = image_size,
+      .table_base = table_base,
       .next_thunk_address = code_base + code_size,
       .thunk_limit = code_base + code_size + kThunkReserveSize,
   });

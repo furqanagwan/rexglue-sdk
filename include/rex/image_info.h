@@ -79,6 +79,9 @@ struct PPCImageInfo {
   u32 code_size;
   u32 image_base;
   u32 image_size;
+  /// Where the function dispatch table goes; 0 for image_base + image_size.
+  /// Codegen moves it when a guest DLL's image would sit there.
+  u32 function_table_base = 0;
   const PPCFuncMapping* func_mappings;
   bool rexcrt_heap = false;  ///< Set by codegen when [rexcrt] has heap functions
   RegisterModulesFunc register_modules = nullptr;  ///< Set by codegen for multi-binary projects
@@ -96,6 +99,11 @@ struct PPCImageInfo {
   u32 title_update = 0;
   /// The title updates the title had, ended by a zero version; null when none.
   const PPCTitleUpdate* title_updates = nullptr;
+  /// Raw source XEX identity for first-run source validation. Empty for older
+  /// generated code. A TU build fingerprints its original, unpatched input XEX.
+  u32 source_title_id = 0;
+  const char* source_executable_checksum = "";
+  const char* source_executable_path = "default.xex";
 };
 
 }  // namespace rex

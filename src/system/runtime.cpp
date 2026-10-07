@@ -12,6 +12,8 @@
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/filesystem/devices/host_path_device.h>
+#include <rex/filesystem/devices/disc_image_device.h>
+#include <rex/filesystem/devices/optical_disc_reader.h>
 #include <rex/filesystem/devices/null_device.h>
 #include <rex/filesystem/devices/stfs_container_device.h>
 #include <rex/filesystem/vfs.h>
@@ -34,10 +36,19 @@
 #include <windows.h>
 
 REXCVAR_DEFINE_STRING(game_data_root, "", "Runtime", "Override game data path");
+REXCVAR_DEFINE_STRING(game_source, "", "Runtime", "First-run game folder or XDVDFS image")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
 REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
 REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
 REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
+// As Xenia Canary does (mount_cache, on since 2024-08-31): EA's titles copy
+// their streaming archives to the utility partition and read them from there;
+// without it NHL Legacy Edition read D:\(null)\cacherender.big and drew its
+// matches black (RG-GDK-069).
+REXCVAR_DEFINE_BOOL(mount_cache, true, "Runtime",
+                    "Mount the console's cache partitions (cache:, cache0:, cache1:) in the "
+                    "cache folder");
 
 namespace rex {
 
@@ -247,9 +258,9 @@ X_STATUS Runtime::Setup(const rex::PPCImageInfo& image_info, RuntimeConfig confi
 
   codegen_flags_ = image_info.codegen_flags;
 
-  if (!function_dispatcher_->InitializeFunctionTable(image_info.code_base, image_info.code_size,
-                                                     image_info.image_base, image_info.image_size,
-                                                     /*is_entrypoint=*/true)) {
+  if (!function_dispatcher_->InitializeFunctionTable(
+          image_info.code_base, image_info.code_size, image_info.image_base, image_info.image_size,
+          /*is_entrypoint=*/true, image_info.function_table_base)) {
     REXSYS_ERROR("Failed to initialize function table");
     Shutdown();
     return X_STATUS_UNSUCCESSFUL;
@@ -340,15 +351,22 @@ bool Runtime::SetupVfs() {
   }
 
   auto abs_game_root = std::filesystem::absolute(game_data_root_);
-  if (!std::filesystem::exists(abs_game_root)) {
+  if (!rex::filesystem::IsOpticalDiscPath(abs_game_root) &&
+      !std::filesystem::exists(abs_game_root)) {
     REXSYS_ERROR("Runtime::SetupVfs: game_data_root does not exist: {}", abs_game_root.string());
     return false;
   }
 
   // Mount game_data_root as \Device\Harddisk0\Partition1
   auto mount_path = "\\Device\\Harddisk0\\Partition1";
-  auto device = std::make_unique<rex::filesystem::HostPathDevice>(
-      mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes));
+  std::unique_ptr<rex::filesystem::Device> device;
+  if (rex::filesystem::IsOpticalDiscPath(abs_game_root) ||
+      std::filesystem::is_regular_file(abs_game_root)) {
+    device = std::make_unique<rex::filesystem::DiscImageDevice>(mount_path, abs_game_root);
+  } else {
+    device = std::make_unique<rex::filesystem::HostPathDevice>(
+        mount_path, abs_game_root, !REXCVAR_GET(allow_game_relative_writes));
+  }
   if (!device->Initialize()) {
     REXSYS_ERROR("Runtime::SetupVfs: Failed to initialize host path device");
     return false;
@@ -403,9 +421,29 @@ bool Runtime::SetupVfs() {
     REXSYS_DEBUG("  Registered NullDevice for \\Device\\Harddisk0\\{{Partition0,Cache0,Cache1}}");
   }
 
-  // NOTE: Do NOT register a device for cache: paths
-  // Games handle "device not found" gracefully but don't handle actual device
-  // errors (like NAME_COLLISION) well. Let cache: fail cleanly.
+  // The utility partitions as host folders under the cache root (Canary's
+  // mount_cache): cache0: and cache1: first, since cache: is their prefix.
+  if (REXCVAR_GET(mount_cache) && !cache_root_.empty()) {
+    struct Partition {
+      const char* device;
+      const char* folder;
+      const char* link;
+    };
+    for (const Partition& p :
+         {Partition{"\\CACHE0", "cache0", "cache0:"}, Partition{"\\CACHE1", "cache1", "cache1:"},
+          Partition{"\\CACHE", "cache", "cache:"}}) {
+      const std::filesystem::path folder = cache_root_ / "partitions" / p.folder;
+      std::error_code ec;
+      std::filesystem::create_directories(folder, ec);
+      auto partition = std::make_unique<rex::filesystem::HostPathDevice>(p.device, folder, false);
+      if (partition->Initialize() && file_system_->RegisterDevice(std::move(partition))) {
+        file_system_->RegisterSymbolicLink(p.link, p.device);
+        REXSYS_DEBUG("  Mounted {} at {}", folder.string(), p.link);
+      } else {
+        REXSYS_WARN("Runtime::SetupVfs: could not mount {} at {}", folder.string(), p.link);
+      }
+    }
+  }
 
   return true;
 }

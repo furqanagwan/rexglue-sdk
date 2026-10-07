@@ -43,9 +43,9 @@ REXCVAR_DEFINE_BOOL(resolve_resolution_scale_fill_half_pixel_offset, true, "GPU"
 namespace rex::graphics::draw_util {
 
 bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_polygonal) {
-  // TODO(Triang3l): Investigate EdramMode::kNoOperation better, with respect to
-  // sample counting. Let's assume sample counting is a part of depth / stencil,
-  // thus disabled too.
+  // The sample counters live in the RB with depth/stencil testing.
+  // kNoOperation and kCopy don't count. D3D sits in kCopy during
+  // EVENT_WRITE_ZPD, which only snapshots the running counters.
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
   if (edram_mode != xenos::EdramMode::kColorDepth && edram_mode != xenos::EdramMode::kDepthOnly) {
     return false;
@@ -53,6 +53,11 @@ bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_pol
   if (regs.Get<reg::SQ_PROGRAM_CNTL>().vs_export_mode ==
           xenos::VertexShaderExportMode::kMultipass ||
       !regs.Get<reg::RB_SURFACE_INFO>().surface_pitch) {
+    return false;
+  }
+  // Geometry killed after hi-Z only feeds the VIZ survey. Without an ID,
+  // nothing consumes it (screen-extent queries are not emulated).
+  if (regs.Get<reg::PA_SC_VIZ_QUERY>().kill_pix_post_hi_z && !IsVIZSurveyDraw(regs)) {
     return false;
   }
   if (primitive_polygonal) {
@@ -65,6 +70,12 @@ bool IsRasterizationPotentiallyDone(const RegisterFile& regs, bool primitive_pol
   return true;
 }
 
+bool IsVIZSurveyDraw(const RegisterFile& regs) {
+  auto pa_sc_viz_query = regs.Get<reg::PA_SC_VIZ_QUERY>();
+  return REXCVAR_GET(occlusion_query_viz) && pa_sc_viz_query.viz_query_ena &&
+         pa_sc_viz_query.kill_pix_post_hi_z;
+}
+
 reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs) {
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
   if (edram_mode != xenos::EdramMode::kColorDepth && edram_mode != xenos::EdramMode::kDepthOnly) {
@@ -74,6 +85,15 @@ reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs) {
     return disabled;
   }
   reg::RB_DEPTHCONTROL depthcontrol = regs.Get<reg::RB_DEPTHCONTROL>();
+  if (IsVIZSurveyDraw(regs)) {
+    // VIZ surveys just test, never write. Nothing rejects them with hi-Z off.
+    depthcontrol.z_write_enable = 0;
+    depthcontrol.stencil_enable = 0;
+    // Surveys use per-sample depth tests when hi-Z is on.
+    if (!regs.Get<reg::RB_HIZCONTROL>().hiz_enable) {
+      depthcontrol.z_enable = 0;
+    }
+  }
   // For more reliable skipping of depth render target management for draws not
   // requiring depth.
   if (depthcontrol.z_enable && !depthcontrol.z_write_enable &&
@@ -125,6 +145,11 @@ bool IsPixelShaderNeededWithRasterization(const Shader& shader, const RegisterFi
   // See xenos::EdramMode for explanation why the pixel shader is only used when
   // it's kColorDepth here.
   if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth) {
+    return false;
+  }
+
+  // Surveys just count coverage; hardware kills them before the shader.
+  if (IsVIZSurveyDraw(regs)) {
     return false;
   }
 
@@ -581,7 +606,8 @@ void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_su
 
 uint32_t GetNormalizedColorMask(const RegisterFile& regs,
                                 uint32_t pixel_shader_writes_color_targets) {
-  if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth) {
+  if (regs.Get<reg::RB_MODECONTROL>().edram_mode != xenos::EdramMode::kColorDepth ||
+      IsVIZSurveyDraw(regs)) {
     return 0;
   }
   uint32_t normalized_color_mask = 0;
@@ -1138,6 +1164,24 @@ bool GetResolveInfo(const RegisterFile& regs, const memory::Memory& memory,
   return true;
 }
 
+// The fast resolves are only right when the destination reads the bits the
+// EDRAM view stores: fixed colors as unsigned fractions, float colors as
+// floats. Signed and integer destinations need the full resolve to repack.
+static constexpr bool ColorResolveNumberFormatMatches(xenos::ColorFormat color_format,
+                                                      xenos::SurfaceNumberFormat num_format) {
+  switch (color_format) {
+    case xenos::ColorFormat::k_16_FLOAT:
+    case xenos::ColorFormat::k_16_16_FLOAT:
+    case xenos::ColorFormat::k_16_16_16_16_FLOAT:
+    case xenos::ColorFormat::k_32_FLOAT:
+    case xenos::ColorFormat::k_32_32_FLOAT:
+    case xenos::ColorFormat::k_32_32_32_32_FLOAT:
+      return num_format == xenos::SurfaceNumberFormat::kFloat;
+    default:
+      return num_format == xenos::SurfaceNumberFormat::kUnsignedRepeatingFraction;
+  }
+}
+
 ResolveCopyShaderIndex ResolveInfo::GetCopyShader(uint32_t draw_resolution_scale_x,
                                                   uint32_t draw_resolution_scale_y,
                                                   ResolveCopyShaderConstants& constants_out,
@@ -1147,12 +1191,21 @@ ResolveCopyShaderIndex ResolveInfo::GetCopyShader(uint32_t draw_resolution_scale
   bool is_depth = IsCopyingDepth();
   ResolveEdramInfo edram_info = is_depth ? depth_edram_info : color_edram_info;
   bool source_is_64bpp = !is_depth && color_edram_info.format_is_64bpp != 0;
+  // The fast resolves copy the EDRAM bits. Hardware decodes 8_8_8_8_GAMMA to
+  // linear (a title keeping the encoding re-aliases the surface as 8_8_8_8
+  // first), and a copy_dest_number other than the EDRAM's own interpretation
+  // needs repacking, so both take the full shader (xenia-canary d119505289,
+  // 2ddc5ef737, fc48d37cdc).
+  bool gamma_source = !is_depth && xenos::ColorRenderTargetFormat(color_edram_info.format) ==
+                                       xenos::ColorRenderTargetFormat::k_8_8_8_8_GAMMA;
   if (is_depth ||
-      (!copy_dest_info.copy_dest_exp_bias &&
+      (!gamma_source && !copy_dest_info.copy_dest_exp_bias &&
        xenos::IsSingleCopySampleSelected(copy_dest_coordinate_info.copy_sample_select) &&
        xenos::IsColorResolveFormatBitwiseEquivalent(
            xenos::ColorRenderTargetFormat(color_edram_info.format),
-           xenos::ColorFormat(copy_dest_info.copy_dest_format)))) {
+           xenos::ColorFormat(copy_dest_info.copy_dest_format)) &&
+       ColorResolveNumberFormatMatches(xenos::ColorFormat(copy_dest_info.copy_dest_format),
+                                       copy_dest_info.copy_dest_number))) {
     if (edram_info.msaa_samples >= xenos::MsaaSamples::k4X) {
       shader = source_is_64bpp ? ResolveCopyShaderIndex::kFast64bpp4xMSAA
                                : ResolveCopyShaderIndex::kFast32bpp4xMSAA;

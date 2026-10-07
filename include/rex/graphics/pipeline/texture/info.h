@@ -126,6 +126,10 @@ struct FormatInfo {
   uint32_t block_width;
   uint32_t block_height;
   uint32_t bits_per_pixel;
+  // Bits of each stored component, 0 for none (and for non-fixed formats).
+  uint8_t component_bits[4];
+  // Fixed point: the host samples it normalized.
+  bool fixed;
 
   uint32_t bytes_per_block() const { return block_width * block_height * bits_per_pixel / 8; }
 

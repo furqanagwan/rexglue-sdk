@@ -1,5 +1,21 @@
 # Compatibility baseline and regression strategy
 
+## CTest configuration discovery (2026-10-07)
+
+During PC host validation, a Release CTest run invoked Debug GPU executables
+after a Debug build. Vendored Catch2's POST_BUILD discovery writes a shared
+test file in this multi-configuration build. This made the known Debug
+tessellation assertion appear to be a Release regression and invalidated
+that run as Release evidence.
+
+The SDK selects Catch2's existing PRE_TEST discovery mode. Each configuration
+then receives its own discovered test file. Validation must inspect CTest's
+`--show-only=json-v1` inventory as well as the test count: every SDK executable
+argument, including nested PowerShell invocations, must match Debug or Release
+as requested. The corrected full Release suite passes; the baseline Debug
+tessellation fixture failure remains independently reproducible and open.
+Current counts and limitations are in [release evidence](release-evidence.md).
+
 ## Current baseline
 
 As of 2026-09-27 (RG-GDK-001 closed):
@@ -460,6 +476,32 @@ and a tested rollback. Run save tests on disposable copies. A build-only pass
 cannot close a compatibility migration. When hardware is unavailable, keep that
 gate blocked and the issue open.
 
+## PPC test corpus (RG-GDK-054)
+
+Besides ReXGlue's own `tests/ppc` suite (1,473 cases, default CTest),
+`tests/ppc/corpus` carries xenia-edge's 578 instruction test files, most of
+them captured on Xbox 360 hardware ([README](../tests/ppc/corpus/README.md)).
+It is opt-in (`-DREXGLUE_PPC_CORPUS=ON`), one CTest test per file, labelled
+`ppc_corpus`; run it for any codegen, PPC builder or FPSCR change.
+
+`tests/ppc/corpus/known_failures.txt` lists each case expected to fail with
+its cause. A new failure or a known failure that passes fails the file's test,
+so the list always matches the run; a fix removes its entries in the same
+change. Measured 2026-10-02 (GDK Release, `main` 8aaf14e plus RG-GDK-055):
+567 files, 169,459 cases run (917 skipped by Edge's `skip.txt`, 11 files the
+bundled assembler can't assemble), 3,381 known failures. RG-GDK-055 (#151)
+cleared the 27,585 floating-point failures RG-GDK-054 started with, and
+RG-GDK-072 (#185) the 40 other wrong results (2026-10-03), leaving 3,341.
+
+| Cause | Cases |
+| --- | --- |
+| #149 missing instructions, and `mfmsr` | 3,333 |
+| Corpus errors: hand-written cases expecting a non-IEEE result (`faddx_3`, `fcmpu_1`, ...) | 8 |
+
+Each case starts from a reset FPSCR (round to nearest, no flush) and a zeroed
+test data window, as Edge's runner does; without that, rounding modes and
+memory left by earlier cases changed later results.
+
 ## Regression tracking index
 
 These are **upstream-reported risks**, not newly proven ReXGlue regressions.
@@ -487,6 +529,34 @@ SHAs or `unknown`, title/module hash, subsystem, vendor matrix, reproduction,
 logs/images/PIX as appropriate, upstream links, suspect change, workaround and
 acceptance test. Label `regression` plus subsystem/vendor labels. Triage at each
 port/release and during the monthly upstream review.
+
+## Debug tessellation fixture, 2026-10-06
+
+Found while validating the [Guide extraction](xbox-guide-extraction.md).
+Standard Windows x64 Debug, Clang 22.1.8, VS 2026 Community, NVIDIA on the
+development machine. `gpu.A tessellated quad patch covers the domain the shader maps`
+fails at `src/graphics/pipeline/shader/dxbc_translator.cpp:551`, asserting
+`register_count() >= 2` for the patch-indexed quad domain shader. Release
+passes this fixture with assertions disabled; that does not validate the Debug
+contract. No game assets are involved.
+
+Reproduction: build Debug and run `gpu_tests.exe "[tessellation]"`, or the full
+Debug CTest preset. Full extracted-suite result: 2,078 discovered, 2,066 passed,
+11 skipped, one failed. The Guide-specific Debug suite passes 51 cases with
+six private-asset cases skipped.
+
+The same assertion independently reproduces after archiving and freshly
+building pre-extraction SDK commit `d1a87b4ef0a09c7a7813ab2a2b27976de01de203`
+with the standard preset's `-march=x86-64-v2` flags and original dependency
+pins. This establishes an existing fixture/translator failure, rather than a
+new Guide extraction regression. First bad and last good Debug revisions are
+unknown. No assertion or GPU behavior was changed to hide it.
+
+Local logs: `out/guide-ctest-debug.log`, `out/guide-original-debug-build.log`
+and `out/guide-original-debug-tessellation.log`. Follow-up must reconcile the
+fixture's domain shader register use with the translator's two-register
+contract and pass the same test in Debug and Release. It stays unresolved;
+the Guide extraction does not close or claim to fix it.
 
 ## Initial Windows D3D12 baseline results (RG-GDK-001)
 
@@ -521,3 +591,42 @@ GPU coverage does not block local completion.
 The known generated branch from `0x824A287C` to `0x821C1BF8` emits `REX_FATAL`.
 The observed boot crash is an illegal instruction at a different generated code
 offset; its cause is still unknown. Keep these as separate investigation items.
+
+## Game-source and removable-media regression gates (2026-10-07)
+
+[ADR-014](adr/ADR-014-game-source-and-media-recovery.md) replaces mapped image
+pages with checked reads. Synthetic disc tests reject malformed headers,
+cycles, unsafe names and out-of-range payloads; alignment fakes enforce sector
+and buffer requirements. Actual image truncation exercises failure on an
+already-open handle. Concurrent recovery keeps existing entry pointers,
+rejects changed layouts and never blocks a UI-thread read on its own dialog.
+Cancellation releases waiting workers, including during retry validation.
+
+Game-source tests cover executable fingerprints, custom guest paths, original
+inputs for TU builds, extraction completion/cancellation/read failure,
+existing destination preservation and game:/d: runtime mounts. ImGui tests
+cover validation-before-launch, persistence, mismatch rejection, Leave Game,
+shutdown without launch, and controller disconnect/disposal. Leave Game uses
+the same window-close path as the Guide; UI-only tests do not prove title
+termination or painted GPU presentation.
+
+Before closing #154, run each real first-run choice, source-original/TU
+launches, image removal on a substituted/removable drive and physical optical
+media removal/reinsert with the same and a different disc. Preserve saves and
+use disposable copies for failure injection. Painted XuiMessageBox3/Active
+Downloads and physical pad checks remain open. Results and the existing Debug
+GPU assertion are recorded in [release evidence](release-evidence.md).
+
+The scene adapter additionally tests the private reference's native choice
+controls and Active Downloads template, safe initial Leave focus, controller
+A activation without a prior directional input, extraction completion history
+and local-folder handoff. Invisible ImGui hit targets must explicitly opt in
+to navigation. Controller activation must make the navigation cursor visible;
+otherwise ImGui ignores the first A press. Both gaps were caught and fixed
+before publication. A temporary fixture collision during concurrent SDK test
+processes was resolved with per-process source/disc fixture paths; final full
+Debug and Release suites run sequentially. This is a test-fixture correction,
+not a title compatibility claim.
+
+The recovery fallback additionally tests first controller A on the initial
+Leave Game choice, so absent Guide assets preserve the same safe default.

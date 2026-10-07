@@ -43,10 +43,21 @@ endfunction()
 
 # Add a PPC test binary from an assembly file.
 # Assembles .s -> .o, links .o -> .bin, generates .o -> .map.
-# Appends output files to PPC_TEST_BINS, PPC_TEST_MAPS, PPC_TEST_OBJS
-# global properties.
+# Appends output files to <PREFIX>_BINS, <PREFIX>_MAPS and <PREFIX>_OBJS
+# global properties; PREFIX, the optional fourth argument, defaults to
+# PPC_TEST (the corpus suite keeps its own lists).
 function(ppc_add_test_binary ASM_FILE OBJ_DIR BIN_DIR)
     get_filename_component(BASE_NAME ${ASM_FILE} NAME_WE)
+    set(PREFIX PPC_TEST)
+    if(ARGC GREATER 3)
+        set(PREFIX ${ARGV3})
+    endif()
+    # mcrxr left the architecture after POWER4; assemble its test as classic
+    # PowerPC as well.
+    set(EXTRA_AS_FLAGS "")
+    if(BASE_NAME MATCHES "mcrxr")
+        set(EXTRA_AS_FLAGS -many)
+    endif()
 
     set(OBJ_FILE ${OBJ_DIR}/${BASE_NAME}.o)
     set(BIN_FILE ${BIN_DIR}/${BASE_NAME}.bin)
@@ -61,7 +72,7 @@ function(ppc_add_test_binary ASM_FILE OBJ_DIR BIN_DIR)
     add_custom_command(
         OUTPUT ${OBJ_FILE}
         COMMAND ${PPC_ASSEMBLER}
-                -a32 -be -mregnames -mpower7 -maltivec -mvsx -mvmx128 -R
+                -a32 -be -mregnames -mpower7 -maltivec -mvsx -mvmx128 -R ${EXTRA_AS_FLAGS}
                 -o ${OBJ_FILE_CYGWIN}
                 ${ASM_FILE_CYGWIN}
         DEPENDS ${ASM_FILE}
@@ -91,7 +102,7 @@ function(ppc_add_test_binary ASM_FILE OBJ_DIR BIN_DIR)
         VERBATIM
     )
 
-    set_property(GLOBAL APPEND PROPERTY PPC_TEST_BINS ${BIN_FILE})
-    set_property(GLOBAL APPEND PROPERTY PPC_TEST_MAPS ${MAP_FILE})
-    set_property(GLOBAL APPEND PROPERTY PPC_TEST_OBJS ${OBJ_FILE})
+    set_property(GLOBAL APPEND PROPERTY ${PREFIX}_BINS ${BIN_FILE})
+    set_property(GLOBAL APPEND PROPERTY ${PREFIX}_MAPS ${MAP_FILE})
+    set_property(GLOBAL APPEND PROPERTY ${PREFIX}_OBJS ${OBJ_FILE})
 endfunction()

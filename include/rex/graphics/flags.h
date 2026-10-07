@@ -32,6 +32,7 @@ REXCVAR_DECLARE(bool, readback_memexport_fast);
 REXCVAR_DECLARE(bool, occlusion_query_enable);
 REXCVAR_DECLARE(std::string, occlusion_query);
 REXCVAR_DECLARE(bool, occlusion_query_full_counters);
+REXCVAR_DECLARE(bool, occlusion_query_viz);
 REXCVAR_DECLARE(bool, gpu_scalar_approximation_rounding);
 REXCVAR_DECLARE(bool, mulsc_round_toward_zero);
 REXCVAR_DECLARE(int32_t, query_occlusion_fake_sample_count);
@@ -76,6 +77,7 @@ REXCVAR_DECLARE(bool, use_fuzzy_alpha_epsilon);
 
 // GPU Shader Translation
 REXCVAR_DECLARE(std::string, dump_shaders);
+REXCVAR_DECLARE(std::string, gpu_shader_path);
 REXCVAR_DECLARE(std::string, swap_post_effect);
 
 REXCVAR_DECLARE(bool, dxbc_switch);

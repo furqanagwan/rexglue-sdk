@@ -41,3 +41,6 @@
 [submodule "thirdparty/tracy"]
 	path = thirdparty/tracy
 	url = https://github.com/wolfpld/tracy.git
+[submodule "thirdparty/xbox-guide"]
+	path = thirdparty/xbox-guide
+	url = https://github.com/furqanagwan/xbox-guide.git

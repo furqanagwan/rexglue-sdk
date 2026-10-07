@@ -37,6 +37,7 @@ const rex::PPCImageInfo PPCImageConfig = {
     .code_size = REX_CODE_SIZE,
     .image_base = REX_IMAGE_BASE,
     .image_size = REX_IMAGE_SIZE,
+    .function_table_base = REX_FUNC_TABLE_BASE,
     .func_mappings = PPCFuncMappings,
     .rexcrt_heap = REXCRT_HEAP,
 {% if has_dll_modules and not is_dll %}
@@ -58,6 +59,9 @@ const rex::PPCImageInfo PPCImageConfig = {
     .title_dlc = kTitleDlc,
     .title_update = {{ title_update }},
     .title_updates = kTitleUpdates,
+    .source_title_id = {{ source_title_id }},
+    .source_executable_checksum = "{{ source_executable_checksum }}",
+    .source_executable_path = "{{ source_executable_path }}",
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

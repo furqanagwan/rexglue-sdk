@@ -81,6 +81,16 @@ class TextureCache {
   virtual void BeginFrame();
 
   void MarkRangeAsResolved(uint32_t start_unscaled, uint32_t length_unscaled);
+  // A resolve that wrote this range at the guest's size (ADR-012): pages it
+  // covers whole are no longer scaled, so textures there read the unscaled
+  // data. A page it only partly covers keeps the scaled copy, which the
+  // resolve also wrote.
+  void MarkRangeAsNativeResolved(uint32_t start_unscaled, uint32_t length_unscaled);
+  // Whether any page of the range holds a scaled resolve, so its data is the
+  // scaled copy rather than shared memory.
+  bool IsRangeResolvedScaled(uint32_t start_unscaled, uint32_t length_unscaled) {
+    return IsRangeScaledResolved(start_unscaled, length_unscaled);
+  }
   // Ensures the memory backing the range in the scaled resolve address space is
   // allocated and returns whether it is.
   virtual bool EnsureScaledResolveMemoryCommitted(uint32_t /*start_unscaled*/,
@@ -120,6 +130,10 @@ class TextureCache {
   uint8_t GetActiveTextureSwizzledSigns(uint32_t fetch_constant_index) const {
     const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
     return binding ? binding->swizzled_signs : kSwizzledSignsUnsigned;
+  }
+  uint32_t GetActiveIntegerScaleBits(uint32_t fetch_constant_index) const {
+    const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
+    return binding ? binding->integer_scale_bits : 0;
   }
   bool IsActiveTextureResolutionScaled(uint32_t fetch_constant_index) const {
     const TextureBinding* binding = GetValidTextureBinding(fetch_constant_index);
@@ -452,6 +466,9 @@ class TextureCache {
 
   struct TextureBinding {
     TextureKey key;
+    // Packed fixed texture conversion for the fetch shader, see
+    // texture_util::GetIntegerScaleBits.
+    uint32_t integer_scale_bits;
     // Destination swizzle merged with guest to host format swizzle.
     uint32_t host_swizzle;
     // Packed TextureSign values, 2 bit per each component, with guest-side

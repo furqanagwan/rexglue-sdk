@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -80,8 +81,11 @@ class FunctionDispatcher : public IModuleRegistrar {
   // rexglue function table management (per-module table at IMAGE_BASE + IMAGE_SIZE)
   // Set is_entrypoint=true exactly once for the host-loaded entrypoint so
   // AllocateThunk(caller_address=0) can route to its pool.
+  /// `table_base` is where the dispatch table goes (PPCImageInfo
+  /// function_table_base); 0 for image_base + image_size.
   bool InitializeFunctionTable(uint32_t code_base, uint32_t code_size, uint32_t image_base,
-                               uint32_t image_size, bool is_entrypoint = false);
+                               uint32_t image_size, bool is_entrypoint = false,
+                               uint32_t table_base = 0);
   bool SetFunction(uint32_t guest_address, ::PPCFunc* func) override;
   ::PPCFunc* GetFunction(uint32_t guest_address);
   /**
@@ -126,6 +130,7 @@ class FunctionDispatcher : public IModuleRegistrar {
     uint32_t code_size;
     uint32_t image_base;
     uint32_t image_size;
+    uint32_t table_base;
     uint32_t next_thunk_address;
     uint32_t thunk_limit;
   };
@@ -161,5 +166,11 @@ class FunctionDispatcher : public IModuleRegistrar {
   // Protects dispatcher metadata during module registration and callback dispatch.
   mutable std::recursive_mutex dispatch_mutex_;
 };
+
+/// Adds `guest_address` to the indirect call trace at `path` (RG-GDK-066): a
+/// TOML file whose [functions] table the title's codegen config can include,
+/// so the next codegen registers every target a run found unregistered. The
+/// file keeps what earlier runs recorded. False if it can't be written.
+bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address);
 
 }  // namespace rex::runtime

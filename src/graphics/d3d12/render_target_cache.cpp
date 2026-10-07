@@ -1208,8 +1208,11 @@ bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMe
       const draw_util::ResolveCopyShaderInfo& copy_shader_info =
           draw_util::resolve_copy_shader_info[size_t(copy_shader)];
       bool direct_resolved = false;
+      // Written at the guest's size after the scaled copy (ADR-012); the
+      // direct path writes textures, not the scaled copy it downscales.
+      const bool resolve_native = IsResolveNative(resolve_info);
       if (GetPath() == Path::kHostRenderTargets) {
-        if (REXCVAR_GET(direct_host_resolve)) {
+        if (REXCVAR_GET(direct_host_resolve) && !resolve_native) {
           direct_resolved =
               TryResolveCopyDirectly(resolve_info, copy_shader, draw_resolution_scaled);
           if (direct_resolved) {
@@ -1325,6 +1328,24 @@ bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMe
           // Invalidate textures and mark the range as scaled if needed.
           texture_cache.MarkRangeAsResolved(resolve_info.copy_dest_extent_start,
                                             resolve_info.copy_dest_extent_length);
+          // A native resolve also gets the guest-size copy: the center host
+          // sample of each texel into shared memory, which textures of the
+          // pages it covers then read.
+          if (resolve_native && shared_memory.RequestRange(resolve_info.copy_dest_extent_start,
+                                                           resolve_info.copy_dest_extent_length)) {
+            shared_memory.UseForWriting();
+            if (command_processor_.DispatchResolveDownscale(
+                    resolve_info.copy_dest_extent_start, resolve_info.copy_dest_extent_length,
+                    draw_util::GetResolveDownscalePixelSizeLog2(resolve_info.copy_dest_info),
+                    IsNativeResolveAveraged(resolve_info)
+                        ? D3D12CommandProcessor::ResolveDownscaleMode::kAverage
+                        : D3D12CommandProcessor::ResolveDownscaleMode::kCenter,
+                    shared_memory.GetBuffer(), resolve_info.copy_dest_extent_start)) {
+              shared_memory.MarkUAVWritesCommitNeeded();
+              texture_cache.MarkRangeAsNativeResolved(resolve_info.copy_dest_extent_start,
+                                                      resolve_info.copy_dest_extent_length);
+            }
+          }
           written_address_out = resolve_info.copy_dest_extent_start;
           written_length_out = resolve_info.copy_dest_extent_length;
           copied = true;

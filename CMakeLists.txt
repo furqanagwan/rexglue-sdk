@@ -18,6 +18,7 @@ project(ReXGlue
 # Build Options
 #==========================================================
 option(REXGLUE_BUILD_TESTS       "Build PPC instruction and unit tests" OFF)
+option(REXGLUE_PPC_CORPUS        "Build the hardware-captured PPC test corpus (170,000 cases, label ppc_corpus)" OFF)
 option(REXGLUE_ENABLE_SANITIZERS "Enable UndefinedBehaviorSanitizer" OFF)
 option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (experimental)" OFF)
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
@@ -25,6 +26,7 @@ option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter regi
 # Opt-in PC GDK build (RG-GDK-002). Off by default so standard Windows builds
 # need no GDK. The edition is pinned; see docs/gdk-toolchain.md.
 option(REXGLUE_USE_GDK "Build against an installed Microsoft GDK (PC) edition" OFF)
+option(REXGLUE_SHADER_DXIL "Opt-in DXIL shader toolchain: Mesa spirv_to_dxil, D3D12 Agility SDK and DXC (RG-GDK-032 stage 1)" OFF)
 set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Required GDK edition (_GRDK_EDITION)")
 set(REXGLUE_GDK_ROOT "$ENV{GameDKCoreLatest}" CACHE PATH "Installed GDK edition directory")
 # Propagate profiling defines globally (compiled out in Release)
@@ -153,6 +155,9 @@ set(REXGLUE_OUTPUT_DIR "${REXGLUE_ROOT}/out/${REX_PLATFORM}")
 if(REXGLUE_USE_GDK)
     string(APPEND REXGLUE_OUTPUT_DIR "-gdk")
 endif()
+if(REXGLUE_SHADER_DXIL)
+    string(APPEND REXGLUE_OUTPUT_DIR "-dxil")
+endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${REXGLUE_OUTPUT_DIR}")
@@ -170,9 +175,17 @@ if(REXGLUE_USE_GDK)
     rexglue_find_gdk(ROOT "${REXGLUE_GDK_ROOT}" EDITION "${REXGLUE_GDK_EDITION}")
 endif()
 
+if(REXGLUE_SHADER_DXIL)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rexglue_shader_dxil.cmake)
+endif()
+
 if(REXGLUE_BUILD_TESTS)
     list(APPEND CMAKE_MODULE_PATH "${REXGLUE_ROOT}/cmake")
     list(APPEND CMAKE_MODULE_PATH "${REXGLUE_ROOT}/thirdparty/catch2/extras")
+    # Catch's POST_BUILD mode writes one discovery file for all configurations.
+    # PRE_TEST keeps Debug/Release command paths separate under multi-config
+    # generators, even after alternating builds in the same output directory.
+    set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 endif()
 
 # Third-party dependencies (vendored sources only)
@@ -185,6 +198,14 @@ add_compile_options(
 )
 
 include_directories(${REXGLUE_ROOT}/include)
+
+# The Guide has its own repository; keep its pinned adapter in rexruntime.
+set(XBOX_GUIDE_SOURCE_DIR "${REXGLUE_ROOT}/thirdparty/xbox-guide")
+if(NOT EXISTS "${XBOX_GUIDE_SOURCE_DIR}/cmake/rexglue.cmake")
+    message(FATAL_ERROR "Xbox Guide submodule is missing; run git submodule update --init --recursive")
+endif()
+include("${XBOX_GUIDE_SOURCE_DIR}/cmake/rexglue.cmake")
+include_directories("${XBOX_GUIDE_SOURCE_DIR}/include")
 
 add_subdirectory(src/core)
 add_subdirectory(src/filesystem)

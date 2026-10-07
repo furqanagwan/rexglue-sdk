@@ -8,13 +8,14 @@ across compatible AMD, NVIDIA and Intel GPUs.
 **Status:** early-development modernization of upstream ReXGlue v0.10.0
 (`c94f5ebdcb3c9d1a460ca48e04f9758448f8d518`). Windows is the only supported
 host (Linux and macOS retired by RG-GDK-024) and Direct3D 12 is the only
-graphics backend (Vulkan removed by RG-GDK-023). The SDK builds and tests on
+graphics backend (Vulkan removed by RG-GDK-023). The SDK builds on
 Windows x64 with and without the April 2026 GDK. One title (Quantum of Solace)
 runs its recorded scene on NVIDIA. GDK packaging works for a minimal title. The
 native Win32 window, XAudio2 and GameInput (XInput outside GDK builds) are the
 only backends; SDL3 was removed (RG-GDK-033). AMD/Intel GPUs,
 other titles and fresh machines are not validated. Each claim and its evidence
-is in [release evidence](docs/release-evidence.md). Public APIs may change.
+is in [release evidence](docs/release-evidence.md), including the current Debug
+tessellation fixture failure. Public APIs may change.
 
 ## Purpose and architecture
 
@@ -54,6 +55,9 @@ See [architecture plan](docs/architecture-plan.md) and [decisions](docs/adr/READ
   [Edge](https://github.com/has207/xenia-edge) are compatibility research sources.
 * [furqanagwan/xenia-edge](https://github.com/furqanagwan/xenia-edge) is a
   controlled reference/experiment fork, not a dependency required to run ReXGlue.
+* [furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide) owns the
+  Guide and native XUI layer. This SDK pins its sources as a submodule and
+  supplies the complete Guide's host services.
 * Title repositories, such as [furqanagwan/007](https://github.com/furqanagwan/007),
   hold each game's configuration and investigation records, never game files.
   New ones follow the [title repository standard](docs/title-repo-standard.md).
@@ -146,6 +150,9 @@ installed `260404` edition and installs a package whose consumers resolve the
 GDK on their own machine; see [GDK toolchain](docs/gdk-toolchain.md) for the
 pinned versions, commands, results and what is not yet established (supported
 VS edition, clean machine). The standard `win-amd64` preset needs no GDK.
+`win-amd64-gdk-dxil` adds the opt-in DXIL shader toolchain (Mesa
+`spirv_to_dxil`, D3D12 Agility SDK 1.618.5, DXC 1.8.2502.8, the pairing
+Microsoft's PC backward compatibility ships); see [DXIL shader toolchain](docs/shader-dxil.md).
 GDK builds read pads through GameInput and other builds through XInput
 (`input_backend`): see [GameInput driver](docs/gameinput.md).
 Pads GameInput does not list, such as Bluetooth LE pads, come through
@@ -196,6 +203,9 @@ Both paths are optional: by default the title finds its game files in a `game`
 folder beside the executable (or the executable's own folder), keeps saves in
 `Saved Games\<name>` and caches, logs and settings in `%LOCALAPPDATA%\<name>`,
 as an Xbox PC game does ([data locations](docs/data-locations.md)).
+Rebuilt hosts can opt into pre-launch graphics/audio/language settings with
+`--launch_menu=true`. `rexglue title-art` generates native EXE icons and GDK
+images from local title art; see [PC backward compatibility coverage and gates](docs/pc-backward-compatibility.md).
 This is how the Quantum of Solace baseline runs. Add `--input_backend=gameinput`,
 `--ui_backend=win32` and `--audio_backend=xaudio2` for the native paths (GameInput
 needs a GDK build). `rexglue init gameconfig` adds a `MicrosoftGame.config` for
@@ -209,7 +219,27 @@ A title update is built as a second executable, `<title>_tu<version>`, from its
 package and its own config: a manifest `[[title_update]]` entry
 ([title updates](docs/title-updates.md)).
 
+### PC launch and game sources
+
+The existing Xbox 360 Guide remains the presentation for in-game features.
+An optional host settings screen is available with `--launch_menu=true` for
+graphics, audio and language settings before launch. Regenerated titles also validate the original source executable and
+offer a first-run folder/ISO/disc selector, optional cancellable extraction
+and Retry/Leave Game on media read failure. Sources use checked file I/O;
+source/recovery choices and copy progress use the console scenes when Guide
+assets are available. Physical drive, painted scene and real-title checks remain.
+See [PC experience and remaining gates](docs/pc-backward-compatibility.md).
+
 ### Xbox guide
+
+The Guide is maintained in [furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide),
+with its own issues and reusable XUI scene target. This SDK consumes a pinned
+`thirdparty/xbox-guide` submodule; use `git submodule update --init --recursive`
+after updating. The complete Guide uses ReXGlue services; other recomp SDKs can
+reuse the scene layer and adapt the host services. See the
+[extraction and issue ownership](docs/xbox-guide-extraction.md).
+The [2026-10-07 issue audit](docs/guide-issue-audit-20261007.md) distinguishes
+closed Guide work from outstanding acceptance checks and title rebuild evidence.
 
 Press View and Menu together (Back and Start on an Xbox 360 pad), or Home on
 the keyboard, to open the Xbox 360 guide over the running title, as Xbox backward
@@ -217,7 +247,11 @@ compatibility does. The Xbox button is left to Windows for Game Bar. The guide i
 from your own dashboard 2.0.17559 system update, and nothing from it ships with
 the SDK. Set `REXGLUE_SYSTEM_UPDATE` to that `$SystemUpdate` folder when you
 build a title (CMake variable or environment variable) and the guide is built into
-the executable: players need nothing and it works offline.
+the executable: players need nothing and it works offline. Xbox 360 presentation
+is the default and ignores a configured `REXGLUE_GUIDE_FLASH` path. An original
+Xbox host explicitly selects `GUIDE_PRESENTATION original-xbox` and supplies its
+own BC `Content/Flash` assets. The Guide mode does not add original Xbox game
+execution; see [Guide presentation](docs/adr/ADR-015-guide-presentation-by-title.md).
 Games & Apps has the title's achievements (grid and details) and Manage Game,
 which lists the title's marketplace add-ons (its config's `[[dlc]]`; the build
 fetches their names, descriptions and art) and installs them from packages on

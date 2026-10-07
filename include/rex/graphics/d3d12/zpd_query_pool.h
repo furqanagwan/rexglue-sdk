@@ -85,6 +85,17 @@ class D3D12ZPDQueryPool {
   void FlushResolveBatch(DeferredCommandList& deferred_command_list, uint64_t submission,
                          bool submission_open);
 
+  // VIZ predicates (xenia-canary #1111): SetPredication reads a buffer, so a
+  // survey's count is staged into `dest` at `dest_offset` (8 bytes, the
+  // destination in COPY_DEST). The occlusion query's sample count, after
+  // EndQuery:
+  void ResolveQueryTo(DeferredCommandList& deferred_command_list, uint32_t query_index,
+                      ID3D12Resource* dest, uint64_t dest_offset) const;
+  // The ROV counter slot's ZPass lane (the low dword only; the high one stays
+  // as the destination has it):
+  void CopyCounterZPassTo(DeferredCommandList& deferred_command_list, uint64_t submission,
+                          uint32_t query_index, ID3D12Resource* dest, uint64_t dest_offset);
+
   XenosZPDReport GetQueryReadbackValue(uint32_t query_index, bool counter = false) const;
   // A hybrid query resolves both the native query and the counter slot.
   XenosZPDReport GetHybridReadbackValue(uint32_t query_index) const;

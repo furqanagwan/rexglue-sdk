@@ -53,6 +53,29 @@ elseif(REXGLUE_RECOMP_DEBUG_INFO STREQUAL "line-tables-only")
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-gline-tables-only>)
 endif()
 
+# Fallback build (RG-GDK-066): generated files whose name matches this regex
+# ("ALL" for every one) compile without optimisation and without the
+# precompiled header, to find a suspected miscompile by bisecting the files
+# without touching the title config. Empty: none.
+set(REXGLUE_RECOMP_FALLBACK "" CACHE STRING
+    "Generated files to build unoptimised: ALL, or a regex of file names")
+function(_rexglue_apply_recomp_fallback)
+    if(NOT REXGLUE_RECOMP_FALLBACK)
+        return()
+    endif()
+    set(_count 0)
+    foreach(_source IN LISTS ARGN)
+        get_filename_component(_name "{{ cmake_var("_source") }}" NAME)
+        if(REXGLUE_RECOMP_FALLBACK STREQUAL "ALL" OR _name MATCHES "{{ cmake_var("REXGLUE_RECOMP_FALLBACK") }}")
+            set_property(SOURCE "{{ cmake_var("_source") }}" APPEND PROPERTY COMPILE_OPTIONS
+                $<IF:$<CXX_COMPILER_ID:MSVC>,/Od,-O0>)
+            set_source_files_properties("{{ cmake_var("_source") }}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+            math(EXPR _count "{{ cmake_var("_count") }} + 1")
+        endif()
+    endforeach()
+    message(STATUS "ReXGlue fallback build: {{ cmake_var("_count") }} generated files unoptimised")
+endfunction()
+
 # Include entrypoint generated code if codegen has been run.
 if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/sources.cmake")
     include({{ entrypoint_out_dir }}/sources.cmake)
@@ -62,6 +85,7 @@ if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ entrypoint_out_dir }}/
     # Carried on the sources so they hold for whichever target compiles them.
     set_source_files_properties({{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }}
         PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
+    _rexglue_apply_recomp_fallback({{ cmake_var("REXGLUE_ENTRYPOINT_GENERATED_SOURCES") }})
 endif()
 # Each version's sources.cmake sets the add-on list its executable embeds.
 set(REXGLUE_ENTRYPOINT_DLC_IDS "{{ cmake_var("REXGLUE_TITLE_DLC_IDS") }}")
@@ -74,6 +98,7 @@ if(EXISTS "{{ cmake_var("CMAKE_CURRENT_SOURCE_DIR") }}/{{ tu.out_dir }}/sources.
     set({{ tu.dlc_var }} "{{ cmake_var("REXGLUE_TITLE_DLC_IDS") }}")
     set_source_files_properties({{ cmake_var(tu.sources_var) }}
         PROPERTIES COMPILE_OPTIONS "{{ cmake_var("REXGLUE_RECOMP_OPTIONS") }}")
+    _rexglue_apply_recomp_fallback({{ cmake_var(tu.sources_var) }})
 endif()
 {% endfor %}
 set(REXGLUE_TITLE_DLC_IDS "{{ cmake_var("REXGLUE_ENTRYPOINT_DLC_IDS") }}")

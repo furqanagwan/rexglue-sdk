@@ -27,29 +27,8 @@ set(REXUI_OVERLAY_SOURCES
     overlay/console_overlay.cpp
     overlay/console_commands.cpp
     overlay/settings_overlay.cpp
-)
-
-# The Xbox guide on the console's own scenes (RG-GDK-041)
-set(REXUI_GUIDE_SOURCES
-    guide/dlc_catalog.cpp
-    guide/guide_dlc.cpp
-    guide/guide_input.cpp
-    guide/guide_layout.cpp
-    guide/guide_title_update.cpp
-    guide/title_update.cpp
-    guide/guide_notification.cpp
-    guide/guide_settings.cpp
-    guide/xbox_guide.cpp
-)
-
-# Native XUI: the console's own scene format (RG-GDK-041)
-set(REXUI_XUI_SOURCES
-    xui/package.cpp
-    xui/renderer.cpp
-    xui/runtime.cpp
-    xui/schema.cpp
-    xui/system_update.cpp
-    xui/xur_reader.cpp
+    overlay/launch_settings.cpp
+    overlay/game_source.cpp
 )
 
 # D3D12 UI backend
@@ -78,8 +57,6 @@ set(REXUI_PLATFORM_SOURCES
 set(REXUI_SOURCES
     ${REXUI_CORE_SOURCES}
     ${REXUI_OVERLAY_SOURCES}
-    ${REXUI_XUI_SOURCES}
-    ${REXUI_GUIDE_SOURCES}
     ${REXUI_PLATFORM_SOURCES}
 )
 
@@ -89,6 +66,7 @@ endif()
 
 add_library(rexui OBJECT ${REXUI_SOURCES})
 add_library(rex::ui ALIAS rexui)
+xbox_guide_attach_rexglue(rexui)
 
 rex_target_pch(rexui <rex/math.h>)
 
@@ -112,8 +90,6 @@ target_link_libraries(rexui PUBLIC
 target_link_libraries(rexui PRIVATE utf8cpp)
 # Native Win32 window: DWM corner preference, IME association, drag and drop.
 target_link_libraries(rexui PRIVATE dwmapi imm32 shell32)
-# Title update downloads (guide/title_update.cpp).
-target_link_libraries(rexui PRIVATE winhttp)
 
 if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
     target_include_directories(rexui PRIVATE

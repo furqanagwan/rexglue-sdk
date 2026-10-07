@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <fmt/format.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/pipeline/render_target/scaling_list.h>
 #include <rex/graphics/pipeline/shader/shader.h>
 #include <rex/graphics/register_file.h>
 #include <rex/graphics/registers.h>
@@ -164,6 +166,17 @@ class RenderTargetCache {
   // to be discarded.
   uint32_t draw_resolution_scale_x() const { return draw_resolution_scale_x_; }
   uint32_t draw_resolution_scale_y() const { return draw_resolution_scale_y_; }
+  // Whether this resolve is written at the guest's size (ADR-012): the
+  // resolution is scaled, resolution_scale_targets doesn't list the resolved
+  // size, and the copy can be downscaled whole (a 2D destination of up to
+  // 64bpp that the resolved rectangle covers, so no texel beside it changes).
+  // Logs each resolved size once with log_resolution_scale_targets.
+  bool IsResolveNative(const draw_util::ResolveInfo& resolve_info);
+  // Whether a native resolve averages each texel's host block
+  // (resolve_downscale_average, supersampling) rather than taking its center:
+  // only for formats of 8-bit channels, where a per-byte mean is exact.
+  bool IsNativeResolveAveraged(const draw_util::ResolveInfo& resolve_info);
+
   bool IsDrawResolutionScaled() const {
     return draw_resolution_scale_x() > 1 || draw_resolution_scale_y() > 1;
   }
@@ -577,6 +590,11 @@ class RenderTargetCache {
   uint32_t draw_resolution_scale_y_;
 
   DrawExtentEstimator draw_extent_estimator_;
+
+  // resolution_scale_targets (ADR-012). Phase 1 only reports which render
+  // target sizes the list would scale (log_resolution_scale_targets).
+  ScalingResolutionList scaling_list_;
+  std::set<uint64_t> logged_render_target_sizes_;
 
   // For host render targets.
 

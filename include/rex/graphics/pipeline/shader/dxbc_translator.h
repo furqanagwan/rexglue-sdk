@@ -111,7 +111,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
     // If anything in this is structure is changed in a way not compatible with
     // the previous layout, invalidate the pipeline storages by increasing this
     // version number (0xYYYYMMDD)!
-    static constexpr uint32_t kVersion = 0x20260929;
+    static constexpr uint32_t kVersion = 0x20261003;
 
     enum class DepthStencilMode : uint32_t {
       kNoModifiers,
@@ -394,6 +394,15 @@ class DxbcShaderTranslator : public ShaderTranslator {
     // The constant blend factor for the respective modes.
     float edram_blend_constant[4];
 
+    // Packed fixed texture conversion (see texture_util::GetIntegerScaleBits).
+    // Every component occupies 6 bits in bits 0:23
+    //   bits 0:3 = component_bits - 1
+    //   bits 4:5 = xenos::TextureSign
+    // bit 24 = normalized num_format
+    // bit 26 = point sampled fetch constant
+    // Zero means no conversion.
+    uint32_t texture_integer_scale_bits[32];
+
    private:
     friend class DxbcShaderTranslator;
 
@@ -446,6 +455,8 @@ class DxbcShaderTranslator : public ShaderTranslator {
       kEdramRTBlendFactorsOps,
 
       kEdramBlendConstant,
+
+      kTextureIntegerScaleBits,
 
       kCount,
     };
@@ -521,9 +532,14 @@ class DxbcShaderTranslator : public ShaderTranslator {
 
   // Creates a special pixel shader without color outputs - this resets the
   // state of the translator.
+  // `viz_survey` (ROV): marks the ZPass lane of the counter slot instead of
+  // counting, for VIZ surveys, which only need zero or not (xenia-canary
+  // #1111).
   std::vector<uint8_t> CreateDepthOnlyPixelShader(
-      bool zpd_total = false, Modification::DepthStencilMode depth_stencil_mode =
-                                  Modification::DepthStencilMode::kNoModifiers);
+      bool zpd_total = false,
+      Modification::DepthStencilMode depth_stencil_mode =
+          Modification::DepthStencilMode::kNoModifiers,
+      bool viz_survey = false);
 
   // Common functions useful not only for the translator, but also for render
   // target reinterpretation.
@@ -972,6 +988,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
   // Is currently writing the empty depth-only pixel shader, for
   // CompleteTranslation.
   bool is_depth_only_pixel_shader_ = false;
+  bool is_viz_survey_pixel_shader_ = false;
 
   // Data types used in constants buffers. Listed in dependency order.
   enum class ShaderRdefTypeIndex {

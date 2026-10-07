@@ -127,5 +127,7 @@ class InputSystem : public system::IInputSystem {
 /// then MnK and NOP.
 /// In tool mode, only the NOP driver is added.
 std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode);
+/// Host menus: physical pads only, without guest MnK/NOP synthetic devices.
+std::unique_ptr<InputSystem> CreatePhysicalInputSystem();
 
 }  // namespace rex::input

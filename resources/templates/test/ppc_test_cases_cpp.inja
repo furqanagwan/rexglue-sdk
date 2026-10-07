@@ -10,8 +10,9 @@
 #include <rex/system/xmemory.h>
 #include "ppc_test_decls.h"
 
-// Global memory instance - same class used by real runtime
-static rex::memory::Memory& get_memory() {
+// Global memory instance - same class used by real runtime. Inline so the
+// chunks of a split corpus share one instance rather than reserving one each.
+inline rex::memory::Memory& get_memory() {
     static rex::memory::Memory memory;
     static bool initialized = false;
     if (!initialized) {
@@ -32,7 +33,12 @@ static rex::memory::Memory& get_memory() {
 }
 
 ## for test in tests
+## if test.known_failure
+// Known failure: {{ test.known_failure_reason }}
+TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}][!shouldfail]") {
+## else
 TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
+## endif
     auto& mem = get_memory();
     uint8_t* memory = mem.virtual_membase();
     PPCContext ctx{};
@@ -63,6 +69,9 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
     ctx.{{ reg.reg }}.u64 = {{ reg.value }};
 ## endif
 ## endfor
+## for mem_out in test.outputs.memory
+    std::memset(memory + 0x{{ mem_out.address }}, 0, {{ length(mem_out.bytes) }});
+## endfor
 ## for mem_in in test.inputs.memory
 ## for entry in mem_in.bytes
     memory[0x{{ mem_in.address }} + 0x{{ entry.offset }}] = 0x{{ entry.value }};
@@ -78,7 +87,10 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
         REQUIRE(cr_actual == {{ reg.value }});
     }
 ## else if reg.type == "xer"
-    REQUIRE(((uint32_t(ctx.xer.so) << 31) | (uint32_t(ctx.xer.ov) << 30) | (uint32_t(ctx.xer.ca) << 29)) == {{ reg.value }});
+    {
+        const uint32_t xer_actual = (uint32_t(ctx.xer.so) << 31) | (uint32_t(ctx.xer.ov) << 30) | (uint32_t(ctx.xer.ca) << 29);
+        REQUIRE(xer_actual == uint32_t({{ reg.value }}));
+    }
 ## else if reg.type == "vector"
     REQUIRE(ctx.{{ reg.reg }}.u32[3] == 0x{{ reg.values.0 }});
     REQUIRE(ctx.{{ reg.reg }}.u32[2] == 0x{{ reg.values.1 }});

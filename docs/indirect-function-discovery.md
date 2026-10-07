@@ -302,3 +302,41 @@ Effect on generated code:
 
 The next session ran 99 seconds, into the first mission's load, and was
 closed normally with no error lines.
+
+## Runtime trace and the fallback build (RG-GDK-066)
+
+Microsoft's PC backward compatibility recompiles statically too, and its
+modules' build metadata shows two things worth having (design observations
+only; nothing of theirs is used): indirect-call targets seen at runtime feed
+the next compile, and each module also ships as a larger unoptimised build.
+
+**Indirect trace.** With `--indirect_trace=<file>`, a run that reaches an
+indirect call target with no registered function writes the target to that
+file before stopping with the usual fatal error:
+
+```toml
+# Indirect call targets a run reached with no registered function, ...
+[functions]
+0x82462590 = {}
+```
+
+The file keeps every earlier run's targets, so repeated runs add up. Add it to
+the title's codegen config `includes`; the next `rexglue codegen` registers
+each target as a function. Review the targets as with any hint: a target the
+static analysis missed is usually a method in an RTTI-free dispatch table (see
+above), and the regenerated code should be checked for new unresolved
+branches. Hot functions are measured with the existing guest function
+profiling (`REXGLUE_PROFILE_GUEST_FUNCTIONS`, Tracy), not this trace.
+
+**Fallback build.** `-DREXGLUE_RECOMP_FALLBACK=<regex>` (on the title's CMake
+configure) builds the generated files whose names match without optimisation
+(`-O0`) and without the precompiled header; `ALL` builds every one that way.
+To find a suspected miscompile, halve the matching files until the fault
+follows one file, for example `recomp\.([0-9]|1[0-9])\.cpp$`, then
+`recomp\.1[0-9]\.cpp$`. The title config and generated C++ are untouched; the
+configure log says how many files are unoptimised. Unoptimised generated code
+is much slower, so expect lower frame rates.
+
+Tests: `tests/unit/codegen/indirect_trace_test.cpp` (two runs' targets kept
+once each and loaded by the codegen config; the generated CMake offers the
+fallback for the original and each title update).

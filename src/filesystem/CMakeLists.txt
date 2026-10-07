@@ -5,6 +5,7 @@ add_library(rexfilesystem OBJECT
     devices/disc_image_device.cpp
     devices/disc_image_entry.cpp
     devices/disc_image_file.cpp
+    devices/optical_disc_reader.cpp
     devices/host_path_device.cpp
     devices/host_path_entry.cpp
     devices/host_path_file.cpp

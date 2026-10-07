@@ -32,9 +32,34 @@ endfunction()
 #   - Windows POST_BUILD copy of TARGET_RUNTIME_DLLS and the FidelityFX DLLs.
 #     Guest modules colocate with the host (see rexglue_configure_module_target),
 #     so this single copy handles them transitively.
+#   - The shipped shader cache (SHADER_CACHE <dir>, or ./shader_cache).
+#   - GUIDE_PRESENTATION xbox360 (default) or original-xbox selects its Guide scenes.
+#   - The title's cvar defaults (CVAR_DEFAULTS "name=value" ...).
+#   - The title's replacement shaders (SHADER_REPLACEMENTS <dir>): HLSL
+#     compiled with FXC, or DXBC, staged in shader_replacements beside the
+#     executable, with shader_replacements=true as a title default
+#     (docs/shader-replacements.md).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "" "GPU_PLUGINS" ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS;ICON;GUIDE_PRESENTATION"
+        "GPU_PLUGINS;CVAR_DEFAULTS" ${ARGN})
+    if(NOT ARG_GUIDE_PRESENTATION)
+        set(ARG_GUIDE_PRESENTATION xbox360)
+    endif()
+    if(NOT ARG_GUIDE_PRESENTATION MATCHES "^(xbox360|original-xbox)$")
+        message(FATAL_ERROR "GUIDE_PRESENTATION must be xbox360 or original-xbox")
+    endif()
+    if(ARG_GUIDE_PRESENTATION STREQUAL "original-xbox")
+        target_compile_definitions(${target_name} PRIVATE REXGLUE_GUIDE_ORIGINAL_XBOX=1)
+    endif()
+    if(ARG_ICON)
+        rexglue_embed_title_icon(${target_name} "${ARG_ICON}")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gdk/Title.ico")
+        rexglue_embed_title_icon(${target_name} "${CMAKE_CURRENT_SOURCE_DIR}/gdk/Title.ico")
+    endif()
+    if(ARG_SHADER_REPLACEMENTS)
+        list(APPEND ARG_CVAR_DEFAULTS "shader_replacements=true")
+    endif()
 
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main.cpp
@@ -42,10 +67,22 @@ function(rexglue_configure_target target_name)
 
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")
+    # The title's own cvar defaults ("name=value" each), under its config
+    # file and the command line (ADR-009: titles opt in by name).
+    if(ARG_CVAR_DEFAULTS)
+        list(JOIN ARG_CVAR_DEFAULTS "|" _cvar_defaults)
+        target_compile_definitions(${target_name} PRIVATE
+            REXGLUE_TITLE_CVAR_DEFAULTS="${_cvar_defaults}")
+    endif()
 
     rexglue_apply_target_settings(${target_name})
-    _rexglue_embed_xbox_guide(${target_name})
+    _rexglue_embed_xbox_guide(${target_name} "${ARG_GUIDE_PRESENTATION}")
     _rexglue_embed_dlc_catalog(${target_name})
+    _rexglue_stage_shader_cache(${target_name} "${ARG_SHADER_CACHE}")
+    if(ARG_SHADER_REPLACEMENTS)
+        _rexglue_stage_shader_replacements(${target_name} "${ARG_SHADER_REPLACEMENTS}")
+    endif()
+    _rexglue_stage_d3d12_agility(${target_name})
 
     if(WIN32)
         # Stage runtime DLLs (rexruntime, TracyClient, etc.) next to the host
@@ -98,25 +135,186 @@ function(rexglue_configure_target target_name)
 
 endfunction()
 
+# Embeds native Windows resources independently of the runtime window icon
+# and MicrosoftGame.config. Call for each host/TU EXE; guest DLLs do not need it.
+function(rexglue_embed_title_icon target_name icon_path)
+    if(NOT WIN32)
+        message(FATAL_ERROR "rexglue_embed_title_icon requires Windows")
+    endif()
+    get_filename_component(_icon "${icon_path}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    if(NOT EXISTS "${_icon}" OR IS_DIRECTORY "${_icon}")
+        message(FATAL_ERROR "Title icon does not exist: ${_icon}")
+    endif()
+    get_target_property(_existing ${target_name} REXGLUE_EMBEDDED_ICON)
+    if(_existing)
+        message(FATAL_ERROR "Title icon already configured for ${target_name}")
+    endif()
+    enable_language(RC)
+    set(_resource "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_title_icon.rc")
+    # Forward slashes avoid RC interpreting Windows path escape sequences.
+    file(TO_CMAKE_PATH "${_icon}" _icon)
+    file(WRITE "${_resource}" "// Generated title icon; the linker retains its manifest.\n1 ICON \"${_icon}\"\n")
+    set_source_files_properties("${_resource}" PROPERTIES OBJECT_DEPENDS "${_icon}")
+    target_sources(${target_name} PRIVATE "${_resource}")
+    set_property(TARGET ${target_name} PROPERTY REXGLUE_EMBEDDED_ICON "${_icon}")
+endfunction()
+
+#==========================================================
+# The D3D12 Agility SDK and dxil.dll (RG-GDK-032)
+#
+# With an SDK built with REXGLUE_SHADER_DXIL, a title exports the Agility SDK
+# version (d3d12_agility.cpp) and ships D3D12Core.dll, d3d12SDKLayers.dll and
+# dxil.dll in D3D12\ beside the executable, as Microsoft's PC backward
+# compatibility packages do; gpu_shader_path=dxil needs them.
+#==========================================================
+function(_rexglue_stage_d3d12_agility target_name)
+    if(NOT REXGLUE_SHADER_DXIL)
+        return()
+    endif()
+    if(REXGLUE_D3D12_REDIST_FILES)
+        set(_files ${REXGLUE_D3D12_REDIST_FILES})
+    else()
+        file(GLOB _files "${REXGLUE_SHARE_DIR}/d3d12/*.dll")
+    endif()
+    if(NOT _files)
+        message(FATAL_ERROR "rexglue_configure_target: the SDK was built with REXGLUE_SHADER_DXIL "
+            "but its D3D12 redistributables are missing")
+    endif()
+    target_sources(${target_name} PRIVATE ${REXGLUE_SHARE_DIR}/d3d12_agility.cpp)
+    set_source_files_properties(${REXGLUE_SHARE_DIR}/d3d12_agility.cpp PROPERTIES
+        COMPILE_DEFINITIONS "REXGLUE_D3D12_SDK_VERSION=${REXGLUE_D3D12_SDK_VERSION}"
+        SKIP_PRECOMPILE_HEADERS ON)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/D3D12"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_files}
+            "$<TARGET_FILE_DIR:${target_name}>/D3D12"
+        VERBATIM
+    )
+endfunction()
+
+#==========================================================
+# The shipped shader cache (RG-GDK-064)
+#
+# A title's recorded shader and pipeline storage files (<title ID>.xsh and
+# <title ID>.*.d3d12.xpso, from a playthrough's cache\shaders\shareable)
+# go beside the executable in shader_cache\; at startup they seed the
+# player's cache, so pipelines are built before play instead of mid-frame.
+# From SHADER_CACHE, else the project's own shader_cache folder. They hold
+# the game's shaders: keep them out of the repository, like the game.
+#==========================================================
+function(_rexglue_stage_shader_cache target_name dir)
+    if(NOT dir)
+        set(dir "${CMAKE_CURRENT_SOURCE_DIR}/shader_cache")
+        if(NOT IS_DIRECTORY "${dir}")
+            return()
+        endif()
+    elseif(NOT IS_DIRECTORY "${dir}")
+        message(FATAL_ERROR "rexglue_configure_target: SHADER_CACHE '${dir}' is not a folder")
+    endif()
+    file(GLOB _files CONFIGURE_DEPENDS "${dir}/*.xsh" "${dir}/*.xpso")
+    if(NOT _files)
+        message(WARNING "rexglue_configure_target: no .xsh or .xpso files in '${dir}'")
+        return()
+    endif()
+    list(LENGTH _files _count)
+    message(STATUS "${target_name}: shipping ${_count} shader cache files from ${dir}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_files}
+            "$<TARGET_FILE_DIR:${target_name}>/shader_cache"
+        VERBATIM
+    )
+endfunction()
+
+# Replacement shaders (RG-GDK-067): <HASH>[_<MODIFICATION>].<vs|ps_rtv|ps_rov>
+# .hlsl is compiled by FXC (entry point main, shader model 5.1, as
+# scripts/build_shaders.py builds the SDK's own); a .dxbc of that name is
+# shipped as it is.
+function(_rexglue_stage_shader_replacements target_name dir)
+    if(NOT IS_ABSOLUTE "${dir}")
+        set(dir "${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
+    endif()
+    if(NOT IS_DIRECTORY "${dir}")
+        message(FATAL_ERROR "rexglue_configure_target: SHADER_REPLACEMENTS '${dir}' is not a folder")
+    endif()
+    file(GLOB _hlsl CONFIGURE_DEPENDS "${dir}/*.hlsl")
+    file(GLOB _dxbc CONFIGURE_DEPENDS "${dir}/*.dxbc")
+    set(_outputs ${_dxbc})
+    if(_hlsl)
+        file(GLOB _fxc_candidates
+            "$ENV{ProgramFiles\(x86\)}/Windows Kits/10/bin/*/x64/fxc.exe")
+        list(SORT _fxc_candidates COMPARE NATURAL ORDER DESCENDING)
+        list(GET _fxc_candidates 0 _fxc)
+        if(NOT _fxc)
+            message(FATAL_ERROR "rexglue_configure_target: SHADER_REPLACEMENTS needs FXC (Windows SDK)")
+        endif()
+        set(_out_dir "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_shader_replacements")
+        file(MAKE_DIRECTORY "${_out_dir}")
+        foreach(_source IN LISTS _hlsl)
+            get_filename_component(_name "${_source}" NAME_WLE)
+            if(NOT _name MATCHES "^[0-9A-Fa-f]+(_[0-9A-Fa-f]+)?[.](vs|ps_rtv|ps_rov)$")
+                message(FATAL_ERROR
+                    "rexglue_configure_target: replacement shader '${_name}.hlsl' is not "
+                    "<HASH>[_<MODIFICATION>].<vs|ps_rtv|ps_rov>.hlsl")
+            endif()
+            if(_name MATCHES "[.]vs$")
+                set(_profile vs_5_1)
+            else()
+                set(_profile ps_5_1)
+            endif()
+            set(_output "${_out_dir}/${_name}.dxbc")
+            add_custom_command(OUTPUT "${_output}"
+                COMMAND "${_fxc}" /nologo /T ${_profile} /E main /O3 /Fo "${_output}" "${_source}"
+                DEPENDS "${_source}"
+                COMMENT "Compiling replacement shader ${_name}"
+                VERBATIM)
+            list(APPEND _outputs "${_output}")
+        endforeach()
+        add_custom_target(${target_name}_shader_replacements DEPENDS ${_outputs})
+        add_dependencies(${target_name} ${target_name}_shader_replacements)
+    endif()
+    if(NOT _outputs)
+        message(WARNING "rexglue_configure_target: no .hlsl or .dxbc files in '${dir}'")
+        return()
+    endif()
+    list(LENGTH _outputs _count)
+    message(STATUS "${target_name}: shipping ${_count} replacement shaders from ${dir}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${target_name}>/shader_replacements"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_outputs}
+            "$<TARGET_FILE_DIR:${target_name}>/shader_replacements"
+        VERBATIM
+    )
+endfunction()
+
 #==========================================================
 # The Xbox guide (RG-GDK-041), built into every title
 #
 # The guide runs the console's own scenes. They come from the builder's own
 # console system update (like the game files, never shipped with the SDK),
 # named by REXGLUE_SYSTEM_UPDATE or the environment variable of that name.
-# `rexglue guide-bundle` takes the four modules the guide reads (about 3 MB)
-# and the executable embeds them, so players need nothing for the guide.
+# REXGLUE_GUIDE_FLASH optionally names an Xbox PC backward-compatibility
+# game's Content/Flash folder, used only by GUIDE_PRESENTATION original-xbox.
+# Xbox 360 titles retain the console system-update bundle even when Flash is set.
+# `rexglue guide-bundle` takes the modules the guide reads and the console fonts, and the executable embeds them, so
+# players need nothing for the guide.
 #==========================================================
 set(REXGLUE_SYSTEM_UPDATE "$ENV{REXGLUE_SYSTEM_UPDATE}" CACHE PATH
     "Console $SystemUpdate (dashboard 2.0.17559) built into each title for the Xbox guide")
+set(REXGLUE_GUIDE_FLASH "$ENV{REXGLUE_GUIDE_FLASH}" CACHE PATH
+    "Optional Xbox PC backward-compatibility Content/Flash folder for the Xbox guide")
 
-function(_rexglue_embed_xbox_guide target_name)
-    if(NOT REXGLUE_SYSTEM_UPDATE)
+function(_rexglue_embed_xbox_guide target_name presentation)
+    if(presentation STREQUAL "original-xbox" AND NOT REXGLUE_GUIDE_FLASH)
+        message(FATAL_ERROR "Original Xbox Guide requires REXGLUE_GUIDE_FLASH")
+    endif()
+    if(NOT REXGLUE_SYSTEM_UPDATE AND NOT presentation STREQUAL "original-xbox")
         message(STATUS "${target_name}: Xbox guide not built in; set REXGLUE_SYSTEM_UPDATE "
                        "to the console's $SystemUpdate folder")
         return()
     endif()
-    if(NOT EXISTS "${REXGLUE_SYSTEM_UPDATE}")
+    if(REXGLUE_SYSTEM_UPDATE AND NOT EXISTS "${REXGLUE_SYSTEM_UPDATE}")
         message(FATAL_ERROR "REXGLUE_SYSTEM_UPDATE: '${REXGLUE_SYSTEM_UPDATE}' does not exist")
     endif()
     if(TARGET rexglue)
@@ -129,16 +327,30 @@ function(_rexglue_embed_xbox_guide target_name)
     set(_dir "${CMAKE_CURRENT_BINARY_DIR}/rexglue_guide")
     set(_bundle "${_dir}/${_id}_xbox_guide.bin")
     set(_source "${_dir}/${_id}_xbox_guide.cpp")
-    if(IS_DIRECTORY "${REXGLUE_SYSTEM_UPDATE}")
-        file(GLOB_RECURSE _inputs CONFIGURE_DEPENDS "${REXGLUE_SYSTEM_UPDATE}/*")
-    else()
-        set(_inputs "${REXGLUE_SYSTEM_UPDATE}")
+    set(_sources "${REXGLUE_SYSTEM_UPDATE}")
+    if(presentation STREQUAL "original-xbox")
+        if(NOT IS_DIRECTORY "${REXGLUE_GUIDE_FLASH}")
+            message(FATAL_ERROR "REXGLUE_GUIDE_FLASH: '${REXGLUE_GUIDE_FLASH}' is not a folder")
+        endif()
+        list(PREPEND _sources "${REXGLUE_GUIDE_FLASH}")
+    elseif(REXGLUE_GUIDE_FLASH)
+        message(STATUS "${target_name}: ignoring BC Flash override for Xbox 360 Guide")
     endif()
+    set(_inputs "")
+    foreach(_src IN LISTS _sources)
+        if(IS_DIRECTORY "${_src}")
+            file(GLOB_RECURSE _src_inputs CONFIGURE_DEPENDS "${_src}/*")
+            list(APPEND _inputs ${_src_inputs})
+        else()
+            list(APPEND _inputs "${_src}")
+        endif()
+    endforeach()
     add_custom_command(
         OUTPUT "${_bundle}"
-        COMMAND $<TARGET_FILE:${_rexglue_cli}> guide-bundle "${REXGLUE_SYSTEM_UPDATE}"
+        COMMAND $<TARGET_FILE:${_rexglue_cli}> guide-bundle ${_sources}
                 -o "${_bundle}"
-        DEPENDS ${_inputs}
+        # The CLI too: a newer SDK may take more from the same update.
+        DEPENDS ${_inputs} ${_rexglue_cli}
         COMMENT "Building the Xbox guide into ${target_name}"
         VERBATIM)
 

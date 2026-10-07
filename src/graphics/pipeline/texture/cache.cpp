@@ -349,6 +349,35 @@ void TextureCache::MarkRangeAsResolved(uint32_t start_unscaled, uint32_t length_
   shared_memory().RangeWrittenByGpu(start_unscaled, length_unscaled);
 }
 
+void TextureCache::MarkRangeAsNativeResolved(uint32_t start_unscaled, uint32_t length_unscaled) {
+  if (length_unscaled == 0) {
+    return;
+  }
+  start_unscaled &= 0x1FFFFFFF;
+  length_unscaled = std::min(length_unscaled, 0x20000000 - start_unscaled);
+
+  if (IsDrawResolutionScaled()) {
+    // Whole pages only.
+    uint32_t page_first = (start_unscaled + 0xFFF) >> 12;
+    uint32_t page_end = (start_unscaled + length_unscaled) >> 12;
+    if (page_first < page_end) {
+      auto global_lock = global_critical_region_.Acquire();
+      for (uint32_t page = page_first; page < page_end; ++page) {
+        scaled_resolve_pages_[page >> 5] &= ~(UINT32_C(1) << (page & 31));
+      }
+      // Keep the second level a superset: clear a block's bit only when the
+      // block has no scaled page left.
+      for (uint32_t block = page_first >> 5; block <= (page_end - 1) >> 5; ++block) {
+        if (!scaled_resolve_pages_[block]) {
+          scaled_resolve_pages_l2_[block >> 6] &= ~(UINT64_C(1) << (block & 63));
+        }
+      }
+    }
+  }
+
+  shared_memory().RangeWrittenByGpu(start_unscaled, length_unscaled);
+}
+
 uint32_t TextureCache::GuestToHostSwizzle(uint32_t guest_swizzle, uint32_t host_format_swizzle) {
   uint32_t host_swizzle = 0;
   for (uint32_t i = 0; i < 4; ++i) {
@@ -492,6 +521,7 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     TextureBinding& binding = texture_bindings_[index];
     xenos::xe_gpu_texture_fetch_t fetch = regs.GetTextureFetch(index);
     TextureKey old_key = binding.key;
+    uint32_t old_integer_scale_bits = binding.integer_scale_bits;
     uint8_t old_swizzled_signs = binding.swizzled_signs;
     BindingInfoFromFetchConstant(fetch, binding.key, &binding.swizzled_signs);
     texture_bindings_in_sync_ |= index_bit;
@@ -504,6 +534,7 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     }
     uint32_t old_host_swizzle = binding.host_swizzle;
     binding.host_swizzle = GuestToHostSwizzle(fetch.swizzle, GetHostFormatSwizzle(binding.key));
+    binding.integer_scale_bits = texture_util::GetIntegerScaleBits(fetch, binding.swizzled_signs);
 
     // Check if need to load the unsigned and the signed versions of the texture
     // (if the format is emulated with different host bit representations for
@@ -513,7 +544,8 @@ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
     bool any_sign_was_signed = texture_util::IsAnySignSigned(old_swizzled_signs);
     bool any_sign_is_not_signed = texture_util::IsAnySignNotSigned(binding.swizzled_signs);
     bool any_sign_is_signed = texture_util::IsAnySignSigned(binding.swizzled_signs);
-    if (key_changed || binding.host_swizzle != old_host_swizzle ||
+    if (key_changed || binding.integer_scale_bits != old_integer_scale_bits ||
+        binding.host_swizzle != old_host_swizzle ||
         any_sign_is_not_signed != any_sign_was_not_signed ||
         any_sign_is_signed != any_sign_was_signed) {
       bindings_changed |= index_bit;

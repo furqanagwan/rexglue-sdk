@@ -216,7 +216,7 @@ bool build_mcrfs(BuilderContext& ctx) {
   const uint32_t shift = 4 * (7 - ctx.insn.operands[1]);
   ctx.println("\t{}.set_raw((ctx.fpscr.loadFromHost() >> {}) & 0xF);", ctx.cr(ctx.insn.operands[0]),
               shift);
-  ctx.println("\tctx.fpscr.storeFromGuest(ctx.fpscr.guest_value & 0x{:08X});", ~(0xFu << shift));
+  ctx.println("\tctx.fpscr.storeFromGuest(ctx.fpscr.guest_bits & 0x{:08X});", ~(0xFu << shift));
   return true;
 }
 

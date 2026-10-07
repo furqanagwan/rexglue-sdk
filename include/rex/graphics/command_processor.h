@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <deque>
@@ -242,13 +243,27 @@ class CommandProcessor {
     bool awaited = false;
   };
 
-  // Host query segment open for the report currently being measured.
+  static constexpr uint64_t kInvalidVIZGeneration = 0;
+  struct VIZQueryHandle {
+    uint32_t id = 0;
+    uint64_t generation = kInvalidVIZGeneration;
+  };
+
+  // Host query segment open for the ZPD report and/or VIZ ID currently being
+  // measured. Both read the same resolve (xenia-canary #1111).
   struct ActiveZPDSegment {
     uint32_t scale_area = 0;
     // The segment's draws count Total in the pixel shaders (hybrid query).
     bool count_total = false;
     bool segment_active = false;
     bool segment_pending_begin = false;
+    // The segment counts for the current report.
+    bool report = false;
+    // The VIZ ID the segment measures, if any.
+    VIZQueryHandle viz;
+    // The segment holds VIZ survey draws, which no report counts.
+    bool survey = false;
+    bool report_measuring() const { return segment_pending_begin || (segment_active && report); }
   };
 
   virtual void EnsureZPDQueryResources() {}
@@ -259,9 +274,15 @@ class CommandProcessor {
   virtual QueryOpenResult OpenZPDQuery(bool can_close_submission) {
     return QueryOpenResult::kFailed;
   }
-  // Backend records EndQuery, queues a resolve for the active slot.
-  virtual bool CloseZPDQuery(ReportHandle report_handle, uint64_t& out_submission) { return false; }
-  // Backend drains completed resolves and calls OnZPDQueryResolved for each.
+  // Backend records EndQuery, queues a resolve for the active slot and the
+  // VIZ predicate if there's a VIZ consumer. report_handle is invalid without
+  // a report consumer.
+  virtual bool CloseZPDQuery(ReportHandle report_handle, const VIZQueryHandle& viz,
+                             uint64_t& out_submission) {
+    return false;
+  }
+  // Backend drains completed resolves and calls OnZPDQueryResolved and
+  // OnVIZQueryResolved for each.
   virtual void PumpQueryResolves() {}
   // Backend waits for all pending segments of report_handle to resolve.
   virtual bool AwaitQueryResolve(ReportHandle report_handle, uint64_t wait_for_submission) {
@@ -280,9 +301,81 @@ class CommandProcessor {
     zpd_active_segment_.segment_pending_begin = false;
   }
   // Splits the open segment when the draw scale or hybrid Total counting
-  // changes, so each segment normalizes with one scale and counts one way.
-  // Also opens a pending segment, once per draw.
-  void UpdateZPDSegment(uint32_t scale_area, bool count_total = false);
+  // changes, so each segment normalizes with one scale and counts one way, and
+  // when the VIZ ID or survey state changes. Also opens a pending segment, once
+  // per draw.
+  void UpdateZPDSegment(uint32_t scale_area, bool count_total = false, bool survey = false);
+
+  // VIZ_QUERY has the scan converter track 64 query IDs. An ID is visible when
+  // its geometry is still potentially visible after hi-Z. Without any
+  // hierarchical state, answers come from the survey's query segment instead.
+  // Draws carrying a VIZ token then get predicated on the GPU. Anything
+  // unmeasured, for whatever reason, stays visible (xenia-canary #1111).
+  struct VIZQuery {
+    uint64_t generation = kInvalidVIZGeneration;
+    uint32_t pending_segments = 0;
+    bool resolved = true;
+    bool visible = true;
+    bool active = false;
+    // Survey reached the backend during this generation.
+    bool surveyed = false;
+    // OR of the resolved segments for this generation.
+    bool accumulated_visible = false;
+    // Something went wrong while measuring; this doesn't mean not-visible.
+    bool fallback = false;
+    uint64_t last_segment_end_submission = 0;
+    // The backend has a survey result ready to use for predication.
+    bool predicate_armed = false;
+    // Once the predicate no longer covers the full unresolved query, later
+    // segments can't make it exact again.
+    bool predicate_blocked = false;
+  };
+
+  // Surveys ride the query segments as a consumer, see ActiveZPDSegment.
+  void BeginVIZQuery(uint32_t id);
+  void EndVIZQuery(uint32_t id);
+  // Backend calls this for every draw under an active ID. Measured only if it
+  // ran inside a segment carrying the ID.
+  void OnVIZSurveyDraw(bool measured);
+  // Backend reports a resolved segment here.
+  void OnVIZQueryResolved(uint32_t id, uint64_t generation, bool visible);
+  // Whether a draw with a VIZ token runs. If it does, viz_draw_predicate_ is
+  // set when the backend has to predicate it. Memexport and copy draws pass
+  // through untouched, since a cull or a predicate would lose their side
+  // effects.
+  bool PrepareVIZDraw(uint32_t token);
+  // Backend waits for the submission holding a VIZ segment's resolve.
+  virtual void AwaitVIZQueryResolve(uint64_t wait_for_submission) {}
+  // The backend stages a survey's result into its predicate buffer while the
+  // generation can still use it, and arms or blocks the ID accordingly.
+  bool CanArmVIZPredicate(uint32_t id, uint64_t generation) const {
+    const VIZQuery& query = viz_queries_[id];
+    return query.generation == generation && !query.predicate_armed && !query.predicate_blocked;
+  }
+  void ArmVIZPredicate(uint32_t id, uint64_t generation) {
+    VIZQuery& query = viz_queries_[id];
+    assert_true(query.generation == generation);
+    query.predicate_armed = true;
+  }
+  void BlockVIZPredicate(uint32_t id, uint64_t generation) {
+    VIZQuery& query = viz_queries_[id];
+    assert_true(query.generation == generation);
+    query.predicate_armed = false;
+    query.predicate_blocked = true;
+  }
+  // Whether the draw being issued runs under an armed predicate.
+  bool IsVIZPredicateArmed() const {
+    return viz_draw_predicate_.generation != kInvalidVIZGeneration &&
+           viz_queries_[viz_draw_predicate_.id].predicate_armed;
+  }
+  void ResetVIZState() {
+    zpd_active_segment_.viz = {};
+    viz_draw_predicate_ = {};
+    viz_pending_resolves_ = 0;
+    for (VIZQuery& query : viz_queries_) {
+      query = {};
+    }
+  }
 
   // Called by backends when a host query resolve completes.
   // Accumulates the normalized sample counts into the report.
@@ -408,6 +501,14 @@ class CommandProcessor {
   // The report the next event will end. No handle means nothing is measuring.
   ZPDReport zpd_current_report_;
   ActiveZPDSegment zpd_active_segment_{};
+  // OpenZPDQuery is running (a nested open would double-book the slot).
+  bool query_segment_opening_ = false;
+  // The 64 slots of PA_SC_VIZ_QUERY_STATUS_0/1.
+  std::array<VIZQuery, 64> viz_queries_{};
+  // Predicate for the draw being issued, set by PM4.
+  VIZQueryHandle viz_draw_predicate_{};
+  // Segments with an unresolved VIZ consumer.
+  uint32_t viz_pending_resolves_ = 0;
   // Reports owed to the guest, in stream order.
   std::deque<ZPDReport> zpd_reports_;
   // Strict reports containing the D3D sentinel the guest polls.

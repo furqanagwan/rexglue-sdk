@@ -1,5 +1,53 @@
 # Upstream tracking and compatibility provenance
 
+## Fuzion Frenzy package-layer verification, 2026-10-07
+
+Read-only reference:
+[stocktaylor/Xbox-BC-for-PC-Research b3609bc](https://github.com/stocktaylor/Xbox-BC-for-PC-Research/blob/b3609bc2385860d17d9bc0f8f8eb8020ab84f434/TECHNICAL_FINDINGS.md).
+This is class B architecture/host-experience research, with no code port and
+no source PR imported. Direct checks of the owner's installed Fuzion Frenzy
+package corroborate XEX2 XeFu modules and AMD64 native compatibility DLLs.
+The research's missing Emu.exe observation does not apply to this installation.
+The [audit record](guide-issue-audit-20261007.md) separates direct header evidence
+from inferred translation details and records title scope: 007, FIFA Street
+and NHL are Xbox 360 projects, so no original Xbox execution layer is added.
+No upstream regression history is inferred from package metadata; no runtime
+dependency or proprietary implementation is imported.
+
+## PC host experience, 2026-10-06
+
+Based on local SDK `248d6c3` after the Guide extraction, with read-only package
+observations and Microsoft's July 2026 announcement recorded in
+[PC backward compatibility coverage](pc-backward-compatibility.md). This is
+original host adapter work (class B), not an upstream source port: no Xenia
+commit or PR is imported, and no Microsoft implementation/assets are copied.
+SDK [#164](https://github.com/furqanagwan/rexglue-sdk/issues/164) is the related
+native-art issue and remains open for title deployment/Xbox app gates.
+
+The pre-existing XGetLanguage stub always returned English through a hardcoded
+NTSC-U region. A shared resolver now respects configured guest language and an
+opt-in Windows locale. XConfig packing/status and XDBF language fallback remain
+unchanged. Startup controls use existing cvar contracts before guest setup;
+native art uses local supplied images and additive icon resources. Regression
+risk is language selection in titles, launcher completion/lifetime and resource
+loading; tests cover guest API agreement, locale mapping, UI actions/persistence,
+controller navigation/disconnect, icon encoding and native consumer extraction.
+The temporary physical-only input reader reuses existing drivers; guest input
+factories keep their previous synthetic fallback behaviour. Held input is
+consumed through the existing UI handoff contract before guest execution.
+Whole-experience parity, real
+title/GPU-rendered launcher checks and service integration remain unverified.
+
+No upstream regressions are inferred from this research. The SDK baseline's
+known Debug tessellation fixture assertion remains unrelated and open; see
+[release evidence](release-evidence.md).
+
+Validation also exposed configuration mixing in vendored Catch2
+`88abf9bf325c798c33f54f6b9220ef885b267f4f`: POST_BUILD discovery overwrote a
+shared test file with the last-built configuration's executable. The SDK now
+selects its existing PRE_TEST discovery mode, without modifying vendored code.
+See the [regression record](regression-strategy.md#ctest-configuration-discovery-2026-10-07).
+
 Snapshot: 2026-09-23. These are evaluated candidates, not imported patches. A–H classifications are defined in [the investigation](investigation.md). “Unknown” regressions means none verified during this review, not proven absence. Issue/PR comments contain upstream observations; no local title outcome is inferred. See [roadmap](roadmap.md) for live ReXGlue issue links.
 
 ## Compact upstream-to-roadmap index
@@ -27,7 +75,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 | [xenia-canary/xenia-canary #1025](https://github.com/xenia-canary/xenia-canary/pull/1025) | open PR | `abcf2ff1bea480cb6c4cdcafd2c09350826e01d3` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-015 |
 | [xenia-canary/xenia-canary #1077](https://github.com/xenia-canary/xenia-canary/pull/1077) | open PR | `dcd2fff24243b4d2d67c2d08a10d235f04f0de80` | G/H; experimental; not adopted | See scoped record below | RG-GDK-012 |
 | [xenia-canary/xenia-canary #1109](https://github.com/xenia-canary/xenia-canary/pull/1109) | open PR | `95f9f68817c9828ba3a28c144916d45d34d44bd1` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-017 |
-| [xenia-canary/xenia-canary #1111](https://github.com/xenia-canary/xenia-canary/pull/1111) | open PR | `78e06cafaa6429e5464786baa9e1edf252bbe582` | C/H; relevant but pending upstream; experimental; not adopted | See scoped record below; deferred to #65 | RG-GDK-010 |
+| [xenia-canary/xenia-canary #1111](https://github.com/xenia-canary/xenia-canary/pull/1111) | merged | `692cd59cf` | C/H; adopted behind `occlusion_query_viz` (default off) in RG-GDK-010b | See scoped record below | RG-GDK-010 |
 | [xenia-canary/xenia-canary #1182](https://github.com/xenia-canary/xenia-canary/pull/1182) | open PR | `fa6cdaae0f58e9161e5e41ea3683f837b3b112c7` | B/H; relevant but pending upstream | See scoped record below; never assume absence | RG-GDK-004 |
 | [xenia-canary/xenia-canary #1225](https://github.com/xenia-canary/xenia-canary/pull/1225) | open PR | `fe960bf66f98204940a7464ed35b50ef5b7b4cdc` | B/H; relevant but pending upstream; blocked upstream | See scoped record below; never assume absence | RG-GDK-014 |
 | [xenia-canary/xenia-canary #1226](https://github.com/xenia-canary/xenia-canary/pull/1226) | open PR | `c43ea0f9c3e3f3cac600a57d9f464a38c945d808` | B; adapted from the open PR (RG-GDK-017 part 2) | See scoped record below | RG-GDK-017 |
@@ -256,6 +304,7 @@ All implementation statuses are **investigated, not ported**. The roadmap resolv
 - Upstream status: **pending upstream** (still open at the RG-GDK-010 review, 2026-09-24). PR head (not adopted) commit `78e06cafaa6429e5464786baa9e1edf252bbe582`.
 - Scope / reason / applicability: WIP VIZ predication changes query lifecycle, host predicates and ROV counters; local visibility is still faked (every VIZ query reports visible).
 - Classification: relevant but pending upstream; experimental; C/H applicability. **Not adopted.** RG-GDK-010 deferred VIZ to [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65), gated on #1111 settling.
+- Update 2026-10-03: merged into Canary as `692cd59cf` (2026-09-29), which Edge also took. Ported in RG-GDK-010b; see the section at the end of this file.
 - Regression evidence: Known hazard or regression is described above and in the linked discussion; reproduce independently.
 
 ### xenia-canary/xenia-canary #1077 — [GPU] Clamp depth to valid value if Inf is provided
@@ -1229,7 +1278,19 @@ package validated locally has SHA-256
 `8119312192ad3ac41345336c6302a97bc471af2ab6689f04ffe92e9e07bc7c45`
 (`su20076000_00000000`). Design: [ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md);
 record: [Xbox guide](xbox-guide.md); tracking:
-[SDK issue #127](https://github.com/furqanagwan/rexglue-sdk/issues/127).
+[Guide issue #1](https://github.com/furqanagwan/xbox-guide/issues/1)
+(transferred from SDK #127).
+
+Source ownership moved on 2026-10-06 to
+[xbox-guide](https://github.com/furqanagwan/xbox-guide), pinned by this SDK's
+Guide submodule. Extraction source: local SDK
+`d1a87b4ef0a09c7a7813ab2a2b27976de01de203`; classification B (source/host
+organization, no upstream subsystem import). Source notices and an affected
+commit-history record are preserved. `ResolveFile` moves to a separate adapter
+translation unit without changing lookup behavior, allowing standalone scene
+linkage. The Guide suite matches the baseline; private asset/title/pad checks
+remain blocked. [Extraction evidence](xbox-guide-extraction.md) gives the pin,
+issue transfers and full validation.
 
 ### furqanagwan/xenia-edge fork sync of 2026-09-30 (reviewed 2026-09-30)
 
@@ -1329,3 +1390,414 @@ in Canary's later `xenumerator` history as of 2026-10-01.
   (60 achievements: 25 from 1, 25 from 26, 10 from 51, then none, and none
   past the end). 007 Legends after the fix: pages of 25, 25, then
   `NO_MORE_FILES`.
+
+## RG-GDK-069: two Canary defaults, and title cvar defaults (2026-10-02)
+
+Found with NHL Legacy Edition (`454109EC`), whose matches drew black but for
+the HUD ([furqanagwan/nhl](https://github.com/furqanagwan/nhl) RG-NHL-003).
+
+| Canary commit | Class | Adaptation | Tests |
+| --- | --- | --- | --- |
+| `d36b1b38304d58da3daadff76aba0da9bd37b278` "[GPU] gpu_allow_invalid_fetch_constants true by default" (disjtqz, 2023-10-12) | A (Edge has the same default) | Default flipped in `graphics/flags.cpp`. NHL logged 26,635 "invalid type" texture fetch constants in four minutes, skipping those draws. | NHL: no fetch constant warnings with it on. |
+| `4452e300acfc0ceb76fab579c12915d70133ce92` "[Emulator] Changed default config values" (Gliniak, 2024-08-31), `mount_cache` only | B (EA titles) | `mount_cache` (Runtime, default on) mounts `cache:`, `cache0:` and `cache1:` as host folders under `<cache root>\partitions`, the prefixed devices first, as Canary's `xenia_main.cc` does. Replaces the inherited note that `cache:` should fail cleanly. | NHL keeps its cache files there (`809284.ver`, `highlights.sav`); the three 007 titles boot and reach their menus with it. |
+
+Neither fixed NHL's black matches: the scene draws on the ROV render target
+path and not on the RTV path (tested with occlusion queries faked, 2x MSAA
+off, float24 depth rounding and conversion, gamma as unorm16 off and stencil
+output off on RTV, none of which drew it). The RTV cause is open; NHL opts
+into ROV through the new title cvar defaults (`rexglue_configure_target`
+`CVAR_DEFAULTS`, `rex::cvar::SetTitleDefault`, ADR-009).
+
+## RG-GDK-054: Edge's PPC test corpus (2026-10-02)
+
+| Source | Class | Adaptation | Tests |
+| --- | --- | --- | --- |
+| has207/xenia-edge `b5cc59e854020f8406c0b3a96eff6a3d036a514b` (2026-10-01), `src/xenia/cpu/ppc/testing/*.s` and `skip.txt` | A (test data) | Copied unchanged into `tests/ppc/corpus` (578 files; xenia-project `gen_tests` hardware captures plus hand-written cases). 11 files the bundled binutils can't assemble are listed in `assembler_unsupported.txt`. | `ppc_corpus.*` CTest tests (`REXGLUE_PPC_CORPUS=ON`). |
+| Edge `e25eaffff` (bracketed `MEMORY_IN`/`MEMORY_OUT` bytes) and its runner's per-test clearing of `0x10001000`-`0x10010000` | A (harness) | Reimplemented in `rexglue recompile-tests`: bracketed bytes and scalars, `xer` in/out, per-file function names, `skip.txt` labels without `test_`. The new table runner also resets the host FPSCR per case. | The corpus runs deterministically (two runs, same 30,967 failures). |
+
+ReXGlue's generator emits the corpus as data (`--table`, `ppc_table_runner.h`)
+with one Catch2 test per file: a test per case gave 48 sources of about 2 MB
+whose compile exhausted memory. Failures are recorded with their cause issue
+(#149, #151, #185) in `tests/ppc/corpus/known_failures.txt`
+([regression strategy](regression-strategy.md#ppc-test-corpus-rg-gdk-054)).
+
+## RG-GDK-055: PowerPC floating-point rules (2026-10-02)
+
+has207/xenia-edge commits (August-September 2026, all class A: correctness,
+measured against the hardware-captured corpus). Edge makes them in its HIR
+frontend and JIT backends; ReXGlue puts them in inline helpers in
+`include/rex/ppc/fp.h`, which the codegen builders call, and a table in
+`src/system/ppc_fp.cpp`.
+
+| Edge commit | Rule | ReXGlue |
+| --- | --- | --- |
+| `9804846f4`, `19fb3979d`, `01efb80ed` | Multiply-add family: a NaN is picked in A, B, C order, quieted, and the negated forms don't negate it | `madd`/`msub`/`nmadd`/`nmsub` (and `s` forms), `vmadd`, `vnmsub` |
+| `cf43c4c52`, `6de9c21ec` | Invalid operations give the positive default QNaN | `nan_result`; `vnan` for VMX elements |
+| `28f38affe`, `8b19ee756`, `078a07b53` | Single precision answers the default QNaN for a double-denormal operand (all finite); `fdivs`/`fsqrts` instead skip rounding; one cheap screen per op | `single_denormal`, one unlikely branch per single op (`Suspect`/`SingleSlow`) |
+| `de4d24493`, `32920009d` | Record forms set CR1 (FX, FEX, VX, OX) from the host exception status, plus invalid the host doesn't report | `recorded`, `madd_invalid`; per instruction, not sticky in FPSCR |
+| `e4b13738c`, `ed9bfc9a4` (and Canary `7ff152a5a`) | `vcmpbfp` sets both bounds bits for a NaN; `vmaxfp`/`vminfp` quiet a NaN, flush denormals, order +0 above -0 | `vcmpb`, `vmax`, `vmin`; `vcmpbfp.` sets only CR6[2] |
+| `378c95215` | `fctiw`/`fctid` saturate, NaN gives the sign-extended minimum; CR1 for the conversions | `to_int32`, `to_int64`, `set_cr1_convert` |
+| `fb225d975`, `vrsqrte_table.cc`, x64 `EmitFrsqrteHelper` (all at `b5cc59e854`) | Estimates: `vexptefp`/`vlogefp` polynomials snapped to the 2^-11 grid; `vrsqrtefp` coefficient table; `frsqrte` 16-entry table | `vexpte`, `vloge`, `vrsqrte`, `rsqrte`, `set_cr1_estimate` |
+| `c496db01f` | `lfs`/`stfs` keep a signalling NaN signalling | `load_single`, `store_single` (unit tested; not in the corpus) |
+
+`vmaddfp`/`vnmsubfp` are fused, as on hardware: FMA3 through inline assembly
+when the CPU has it (the titles build for SSE4.1), otherwise in double. This
+changed ReXGlue's own `instr_vmaddfp` expectation by one ulp, to the correctly
+rounded value. Known regressions in Edge: none recorded against these commits.
+
+Measured: the corpus loses all 27,585 #151 known failures (and one #185
+case, `vmaddfp_1`); PPC 1,473/1,473. A micro-benchmark (`-O2 -msse4.1`,
+vectorisation off, three runs) puts `fadds`/`fmuls`/`fmadds` at +20-40% per
+op, `fadd` +5%, `vmaddfp` and `vmaxfp` level, `vnmsubfp` +30-60%. Title frame
+time is not yet measured.
+
+## RG-GDK-056: host and guest FP modes kept apart (2026-10-02)
+
+has207/xenia-edge commits (September-October 2026, class A: correctness,
+latent; no symptom was seen in a title). Edge switches modes in its JIT's host
+thunks; ReXGlue does it in the call wrappers, with two scopes in
+`include/rex/ppc/context.h`.
+
+| Edge commit | Rule | ReXGlue |
+| --- | --- | --- |
+| `10c8ae795` "Enter host code with the default MXCSR" (2026-10-01) | Host code called from guest code runs at round to nearest, no flush | `HostFpScope` in `HostToGuestFunction` (every `REX_HOOK`/`REX_EXPORT`) |
+| `95b14f55f` "Keep host and guest FP modes apart around guest callbacks" (2026-10-01) | Guest code entered from host code finds its own mode | `GuestFpScope` in `GuestToHostFunction`, `ImportFunction` and `FunctionDispatcher::Execute` (thread start, APCs, interrupts) |
+| `efbac5e9f` "Run exception handlers in the host FP mode" (2026-10-01) | Host exception handlers don't inherit the faulting guest mode | `exception_handler_win.cpp` clears the guest bits around the handlers |
+| `cb86a688e`, `2802ae523` (mode tracking after host calls) | The JIT forgets its tracked mode after a host call | Already so: codegen resets its tracked state after calls. `HostFpScope` restores the guest bits from `ctx.fpscr`, so a callback that changed the rounding mode is kept and the cache stays true |
+
+Not covered: `REX_HOOK_RAW` hooks and stubs run in the caller's mode (they get
+the raw context; a raw hook doing float math should open a `HostFpScope`).
+Cost, measured on the development laptop: about 9 ns per export call while the
+guest is in flush mode (two control-register writes), 1-2 ns otherwise.
+Tested by `tests/unit/ppc/fp_test.cpp` ("Host code runs in the host FP mode").
+
+## RG-GDK-045: Canary fixed-format texture fetches (2026-10-03)
+
+The texture fetch side of four xenia-canary PRs, taken as they stand at
+Canary `6260a87b8551d2f5ffb30763573d84652bb9e00e` (2026-10-02) rather than
+replayed one by one:
+
+| Canary | Class | What | ReXGlue |
+| --- | --- | --- | --- |
+| #1072 `d119505289` (2026-07-01), fetch half; `2ddc5ef737` (2026-07-28, unsigned-biased scaling) | A (compatibility: Canary reports black screens fixed in dozens of titles) | Integer `num_format` on fixed formats scales the normalized host sample back to the guest's integer range; unsigned-biased decodes as offset binary | `FormatInfo::component_bits`/`fixed` (`info_formats.cpp`), `texture_util::GetIntegerScaleBits`, `texture_integer_scale_bits` system constant (`xenos_draw.hlsli` too; tessellation bytecode rebuilt), DXBC fetch block |
+| #1137 `6a45452087` | A | Walk the guest swizzle to each output's source component (past the stored ones, the last one) | `GetIntegerScaleBits` |
+| #1177 `0c843efb32` (2026-08-26) | A (SSAO in 4D5309C9, 4D530AA4) | Normalized unsigned fixed fetches round to 16 fractional bits; point sampled 4-7 bit components rebuild the guest's `n * (2^w + 1) / 2^(2w)` | bit 24 and the widths; DXBC fetch block |
+| #1250 `c3cd8617b1` (2026-09-27) | B (idTech 5 virtual texturing, 425307EC seams) | Point sampled 2D fetches snap to the texel center instead of adding the coordinate epsilon | bit 26, `CanSnapToTexelCenter`, `kTextureCoordEpsilon` |
+
+Not taken: the resolve half of #1072 (8_8_8_8_GAMMA PWL decode before MSAA
+averaging, `copy_dest_number` packing) and its follow-ups, split to
+RG-GDK-073 (#189). Known regression: Canary #1134 (open), D3D12 device loss on
+a GTX 1660 SUPER in EA titles, bisected to `d119505` with both halves; the
+title runs on NVIDIA here are part of the deferred game-run batch. AMD and
+Intel not run. Tests: `tests/unit/graphics/fetch_conversion_test.cpp`
+(packing for narrow formats, both num_formats, swizzle walk, gamma, point
+flag); gpu suite 43/43; shader bytecode reproducible.
+
+## RG-GDK-067: per-title replacement shaders (2026-10-03)
+
+No Xenia counterpart (class H: new ReXGlue feature). Modelled on the named
+replacement shaders in Microsoft's Xbox One/PC backward compatibility GPU
+emulator (`VGPUDX12.dll`, observed in the installed PC BC files; nothing
+copied). `ShaderReplacements` (rexcore) reads `<HASH>[_<MOD>].<stage>.dxbc`;
+the D3D12 pipeline cache swaps a translation's binary after translating it,
+keeping its bindings. Build side: `rexglue_configure_target(SHADER_REPLACEMENTS)`.
+See [shader replacements](shader-replacements.md). The QoS frame-capture check
+the issue asks for is in the deferred game-run batch.
+
+## RG-GDK-066: runtime indirect trace and fallback build (2026-10-03)
+
+No Xenia counterpart (class H: ReXGlue tooling). Design observations from the
+build metadata of Microsoft's PC backward compatibility modules
+(`xeo3_<hash>.dll` and `_no.dll`, `ficompiler` control files); no Microsoft
+code or data used. `--indirect_trace` records unregistered indirect targets as
+a codegen `[functions]` include; `REXGLUE_RECOMP_FALLBACK` builds matching
+generated files unoptimised. See
+[indirect function discovery](indirect-function-discovery.md#runtime-trace-and-the-fallback-build-rg-gdk-066).
+The QoS trace round trip is in the deferred game-run batch.
+
+## RG-GDK-062/063: selective upscaling and MSAA boost design (2026-10-03)
+
+No Xenia counterpart (class H). From the launch arguments and symbols of
+Microsoft's PC backward compatibility GPU emulator (`scalingResolutions`,
+`aaBoostOn`, `aaBoostTargetMsaa`; nothing of theirs used). Design in
+[ADR-012](adr/ADR-012-selective-upscaling-and-msaa-boost.md); phase 1 adds
+`resolution_scale_targets` parsing and matching (`ScalingResolutionList`,
+`tests/unit/graphics/scaling_list_test.cpp`) and the
+`log_resolution_scale_targets` report, with no rendering change.
+
+RG-GDK-062 phase 2 (2026-10-03): resolves the list doesn't name are written at
+the guest's size through the existing resolve downscale shader (xenia-canary
+`a635ac64f`, already ported for readback), now also dispatched into shared
+memory (`DispatchResolveDownscale`), with `MarkRangeAsNativeResolved` in the
+texture cache; resolve readback reads shared memory for such ranges. ADR-012
+revised accordingly.
+
+RG-GDK-063 (2026-10-03): `resolve_downscale_average` averages native resolves
+per byte (a third mode of the resolve downscale shader; owner's choice over
+true MSAA boost) and `resolution_scale_targets=none` makes every resolve
+native, together supersampling at the guest's size. ADR-012 revised.
+
+## RG-GDK-010b: VIZ_QUERY predication (2026-10-03)
+
+Port of xenia-canary #1111 (merged as `692cd59cf`, 2026-09-29; Edge took the
+same commit; class C/H) for [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65).
+Behind `occlusion_query_viz`, default off and requiring a restart, as in Canary.
+Survey draws (`PA_SC_VIZ_QUERY` enabled with `kill_pix_post_hi_z`) run as
+depth-only occlusion query segments shared with the ZPD report machinery
+(native queries on the RTV path, the ZPass counter on ROV); draws carrying a VIZ
+token run under D3D12 `SetPredication` (`EQUAL_ZERO`) from a 64-entry predicate
+buffer, or are culled on the CPU once the answer is resolved. Any unmeasured
+survey (copy mode, kills or alpha to coverage, pipeline still compiling, lost
+segment, exhausted pool) makes its ID visible, and memexport or copy-mode
+consumers are never skipped. Adaptation: ReXGlue names (`OpenQuerySegment`,
+`CloseQuerySegment`, `UpdateZPDSegment`), reports never count survey draws, and
+the `PA_SC_VIZ_QUERY_STATUS` bits still read back as visible. Behaviour change
+with the cvar on: non-survey draws with the kill bit are dropped, as on
+hardware. Pipeline cache description version bumped (`viz_survey` bit).
+Tests: `tests/gpu/viz_fixture_test.cpp` (hidden survey skips its consumer,
+visible keeps it, both with the consumer in the same submission under the
+predicate and after a flush using the resolved answer, RTV and ROV; a survey
+nothing rejects stays visible). Known regressions: none reported upstream at
+the pin; title validation is in the deferred game-run batch.
+
+## Texture-typed vertex fetch constants (2026-10-03)
+
+xenia-canary `b083312b8` ("[D3D12] Don't drop kInvalidVertex draws",
+2026-10-02; class B, correctness and compatibility; fixes missing character
+models in 5454086C and 425607FE). ReXGlue already allowed `kInvalidVertex`
+under `gpu_allow_invalid_fetch_constants` (default on); the commit also lets
+texture-typed vertex fetch constants through, which this adopts in
+`D3D12CommandProcessor::IssueDraw`. Tests: `tests/gpu/invalid_fetch_fixture_test.cpp`
+(drawn with the cvar on, dropped with it off; `DrawOptions::fetch_type` in the
+guest draw helpers). Known regressions: none at the pin.
+
+## RG-GDK-072: PPC corpus wrong results (2026-10-03)
+
+Class A (correctness), from Xbox 360 hardware results in xenia-edge's PPC
+corpus ([#185](https://github.com/furqanagwan/rexglue-sdk/issues/185)).
+Neither Edge (`504cbee7eb`, the latest change to its `ppc_emit_altivec.cc`)
+nor Canary handles any of them: both shift `vsl` by one count, return the
+same dot product sign and have no `stwcx.` address check.
+
+- `vsl`: each byte shifts by its own count (`rex::ppc::simde_mm_vsl`); the
+  128-bit shift stays as the fast path when all counts agree.
+- `vmsum3fp128`/`vmsum4fp128`: a sum that flushes to zero keeps the sign of
+  the unflushed sum (`rex::ppc::simde_mm_vmsumfp`); other results unchanged.
+- `mffs`: returns the FPSCR bits the guest last wrote with `mtfsf`, with RN
+  from the host. Status bits are still not tracked.
+- `stwcx.`/`stdcx.` design note: `lwarx`/`ldarx` record the reserved address
+  (`PPCContext::reserved_address`, or a function local with
+  `reserved_as_local`, as the reserved value already is). The store
+  conditional fails without storing unless that address matches, and always
+  drops the reservation. The compare-and-swap against the reserved value is
+  unchanged, so another thread's store still fails it. A reservation is exact
+  to the address rather than the 128-byte granule, since the swap compares the
+  reserved value; a title pairing a `lwarx` with a `stwcx.` to another address
+  in the same granule would now fail where hardware may succeed. Nothing seen
+  does that. Lock loops that pair them correctly are unaffected.
+
+Tests: the 40 `#185` entries are gone from `tests/ppc/corpus/known_failures.txt`
+(all 567 corpus files pass); `tests/ppc` and unit tests pass. Title validation
+is in the deferred game-run batch.
+
+## RG-GDK-073: 8_8_8_8_GAMMA resolves and copy_dest_number (2026-10-03)
+
+The resolve half of xenia-canary #1072 (`d119505289`, 2026-07-01) with its
+follow-ups `2ddc5ef737` (2026-07-28, every destination gets linear values, the
+re-encode removed), `fc48d37cdc` (2026-08-10, the cvars removed: the decode and
+the number format check always apply) and `2b3f0cb456` (2026-08-05, k_8 with
+LOW_BLUE selects alpha), for [#189](https://github.com/furqanagwan/rexglue-sdk/issues/189).
+Class A/B (correctness; Canary reports less blowout in at least four titles and
+fixed composites in 5451080D and 4D530808).
+
+- `resolve.xesli`: 8_8_8_8_GAMMA sources decode the PWL curve (RGB only) per
+  sample before MSAA averaging and exponent bias; k_8 destinations with the
+  swap bit read alpha. Hand-ported: ReXGlue's resolve loads use the uint
+  vector buffer and pixel-index addressing, not Canary's byte buffer.
+  Canary's always-on `decode_pwl_gamma` bit is left out; the shader checks the
+  format.
+- `pixel_formats.xesli`, `resolve_full_*.xesli`: fixed packs take the
+  destination number format (`XePackFixed`).
+- `draw_util::ResolveInfo::GetCopyShader`: gamma sources and destinations
+  whose number format isn't the EDRAM's own take the full resolve.
+- Bytecode rebuilt with `scripts/build_shaders.py` (the ten full resolve
+  shaders change).
+- Not taken: `437a7280cf` (Canary #1163, EDRAM single-sample addressing),
+  which touches the same shaders but is a separate render target cache change
+  (RG-GDK-009 row above).
+
+Tests: `tests/gpu/resolve_gamma_fixture_test.cpp` (8_8_8_8_GAMMA at 1x and
+averaged 4x into 8_8_8_8 and 2_10_10_10 on RTV and ROV; 8_8_8_8 into signed
+and unsigned integer destinations). Known regression: Canary #1134 (open),
+D3D12 device loss on a GTX 1660 SUPER in EA titles bisected to `d119505`;
+the FIFA Street and 007 NVIDIA runs are in the deferred game-run batch, and
+AMD and Intel are not run.
+
+## Resolution-scaled lines as quads (2026-10-03)
+
+has207/xenia-edge `7d0a45263` (2026-09-30, "[GPU] Expand resolution-scaled
+lines to 1 guest pixel wide"; class A, correctness at resolution scales above
+1; Dragon's Dogma's 1024x8 tone-mapping LUT came out mostly empty at 3x).
+Edge did it in its SPIR-V built-in geometry shader; ReXGlue keeps DXBC, so
+this is a DXBC port of the same algorithm into
+`PipelineCache::CreateDxbcGeometryShader` (`PipelineGeometryShader::kLineList`):
+each segment of a line list or strip becomes a quad half a guest pixel either
+side of the line, measured in screen space through the point constants'
+NDC size of a guest pixel, which the command processor now also sets for
+line draws. Zero-length and NaN lines are dropped. Selected only when the
+draw resolution scale is above 1; the pipeline description's and geometry
+shader key's `geometry_shader` field gained a bit (description version
+bumped). Noted on epic [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53),
+whose DXIL path would carry Edge's version. Tests:
+`tests/gpu/line_scale_fixture_test.cpp` (RTV and ROV, three line positions:
+one guest pixel of coverage at 1x and 2x; half without the expansion, checked
+by disabling it). Known regressions: none at the pin.
+
+## RG-GDK-032 stage 1: DXIL toolchain build (2026-10-03)
+
+has207/xenia-edge `edge` at `0788c561e3` (2026-10-03): the Mesa
+`spirv_to_dxil` build recipe from `third_party/CMakeLists.txt` (meson out of
+tree, release `/MD`, static archives driven by ninja target, the same meson
+option set) and its Mesa pin, has207/mesa `7a1fc756809f3bdc9771b54e6036b156389dfc85`
+("microsoft/compiler: use c99_alloca.h instead of malloc.h"); the DXIL signing
+approach (DXIL.dll `IDxcValidator`, in-place edit, validator version stamped
+from `IDxcVersionInfo`) from `src/xenia/gpu/spirv_to_dxil_compiler.cc`.
+Class C (enabling, no behaviour change). Adaptation: fetched as a SHA-256-checked
+archive instead of a submodule so the default build never clones Mesa;
+ReXGlue's clang build links the cl-built archives; the D3D12 Agility SDK
+(1.618.5) and DXC (1.8.2502.8) come from NuGet, matching the versions in
+Microsoft's Fuzion Frenzy BC package rather than Edge's in-tree
+DirectXShaderCompiler. Tests: `tests/dxil/dxil_smoke_test.cpp` (sign and
+create a pipeline through the Agility runtime). See
+[DXIL shader toolchain](shader-dxil.md). Known regressions: none at the pin;
+Edge's pipeline is still changing, so later stages re-pin.
+
+## RG-GDK-032 stage 2 (part 1): SPIR-V translator port (2026-10-03)
+
+has207/xenia-edge `0788c561e3`: `spirv_shader_translator{,_alu,_fetch,_memexport,_rb}`,
+`spirv_builder`, `spirv_shader`, `spirv_compatibility.h`,
+`spirv_fsi_system_constants`, `spirv_builtin_geometry_shader`,
+`spirv_to_dxil_compiler`; glslang `a57276bf558f5cf94d3a9854ebdf5a2236849a5a`
+(Edge's pin). Class C (enabling; opt-in build only). Also from Edge's
+`shader.h`/`shader_translator.{h,cc}`/`xenos.h`: re-entered label register
+writes, the call return-point label, point-fetch coordinate registers,
+`TextureFetchUsesComputedLod`, `kTexture1DWideMaxRows`. Adaptation: mechanical
+rename to ReXGlue conventions; Vulkan device paths removed; `dxil.dll` loaded
+from `D3D12\` first. Not taken yet (DXBC-visible parsing changes, with the
+wide 1D texture work): 1D fetch XY coordinates (545407D4) and the scalar
+second component of three-operand vector ops. Tests:
+`tests/dxil/spirv_translator_test.cpp`; the default GPU and unit suites pass
+unchanged. Known regressions: none at the pin.
+
+## RG-GDK-032 stage 2 (part 2): D3D12 drawing on the DXIL path (2026-10-04)
+
+has207/xenia-edge `0788c561e3`: `guest_spirv_shader_cache` (SPIR-V
+modifications, ported as `GuestSpirvShaderCache`), the Mesa root signature
+and `UpdateBindingsMesa` / `GetOrCreateMesaBindlessSamplerIndex` /
+`SwitchToNewBindlessSamplerHeap` from `d3d12_command_processor.cc`, and the
+translator configuration, geometry shader DXIL and DXIL conversion from
+`d3d12/pipeline_cache.cc`. Class C (opt-in). Adaptation: Edge dropped DXBC,
+so this runs beside ReXGlue's DXBC path per draw (`gpu_shader_path=dxil`,
+fallback for tessellation, DXBC helper pixel shaders, hybrid occlusion
+counting, VIZ surveys, ROV and replaced shaders); the host render target
+path only; no draw-scale threshold or interpreter placeholder; DXIL pipelines
+created synchronously and not stored; separate constant buffer bindings; a
+new [shared SRV, shared UAV] bindless pair; the sampler heap switch also
+invalidates the DXBC descriptor indices. Tests: CTest `gpu.dxil_parity` (all
+52 GPU fixture cases with the DXIL path, strict). Known regressions: none at
+the pin; title scenes not yet compared.
+
+## RG-GDK-032 stage 2 (part 3): tessellation, ROV and helper pixel shaders on DXIL (2026-10-04)
+
+has207/xenia-edge `0788c561e3`: `ConvertGuestMesaTessellationToDxil` and
+`GetMesaTessHostSpirv`, the Mesa ROV depth-only / VIZ survey and depth-only
+pixel shaders and their selection in `CreateD3D12Pipeline` from
+`d3d12/pipeline_cache.cc`; the tessellation and FSI parts of
+`UpdateBindingsMesa`; the host tessellation GLSL
+(`tessellation_{indexed,adaptive}.vs.glsl`, the ten `*.hs.glsl`,
+`xenos_draw.glsli`, last changed in Edge `68ca6429f2` and `e3d9428071`),
+built as Edge's `xenia-shader-cc` does (glslang, Vulkan 1.0, SPIR-V 1.0,
+without its spirv-opt pass). Class C (opt-in). Adaptation: the GLSL is
+compiled at build time with the pinned glslang's standalone compiler
+instead of a host tool; linked tessellation DXIL is cached per domain shader
+modification and made at pipeline creation; float24 helper shaders are
+translator-built DXIL (Edge binds its precompiled ones); the ROV guest sample
+count rides in the pixel shader modification of PS-less DXIL descriptions
+instead of a new description field; hybrid occlusion counting stays on DXBC.
+Tests: `tests/gpu/tessellation_fixture_test.cpp` (DXBC and, through
+`gpu.dxil_parity`, DXIL; RTV and ROV), the ROV ZPD and VIZ fixtures in strict
+DXIL. Known regressions: none at the pin; no tessellating or ROV title scene
+compared yet.
+
+## RG-GDK-058: checked sources and media recovery (2026-10-07)
+
+Source: this implementation fork, base `799a5ea`, topic `pc-game-source`;
+[SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154). Original SDK
+work, not an upstream port; no upstream PR head/merge state applies. Class A
+for XDVDFS range/cycle checks and read-error handling, class B for source/host
+integration. Existing reader notices and candidate partition locations are
+retained. The fingerprint is XXH3-128, not authentication. No guest JIT,
+graphics algorithm or restricted asset is introduced.
+
+Architecture: [ADR-014](adr/ADR-014-game-source-and-media-recovery.md).
+Primary references are Microsoft
+[file buffering](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering)
+and [CD-ROM geometry](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddcdrm/ni-ntddcdrm-ioctl_cdrom_get_drive_geometry_ex).
+Tests cover malformed synthetic images, sector alignment, image truncation,
+still-open handles, concurrent/rejected retry, UI-thread recovery avoidance,
+shutdown cancellation, extraction ownership, generated original/TU identity,
+runtime aliases and first-run/controller UI. Results belong in
+[release evidence](release-evidence.md). Known new regressions: none in tested
+synthetic cases. Physical drive/removal, controller interaction, real-title
+launch, friendly mismatch names and console message-box/Active Downloads gates
+remain unverified; #154 stays open. The pre-existing Debug tessellation fixture
+failure is unchanged.
+
+## RG-GDK-058: standalone host scenes and source adapter (2026-10-07)
+
+Source: original Guide component work, base `3d5ea575a0f6a6ceb9f0c39c097d5c06c59b72aa`,
+head `db55a4d`; [Guide PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)
+is open/draft, not merged. SDK adapter base `98f006b`, topic
+`pc-guide-source-scenes`. Class B for neutral message-box/activity models and
+host source/progress/history integration; class A for reading terminal
+TitleUpdateJob state before non-atomic errors and using the displayed activity
+snapshot for cancellation. No upstream subsystem was copied.
+
+Context-bearing scene models own their contexts and prohibit value moves;
+hosts retain private documents and supply resource/input/action callbacks.
+SDK source/disc services stay in the SDK. GuideHost accepts immutable host
+activity snapshots; existing title-update jobs remain visible and completed
+source copies retain history. Media prompts publish XAM system-UI state,
+consume held input and use existing termination semantics. Polling enables
+ImGui navigation activation on the first controller A press without needing
+a prior direction change; custom hit targets explicitly enable navigation.
+
+Tests: standalone Debug/Release, private installed-reference skin controls,
+controller initial activation, synthetic ISO extraction/history and affected
+SDK UI/source/TU/disc suites in Debug, Release and GDK Release. Full SDK and
+installed-consumer results are in [release evidence](release-evidence.md).
+Known tested regressions: none after resolving navigation/fixture issues
+before publication; the pre-existing Debug GPU assertion remains. Painted
+controller/title/media-removal gates and friendly mismatch names remain open.
+No Microsoft assets or installed game service identity are included.
+
+
+## Explicit title Guide selection and empty activity preparation, 2026-10-07
+
+SDK branch `guide-by-title-platform` consumes Guide commit
+`5e75b86` on `explicit-guide-presentation`, based on SDK `8cfb449` and Guide
+`db55a4d347c9edc74a17632fd7f71311ea1e7410`. Class A: avoid automatic BC scene/source
+selection for a 360 title, and hide reused notification controls even when the
+initial Active Downloads row count is zero. No upstream port or Microsoft code
+is incorporated. The issue boundary remains [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1).
+
+The owner explicitly requires the prior 360 Guide for 360 titles, and BC scenes
+for original Xbox presentation. The SDK supplies per-target selection and shared
+host services; the Guide owns typed scene loading and template preparation.
+Actual QoS captures exposed the empty activity regression, which was confirmed
+and repaired through shared preparation rather than a title-specific workaround.
+Both asset sets, standard/GDK Debug/Release, standalone builds and installed
+consumer configurations are tested. Exact counts, title rebuilds, private capture
+locations and the initial test orchestration/file-lock failure are recorded in
+[release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
+Original Xbox execution and 1:1 online/visual parity remain unestablished.

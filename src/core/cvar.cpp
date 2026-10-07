@@ -60,6 +60,7 @@ std::unordered_map<std::string, size_t>& GetRegistryIndex() {
 struct PendingValues {
   std::optional<std::string> cmdline;
   std::optional<std::string> config;
+  std::optional<std::string> title_default;  // SetTitleDefault
 };
 
 std::unordered_map<std::string, PendingValues>& GetPendingValuesStorage() {
@@ -252,6 +253,11 @@ std::optional<size_t> RegisterFlag(FlagEntry entry) {
     FlagEntry& stored = storage[pos];
     auto& pending = GetPendingValuesStorage();
     auto pending_it = pending.find(stored.name);
+    if (pending_it != pending.end() && pending_it->second.title_default &&
+        ValidateConstraints(stored, *pending_it->second.title_default) &&
+        stored.setter(*pending_it->second.title_default)) {
+      stored.default_value = *pending_it->second.title_default;
+    }
     if (pending_it != pending.end() && pending_it->second.config) {
       ApplyFromSource(stored, *pending_it->second.config, Source::kConfig);
       stored.persisted_value = *pending_it->second.config;
@@ -356,6 +362,28 @@ ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Sou
 
 bool SetFlagByName(std::string_view name, std::string_view value) {
   return SetFlagFromSource(name, value, Source::kRuntime) == ApplyResult::kApplied;
+}
+
+bool SetTitleDefault(std::string_view name, std::string_view value) {
+  {
+    std::lock_guard lock(GetRegistryMutex());
+    auto it = GetRegistryIndex().find(std::string(name));
+    if (it == GetRegistryIndex().end()) {
+      // A runtime-loaded module's flag (the GPU plugin's): applied when it
+      // registers, under its config and command-line values.
+      GetPendingValuesStorage()[std::string(name)].title_default = std::string(value);
+      return true;
+    }
+    auto& entry = GetRegistryStorage()[it->second];
+    if (entry.source != Source::kDefault) {
+      return true;  // a higher source already chose
+    }
+    if (!ValidateConstraints(entry, value) || !entry.setter(value)) {
+      return false;
+    }
+    entry.default_value = std::string(value);
+  }
+  return true;
 }
 
 bool SetFlagFromCommandLine(std::string_view name, std::string_view value) {
@@ -726,10 +754,14 @@ bool IsFinalized() {
 }
 
 void SaveConfig(const std::filesystem::path& config_path) {
+  (void)TrySaveConfig(config_path);
+}
+
+bool TrySaveConfig(const std::filesystem::path& config_path) {
   std::string content = SerializeToTOML();
   if (content.empty()) {
     REXLOG_DEBUG("SaveConfig: no modified flags to save");
-    return;
+    return true;
   }
 
   try {
@@ -741,13 +773,19 @@ void SaveConfig(const std::filesystem::path& config_path) {
     std::ofstream file(config_path);
     if (!file) {
       REXLOG_ERROR("SaveConfig: failed to open {}", config_path.string());
-      return;
+      return false;
     }
     file << "# Auto-generated cvar configuration\n";
     file << content;
+    if (!file.flush()) {
+      REXLOG_ERROR("SaveConfig: failed to write {}", config_path.string());
+      return false;
+    }
     REXLOG_INFO("Saved config to {}", config_path.string());
+    return true;
   } catch (const std::exception& e) {
     REXLOG_ERROR("SaveConfig: {}", e.what());
+    return false;
   }
 }
 

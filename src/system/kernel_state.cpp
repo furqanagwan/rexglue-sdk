@@ -28,6 +28,7 @@
 #include <rex/kernel/xboxkrnl/threading.h>
 #include <rex/system/kernel_module.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/user_language.h>
 #include <rex/system/function_dispatcher.h>
 #include <chrono>
 #include <thread>
@@ -289,8 +290,7 @@ void KernelState::LoadAchievementsData() {
 
   const util::XdbfGameData db = title_xdbf();
   if (db.is_valid()) {
-    const XLanguage language =
-        db.GetExistingLanguage(static_cast<XLanguage>(REXCVAR_GET(user_language)));
+    const XLanguage language = db.GetExistingLanguage(GetUserLanguage());
     for (const auto& entry : db.GetAchievements()) {
       AchievementInfo info;
       info.id = entry.id;
@@ -791,7 +791,8 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
               xex->base_address() + xex->image_size());
         } else if (!function_dispatcher_->InitializeFunctionTable(
                        image_info->code_base, image_info->code_size, image_info->image_base,
-                       image_info->image_size)) {
+                       image_info->image_size, /*is_entrypoint=*/false,
+                       image_info->function_table_base)) {
           REXSYS_ERROR("InitializeFunctionTable failed for module '{}'", recomp->pe_name);
         } else {
           function_dispatcher_->RegisterModule(lib_key, image_info->code_base, register_func);
@@ -922,6 +923,15 @@ std::optional<KernelState::RecompiledModuleInfo> KernelState::FindRecompiledModu
   for (const auto& info : recompiled_modules_) {
     if (info.guest_path == normalized)
       return info;
+  }
+  // A module loaded by a bare name is joined to the executable's own path,
+  // the game partition's device path (\Device\Harddisk0\Partition1\...),
+  // which keeps its device in the key; registered paths are relative to the
+  // game root, so they match as the key's trailing segments.
+  for (const auto& info : recompiled_modules_) {
+    if (GuestPathEndsWithModule(normalized, info.guest_path)) {
+      return info;
+    }
   }
   return std::nullopt;
 }

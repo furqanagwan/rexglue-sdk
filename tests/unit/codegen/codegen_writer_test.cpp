@@ -27,6 +27,7 @@
 #include <rex/codegen/codegen_context.h>
 #include <rex/codegen/codegen_writer.h>
 #include <rex/codegen/test_support.h>
+#include <rex/hash.h>
 
 namespace fs = std::filesystem;
 using namespace rex::codegen;
@@ -110,6 +111,37 @@ TEST_CASE("Second write with unchanged inputs writes nothing", "[codegen_writer]
   CHECK(second.writtenFiles().empty());
   CHECK(second.unchangedFiles().size() == first.writtenFiles().size());
   CHECK(second.deletedFiles().empty());
+}
+
+TEST_CASE("Generated image config binds the raw source executable even for title updates",
+          "[codegen_writer][game_source]") {
+  WriterFixture fx("source_identity");
+  std::array<uint8_t, 128> xex{};
+  std::memcpy(xex.data(), "XEX2", 4);
+  xex[23] = 1;
+  xex[25] = 4;
+  xex[27] = 6;
+  xex[31] = 32;
+  xex[47] = 7;
+  {
+    std::ofstream source(fx.root / "source.xex", std::ios::binary);
+    source.write(reinterpret_cast<char*>(xex.data()), xex.size());
+  }
+  fx.ctx->Config().filePath = "source.xex";
+  const auto checksum = rex::hash_file(fx.root / "source.xex");
+  CodegenWriter writer(*fx.ctx);
+  REQUIRE(writer.write(false));
+  auto generated = ReadAll(fx.outputDir() / "testproj_init.cpp");
+  CHECK(generated.find(".source_title_id = 7") != std::string::npos);
+  CHECK(generated.find(checksum) != std::string::npos);
+  CHECK(generated.find(".source_executable_path = \"source.xex\"") != std::string::npos);
+  fx.ctx->Config().titleUpdateVersion = 9;
+  fx.ctx->setSourceGuestPath("disc/sub/source.xex");
+  REQUIRE(writer.write(false));
+  generated = ReadAll(fx.outputDir() / "testproj_init.cpp");
+  CHECK(generated.find(".title_update = 9") != std::string::npos);
+  CHECK(generated.find(".source_executable_path = \"disc/sub/source.xex\"") != std::string::npos);
+  CHECK(generated.find(checksum) != std::string::npos);
 }
 
 TEST_CASE("Unchanged files keep their modification time", "[codegen_writer]") {

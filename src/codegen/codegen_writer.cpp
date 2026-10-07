@@ -26,6 +26,7 @@
 #include <rex/codegen/function_graph.h>
 #include <rex/codegen/output_partition.h>
 #include <rex/codegen/template_registry.h>
+#include <rex/system/game_source.h>
 #include <rex/logging.h>
 #include <rex/runtime.h>
 #include <rex/system/export_resolver.h>
@@ -55,6 +56,14 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
                                  const std::vector<const rex::codegen::FunctionNode*>& functions,
                                  const std::unordered_map<uint32_t, std::string>& rexcrtByAddr) {
   const auto& cfg = ctx.Config();
+  rex::system::GameSourceIdentity source_identity;
+  const auto source_path = ctx.configDir() / cfg.filePath;
+  if (!cfg.filePath.empty() && std::filesystem::is_regular_file(source_path)) {
+    auto source =
+        rex::system::InspectGameSource(source_path.parent_path(), source_path.filename().string());
+    if (source)
+      source_identity = std::move(source.identity);
+  }
 
   // Compute code_base and code_size from binary sections
   size_t codeMin = ~size_t(0);
@@ -144,6 +153,10 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"project", cfg.projectName},
       {"image_base", fmt::format("0x{:X}", ctx.binary().baseAddress())},
       {"image_size", fmt::format("0x{:X}", ctx.binary().imageSize())},
+      {"function_table_base",
+       fmt::format("0x{:X}", ctx.functionTableBase()
+                                 ? ctx.functionTableBase()
+                                 : ctx.binary().baseAddress() + ctx.binary().imageSize())},
       {"code_base", fmt::format("0x{:X}", codeMin)},
       {"code_size", fmt::format("0x{:X}", codeMax - codeMin)},
       {"rexcrt_heap", cfg.rexcrtFunctions.contains("RtlAllocateHeap") ? 1 : 0},
@@ -157,6 +170,14 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"title_dlc", titleDlcJson},
       {"title_update", cfg.titleUpdateVersion},
       {"title_updates", titleUpdatesJson},
+      {"source_title_id", source_identity.title_id},
+      {"source_executable_checksum", source_identity.executable_checksum},
+      {"source_executable_path",
+       CStringBody(ctx.sourceGuestPath().empty()
+                       ? (cfg.filePath.empty()
+                              ? "default.xex"
+                              : std::filesystem::path(cfg.filePath).filename().generic_string())
+                       : ctx.sourceGuestPath())},
       {"functions", functionsJson},
       {"recomp_files", nlohmann::json::array()},
   };

@@ -61,6 +61,11 @@ install(DIRECTORY include/rex
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
+# Preserve the installed SDK's public Guide/XUI include paths.
+install(DIRECTORY "${XBOX_GUIDE_SOURCE_DIR}/include/rex/"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rex
+)
+
 # Install generated version header
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/include/rex/version.h
@@ -107,6 +112,13 @@ install(FILES
     src/ui/rex_app.cpp
     DESTINATION ${CMAKE_INSTALL_DATADIR}/rexglue
 )
+
+# The D3D12 Agility SDK exports and redistributables titles ship with the
+# DXIL shader path (RG-GDK-032).
+if(REXGLUE_SHADER_DXIL)
+    install(FILES src/ui/d3d12_agility.cpp DESTINATION ${CMAKE_INSTALL_DATADIR}/rexglue)
+    install(FILES ${REXGLUE_D3D12_REDIST_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/rexglue/d3d12)
+endif()
 
 # Install DXC API headers (vendored, for D3D12 backend)
 if(REXGLUE_USE_D3D12)

@@ -82,8 +82,9 @@ DxbcShaderTranslator::DxbcShaderTranslator(ui::GraphicsProvider::GpuVendorID ven
 DxbcShaderTranslator::~DxbcShaderTranslator() = default;
 
 std::vector<uint8_t> DxbcShaderTranslator::CreateDepthOnlyPixelShader(
-    bool zpd_total, Modification::DepthStencilMode depth_stencil_mode) {
+    bool zpd_total, Modification::DepthStencilMode depth_stencil_mode, bool viz_survey) {
   is_depth_only_pixel_shader_ = true;
+  is_viz_survey_pixel_shader_ = viz_survey;
   // TODO(Triang3l): Handle in a nicer way (is_depth_only_pixel_shader_ is a
   // leftover from when a Shader object wasn't used during translation).
   Shader shader(xenos::ShaderType::kPixel, 0, nullptr, 0);
@@ -94,6 +95,7 @@ std::vector<uint8_t> DxbcShaderTranslator::CreateDepthOnlyPixelShader(
   Shader::Translation& translation = *shader.GetOrCreateTranslation(modification.value);
   TranslateAnalyzedShader(translation);
   is_depth_only_pixel_shader_ = false;
+  is_viz_survey_pixel_shader_ = false;
   return translation.translated_binary();
 }
 
@@ -1989,6 +1991,8 @@ const DxbcShaderTranslator::SystemConstantRdef DxbcShaderTranslator::system_cons
     {"xe_edram_rt_blend_factors_ops", ShaderRdefTypeIndex::kUint4, sizeof(uint32_t) * 4},
 
     {"xe_edram_blend_constant", ShaderRdefTypeIndex::kFloat4, sizeof(float) * 4},
+
+    {"xe_texture_integer_scale_bits", ShaderRdefTypeIndex::kUint4Array8, sizeof(uint32_t) * 32},
 };
 
 void DxbcShaderTranslator::WriteResourceDefinition() {

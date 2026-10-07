@@ -146,7 +146,9 @@ constexpr uint32_t kRoundMask = 0x03;
 
 struct FPSCRRegister {
   uint32_t csr;
-  uint32_t guest_value = 0;
+  // FPSCR bits other than RN as the guest last wrote them with mtfsf. Only RN
+  // reaches the host; status bits aren't tracked, so mffs returns these.
+  uint32_t guest_bits = 0;
 
   static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundDown, kRoundUp, kRoundTowardZero};
 
@@ -169,12 +171,11 @@ struct FPSCRRegister {
 
   inline uint32_t loadFromHost() noexcept {
     csr = getcsr();
-    guest_value = (guest_value & ~kRoundMask) | HostToGuest[(csr & RoundMaskVal) >> RoundShift];
-    return guest_value;
+    return guest_bits | uint32_t(HostToGuest[(csr & RoundMaskVal) >> RoundShift]);
   }
 
   inline void storeFromGuest(uint32_t value) noexcept {
-    guest_value = value;
+    guest_bits = value & ~kRoundMask;
     csr &= ~RoundMaskVal;
     csr |= Platform::GuestToHost[value & kRoundMask];
     setcsr(csr);
@@ -209,6 +210,56 @@ struct FPSCRRegister {
     Platform::InitHostExceptions(csr);
     setcsr(csr);
   }
+};
+
+//=============================================================================
+// Host and guest FP modes
+//=============================================================================
+// Generated code runs with the guest's rounding mode and VMX flush-to-zero in
+// the host control register, and caches it in ctx.fpscr.csr. Host code
+// (kernel exports, XAM, the guide, audio) must not run in that mode, and
+// guest code entered from the host must find its cache true. Each scope
+// writes the register only when the mode differs, and restores it on exit.
+
+/// Host code called from guest code: round to nearest, no flush. On the way
+/// back the guest bits come from `fpscr`, which a guest callback made inside
+/// the host code may have changed.
+struct HostFpScope {
+  FPSCRRegister& fpscr;
+
+  explicit HostFpScope(FPSCRRegister& guest) noexcept : fpscr(guest) {
+    const uint32_t current = FPSCRRegister::Platform::getcsr();
+    if (current & FPSCRRegister::GuestMask)
+      FPSCRRegister::Platform::setcsr(current & ~FPSCRRegister::GuestMask);
+  }
+  ~HostFpScope() {
+    const uint32_t current = FPSCRRegister::Platform::getcsr();
+    fpscr.csr = (current & ~FPSCRRegister::GuestMask) | (fpscr.csr & FPSCRRegister::GuestMask);
+    if (fpscr.csr != current)
+      FPSCRRegister::Platform::setcsr(fpscr.csr);
+  }
+
+  HostFpScope(const HostFpScope&) = delete;
+  HostFpScope& operator=(const HostFpScope&) = delete;
+};
+
+/// Guest code called from host code: the guest bits of `fpscr` go in, the
+/// host's exception masks stay, and the cache is made to match.
+struct GuestFpScope {
+  uint32_t saved;
+
+  explicit GuestFpScope(FPSCRRegister& fpscr) noexcept : saved(FPSCRRegister::Platform::getcsr()) {
+    fpscr.csr = (saved & ~FPSCRRegister::GuestMask) | (fpscr.csr & FPSCRRegister::GuestMask);
+    if (fpscr.csr != saved) [[unlikely]]
+      FPSCRRegister::Platform::setcsr(fpscr.csr);
+  }
+  ~GuestFpScope() {
+    if (FPSCRRegister::Platform::getcsr() != saved) [[unlikely]]
+      FPSCRRegister::Platform::setcsr(saved);
+  }
+
+  GuestFpScope(const GuestFpScope&) = delete;
+  GuestFpScope& operator=(const GuestFpScope&) = delete;
 };
 
 }  // namespace rex::ppc
@@ -261,6 +312,8 @@ struct alignas(0x40) PPCContext {
   PPCRegister ctr;
   PPCXERRegister xer;
   PPCRegister reserved;
+  // The address lwarx/ldarx reserved; all ones when none is held.
+  uint64_t reserved_address = ~uint64_t(0);
   uint32_t msr = 0x200A000;
   PPCCRRegister cr0;
   PPCCRRegister cr1;
@@ -479,6 +532,6 @@ struct alignas(0x40) PPCContext {
     PPCFPSCRRegister saved_fpscr;
     std::memcpy(&saved_fpscr, src, sizeof(PPCFPSCRRegister));
     fpscr.restoreGuestBits(saved_fpscr.csr);
-    fpscr.guest_value = saved_fpscr.guest_value;
+    fpscr.guest_bits = saved_fpscr.guest_bits;
   }
 };

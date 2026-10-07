@@ -10,6 +10,7 @@ add_executable(unit_tests
     core/filesystem_test.cpp
     core/data_locations_test.cpp
     filesystem/stfs_container_test.cpp
+    filesystem/disc_image_test.cpp
     core/vfs_overwrite_test.cpp
     core/hash_test.cpp
     core/stream_test.cpp
@@ -22,14 +23,22 @@ add_executable(unit_tests
     graphics/debug_markers_test.cpp
     graphics/frame_stats_test.cpp
     graphics/vblank_pacer_test.cpp
+    graphics/storage_seed_test.cpp
+    graphics/fetch_conversion_test.cpp
+    graphics/shader_replacements_test.cpp
+    graphics/scaling_list_test.cpp
     ppc/import_function_test.cpp
     ppc/stack_test.cpp
     ppc/nonlocal_jump_test.cpp
+    ppc/fp_test.cpp
     system/guest_path_test.cpp
     system/achievement_manager_test.cpp
     system/function_dispatcher_test.cpp
     system/gaming_runtime_test.cpp
     system/title_display_name_test.cpp
+    system/user_language_test.cpp
+    system/game_source_test.cpp
+    system/game_media_recovery_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp
@@ -42,12 +51,10 @@ add_executable(unit_tests
     input/gamepad_devices_test.cpp
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
-    ui/xui_format_test.cpp
-    ui/xui_runtime_test.cpp
-    ui/dlc_catalog_test.cpp
-    ui/guide_input_test.cpp
-    ui/title_update_test.cpp
+    ui/launch_settings_test.cpp
+    ui/game_source_test.cpp
     codegen/codegen_writer_test.cpp
+    codegen/function_table_layout_test.cpp
     codegen/output_partition_test.cpp
     codegen/output_stamp_test.cpp
     codegen/jump_table_test.cpp
@@ -56,8 +63,11 @@ add_executable(unit_tests
     codegen/code_patch_test.cpp
     codegen/game_config_test.cpp
     codegen/title_update_manifest_test.cpp
+    codegen/indirect_trace_test.cpp
     rexglue/app_name_test.cpp
 )
+
+xbox_guide_attach_tests(unit_tests)
 
 if(WIN32)
     target_sources(unit_tests PRIVATE audio/xaudio2_driver_test.cpp)
@@ -73,6 +83,14 @@ target_sources(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/rexglue/commands/project_scan.cpp
 )
 
+if(WIN32)
+    target_sources(unit_tests PRIVATE
+        rexglue/library_art_test.cpp
+        ${PROJECT_SOURCE_DIR}/src/rexglue/commands/library_art.cpp
+    )
+    target_link_libraries(unit_tests PRIVATE windowscodecs)
+endif()
+
 target_include_directories(unit_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
@@ -84,6 +102,7 @@ target_include_directories(unit_tests PRIVATE
 target_link_libraries(unit_tests PRIVATE
     rexcodegen
     rexruntime
+    imgui::imgui  # the guide's headers (xbox_guide.h)
     Catch2::Catch2WithMain
 )
 

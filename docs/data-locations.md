@@ -8,8 +8,10 @@ command-line flag or `OnConfigurePaths` overrides any of them.
 | What | Default | Override |
 | --- | --- | --- |
 | Game files (`game:`) | `<exe>\game`, else the executable's own folder, whichever holds `default.xex` | `--game_data_root` |
+| Extracted game source | `%LOCALAPPDATA%\<name>\games\game-<checksum>` | First-run Extract to this PC |
 | Saves, profiles, achievements | `%USERPROFILE%\Saved Games\<name>` | `--user_data_root` |
-| Shader and other caches | `%LOCALAPPDATA%\<name>\cache` | `--cache_root` |
+| Shader and other caches | `%LOCALAPPDATA%\<name>\cache` (seeded from a [shipped shader cache](shader-cache.md) beside the executable) | `--cache_root` |
+| The console's cache partitions (`cache:`, `cache0:`, `cache1:`; `mount_cache`) | `<cache>\partitions` | `--cache_root` |
 | Logs | `%LOCALAPPDATA%\<name>\logs` | `--log_dir`, or `--log_file` for one file |
 | Settings (`<name>.toml`) | `<exe>\<name>.toml` if it exists, else `%LOCALAPPDATA%\<name>\<name>.toml` | none |
 
@@ -20,6 +22,12 @@ loads and never changes.
 With `--user_data_root` and no `--cache_root`, the cache stays in
 `<user data>\cache`, as it always has. Existing scripts that pass their own
 user data folder see no change except where logs go.
+
+A checked source selected in the first-run menu is persisted as `game_source`
+in the per-title settings file. It may be an absolute extracted folder, ISO or
+optical drive path; the runtime mounts it at `game:` and `d:`. An explicit
+`--game_data_root` wins over the remembered source. Choosing or extracting a
+source does not move saves. See [source selection](pc-backward-compatibility.md#game-sources-and-media-recovery).
 
 ## Why these folders
 

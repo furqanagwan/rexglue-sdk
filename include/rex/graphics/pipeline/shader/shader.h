@@ -522,9 +522,35 @@ struct ParsedTextureFetchInstruction {
   // is not always zero.
   uint32_t GetNonZeroResultComponents() const;
 
+  // Whether the fetch can return a single texel with no instruction override to
+  // linear/anisotropic filtering.
+  bool AllowsPointSampling(bool use_computed_lod) const {
+    return attributes.mag_filter != xenos::TextureFilter::kLinear &&
+           attributes.min_filter != xenos::TextureFilter::kLinear &&
+           attributes.mip_filter != xenos::TextureFilter::kLinear &&
+           (!use_computed_lod || attributes.aniso_filter == xenos::AnisoFilter::kDisabled ||
+            attributes.aniso_filter == xenos::AnisoFilter::kUseFetchConst);
+  }
+
+  // Whether a tfetch snaps its coordinates to the texel center instead of
+  // adding kTextureCoordEpsilon. Only point sampled 2D fetches with normalized
+  // coordinates snap; the fetch constant side is bit 26 of
+  // texture_util::GetIntegerScaleBits. The epsilon is there so host rounding
+  // picks the texel guest truncation would, but near an edge it can push the
+  // sample into the next texel: texture seams in 425307EC's virtual texture
+  // tables (xenia-canary c3cd8617b1).
+  bool CanSnapToTexelCenter(bool use_computed_lod) const {
+    return opcode == ucode::FetchOpcode::kTextureFetch &&
+           dimension == xenos::FetchOpDimension::k2D && !attributes.unnormalized_coordinates &&
+           AllowsPointSampling(use_computed_lod);
+  }
+
   // Disassembles the instruction into ucode assembly text.
   void Disassemble(string::StringBuffer* out) const;
 };
+
+// Fixed point texture coordinate ULP (see ProcessTextureFetchInstruction).
+constexpr float kTextureCoordEpsilon = 1.5f / 1024.0f;
 
 struct ParsedAluInstruction {
   // Opcode for the vector part of the instruction.
@@ -789,6 +815,13 @@ class Shader {
     // Translated shader binary (or text).
     const std::vector<uint8_t>& translated_binary() const { return translated_binary_; }
 
+    // A title's replacement shader (ShaderReplacements) stands in for the
+    // translated binary. The translation's bindings and interface stay, so the
+    // replacement must keep them. Only before PublishTranslated.
+    void ReplaceTranslatedBinary(std::vector<uint8_t> binary) {
+      translated_binary_ = std::move(binary);
+    }
+
     // Gets the translated shader binary as a string.
     // This is only valid if it is actually text.
     std::string GetTranslatedBinaryString() const;
@@ -887,6 +920,20 @@ class Shader {
   // Exclusive upper bound of the indexes of paired control flow instructions
   // (each corresponds to 3 dwords).
   uint32_t cf_pair_index_bound() const { return cf_pair_index_bound_; }
+
+  // Whether the shader contains subroutine calls (cond_call).
+  bool uses_subroutine_calls() const { return uses_subroutine_calls_; }
+  // Components of registers 0-15, 4 bits per register, that may be written
+  // after the label in the program and then reach it by jumping back or
+  // returning from a subroutine. Zero for labels only jumped to forward.
+  uint64_t GetRegisterComponentsWrittenBeforeReentering(uint32_t label) const {
+    return label < reentered_label_register_components_written_.size()
+               ? reentered_label_register_components_written_[label]
+               : 0;
+  }
+  // Registers 0-15 used with absolute addressing as coordinates of texture
+  // fetches that may snap to texel centers (see CanSnapToTexelCenter).
+  uint32_t point_fetch_coordinate_registers() const { return point_fetch_coordinate_registers_; }
 
   // Upper bound of temporary registers addressed statically by the shader -
   // highest static register address + 1, or 0 if no registers referenced this
@@ -1018,6 +1065,11 @@ class Shader {
   ConstantRegisterMap constant_register_map_ = {};
   std::set<uint32_t> label_addresses_;
   uint32_t cf_pair_index_bound_ = 0;
+  // Per control flow instruction index.
+  std::vector<uint64_t> cf_register_components_written_;
+  std::vector<uint64_t> reentered_label_register_components_written_;
+  uint32_t point_fetch_coordinate_registers_ = 0;
+  bool uses_subroutine_calls_ = false;
   uint32_t register_static_address_bound_ = 0;
   uint32_t writes_interpolators_ = 0;
   uint32_t writes_point_size_edge_flag_kill_vertex_ = 0;
@@ -1048,16 +1100,17 @@ class Shader {
                              ucode::VertexFetchInstruction& previous_vfetch_full,
                              uint32_t& unique_texture_bindings,
                              string::StringBuffer& ucode_disasm_buffer);
-  void GatherVertexFetchInformation(const ucode::VertexFetchInstruction& op,
+  void GatherVertexFetchInformation(const ucode::VertexFetchInstruction& op, uint32_t exec_cf_index,
                                     ucode::VertexFetchInstruction& previous_vfetch_full,
                                     string::StringBuffer& ucode_disasm_buffer);
   void GatherTextureFetchInformation(const ucode::TextureFetchInstruction& op,
-                                     uint32_t& unique_texture_bindings,
+                                     uint32_t exec_cf_index, uint32_t& unique_texture_bindings,
                                      string::StringBuffer& ucode_disasm_buffer);
   void GatherAluInstructionInformation(const ucode::AluInstruction& op, uint32_t exec_cf_index,
                                        string::StringBuffer& ucode_disasm_buffer);
   void GatherOperandInformation(const InstructionOperand& operand);
-  void GatherFetchResultInformation(const InstructionResult& result);
+  void GatherFetchResultInformation(const InstructionResult& result, uint32_t exec_cf_index);
+  void GatherRegisterWriteInformation(const InstructionResult& result, uint32_t exec_cf_index);
   void GatherAluResultInformation(const InstructionResult& result, uint32_t exec_cf_index);
 };
 

@@ -22,7 +22,9 @@ and fixes that help every title go to the SDK.
   title image, the icon its window and taskbar button show) may be kept in
   `assets/icons/` so the README can show the games side by side, since a
   title's own icon is often not hosted anywhere; the README's Legal section
-  says so.
+  says so. Library tiles made with
+  [`rexglue library-art`](library-art.md) contain the box art, so they stay
+  local too.
 - **Identify every release exactly**, from the disc and the XEX headers, never
   from memory: the Redump name of the image, region, languages, title ID, media
   ID, executable version, disc number and title updates. Record "not yet
@@ -42,6 +44,10 @@ README.md                 The series README (below): games, download, how to pla
   <title>.toml            Its codegen configuration (function entries, hooks,
                           patches, mods, cheats, add-ons), added to the private
                           manifest's `includes` as "../<title>.toml"
+  shader_replacements/    Optional hand-written replacement shaders
+                          (<HASH>[_<MOD>].<vs|ps_rtv|ps_rov>.hlsl), see
+                          [shader replacements](shader-replacements.md); HLSL
+                          only, never DXBC dumped from the game
 assets/
   logo.svg                Original square logo
   social-preview.svg/.png Original 1280x640 image for Settings → Social preview

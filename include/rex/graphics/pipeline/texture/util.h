@@ -333,4 +333,10 @@ void GetClampModesForDimension(const xenos::xe_gpu_texture_fetch_t& fetch,
                                xenos::ClampMode& clamp_x_out, xenos::ClampMode& clamp_y_out,
                                xenos::ClampMode& clamp_z_out);
 
+// How the fetch shader turns the host's normalized sample of a fixed format
+// back into what the guest reads: the integer value for num_format 1, and the
+// guest's rounding for num_format 0, plus the point sampled flag (layout in
+// DxbcShaderTranslator::SystemConstants::texture_integer_scale_bits).
+uint32_t GetIntegerScaleBits(const xenos::xe_gpu_texture_fetch_t& fetch, uint8_t swizzled_signs);
+
 }  // namespace rex::graphics::texture_util

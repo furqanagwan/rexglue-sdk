@@ -1137,7 +1137,7 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
 
   // Other state
   state.context.fpscr = ctx->fpscr.csr;
-  state.context.guest_fpscr = ctx->fpscr.guest_value;
+  state.context.guest_fpscr = ctx->fpscr.guest_bits;
   state.context.xer_ca = ctx->xer.ca;
   state.context.xer_ov = ctx->xer.ov;
   state.context.xer_so = ctx->xer.so;
@@ -1250,7 +1250,7 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
 
   // Other state
   ctx->fpscr.csr = state.context.fpscr;
-  ctx->fpscr.guest_value = state.context.guest_fpscr;
+  ctx->fpscr.guest_bits = state.context.guest_fpscr;
   ctx->xer.ca = state.context.xer_ca;
   ctx->xer.ov = state.context.xer_ov;
   ctx->xer.so = state.context.xer_so;
