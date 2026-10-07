@@ -372,3 +372,17 @@ Original Xbox presentation uses owner's BC scenes but is not a 1:1 fidelity
 claim or an execution backend. Original Xbox CPU/kernel/media execution, Xbox
 account linking, entitlements, cloud saves and live services still require their
 separate implementation/design/deployment gates. No issue is closed by this work.
+
+
+Follow-up staged window probes also launch Blood Stone, Legends, FIFA Street
+and NHL with disposable data. Blood Stone's original Guide is visibly present.
+Legends' initial captured Guide is partially clipped during the startup probe;
+its settled/fidelity result is unresolved. Earlier four-second captures were
+black startup frames and are not passes. Subsequent Legends/FIFA/NHL capture
+attempts cannot acquire the owned foreground window and therefore refuse
+input/screenshots. No painted pass is claimed for those three titles. Capture
+records are `title-window-checks.json` and `title-window-checks-final.json` in the
+same private evidence folder. All owned processes are closed. The current
+[Guide draft PR](https://github.com/furqanagwan/xbox-guide/pull/9) Windows CI checks
+pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
+format checks; these do not replace the missing owner/hardware/service gates.
