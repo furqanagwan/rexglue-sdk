@@ -28,6 +28,7 @@
 #include <rex/kernel/xboxkrnl/threading.h>
 #include <rex/system/kernel_module.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/user_language.h>
 #include <rex/system/function_dispatcher.h>
 #include <chrono>
 #include <thread>
@@ -289,8 +290,7 @@ void KernelState::LoadAchievementsData() {
 
   const util::XdbfGameData db = title_xdbf();
   if (db.is_valid()) {
-    const XLanguage language =
-        db.GetExistingLanguage(static_cast<XLanguage>(REXCVAR_GET(user_language)));
+    const XLanguage language = db.GetExistingLanguage(GetUserLanguage());
     for (const auto& entry : db.GetAchievements()) {
       AchievementInfo info;
       info.id = entry.id;

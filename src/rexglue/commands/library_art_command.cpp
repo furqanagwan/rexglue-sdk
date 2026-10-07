@@ -30,6 +30,7 @@
 #include <fmt/format.h>
 
 #include <rex/logging.h>
+#include <rex/codegen/game_config.h>
 #include <rex/ui/xui/runtime.h>
 #include <rex/ui/xui/system_update.h>
 
@@ -215,6 +216,61 @@ void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction&
       ->type_name("PATH");
   sub->callback([args, &pending]() {
     pending = [args]() -> Result<void> { return WriteLibraryArt(*args); };
+  });
+
+  // Original title art for Windows resources and GDK ShellVisuals. No console
+  // assets, downloads or service identity are needed for this path.
+  struct TitleArtArgs {
+    std::string image;
+    std::string output;
+    bool force = false;
+  };
+  auto title_args = std::make_shared<TitleArtArgs>();
+  auto* art = parent.add_subcommand("title-art", "Generate EXE icon and GDK images from title art");
+  art->add_option("--image", title_args->image, "Title PNG/JPEG; centred crop for square icons")
+      ->required()
+      ->check(CLI::ExistingFile);
+  art->add_option("-o,--output", title_args->output, "Output folder (usually gdk)")->required();
+  art->add_flag("--force", title_args->force, "Replace existing generated art");
+  art->callback([title_args, &pending]() {
+    pending = [title_args]() -> Result<void> {
+      std::string error;
+      const auto image = Local(title_args->image, &error);
+      if (!image)
+        return Err<void>(ErrorCategory::IO, error);
+      const auto ico = EncodeIco(*image, &error);
+      if (!ico)
+        return Err<void>(ErrorCategory::IO, error);
+      const std::filesystem::path output(title_args->output);
+      // Check the entire set before writing, so existing custom art is safe.
+      if (!title_args->force) {
+        std::vector<std::string> names = {"Title.ico"};
+        for (const auto& item : rex::codegen::GameConfigImages())
+          names.emplace_back(item.file_name);
+        for (const auto& name : names) {
+          if (std::filesystem::exists(output / name)) {
+            return Err<void>(ErrorCategory::IO, fmt::format("{} exists; use --force to replace art",
+                                                            (output / name).string()));
+          }
+        }
+      }
+      std::error_code ec;
+      std::filesystem::create_directories(output, ec);
+      if (ec)
+        return Err<void>(ErrorCategory::IO, ec.message());
+      for (const auto& item : rex::codegen::GameConfigImages()) {
+        if (auto result =
+                WritePng(Cover(*image, int(item.width), int(item.height)), output / item.file_name);
+            !result)
+          return result;
+      }
+      std::ofstream file(output / "Title.ico", std::ios::binary | std::ios::trunc);
+      file.write(reinterpret_cast<const char*>(ico->data()), std::streamsize(ico->size()));
+      if (!file.flush())
+        return Err<void>(ErrorCategory::IO, "Cannot write Title.ico");
+      REXLOG_INFO("Wrote title icon and ShellVisuals to {}", output.string());
+      return rex::Ok();
+    };
   });
 }
 

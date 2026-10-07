@@ -40,8 +40,13 @@ endfunction()
 #     (docs/shader-replacements.md).
 #==========================================================
 function(rexglue_configure_target target_name)
-    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS" "GPU_PLUGINS;CVAR_DEFAULTS"
+    cmake_parse_arguments(ARG "" "SHADER_CACHE;SHADER_REPLACEMENTS;ICON" "GPU_PLUGINS;CVAR_DEFAULTS"
         ${ARGN})
+    if(ARG_ICON)
+        rexglue_embed_title_icon(${target_name} "${ARG_ICON}")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gdk/Title.ico")
+        rexglue_embed_title_icon(${target_name} "${CMAKE_CURRENT_SOURCE_DIR}/gdk/Title.ico")
+    endif()
     if(ARG_SHADER_REPLACEMENTS)
         list(APPEND ARG_CVAR_DEFAULTS "shader_replacements=true")
     endif()
@@ -118,6 +123,30 @@ function(rexglue_configure_target target_name)
         unset(_plugin_target)
     endforeach()
 
+endfunction()
+
+# Embeds native Windows resources independently of the runtime window icon
+# and MicrosoftGame.config. Call for each host/TU EXE; guest DLLs do not need it.
+function(rexglue_embed_title_icon target_name icon_path)
+    if(NOT WIN32)
+        message(FATAL_ERROR "rexglue_embed_title_icon requires Windows")
+    endif()
+    get_filename_component(_icon "${icon_path}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    if(NOT EXISTS "${_icon}" OR IS_DIRECTORY "${_icon}")
+        message(FATAL_ERROR "Title icon does not exist: ${_icon}")
+    endif()
+    get_target_property(_existing ${target_name} REXGLUE_EMBEDDED_ICON)
+    if(_existing)
+        message(FATAL_ERROR "Title icon already configured for ${target_name}")
+    endif()
+    enable_language(RC)
+    set(_resource "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_title_icon.rc")
+    # Forward slashes avoid RC interpreting Windows path escape sequences.
+    file(TO_CMAKE_PATH "${_icon}" _icon)
+    file(WRITE "${_resource}" "// Generated title icon; the linker retains its manifest.\n1 ICON \"${_icon}\"\n")
+    set_source_files_properties("${_resource}" PROPERTIES OBJECT_DEPENDS "${_icon}")
+    target_sources(${target_name} PRIVATE "${_resource}")
+    set_property(TARGET ${target_name} PROPERTY REXGLUE_EMBEDDED_ICON "${_icon}")
 endfunction()
 
 #==========================================================

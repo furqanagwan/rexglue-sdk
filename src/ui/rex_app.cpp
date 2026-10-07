@@ -29,6 +29,7 @@
 #include <rex/ui/overlay/console_overlay.h>
 #include <rex/ui/overlay/debug_overlay.h>
 #include <rex/ui/overlay/settings_overlay.h>
+#include <rex/ui/overlay/launch_settings.h>
 #include <rex/audio/audio_backend.h>
 #include <rex/audio/audio_system.h>
 #include <rex/audio/downmix.h>
@@ -41,6 +42,7 @@
 #include <rex/system/gpu_plugin.h>
 #include <rex/system/flags.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/user_language.h>
 #include <rex/system/util/xdbf_utils.h>
 #include <rex/system/xthread.h>
 #include <rex/thread.h>
@@ -58,10 +60,14 @@
 #include <imgui.h>
 
 #include <algorithm>
+
 #include <array>
 #include <chrono>
 #include <filesystem>
 #include <string_view>
+
+REXCVAR_DEFINE_BOOL(launch_menu, false, "UI/Window", "Show game settings before launching")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_STRING(gpu_plugin, "", "GPU",
                       "GPU emulation plugin to load at startup (e.g. 'xenos'); empty disables "
@@ -114,8 +120,7 @@ std::string TitleName(const system::KernelState& kernel_state) {
   if (!db.is_valid()) {
     return {};
   }
-  const system::XLanguage language =
-      db.GetExistingLanguage(static_cast<system::XLanguage>(REXCVAR_GET(user_language)));
+  const system::XLanguage language = db.GetExistingLanguage(system::GetUserLanguage());
   std::string name = system::util::TitleDisplayName(db.title(language));
   if (name.empty()) {
     name = system::util::TitleDisplayName(db.title());
@@ -275,7 +280,83 @@ bool ReXApp::OnInitialize() {
     return true;
   }
 
-  if (!ConstructRuntime(*paths))
+  return BeginLaunch(std::move(*paths));
+}
+
+bool ReXApp::BeginLaunch(PathConfig paths) {
+  if (REXCVAR_GET(launch_menu) && !imgui_drawer_) {
+    REXLOG_ERROR("Launch menu requested without an ImGui presentation drawer");
+    return false;
+  }
+  if (REXCVAR_GET(launch_menu) && imgui_drawer_) {
+    // This reader is for the host menu, with no synthetic guest controllers.
+    // Its lifetime ends with the dialog, before runtime input is constructed.
+    auto physical_input = rex::input::CreatePhysicalInputSystem();
+    physical_input->Setup();
+    auto pad_input = std::shared_ptr<rex::input::InputSystem>(physical_input.release(),
+                                                              [](rex::input::InputSystem* input) {
+                                                                input->Shutdown();
+                                                                delete input;
+                                                              });
+    ui::LaunchPadSource pad_source = [pad_input]() -> std::optional<ui::LaunchPadState> {
+      using namespace rex::input;
+      std::array<std::optional<X_INPUT_STATE>, 4> states;
+      int first = -1;
+      for (uint32_t user = 0; user < states.size(); ++user) {
+        X_INPUT_STATE state = {};
+        if (pad_input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
+          states[user] = state;
+          if (first < 0)
+            first = int(user);
+        }
+      }
+      if (first < 0)
+        return std::nullopt;
+      const auto last = pad_input->GetLastUsedUser();
+      const auto& gamepad = states[last < states.size() && states[last] ? last : first]->gamepad;
+      const uint16_t buttons = gamepad.buttons;
+      ui::LaunchPadState result;
+      result.x = float(int16_t(gamepad.thumb_lx)) / 32768.0f;
+      result.y = float(int16_t(gamepad.thumb_ly)) / 32768.0f;
+      if (buttons & (X_INPUT_GAMEPAD_DPAD_LEFT | X_INPUT_GAMEPAD_DPAD_RIGHT)) {
+        result.x = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_RIGHT)) -
+                   float(bool(buttons & X_INPUT_GAMEPAD_DPAD_LEFT));
+      }
+      if (buttons & (X_INPUT_GAMEPAD_DPAD_UP | X_INPUT_GAMEPAD_DPAD_DOWN)) {
+        result.y = float(bool(buttons & X_INPUT_GAMEPAD_DPAD_UP)) -
+                   float(bool(buttons & X_INPUT_GAMEPAD_DPAD_DOWN));
+      }
+      result.activate = buttons & X_INPUT_GAMEPAD_A;
+      result.cancel = buttons & X_INPUT_GAMEPAD_B;
+      result.previous_tab = buttons & X_INPUT_GAMEPAD_LEFT_SHOULDER;
+      result.next_tab = buttons & X_INPUT_GAMEPAD_RIGHT_SHOULDER;
+      return result;
+    };
+    launch_settings_ = new ui::LaunchSettingsDialog(
+        imgui_drawer_.get(), std::string(GetName()), config_path_,
+        [this, paths = std::move(paths)](bool play) mutable {
+          launch_settings_ = nullptr;
+          // Leave the current ImGui draw before constructing the guest runtime.
+          app_context().CallInUIThreadDeferred([this, play, paths = std::move(paths)]() mutable {
+            if (shutting_down_.load(std::memory_order_acquire))
+              return;
+            if (!play || !ConstructRuntime(std::move(paths))) {
+              app_context().QuitFromUIThread();
+              return;
+            }
+            if (auto* input = dynamic_cast<rex::input::InputSystem*>(runtime_->input_system())) {
+              // Consume held buttons/keystrokes before the guest starts, using
+              // the same handoff contract as the in-game Guide/keyboard.
+              input->AddUIInputBlocker();
+              input->RemoveUIInputBlocker();
+            }
+            LaunchModule();
+          });
+        },
+        std::move(pad_source));
+    return true;
+  }
+  if (!ConstructRuntime(std::move(paths)))
     return false;
   LaunchModule();
   return true;
@@ -860,11 +941,10 @@ std::function<void(PathConfig)> ReXApp::MakeResumeCallback() {
   return [this](PathConfig paths) {
     if (shutting_down_.load(std::memory_order_acquire))
       return;
-    if (!ConstructRuntime(std::move(paths))) {
+    if (!BeginLaunch(std::move(paths))) {
       app_context().QuitFromUIThread();
       return;
     }
-    LaunchModule();
   };
 }
 
@@ -960,6 +1040,8 @@ void ReXApp::OnDestroy() {
   achievement_notification_.reset();
   achievements_overlay_.reset();
   settings_overlay_.reset();
+  delete launch_settings_;
+  launch_settings_ = nullptr;
   console_overlay_.reset();
   debug_overlay_.reset();
   if (imgui_drawer_) {

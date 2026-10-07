@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <array>
 
 #include "rexglue/commands/library_art.h"
 
@@ -19,6 +20,59 @@ using rexglue::cli::EncodePng;
 using rexglue::cli::Image;
 using rexglue::cli::StripArt;
 using rexglue::cli::StripArtFromSplash;
+
+TEST_CASE("Native title ICO frames retain size colour and transparency", "[library_art][icon]") {
+  Image source{256, 256, std::vector<uint8_t>(256 * 256 * 4)};
+  for (size_t i = 0; i < source.pixels.size(); i += 4) {
+    source.pixels[i] = 32;
+    source.pixels[i + 1] = 64;
+    source.pixels[i + 2] = 96;
+    source.pixels[i + 3] = 128;
+  }
+  std::string error;
+  const auto ico = rexglue::cli::EncodeIco(source, &error);
+  REQUIRE(ico);
+  REQUIRE(ico->size() > 118);
+  auto read32 = [&ico](size_t offset) {
+    uint32_t value = 0;
+    for (int i = 0; i < 4; ++i)
+      value |= uint32_t((*ico)[offset + i]) << (8 * i);
+    return value;
+  };
+  CHECK((*ico)[0] == 0);
+  CHECK((*ico)[2] == 1);
+  CHECK((*ico)[4] == 7);
+  constexpr std::array<int, 7> sizes = {16, 24, 32, 48, 64, 128, 256};
+  size_t end = 118;
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    const size_t entry = 6 + i * 16;
+    const auto length = read32(entry + 8);
+    const auto offset = read32(entry + 12);
+    REQUIRE(offset == end);
+    REQUIRE(size_t(offset) + length <= ico->size());
+    CHECK((*ico)[entry] == uint8_t(sizes[i]));
+    if (sizes[i] == 256) {
+      const auto decoded =
+          DecodeImage(std::span<const uint8_t>(*ico).subspan(offset, length), &error);
+      REQUIRE(decoded);
+      CHECK(decoded->width == sizes[i]);
+      CHECK(decoded->height == sizes[i]);
+      CHECK(decoded->at(sizes[i] / 2, sizes[i] / 2)[0] == 32);
+      CHECK(decoded->at(sizes[i] / 2, sizes[i] / 2)[3] == 128);
+    } else {
+      CHECK(read32(offset) == 40);
+      CHECK(read32(offset + 4) == uint32_t(sizes[i]));
+      CHECK(read32(offset + 8) == uint32_t(sizes[i] * 2));
+      CHECK((*ico)[offset + 40] == 64);  // Straight blue, not premultiplied.
+      CHECK((*ico)[offset + 43] == 128);
+    }
+    end = size_t(offset) + length;
+  }
+  CHECK(end == ico->size());
+  CHECK_FALSE(rexglue::cli::EncodeIco(Image{}, &error));
+  source.pixels.pop_back();
+  CHECK_FALSE(rexglue::cli::EncodeIco(source, &error));
+}
 
 namespace {
 

@@ -182,6 +182,10 @@ endif()
 if(REXGLUE_BUILD_TESTS)
     list(APPEND CMAKE_MODULE_PATH "${REXGLUE_ROOT}/cmake")
     list(APPEND CMAKE_MODULE_PATH "${REXGLUE_ROOT}/thirdparty/catch2/extras")
+    # Catch's POST_BUILD mode writes one discovery file for all configurations.
+    # PRE_TEST keeps Debug/Release command paths separate under multi-config
+    # generators, even after alternating builds in the same output directory.
+    set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 endif()
 
 # Third-party dependencies (vendored sources only)

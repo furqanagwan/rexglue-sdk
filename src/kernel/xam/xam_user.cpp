@@ -22,13 +22,17 @@
 #include <rex/types.h>
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/user_language.h>
 #include <rex/system/xam/user_profile.h>
 #include <rex/system/xenumerator.h>
 #include <rex/system/xio.h>
 #include <rex/system/xthread.h>
 #include <rex/system/xtypes.h>
 
-REXCVAR_DEFINE_UINT32(user_language, 1, "Kernel", "User's language ID");
+REXCVAR_DEFINE_UINT32(user_language, 1, "Kernel",
+                      "Game language: 0 follows Windows, 1..12 Xbox language ID")
+    .range(0, 12)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace rex {
 namespace kernel {
@@ -658,8 +662,7 @@ u32 XamUserCreateAchievementEnumerator_entry(u32 title_id, u32 user_index, u32 x
   } else {
     const util::XdbfGameData db = ks->title_xdbf();
     if (db.is_valid()) {
-      const XLanguage language =
-          db.GetExistingLanguage(static_cast<XLanguage>(REXCVAR_GET(user_language)));
+      const XLanguage language = db.GetExistingLanguage(GetUserLanguage());
       for (const util::XdbfAchievementTableEntry& entry : db.GetAchievements()) {
         auto item = XStaticAchievementEnumerator::AchievementDetails{
             entry.id,

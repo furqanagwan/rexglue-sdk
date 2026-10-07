@@ -562,7 +562,7 @@ X_RESULT InputSystem::DrainKeystrokesLocked(uint32_t user_index, uint32_t flags)
   return result;
 }
 
-std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
+static std::unique_ptr<InputSystem> CreateInputSystem(bool tool_mode, bool physical_only) {
   auto input = std::make_unique<InputSystem>(nullptr);
 
   if (!tool_mode) {
@@ -610,17 +610,29 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     REXLOG_INFO("Input: {} driver", backend);
 
     // MnK driver (keyboard/mouse -> controller emulation)
-    auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);
-    if (mnk_driver->Setup() == X_STATUS_SUCCESS) {
-      input->AddDriver(std::move(mnk_driver));
+    if (!physical_only) {
+      auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);
+      if (mnk_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(mnk_driver));
+      }
     }
   }
 
   // NOP driver (primary in tool mode, fallback otherwise)
-  uint8_t nop_index = tool_mode ? 0 : 1;
-  input->AddDriver(std::make_unique<nop::NopInputDriver>(nullptr, nop_index));
+  if (!physical_only) {
+    uint8_t nop_index = tool_mode ? 0 : 1;
+    input->AddDriver(std::make_unique<nop::NopInputDriver>(nullptr, nop_index));
+  }
   input->SetDeviceAssignment(std::make_unique<SlotAssignment>());
   return input;
+}
+
+std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
+  return CreateInputSystem(tool_mode, false);
+}
+
+std::unique_ptr<InputSystem> CreatePhysicalInputSystem() {
+  return CreateInputSystem(false, true);
 }
 
 }  // namespace rex::input

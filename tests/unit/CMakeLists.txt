@@ -35,6 +35,7 @@ add_executable(unit_tests
     system/function_dispatcher_test.cpp
     system/gaming_runtime_test.cpp
     system/title_display_name_test.cpp
+    system/user_language_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
     audio/conversion_test.cpp
@@ -47,6 +48,7 @@ add_executable(unit_tests
     input/gamepad_devices_test.cpp
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
+    ui/launch_settings_test.cpp
     codegen/codegen_writer_test.cpp
     codegen/function_table_layout_test.cpp
     codegen/output_partition_test.cpp

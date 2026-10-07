@@ -38,6 +38,26 @@ using rex::input::X_INPUT_KEYSTROKE;
 using rex::input::X_INPUT_STATE;
 using rex::input::X_INPUT_VIBRATION;
 
+TEST_CASE("Host menu input never spoofs a pad when no physical backend is available",
+          "[input][launch_settings]") {
+  const auto original = REXCVAR_GET(input_backend);
+  struct Restore {
+    std::string value;
+    ~Restore() { REXCVAR_SET(input_backend, value); }
+  } restore{original};
+  // Exercise the no-driver branch without depending on attached hardware.
+  REXCVAR_SET(input_backend, "none");
+  auto physical = rex::input::CreatePhysicalInputSystem();
+  auto guest = rex::input::CreateDefaultInputSystem(true);
+  REQUIRE(physical->Setup() == 0);
+  REQUIRE(guest->Setup() == 0);
+  X_INPUT_STATE state = {};
+  CHECK(physical->GetStateForUI(0, &state) != 0);
+  CHECK(guest->GetStateForUI(0, &state) == 0);
+  physical->Shutdown();
+  guest->Shutdown();
+}
+
 namespace {
 
 constexpr StickRange kFullRange = {0xFFFF, 0xFFFF};

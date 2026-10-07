@@ -125,6 +125,8 @@ void ApplyEnvironment();
 void FinalizeInit();
 bool IsFinalized();
 void SaveConfig(const std::filesystem::path& config_path);
+// As SaveConfig, reporting a write/flush failure to interactive callers.
+bool TrySaveConfig(const std::filesystem::path& config_path);
 
 //=============================================================================
 // Flag Registry
