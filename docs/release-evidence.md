@@ -504,6 +504,18 @@ usual Guide exit flow. 007 Legends codegen also reports its existing
 1,437,835-byte function above the 1 MiB limit. The build is not runtime or
 compatibility evidence.
 
+## Native title artwork follow-up, 2026-10-08
+
+`scripts/test_title_art.py` passes using synthetic artwork: the external CMake
+consumer embeds base/update ICO resources, Shell extracts both icon sizes,
+resource inspection finds RT_ICON/RT_GROUP_ICON and the linker manifest, the
+five PNG outputs have the requested dimensions, and overwrite protection
+preserves caller-owned files. The base/TU2 Quantum of Solace, Blood Stone and
+007 Legends executables built from the isolated SDK install also pass the
+native Shell/resource check with their title artwork. Xbox PC Add game
+appearance and MicrosoftGame.config schema validation remain unverified, so
+issue #164 stays open; no installed title or Xbox library entry was changed.
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main
