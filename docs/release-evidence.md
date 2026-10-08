@@ -516,6 +516,18 @@ native Shell/resource check with their title artwork. Xbox PC Add game
 appearance and MicrosoftGame.config schema validation remain unverified, so
 issue #164 stays open; no installed title or Xbox library entry was changed.
 
+## Game source and media recovery review, 2026-10-08
+
+The focused source-selection/XDVDFS/media-recovery CTest selection passes in
+GDK Debug and Release (13 entries each; one private Guide message-box test is
+skipped because `$SystemUpdate` is unavailable). It covers XEX identity and
+checksum checks, extraction without overwriting existing data, XDVDFS reads
+and short reads on open files, replacement-media rejection, retry/leave
+behavior, shutdown cancellation and first-run UI validation. The optical-drive
+and ISO/folder picker flows were not driven end to end, and physical same-disc
+removal/reinsert was not exercised, so issue #154 remains open; synthetic
+file failures do not establish hardware drive behavior.
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main
