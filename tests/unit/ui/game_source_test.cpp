@@ -59,7 +59,8 @@ struct SourceHarness {
     std::filesystem::remove(root, ec);
     rex::cvar::testing::ResetAllForTesting();
   }
-  void Show(rex::ui::LaunchPadSource pad = {}, rex::ui::GameSourceVisualsProvider visuals = {}) {
+  void Show(rex::ui::LaunchPadSource pad = {}, rex::ui::GameSourceVisualsProvider visuals = {},
+            bool empty_initial = false) {
     dialog = new rex::ui::GameSourceDialog(
         drawer.get(), expected, root / "settings.toml",
         [this](std::filesystem::path source) {
@@ -67,7 +68,8 @@ struct SourceHarness {
           ++completed;
           selected = std::move(source);
         },
-        root, "", "default.xex", {}, std::move(pad), std::move(visuals));
+        empty_initial ? std::filesystem::path{} : root, "", "default.xex", {}, std::move(pad),
+        std::move(visuals));
     Frame();
     Frame();
   }
@@ -84,6 +86,13 @@ struct SourceHarness {
     auto* wizard = ImGui::FindWindowByName("Choose game files");
     REQUIRE(wizard);
     ImGui::ActivateItemByID(wizard->GetID(label));
+    Frame();
+  }
+  void PressConsole(size_t choice) {
+    auto* overlay = ImGui::FindWindowByName("##GameSourceGuideOverlay");
+    REQUIRE(overlay);
+    const auto seed = overlay->GetID("Console choices");
+    ImGui::ActivateItemByID(ImHashStr(("Button" + std::to_string(choice)).c_str(), 0, seed));
     Frame();
   }
   rex::ui::Win32WindowedAppContext context;
@@ -246,13 +255,11 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
   };
   SourceHarness h;
   SECTION("Source choice uses the console's third-button visual") {
-    h.Show({}, visuals);
-    auto* window = ImGui::FindWindowByName("Choose game files");
-    REQUIRE(window);
-    const auto seed = window->GetID("Console choices");
-    ImGui::ActivateItemByID(ImHashStr("Button1", 0, seed));
-    h.Frame();
-    CHECK_FALSE(GImGui->OpenPopupStack.empty());  // native Disc choice reached the drive picker
+    h.Show({}, visuals, true);
+    REQUIRE(ImGui::FindWindowByName("##GameSourceGuideOverlay"));
+    CHECK(ImGui::FindWindowByName("Choose game files") == nullptr);
+    h.PressConsole(2);
+    CHECK(GImGui->OpenPopupStack.empty());
     CHECK(h.completed == 0);
   }
   SECTION("Extraction uses Active Downloads and publishes completed copy history") {
@@ -290,10 +297,9 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
         [&](rex::ui::guide::GuideActivity item) { history.push_back(std::move(item)); });
     h.Frame();
     h.Frame();
-    h.Press("Check source");
     for (int i = 0; i < 1000 && history.empty(); ++i) {
       h.Frame();
-      h.Press("Extract to this PC");
+      h.PressConsole(1);
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     REQUIRE(history.size() == 1);
@@ -302,7 +308,7 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
     CHECK(h.completed == 0);
     const auto copied = h.root / "extracted" / ("game-" + h.expected.executable_checksum);
     CHECK(std::filesystem::is_regular_file(copied / "default.xex"));
-    h.Press("Use this source");
+    h.PressConsole(0);
     CHECK(h.completed == 1);
     CHECK(h.selected == copied);
   }

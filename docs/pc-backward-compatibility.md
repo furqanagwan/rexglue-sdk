@@ -128,8 +128,10 @@ source before applying their update. Older generated hosts retain folder
 launching; they need regeneration for checked image selection.
 
 A new host checks its configured source before constructing the guest. If
-missing or mismatched, Choose game files offers an extracted folder, ISO or
-optical drive. Check source verifies the XDVDFS structures and exact executable
+missing or mismatched, the first-run Guide screen offers an extracted folder,
+ISO or optical drive. Guide message boxes present source choices, validation
+results, errors and confirmation; Windows' native file dialog selects an ISO or
+folder. Source checks verify the XDVDFS structures and exact executable
 identity. Remember source persists an absolute `game_source` path; an explicit
 `--game_data_root` takes precedence. These choices preserve save/profile paths.
 
@@ -152,12 +154,12 @@ UI-thread reads return errors instead of waiting for their own dialog.
 
 Both dialogs support physical-controller navigation, with disconnected/held
 input released before guest handoff. Tests draw ImGui; physical pad behaviour
-and painted presentation are still unverified. When private Guide assets finish loading, source and recovery choices use the
-console's XuiMessageBox3 visual; while loading or without assets the controls
-use the host fallback. Extraction progress uses the console Active Downloads
-scene with nonblocking cancellation. Completed/cancelled/failed copy results
-remain in the Guide's Active Downloads alongside title-update jobs. The source
-file picker and validation controls stay host-native.
+and painted presentation are still unverified. When private Guide assets finish
+loading, source and recovery choices use the console's XuiMessageBox3 visual;
+without assets the host fallback remains available for development. Extraction
+progress uses the console Active Downloads scene with nonblocking cancellation.
+Completed/cancelled/failed copy results remain in the Guide's Active Downloads
+alongside title-update jobs.
 
 Friendly mismatch game names, original/TU title launches, painted scene/pad
 interaction and real media-removal checks remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).

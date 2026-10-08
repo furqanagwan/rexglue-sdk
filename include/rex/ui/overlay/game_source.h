@@ -36,10 +36,19 @@ class GameSourceDialog : public ImGuiDialog {
   void OnClose() override;
 
  private:
+  enum class ConsoleScreen { kSource, kDrives, kChecking, kVerified, kError, kSaveFailed, kCopied };
   void Browse(bool folder);
+  void ShowConsoleScreen(ConsoleScreen screen, std::string title, std::string body,
+                         std::vector<std::string> choices, size_t initial = 0);
+  void BeginSourceCheck(std::filesystem::path path);
+  void HandleConsoleChoice(size_t choice);
+  void CompleteConsoleSelection(bool remember);
+  void StartExtraction();
+  void CollectOpticalDrives();
   system::GameSourceIdentity expected_;
   std::filesystem::path config_;
   std::function<void(std::filesystem::path)> completed_;
+  std::filesystem::path initial_source_;
   std::array<char, 4096> path_{};
   std::future<system::GameSourceResult> checking_;
   std::shared_ptr<std::atomic<bool>> check_cancel_ = std::make_shared<std::atomic<bool>>(false);
@@ -60,6 +69,12 @@ class GameSourceDialog : public ImGuiDialog {
   LaunchPadSource pad_source_;
   GameSourceVisualsProvider visuals_;
   std::unique_ptr<GameSourceConsoleBox> console_box_;
+  bool console_initialized_ = false;
+  bool console_mode_ = false;
+  ConsoleScreen console_screen_ = ConsoleScreen::kSource;
+  std::vector<std::string> console_choices_;
+  std::vector<std::string> optical_drives_;
+  size_t optical_drive_page_ = 0;
   std::unique_ptr<GameSourceConsoleDownloads> console_downloads_;
   std::function<void(guide::GuideActivity)> activity_completed_;
 };
