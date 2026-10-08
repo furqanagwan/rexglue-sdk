@@ -1788,3 +1788,44 @@ source diffs/history were inspected; no GPU code was ported in the GDK-policy
 maintenance change. New candidates remain unvalidated and have no title
 compatibility claim. The review does not import CPU JIT/XeFu execution,
 Vulkan/Metal backends or a dependency on the reference emulator.
+
+## Primitive conversion cache invalidation, 2026-10-07
+
+Source: `has207/xenia-edge:edge`, commit
+[`1b0e9d00ea33e6148c3429234e44e8c364edbd7d`](https://github.com/has207/xenia-edge/commit/1b0e9d00ea33e6148c3429234e44e8c364edbd7d),
+2026-10-05, "Drop cached primitive conversions a guest write overlaps".
+Reviewed at reference head `669b4266f5682e5169d42552fdf64f02880652a4` on October 7.
+GitHub reports no associated PR or commit comments; it is a direct branch commit,
+not an assumed merged Canary PR. No later changes to that source file appear
+between the source and reviewed head. No affected game is named; external
+regressions beyond that reviewed history remain unknown.
+
+Class A, GPU correctness: a cached index range that a guest write contains or
+ends at exactly its end was incorrectly kept. Coarse bucket writes also kept
+entries, and writes during conversion did not inhibit insertion. Preserve the
+SDK's `cache_mutex_` and physical callback dispatch rather than importing Edge's
+global critical region or CPU/JIT machinery. Compare half-open overlap with
+the write's start, mark an overlapping conversion invalid under that mutex,
+and suppress insertion when its transaction finishes. This does not promise
+an atomic snapshot of an in-flight draw; it prevents reusing a potentially
+stale conversion on following draws. No new option or global title hack.
+
+Baseline: the new CPU adapter reproduces four failures out of six initial
+cases against the original production source; adjacent-range and unrelated
+write controls pass. The adapted source plus a seventh same-bucket-entry
+control passes Debug/Release. Production converter/shared-memory sources are
+compiled into a dedicated software test target; the GPU plugin stays runtime
+loaded for real consumers. Tests cover 16/32-bit indices, crossing cache bucket
+boundaries, all exact overlap shapes, adjacency/empty ranges, coarse writes,
+conversion-time writes and actual physical-memory watch dispatch plus refreshed
+index contents. GPU/title results and missing gates are recorded in
+[release evidence](release-evidence.md). Rollback is this isolated port; do not
+fold shader or resolve redesigns into it.
+
+A synthetic D3D12 triangle-fan readback also reproduces stale white geometry
+after guest indices are changed to degenerate triangles, on both RTV and ROV
+with the original source. The adapted source returns the red background as
+expected, in Debug/Release. This exercises the real plugin, converted index
+buffer and guest write watches rather than relying only on CPU allocation counts.
+The affected RTV/ROV readback also passes strict DXIL in the opt-in GDK Release
+configuration; the default shader path remains DXBC.

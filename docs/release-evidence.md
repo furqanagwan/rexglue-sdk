@@ -432,10 +432,9 @@ pairing. Configure and full builds succeed in Debug and Release.
 Private logs use the `out/maturity-*` prefix. No new game execution, GPU/vendor,
 deployment, physical-controller or save/load gate is established. The prior
 Debug GPU quad-tessellation assertion remains unresolved and was not rerun
-for this non-GPU change. No issue is closed by this batch. Public-payload
-download/extraction and hosted CI require their own run; the local setup check
-uses the installed GDK and does not prove that download path. Helix hardware
-support is not established.
+for this non-GPU change. No issue is closed by this batch. The local setup check
+uses the installed GDK; public-payload extraction and hosted software results
+are recorded below. Helix hardware support is not established.
 
 The first hosted run, [37690858740](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37690858740),
 successfully downloads, digest-checks and extracts the public GDK, configures,
@@ -444,4 +443,96 @@ fixture: `TEMP` and the CTest working directory are on different drives, so
 `std::filesystem::relative` cannot represent the fixture's path. Keep that
 relative-path fixture under the CTest working directory and require a fresh
 directory before writing. No production source validation is weakened and no
-test is excluded. The corrected workflow needs a subsequent complete run.
+test is excluded. The corrected workflow's complete result is recorded below.
+
+## Primitive conversion cache correctness, 2026-10-07
+
+Branch `gpu-primitive-cache-invalidation` builds on GDK-policy commit
+`99d4c0a8db459f2203dffc7049ced534576d3ad2`. Exact Edge source, associated-PR/comment
+review, classification and the local locking adaptation are in
+[the tracking ledger](upstream-tracking.md#primitive-conversion-cache-invalidation-2026-10-07).
+The production patch affects only cache overlap/in-flight insertion, shared
+by the D3D12 shader paths; no shader/default/guest execution rewrite.
+
+Baseline CPU tests fail four of six initial cases against the original converter.
+Final seven cases pass **494 assertions** each in Debug and Release, both through
+isolated CTest and the dedicated single-memory test binary. They cover exact
+overlap shapes, 16/32-bit and two-bucket ranges, coarse writes, in-flight writes,
+unrelated/adjacent/empty controls, separate entries in one bucket and actual
+physical-memory callback dispatch with changed converted contents.
+
+On NVIDIA RTX 5080 Laptop / driver **32.0.16.1742**, the new triangle-fan GPU
+readback fails with the original source on **both RTV and ROV**: after writing
+degenerate indices, the result stays `0xFFFFFFFF` rather than background
+`0xFF0000FF`. With the patch it passes both paths in Debug and Release. Existing
+GPU selections also pass: **57 Release**, **56 Debug**; Debug explicitly excludes
+the previously recorded quad-tessellation assertion. PIX capture is excluded;
+DXIL parity is a separate gate. AMD/Intel remain untested per ADR-007.
+The optional GDK/DXIL Release plugin also builds and the new readback case
+passes both paths with `gpu_shader_path=dxil` and
+`gpu_shader_path_dxil_strict=true` (18 assertions); this is the affected case,
+not a fresh full DXIL parity run. Its initial CTest discovery hit an older
+unit executable with exit `0xc0000139` after the runtime rebuild; rebuilding
+that tree's unit/primitive targets fixes discovery and the final CTest passes.
+During the temporary baseline swap, restoring an older source timestamp initially
+left Ninja's old plugin in place; refreshing the timestamp and rebuilding both
+configurations restores the passing candidate. No production assertion is disabled.
+
+Focused Clang-Tidy analysis of the new CPU adapter exposed naming and widened
+allocation arithmetic, which were corrected. The final run has seven
+`bugprone-throwing-static-initialization` diagnostics from Catch2's registration
+macros; this is not a repository-wide clean analyzer baseline. Formatting,
+roadmap and handoff-document checks pass.
+
+The three private 007 staging projects rebuild once against the candidate GDK
+installation: QoS (its existing TU2 build target also links), Blood Stone and
+Legends. Existing generated code is reused because this fix does not change
+codegen. The configured dashboard source path was no longer present; private
+modules recovered from the retained console-only bundle allow the rebuild
+without substituting BC assets. All three rebuilt Guide bundles retain SHA-256
+`d6aec228966231e6f5a4de2926507e23a5a2c48ffca9989bd9896e50d51bba30`.
+
+One candidate instance per title stays alive for a **30-second** startup smoke,
+uses a borderless fullscreen window matching the **1280x720** monitor
+(`0x16000000`, no caption/frame), and closes through the owned window with status
+zero. No fatal/assert/missing-function/device-removal diagnostics were found;
+combined runtime diagnostics total **2,470 bytes**. Settings/cache/user data are
+isolated, game-relative writes disabled, and existing saves/patch choices are
+preserved. Fullscreen/startup is established; painted scenes, Guide exit,
+physical controller, gameplay and save/load are not established by this smoke.
+
+Compact private rebuild/input/hash/smoke records are in
+`out/primitive-title-batch`; validation logs initially use `out/primitive-*`.
+There is no measured performance superiority claim and no issue closure.
+
+## Hosted validation and evidence cleanup, 2026-10-08
+
+The corrected GDK maintenance commit
+`99d4c0a8db459f2203dffc7049ced534576d3ad2` passes
+[run 37692972322](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37692972322).
+Debug and Release each select **2,017** tests: **1,999 passed, 18 skipped,
+zero failures**, in 155.29 and 83.44 seconds respectively. The primitive-cache
+implementation commit `60b761eeda2d36e93538f2d4fcc2f809197cad0f` passes
+[run 37695313281](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37695313281).
+Both configurations select **2,024** tests: **2,006 passed, 18 skipped,
+zero failures**, in 108.20 and 61.37 seconds respectively. The seven added
+primitive cases run in both configurations.
+
+These runs download, SHA-256-check and extract the pinned public GDK 260404,
+then build with Clang 20.1.8 on the Windows VS2026 hosted runner. Its observed
+VS Enterprise toolchain is additional CI evidence, not a Microsoft-supported
+pairing claim. The seven installed-runtime cases remain excluded on hosted CI;
+the 18 skips include private console asset and audio fixtures. Local installed
+runtime checks above remain separate. Hosted checks do not establish GPU,
+title gameplay, deployment, controller or save compatibility, and do not resolve
+the broader Debug PPC corpus abort or Debug GPU tessellation assertion.
+
+After extracting compact results, **66** disposable logs from this batch were
+removed, reclaiming **28,050,710 bytes (26.8 MiB)**. Only explicitly scoped
+`out/maturity-*.log`, `out/primitive-*.log` and logs under
+`out/primitive-title-batch` were removed. Private JSON input hashes, title
+rebuild/smoke records and cleanup manifests remain, including
+`out/sdk-maturity-results-20261008.json` and
+`out/sdk-log-cleanup-20261008.json`. Binaries, inputs, saves, preferences and
+reference worktrees were preserved. Earlier log cleanup is a separate record;
+these figures count only this batch.
