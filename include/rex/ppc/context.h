@@ -147,8 +147,34 @@ constexpr uint32_t kRoundMask = 0x03;
 struct FPSCRRegister {
   uint32_t csr;
   // FPSCR bits other than RN as the guest last wrote them with mtfsf. Only RN
-  // reaches the host; status bits aren't tracked, so mffs returns these.
+  // reaches the host; arithmetic status is accumulated here for mffs/mcrfs.
   uint32_t guest_bits = 0;
+
+  static constexpr uint32_t kFX = 0x80000000;
+  static constexpr uint32_t kFEX = 0x40000000;
+  static constexpr uint32_t kVX = 0x20000000;
+  static constexpr uint32_t kOX = 0x10000000;
+  static constexpr uint32_t kUX = 0x08000000;
+  static constexpr uint32_t kZX = 0x04000000;
+  static constexpr uint32_t kXX = 0x02000000;
+  static constexpr uint32_t kVXSNAN = 0x01000000;
+  static constexpr uint32_t kVXISI = 0x00800000;
+  static constexpr uint32_t kVXIDI = 0x00400000;
+  static constexpr uint32_t kVXZDZ = 0x00200000;
+  static constexpr uint32_t kVXIMZ = 0x00100000;
+  static constexpr uint32_t kVXVC = 0x00080000;
+  static constexpr uint32_t kVXSOFT = 0x00000400;
+  static constexpr uint32_t kVXSQRT = 0x00000200;
+  static constexpr uint32_t kVXCVI = 0x00000100;
+  static constexpr uint32_t kVE = 0x00000080;
+  static constexpr uint32_t kOE = 0x00000040;
+  static constexpr uint32_t kUE = 0x00000020;
+  static constexpr uint32_t kZE = 0x00000010;
+  static constexpr uint32_t kXE = 0x00000008;
+
+  static constexpr uint32_t kInvalidCauses =
+      kVXSNAN | kVXISI | kVXIDI | kVXZDZ | kVXIMZ | kVXVC | kVXSOFT | kVXSQRT | kVXCVI;
+  static constexpr uint32_t kExceptionCauses = kVX | kOX | kUX | kZX | kXX | kInvalidCauses;
 
   static constexpr size_t HostToGuest[] = {kRoundNearest, kRoundDown, kRoundUp, kRoundTowardZero};
 
@@ -176,9 +202,30 @@ struct FPSCRRegister {
 
   inline void storeFromGuest(uint32_t value) noexcept {
     guest_bits = value & ~kRoundMask;
+    updateFex();
     csr &= ~RoundMaskVal;
     csr |= Platform::GuestToHost[value & kRoundMask];
     setcsr(csr);
+  }
+
+  /// Record exception cause bits produced by a guest floating-point operation.
+  /// FX is set only when an exception flag changes from zero to one; FEX and
+  /// VX are summaries of their enables/cause bits.
+  inline void recordExceptions(uint32_t causes) noexcept {
+    causes &= kExceptionCauses;
+    const uint32_t newly_set = causes & ~guest_bits;
+    guest_bits |= causes;
+    if (guest_bits & kInvalidCauses)
+      guest_bits |= kVX;
+    if (newly_set)
+      guest_bits |= kFX;
+    updateFex();
+  }
+
+  inline bool exceptionEnabled(uint32_t causes) const noexcept {
+    return ((causes & (kVX | kInvalidCauses)) && (guest_bits & kVE)) ||
+           ((causes & kOX) && (guest_bits & kOE)) || ((causes & kUX) && (guest_bits & kUE)) ||
+           ((causes & kZX) && (guest_bits & kZE)) || ((causes & kXX) && (guest_bits & kXE));
   }
 
   inline void enableFlushModeUnconditional() noexcept {
@@ -209,6 +256,14 @@ struct FPSCRRegister {
     csr = getcsr();
     Platform::InitHostExceptions(csr);
     setcsr(csr);
+  }
+
+ private:
+  inline void updateFex() noexcept {
+    if (exceptionEnabled(guest_bits & kExceptionCauses))
+      guest_bits |= kFEX;
+    else
+      guest_bits &= ~kFEX;
   }
 };
 

@@ -472,6 +472,19 @@ controller. These limits and representative gameplay gates keep #149 open;
 instruction-corpus success does not certify every title or opcode. The
 provenance and reviewed upstream regression are in
 [the tracking ledger](upstream-tracking.md#rg-gdk-053-main-integration-and-corpus-follow-up-2026-10-07).
+
+## PPC arithmetic FPSCR follow-up, 2026-10-08
+
+On Windows x64 with April 2026 GDK 260404 and the Visual Studio developer
+shell, Debug and Release `unit_tests` and `ppc_tests` targets build. The four
+new arithmetic cases and four existing `mcrfs` cases pass under CTest in each
+configuration. The full ordinary Debug PPC executable passes 1,579 cases and
+6,523 assertions. The Release run here is focused; it is not a full CTest or
+title validation. The implementation covers scalar arithmetic exceptions and
+summaries only; FPSCR effects from comparisons, conversions and estimate
+instructions remain outside this evidence. See the
+[upstream ledger](upstream-tracking.md#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08).
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main

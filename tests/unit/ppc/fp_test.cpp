@@ -47,6 +47,39 @@ TEST_CASE("Record forms set CR1 from what the operation raised", "[ppc][fp]") {
   CHECK(cr1.raw() == 0xA);
 }
 
+TEST_CASE("Scalar arithmetic accumulates FPSCR exception causes and summaries", "[ppc][fp]") {
+  rex::ppc::FPSCRRegister fpscr{};
+  auto add = [](double a, double b, double) { return fp::add(a, b); };
+  const uint32_t original_csr = rex::ppc::FPSCRRegister::Platform::getcsr();
+  fpscr.csr = original_csr;
+
+  // Inexact is sticky and sets FX when the cause flag first changes.
+  CHECK(fp::tracked(fpscr, nullptr, add, 0, false, 0.1, 0.2) != 0.0);
+  CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX)) ==
+        (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX));
+
+  // An invalid operation records its PowerPC subcause and invalid summary.
+  fpscr.guest_bits = 0;
+  const double infinity = fp::from_bits(fp::kInfinity);
+  auto sub = [](double a, double b, double) { return fp::sub(a, b); };
+  fp::tracked(fpscr, nullptr, sub, fp::sub_invalid_causes(infinity, infinity), false, infinity,
+              infinity);
+  CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kVX |
+                             rex::ppc::FPSCRRegister::kVXISI)) ==
+        (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kVX |
+         rex::ppc::FPSCRRegister::kVXISI));
+
+  // FEX reflects the corresponding enable and clears when the enabled cause is cleared.
+  fpscr.storeFromGuest(rex::ppc::FPSCRRegister::kVE);
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFEX) == 0);
+  fpscr.recordExceptions(rex::ppc::FPSCRRegister::kVXSNAN);
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFEX) != 0);
+  fpscr.storeFromGuest(rex::ppc::FPSCRRegister::kVE);
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFEX) == 0);
+
+  rex::ppc::FPSCRRegister::Platform::setcsr(original_csr);
+}
+
 TEST_CASE("Host code runs in the host FP mode, guest code in its own", "[ppc][fp]") {
   using Platform = rex::ppc::FPSCRRegister::Platform;
   constexpr uint32_t kGuestBits = rex::ppc::FPSCRRegister::GuestMask;

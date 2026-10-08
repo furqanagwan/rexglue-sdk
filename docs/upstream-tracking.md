@@ -1362,11 +1362,17 @@ not ports of the Edge JIT.
 Other scalar and system dispatch additions in this issue use existing static
 builders or narrow no-op implementations; pinned Edge `instr_icbi.s`,
 `instr_isync.s`, `instr_mfmsr.s`, `instr_mtmsr.s` and `instr_mtmsrd.s` cover them.
-Their title and vendor regressions
-have not yet been measured. Floating-point exception bits produced by arithmetic
-are not yet reflected in guest FPSCR, so `mcrfs` is only verified for fields
-written through `mtfsf`. The issue remains open for this limitation, the
-broader Edge corpus, title validation, and release gates.
+Their title and vendor regressions have not yet been measured. Scalar
+arithmetic-produced FPSCR causes and derived summary bits are now tracked for
+add, subtract, multiply, divide, fused multiply-add/subtract and square-root
+families, including their single-precision forms. The adaptation uses host fenv
+for OX/UX/ZX/XX and explicitly classifies PowerPC invalid subcauses that host
+fenv does not distinguish. Sticky FX, enabled FEX, invalid VX and record-form
+CR1 are checked by unit tests and
+`tests/ppc/asm/instr_fpscr_arithmetic.s`. This does not yet cover FP compares,
+integer conversions, estimate instructions or every operation that can affect
+FPSCR. The issue remains open for that coverage, the broader Edge corpus, title
+validation and release gates.
 
 ## RG-GDK-048: achievement enumerator offset (2026-10-01)
 
@@ -1842,6 +1848,23 @@ runtime contract: `mcrfs` is validated for guest-written fields, not full
 floating-point exception production. Final configuration/title evidence belongs
 in [release evidence](release-evidence.md); no compatibility issue is closed
 from the corpus result alone.
+
+## RG-GDK-053: arithmetic FPSCR follow-up (2026-10-08)
+
+Implemented sticky FPSCR updates for scalar arithmetic families in
+`src/codegen/builders/floating_point.cpp`. Host fenv supplies inexact,
+overflow, underflow and divide-by-zero flags; explicit operand classification
+records PowerPC invalid subcauses. `FX`, `VX` and enabled `FEX` are derived as
+arithmetic executes, while `mtfsf` continues to preserve guest-written status
+bits for `mcrfs` compatibility. The tracked path also reports record-form CR1.
+
+GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. In Debug,
+all 1,579 ordinary PPC cases pass in one run (6,523 assertions). The focused
+FPSCR arithmetic and existing `mcrfs` tests pass in both configurations (8
+CTest cases each). The tests cover inexact add, invalid infinity subtraction,
+sticky/summary state, enabled FEX/CR1 and selective clearing. This is not full
+FPSCR coverage: comparisons, conversions, estimates and title/gameplay gates
+remain open. No title compatibility claim follows from these synthetic tests.
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at

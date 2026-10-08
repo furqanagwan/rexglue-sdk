@@ -319,10 +319,61 @@ inline bool any_snan(double a, double b = 0.0, double c = 0.0) noexcept {
   return is_snan(a) || is_snan(b) || is_snan(c);
 }
 
+inline uint32_t snan_causes(double a, double b = 0.0, double c = 0.0) noexcept {
+  return any_snan(a, b, c) ? FPSCRRegister::kVXSNAN : 0;
+}
+
+inline uint32_t add_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  if (std::isinf(a) && std::isinf(b) && std::signbit(a) != std::signbit(b))
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
+}
+
+inline uint32_t sub_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  if (std::isinf(a) && std::isinf(b) && std::signbit(a) == std::signbit(b))
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
+}
+
+inline uint32_t mul_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  const uint64_t ma = bits(a) & kMagnitude, mb = bits(b) & kMagnitude;
+  if ((ma == 0 && mb == kInfinity) || (ma == kInfinity && mb == 0))
+    causes |= FPSCRRegister::kVXIMZ;
+  return causes;
+}
+
+inline uint32_t div_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  const uint64_t ma = bits(a) & kMagnitude, mb = bits(b) & kMagnitude;
+  if (ma == kInfinity && mb == kInfinity)
+    causes |= FPSCRRegister::kVXIDI;
+  if (ma == 0 && mb == 0)
+    causes |= FPSCRRegister::kVXZDZ;
+  return causes;
+}
+
+inline uint32_t sqrt_invalid_causes(double a) noexcept {
+  uint32_t causes = snan_causes(a);
+  const uint64_t magnitude = bits(a) & kMagnitude;
+  if ((bits(a) >> 63) && magnitude != 0 && !is_nan(a))
+    causes |= FPSCRRegister::kVXSQRT;
+  return causes;
+}
+
 /// x86 skips the invalid signal for 0 x inf when the addend is a quiet NaN.
-inline bool madd_invalid(double a, double c, double b) noexcept {
+inline uint32_t madd_invalid_causes(double a, double c, double b) noexcept {
   const uint64_t ma = bits(a) & kMagnitude, mc = bits(c) & kMagnitude;
-  return any_snan(a, c, b) || (ma == 0 && mc == kInfinity) || (ma == kInfinity && mc == 0);
+  uint32_t causes = snan_causes(a, c, b);
+  if ((ma == 0 && mc == kInfinity) || (ma == kInfinity && mc == 0))
+    causes |= FPSCRRegister::kVXIMZ;
+  const bool product_infinite = (ma == kInfinity && mc != 0) || (mc == kInfinity && ma != 0);
+  const bool product_negative = std::signbit(a) != std::signbit(c);
+  if (product_infinite && std::isinf(b) && product_negative != std::signbit(b))
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
 }
 
 inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {
@@ -331,6 +382,42 @@ inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {
   cr1.gt = 0;                                                                          // FEX
   cr1.eq = vx;                                                                         // VX
   cr1.so = (raised & FE_OVERFLOW) != 0;                                                // OX
+}
+
+inline void set_cr1_from_fpscr(CRRegister& cr1, const FPSCRRegister& fpscr) noexcept {
+  cr1.lt = (fpscr.guest_bits & FPSCRRegister::kFX) != 0;
+  cr1.gt = (fpscr.guest_bits & FPSCRRegister::kFEX) != 0;
+  cr1.eq = (fpscr.guest_bits & FPSCRRegister::kVX) != 0;
+  cr1.so = (fpscr.guest_bits & FPSCRRegister::kOX) != 0;
+}
+
+inline uint32_t host_exception_causes(int raised) noexcept {
+  uint32_t causes = 0;
+  if (raised & FE_DIVBYZERO)
+    causes |= FPSCRRegister::kZX;
+  if (raised & FE_OVERFLOW)
+    causes |= FPSCRRegister::kOX;
+  if (raised & FE_UNDERFLOW)
+    causes |= FPSCRRegister::kUX;
+  if (raised & FE_INEXACT)
+    causes |= FPSCRRegister::kXX;
+  return causes;
+}
+
+/// Execute a scalar floating-point instruction, record its sticky FPSCR state,
+/// and optionally update CR1 for the record form.
+template <typename Op>
+inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t invalid_causes,
+                      bool quiet, double a, double b = 0.0, double c = 0.0) noexcept {
+  volatile double va = a, vb = b, vc = c;
+  std::feclearexcept(FE_ALL_EXCEPT);
+  volatile double vr = op(va, vb, vc);
+  const int raised = quiet ? 0 : std::fetestexcept(FE_ALL_EXCEPT);
+  const uint32_t causes = quiet ? 0 : (host_exception_causes(raised) | invalid_causes);
+  fpscr.recordExceptions(causes);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return vr;
 }
 
 /// Runs `op` on the operands with the host status flags cleared and sets CR1
