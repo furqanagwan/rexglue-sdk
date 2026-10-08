@@ -476,12 +476,12 @@ provenance and reviewed upstream regression are in
 ## PPC arithmetic FPSCR follow-up, 2026-10-08
 
 On Windows x64 with April 2026 GDK 260404 and the Visual Studio developer
-shell, Debug and Release `unit_tests` and `ppc_tests` targets build. Fourteen
-PPC arithmetic/compare/conversion cases, three existing `mcrfs` cases and one
-unit case pass under CTest in each configuration. The full ordinary PPC
-executable passes 1,589 cases and 6,543 assertions in both Debug and Release.
+shell, Debug and Release `unit_tests` and `ppc_tests` targets build. Eighteen
+PPC arithmetic/compare/conversion/estimate cases, three existing `mcrfs` cases
+and one unit case pass under CTest in each configuration. The full ordinary PPC
+executable passes 1,593 cases and 6,550 assertions in both Debug and Release.
 This is not a full CTest or title validation. FPSCR result-class fields and
-estimate effects remain outside this evidence. See the
+other estimate effects remain outside this evidence. See the
 [upstream ledger](upstream-tracking.md#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08).
 
 ## Required GDK maintenance and ecosystem audit, 2026-10-07

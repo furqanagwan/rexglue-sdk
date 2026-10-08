@@ -467,19 +467,22 @@ inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, 
   return to_doubleword ? to_int64(x, truncate) : to_int32(x, truncate);
 }
 
-/// frsqrte./fres.: the estimates raise nothing inexact, so the operand is the
-/// whole answer: invalid for a signalling NaN (and, for the square root, a
-/// negative non-zero number), divide by zero for a zero, and for fres
-/// overflow when the reciprocal leaves single range.
-inline void set_cr1_estimate(CRRegister& cr1, double x, bool sqrt_estimate) noexcept {
+/// Execute fres/frsqrte and accumulate the exception state defined by the
+/// operand. These estimate instructions do not report inexact.
+inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
+                               bool sqrt_estimate) noexcept {
   const uint64_t magnitude = bits(x) & kMagnitude;
-  bool invalid = is_snan(x);
-  if (sqrt_estimate)
-    invalid = invalid || ((bits(x) >> 63) && magnitude != 0 && !is_nan(x));
-  int raised = magnitude == 0 ? FE_DIVBYZERO : 0;
+  uint32_t causes = snan_causes(x);
+  if (sqrt_estimate && (bits(x) >> 63) && magnitude != 0 && !is_nan(x))
+    causes |= FPSCRRegister::kVXSQRT;
+  else if (magnitude == 0)
+    causes |= FPSCRRegister::kZX;
   if (!sqrt_estimate && magnitude != 0 && magnitude < 0x37F0000000000000ull)
-    raised |= FE_OVERFLOW;
-  set_cr1(cr1, raised, invalid);
+    causes |= FPSCRRegister::kOX;
+  fpscr.recordExceptions(causes);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return sqrt_estimate ? rsqrte(x) : double(float(1.0 / x));
 }
 
 //=============================================================================

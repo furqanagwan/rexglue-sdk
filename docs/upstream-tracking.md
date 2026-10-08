@@ -1877,15 +1877,23 @@ remain outside the current implementation. See [fctiw] and [fctidz].
 [fctiw]: https://www.ibm.com/docs/en/aix/7.1.0?topic=set-fctiw-fcir-floating-convert-integer-word-instruction
 [fctidz]: https://www.ibm.com/docs/en/aix/7.2?topic=is-fctidz-floating-convert-integer-double-word-round-toward-zero-instruction
 
+`fres/frsqrte` now record zero-divide, signaling-NaN, negative-square-root
+and reciprocal-overflow causes, and their record forms report accumulated
+CR1. IBM's [fres] and [frsqrte] descriptions document these exception classes.
+Their result-class fields and other estimate families remain unmodeled.
+
+[fres]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fres_instrs.html
+[frsqrte]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-frsqrte-floating-reciprocal-square-root-estimate-instruction
+
 GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. The full
-ordinary PPC executable passes 1,589 cases and 6,543 assertions in both
+ordinary PPC executable passes 1,593 cases and 6,550 assertions in both
 configurations. The focused FPSCR arithmetic/compare/conversion, existing
-`mcrfs` and unit tests pass under CTest (18 cases per configuration). The tests
-cover inexact add/conversion, invalid arithmetic and conversions, unordered NaN
-comparisons, sticky/summary state, enabled FEX/CR1 and selective clearing. This
-is not full FPSCR coverage: result-class fields, estimate effects and
-title/gameplay gates remain open. No title compatibility claim follows from
-these synthetic tests.
+`mcrfs` and unit tests pass under CTest (22 cases per configuration). The tests
+cover arithmetic/conversion exceptions, estimate zero-divide/overflow/invalid
+cases, unordered NaN comparisons, sticky/summary state, enabled FEX/CR1 and
+selective clearing. This is not full FPSCR coverage: result-class fields,
+other estimate effects and title/gameplay gates remain open. No title
+compatibility claim follows from these synthetic tests.
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at

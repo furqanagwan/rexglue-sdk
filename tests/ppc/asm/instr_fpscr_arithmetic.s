@@ -129,3 +129,37 @@ test_fpscr_fctiw_record_form_reports_enabled_inexact:
   blr
   #_ REGISTER_OUT r3 0x0C000000
   #_ REGISTER_OUT f4 0xC2000008
+
+test_fpscr_fres_zero_sets_zx:
+  #_ REGISTER_IN f1 0x0000000000000000
+  fres f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x7FF0000000000000
+  #_ REGISTER_OUT f4 0x84000000
+
+test_fpscr_fres_overflow_sets_ox:
+  #_ REGISTER_IN f1 0x37E0000000000000
+  fres f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x7FF0000000000000
+  #_ REGISTER_OUT f4 0x90000000
+
+test_fpscr_frsqrte_negative_sets_vxsqrt:
+  #_ REGISTER_IN f1 0xBFF0000000000000
+  frsqrte f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f4 0xA0000200
+
+test_fpscr_fres_record_form_reports_enabled_divide_by_zero:
+  #_ REGISTER_IN f1 0x0000000000000000
+  #_ REGISTER_IN f5 0x10
+  mtfsf 255, f5
+  fres. f2, f1
+  mfcr r3
+  mffs f4
+  blr
+  #_ REGISTER_OUT r3 0x0C000000
+  #_ REGISTER_OUT f4 0xC4000010

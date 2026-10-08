@@ -265,22 +265,18 @@ bool build_fnmsubs(BuilderContext& ctx) {
 
 bool build_fres(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  if (isRecordForm(ctx.insn)) {
-    ctx.println("\trex::ppc::fp::set_cr1_estimate({}, {}.f64, false);", ctx.cr(1),
-                ctx.f(ctx.insn.operands[1]));
-  }
-  ctx.println("\t{}.f64 = double(float(1.0 / {}.f64));", ctx.f(ctx.insn.operands[0]),
+  ctx.println("\t{}.f64 = rex::ppc::fp::tracked_estimate(ctx.fpscr, {}, {}.f64, false);",
+              ctx.f(ctx.insn.operands[0]),
+              isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr",
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
 
 bool build_frsqrte(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  if (isRecordForm(ctx.insn)) {
-    ctx.println("\trex::ppc::fp::set_cr1_estimate({}, {}.f64, true);", ctx.cr(1),
-                ctx.f(ctx.insn.operands[1]));
-  }
-  ctx.println("\t{}.f64 = rex::ppc::fp::rsqrte({}.f64);", ctx.f(ctx.insn.operands[0]),
+  ctx.println("\t{}.f64 = rex::ppc::fp::tracked_estimate(ctx.fpscr, {}, {}.f64, true);",
+              ctx.f(ctx.insn.operands[0]),
+              isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr",
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
