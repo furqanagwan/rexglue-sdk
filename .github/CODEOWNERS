@@ -1,2 +1,14 @@
-# Global owners
-* @tomcl7
+# Ownership in this implementation fork. Upstream authors retain their notices;
+# they are not assigned this fork's reviews.
+* @furqanagwan
+
+# Module boundaries match AGENTS.md and docs/development.md.
+/src/codegen/ @furqanagwan
+/include/rex/ppc/ @furqanagwan
+/src/system/ @furqanagwan
+/src/kernel/ @furqanagwan
+/src/graphics/ @furqanagwan
+/src/ui/ @furqanagwan
+/cmake/ @furqanagwan
+/.github/ @furqanagwan
+/thirdparty/xbox-guide @furqanagwan

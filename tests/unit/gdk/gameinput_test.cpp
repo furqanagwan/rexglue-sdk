@@ -99,7 +99,8 @@ TEST_CASE("Only both body motors count as XInput vibration", "[gdk][gameinput]")
   CHECK_FALSE(HasXInputRumble(GameInputRumbleLowFrequency));
 }
 
-TEST_CASE("The GameInput driver starts against the installed runtime", "[gdk][gameinput]") {
+TEST_CASE("The GameInput driver starts against the installed runtime",
+          "[gdk][gameinput][installed_runtime]") {
   GameInputDriver driver(nullptr, 0);
   REQUIRE(driver.Setup() == X_STATUS_SUCCESS);
   std::vector<DeviceInfo> devices;
@@ -119,7 +120,8 @@ TEST_CASE("The GameInput driver starts against the installed runtime", "[gdk][ga
   CHECK(driver.GetDeviceState(DeviceId::kInvalid, &state) == X_ERROR_DEVICE_NOT_CONNECTED);
 }
 
-TEST_CASE("A GameInput input system survives ReXApp's window attach", "[gdk][gameinput]") {
+TEST_CASE("A GameInput input system survives ReXApp's window attach",
+          "[gdk][gameinput][installed_runtime]") {
   // ReXApp: CreateDefaultInputSystem, then AttachWindow once the runtime is set up.
   // GameInput is the GDK build's default (owner decision, 2026-09-28).
   CHECK(REXCVAR_GET(input_backend) == "gameinput");
@@ -132,7 +134,8 @@ TEST_CASE("A GameInput input system survives ReXApp's window attach", "[gdk][gam
   input->GetState(0, &state);
 }
 
-TEST_CASE("GameInput Setup leaves the driver object intact", "[gdk][gameinput]") {
+TEST_CASE("GameInput Setup leaves the driver object intact",
+          "[gdk][gameinput][installed_runtime]") {
   // The installed runtime once wrote a callback token over the driver's vtable
   // pointer during Setup (RegisterGuideButtonCallback); the next virtual call,
   // ReXApp's AttachWindow, crashed. Virtual calls go through the base here.

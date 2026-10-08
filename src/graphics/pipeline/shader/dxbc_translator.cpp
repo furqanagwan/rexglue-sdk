@@ -1267,6 +1267,8 @@ void DxbcShaderTranslator::PostTranslation() {
       shader_binding.min_filter = translator_binding.min_filter;
       shader_binding.mip_filter = translator_binding.mip_filter;
       shader_binding.aniso_filter = translator_binding.aniso_filter;
+      shader_binding.border_color_forced = translator_binding.border_color_forced;
+      shader_binding.forced_border_color = translator_binding.forced_border_color;
     }
   }
 }

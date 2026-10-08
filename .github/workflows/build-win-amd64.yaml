@@ -1,4 +1,4 @@
-name: Build rexglue-sdk win-amd64
+name: Build rexglue-sdk Windows x64 GDK
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   build:
     uses: ./.github/workflows/_build-platform.yaml
     with:
-      platform: win-amd64
+      platform: win-amd64-gdk
       ref: ${{ github.ref }}
       publish_mode: release
     secrets: inherit

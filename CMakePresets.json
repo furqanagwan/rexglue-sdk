@@ -21,7 +21,10 @@
         "CMAKE_CROSS_CONFIGS": "all",
         "CMAKE_DEFAULT_BUILD_TYPE": "Debug",
         "CMAKE_DEFAULT_CONFIGS": "all",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+        "REXGLUE_USE_GDK": "ON",
+        "REXGLUE_GDK_EDITION": "260404",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "condition": {
         "type": "equals",
@@ -40,14 +43,18 @@
     },
     {
       "name": "win-amd64",
-      "displayName": "Windows AMD64",
-      "description": "Multi-config build for Windows AMD64 using Clang",
-      "inherits": "windows-base"
+      "displayName": "Windows AMD64 (GDK compatibility alias)",
+      "description": "Compatibility spelling for win-amd64-gdk; GDK-free builds are retired",
+      "inherits": "windows-base",
+      "binaryDir": "${sourceDir}/out/build/win-amd64-gdk",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/win-amd64-gdk"
+      }
     },
     {
       "name": "win-amd64-gdk",
       "displayName": "Windows AMD64 (April 2026 GDK)",
-      "description": "Opt-in x64 build against the installed April 2026 PC GDK (260404); see docs/gdk-toolchain.md",
+      "description": "Windows x64 build against the required April 2026 PC GDK (260404); see docs/gdk-toolchain.md",
       "inherits": "windows-base",
       "cacheVariables": {
         "REXGLUE_USE_GDK": "ON",
@@ -66,7 +73,7 @@
     {
       "name": "win-arm64",
       "displayName": "Windows ARM64",
-      "description": "Multi-config build for Windows ARM64 using Clang",
+      "description": "Unsupported research preset; GDK ARM64 toolchain and title gates remain blocked under RG-GDK-030/031",
       "inherits": "windows-arm64-base"
     }
   ],

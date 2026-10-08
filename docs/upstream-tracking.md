@@ -1842,3 +1842,85 @@ runtime contract: `mcrfs` is validated for guest-written fields, not full
 floating-point exception production. Final configuration/title evidence belongs
 in [release evidence](release-evidence.md); no compatibility issue is closed
 from the corpus result alone.
+## Read-only Edge GPU review, 2026-10-07
+
+Reviewed `furqanagwan/xenia-edge:edge` at
+`669b4266f5682e5169d42552fdf64f02880652a4`; GitHub's comparison with
+`has207/xenia-edge:edge` is identical (zero ahead/behind). The pinned
+[GPU comparison](edge-gpu-review-20261007.md) distinguishes existing adaptations,
+the optional DXIL source pin, missing `getBCF` and primitive invalidation fixes,
+and coupled resolve/memexport changes requiring a separate design. Relevant
+source diffs/history were inspected; no GPU code was ported in the GDK-policy
+maintenance change. New candidates remain unvalidated and have no title
+compatibility claim. The review does not import CPU JIT/XeFu execution,
+Vulkan/Metal backends or a dependency on the reference emulator.
+
+## getBCF translation, 2026-10-08
+
+Source: `has207/xenia-edge:edge`, commit
+[`669b4266f5682e5169d42552fdf64f02880652a4`](https://github.com/has207/xenia-edge/commit/669b4266f5682e5169d42552fdf64f02880652a4),
+2026-10-07, `[GPU] Implement getBCF by sampling with forced border colors`.
+The commit message describes sampling with transparent-black and opaque-white
+border samplers and returning the largest component difference. It names filter,
+LOD, mip, volume, stacked-texture and resolution-scale behavior, with cube maps
+returning zero. The source changes span the shader model, DXBC/SPIR-V
+translators, texture utilities and D3D12/Vulkan/Metal sampler caches. This port
+adapts the DXBC and SPIR-V paths and D3D12 metadata only; the other backends are
+outside the SDK target. No associated PR or source regression was identified in
+the reviewed commit history.
+
+Class A, GPU correctness. The local adaptation adds paired forced-border
+samplers, preserves fully signed SRV selection, and adds synthetic point/linear,
+signed, mip, volume, stacked and cube readbacks. Debug and Release fixtures pass
+on Intel Graphics (driver 32.0.101.6129) and NVIDIA RTX 5080 Laptop GPU (driver
+32.0.16.1742) through RTV and ROV. Strict DXIL fixture runs also pass in both
+configurations on both adapters; each adapter/configuration/path runs the 290
+assertions across the two fixtures. The reproducible shader-bytecode check,
+roadmap validator, documentation checker, clang-format check and `git diff --check`
+also pass. No AMD GPU is present for testing; CPU vendor does not
+establish GPU-driver parity. The three representative 007 title runs remain
+untested, so this is not a title compatibility claim or issue-closure evidence.
+A separate tessellated-quad fixture still asserts `register_count() >= 2`; its
+baseline and relationship to this work are unknown and it remains to be
+triaged.
+
+## Primitive conversion cache invalidation, 2026-10-07
+
+Source: `has207/xenia-edge:edge`, commit
+[`1b0e9d00ea33e6148c3429234e44e8c364edbd7d`](https://github.com/has207/xenia-edge/commit/1b0e9d00ea33e6148c3429234e44e8c364edbd7d),
+2026-10-05, "Drop cached primitive conversions a guest write overlaps".
+Reviewed at reference head `669b4266f5682e5169d42552fdf64f02880652a4` on October 7.
+GitHub reports no associated PR or commit comments; it is a direct branch commit,
+not an assumed merged Canary PR. No later changes to that source file appear
+between the source and reviewed head. No affected game is named; external
+regressions beyond that reviewed history remain unknown.
+
+Class A, GPU correctness: a cached index range that a guest write contains or
+ends at exactly its end was incorrectly kept. Coarse bucket writes also kept
+entries, and writes during conversion did not inhibit insertion. Preserve the
+SDK's `cache_mutex_` and physical callback dispatch rather than importing Edge's
+global critical region or CPU/JIT machinery. Compare half-open overlap with
+the write's start, mark an overlapping conversion invalid under that mutex,
+and suppress insertion when its transaction finishes. This does not promise
+an atomic snapshot of an in-flight draw; it prevents reusing a potentially
+stale conversion on following draws. No new option or global title hack.
+
+Baseline: the new CPU adapter reproduces four failures out of six initial
+cases against the original production source; adjacent-range and unrelated
+write controls pass. The adapted source plus a seventh same-bucket-entry
+control passes Debug/Release. Production converter/shared-memory sources are
+compiled into a dedicated software test target; the GPU plugin stays runtime
+loaded for real consumers. Tests cover 16/32-bit indices, crossing cache bucket
+boundaries, all exact overlap shapes, adjacency/empty ranges, coarse writes,
+conversion-time writes and actual physical-memory watch dispatch plus refreshed
+index contents. GPU/title results and missing gates are recorded in
+[release evidence](release-evidence.md). Rollback is this isolated port; do not
+fold shader or resolve redesigns into it.
+
+A synthetic D3D12 triangle-fan readback also reproduces stale white geometry
+after guest indices are changed to degenerate triangles, on both RTV and ROV
+with the original source. The adapted source returns the red background as
+expected, in Debug/Release. This exercises the real plugin, converted index
+buffer and guest write watches rather than relying only on CPU allocation counts.
+The affected RTV/ROV readback also passes strict DXIL in the opt-in GDK Release
+configuration; the default shader path remains DXBC.

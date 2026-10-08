@@ -7,7 +7,9 @@ no previous chat context is required.
 ## Mission and non-negotiable architecture
 
 Modernize `furqanagwan/rexglue-sdk` into a Windows PC / April 2026 GDK /
-D3D12-only static Xbox 360 recompilation SDK. Current legacy platforms/backends
+D3D12-only static Xbox 360 recompilation SDK. GDK is required, not optional
+(ADR-016); GDK-free builds are retired. Project Helix is a future validation
+target, not a hardware or deployment support claim. Current legacy platforms/backends
 remain only until the documented replacement and regression gates are met.
 `furqanagwan/xenia-edge` is a controlled reference/experiment fork, never a runtime
 dependency. Upstream Xenia, Canary, Edge and ReXGlue are read-only references.
@@ -44,12 +46,12 @@ Ninja, Windows SDK and initialized submodules. `win-amd64` is a CPU architecture
 
 ```powershell
 git submodule update --init --recursive
-cmake --preset win-amd64 -DREXGLUE_USE_D3D12=ON -DREXGLUE_USE_VULKAN=OFF -DREXGLUE_BUILD_TESTS=ON
-cmake --build --preset win-amd64-debug
-ctest --preset win-amd64-debug --output-on-failure
-cmake --build --preset win-amd64-release
-ctest --preset win-amd64-release --output-on-failure
-cmake --install out/build/win-amd64 --config Release
+cmake --preset win-amd64-gdk -DREXGLUE_BUILD_TESTS=ON
+cmake --build --preset win-amd64-gdk-debug
+ctest --preset win-amd64-gdk-debug --output-on-failure --no-tests=error
+cmake --build --preset win-amd64-gdk-release
+ctest --preset win-amd64-gdk-release --output-on-failure --no-tests=error
+cmake --install out/build/win-amd64-gdk --config Release
 ```
 
 PPC tests require bundled `tools/binutils/powerpc-none-elf-{as,ld,nm}.exe` and
@@ -58,9 +60,10 @@ Precompiled DXBC shaders are built from `src/graphics/shaders` sources with
 `python scripts/build_shaders.py [name ...]` (FXC from the Windows SDK); never
 hand-edit `bytecode/` headers, and keep `--check` (CTest
 `shaders.bytecode_reproducible`) passing.
-The opt-in `win-amd64-gdk` preset (`REXGLUE_USE_GDK`, pinned edition 260404)
+The required `win-amd64-gdk` preset (`REXGLUE_USE_GDK`, pinned edition 260404)
 is documented in `docs/gdk-toolchain.md`; it is proven on VS Community only, so
-do not describe it as a Microsoft-supported pairing. Keep `win-amd64` GDK-free. For planning/docs
+do not describe it as a Microsoft-supported pairing. `win-amd64` is a GDK alias;
+do not create a separate GDK-free configuration. For planning/docs
 changes run `python scripts/validate_roadmap.py`, `python scripts/check_docs.py`
 (links and paths in README/AGENTS/CONTRIBUTING/docs) and `git diff --check`.
 Support claims live in `docs/release-evidence.md`; update it with evidence
@@ -69,7 +72,8 @@ whenever a configuration's status changes.
 ## Conventions and Git workflow
 
 Follow `.clang-format` (Google-derived, two spaces, 100 columns), `.editorconfig`
-and local namespace/typed-import conventions. Keep guest endian, pointer width,
+and [development guidance](docs/development.md), plus local namespace/typed-import
+conventions. Keep guest endian, pointer width,
 structure packing and return codes explicit. Prefer narrow adapters over leaking
 host APIs into guest interfaces. Preserve notices and third-party licenses.
 
@@ -110,5 +114,17 @@ and regression checks are linked. A build alone never proves compatibility.
 `agent-ready` additionally requires settled architecture, completed dependencies,
 reviewed relevant upstream items, identified files, bounded regression risk and
 measurable tests. Remove that label if evidence or dependencies invalidate it.
-The initial ready queue is RG-GDK-001; no runtime migration is claimed ready
-before its baseline/research gates. Report precise blockers and leave work open.
+The roadmap's initial ready queue was RG-GDK-001; it is a historical publication
+record, not the current work assignment. Check live issues and the maturity audit
+before choosing work. No migration is ready before its baseline/research gates.
+Report precise blockers and leave work open.
+
+Prioritize bounded SDK issues before rebuilding titles. Run affected software
+checks after each fix; batch the expensive title rebuild/test cycle after the
+selected SDK changes. Current representative titles are the three 007 games
+only. Use fullscreen, one candidate run per routine check, quiet bounded
+logging and disposable save copies. Paired runs remain appropriate for a
+specific regression comparison. Keep small evidence summaries and remove
+disposable verbose logs after extracting results; old raw logs were removed
+at the owner's request on 2026-10-07. Audit/queue evidence is in
+[the maturity audit](docs/sdk-maturity-audit-20261007.md).

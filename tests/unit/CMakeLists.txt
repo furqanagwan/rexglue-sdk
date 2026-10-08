@@ -131,8 +131,27 @@ set_target_properties(unit_tests PROPERTIES
 
 # Discover tests
 include(Catch)
+# Exercise CPU primitive conversion without linking the runtime-loaded GPU plugin.
+# Compile its actual production sources against a small CPU allocation adapter.
+add_executable(primitive_tests
+    graphics/primitive_cache_test.cpp
+    test_memory.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/primitive_processor.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/shared_memory.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/register_file.cpp
+)
+target_include_directories(primitive_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(primitive_tests PRIVATE rexruntime Catch2::Catch2WithMain)
+target_compile_options(primitive_tests PRIVATE
+    -UTRACY_ENABLE -UREXGLUE_ENABLE_PROFILING -UREXGLUE_ENABLE_PERF_COUNTERS)
+set_target_properties(primitive_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>)
+catch_discover_tests(primitive_tests TEST_PREFIX "primitive." ADD_TAGS_AS_LABELS
+    PROPERTIES LABELS "unit" TIMEOUT 60)
+
 catch_discover_tests(unit_tests
     TEST_PREFIX "unit."
+    ADD_TAGS_AS_LABELS
     PROPERTIES
         LABELS "unit"
         TIMEOUT 60

@@ -18,7 +18,7 @@ find_dependency(fmt CONFIG)
 find_dependency(spdlog CONFIG)
 find_dependency(utf8cpp CONFIG)
 
-# A GDK build of the SDK links rex::gdk, which is resolved here against the
+# The SDK links rex::gdk, which is resolved here against the
 # consumer's own GDK install (same pinned edition), never an exported path.
 set(REXGLUE_GDK_EDITION "@REXGLUE_GDK_EDITION_FOUND@")
 if(REXGLUE_GDK_EDITION)

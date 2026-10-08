@@ -4,17 +4,19 @@ Status: **Accepted**. Date: 2026-09-23.
 
 ## Context
 
-The user explicitly confirmed that only NVIDIA graphics can be tested and that
-AMD/Intel GPU availability must not prevent completion. The machine's Intel CPU
-does not provide Intel graphics validation. Earlier adapter enumeration is not
-evidence that Intel GPU testing is available to the user.
+The user explicitly confirmed NVIDIA as the primary local graphics target and
+that AMD GPU availability must not prevent completion. The development machine
+also exposes Intel integrated graphics; the synthetic getBCF fixtures were
+subsequently run on that adapter, but it is not the owner's primary GPU and
+those fixtures alone do not establish general Intel title compatibility.
 
 ## Decision
 
-NVIDIA is the required local GPU validation target. AMD and Intel GPU testing is
-recorded as unavailable and untested, with non-blocking follow-up coverage.
-Implementation, issue completion and local delivery may proceed without it.
-Do not claim compatibility on an untested vendor.
+NVIDIA is the required local GPU validation target. AMD GPU testing is recorded
+as unavailable and untested, with non-blocking follow-up coverage. The limited
+Intel getBCF fixture result is recorded without generalizing it to title
+compatibility. Implementation, issue completion and local delivery may proceed
+without other vendor coverage. Do not claim compatibility on an untested path.
 
 This supersedes mandatory AMD/Intel completion gates in ADR-006, AGENTS.md,
 the regression strategy and existing roadmap issue bodies. Those original issue

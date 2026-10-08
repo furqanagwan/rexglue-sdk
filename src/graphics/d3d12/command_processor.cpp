@@ -5907,6 +5907,8 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
       binding.min_filter = spirv_binding.min_filter;
       binding.mip_filter = spirv_binding.mip_filter;
       binding.aniso_filter = spirv_binding.aniso_filter;
+      binding.border_color_forced = spirv_binding.border_color_forced;
+      binding.forced_border_color = spirv_binding.forced_border_color;
       uint32_t sampler_index =
           GetOrCreateDxilBindlessSamplerIndex(texture_cache_->GetSamplerParameters(binding));
       if (sampler_index == UINT32_MAX) {

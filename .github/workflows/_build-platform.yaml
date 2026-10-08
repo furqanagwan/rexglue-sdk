@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       platform:
-        description: "win-amd64 (Windows is the only supported host)"
+        description: "win-amd64-gdk (Windows x64 / April 2026 PC GDK)"
         required: true
         type: string
       ref:
@@ -27,7 +27,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     outputs:
       version: ${{ steps.version.outputs.v }}
     steps:
@@ -40,6 +40,22 @@ jobs:
 
       - name: Install toolchain
         run: choco install llvm cmake ninja -y
+
+      - name: Select the pinned PC GDK
+        shell: pwsh
+        run: |
+          $gdkRoot = & ./scripts/setup_gdk.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'gdk260404')
+          "GameDKCoreLatest=$gdkRoot" >> $env:GITHUB_ENV
+
+      - name: Set up the x64 developer environment
+        shell: pwsh
+        run: |
+          $vsWhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vsInstall = & $vsWhere -latest -property installationPath
+          & "$vsInstall/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          foreach ($name in @('INCLUDE', 'LIB', 'LIBPATH', 'PATH')) {
+            "$name=$([Environment]::GetEnvironmentVariable($name))" >> $env:GITHUB_ENV
+          }
 
       - name: Set up sccache
         uses: hendrikmuhs/ccache-action@v1.2.22

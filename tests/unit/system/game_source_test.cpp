@@ -143,8 +143,11 @@ TEST_CASE("Game source extraction commits a matching folder and preserves existi
 
 TEST_CASE("Game source identity checks the original XEX header and full-file checksum",
           "[game_source]") {
-  const auto root = std::filesystem::temp_directory_path() /
+  // Relative paths need the working directory's volume. Hosted Windows runners
+  // may keep TEMP on C: and the CTest working directory on D:.
+  const auto root = std::filesystem::current_path() /
                     ("rex-source-identity-test-" + std::to_string(GetCurrentProcessId()));
+  REQUIRE_FALSE(std::filesystem::exists(root));
   std::filesystem::create_directories(root);
   struct Clean {
     std::filesystem::path root;

@@ -22,3 +22,10 @@ win. See the upstream [Contributing Guide](https://github.com/rexglue/rexglue-sd
 - Formatting and linting instructions
 - Git setup (line endings, rebasing)
 - PR submission workflow
+
+The current module ownership, C++/ABI conventions, tooling and shared human/AI
+workflow are in [development guidance](docs/development.md). GDK is required;
+the canonical preset is `win-amd64-gdk`, with the edition pinned to 260404.
+Use the issue's actual acceptance checks and report blocked gates. Current
+representative title testing covers the three 007 games; shared SDK work is
+prioritized and batched before expensive title rebuilds.
