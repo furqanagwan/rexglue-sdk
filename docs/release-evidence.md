@@ -491,6 +491,19 @@ infinity cancellation, NaN product classification, and preserving guest-written
 FEX during `mtfsf`. This result is corpus evidence only; `instr_mtmsrd` remains
 an unresolved timeout and gameplay validation remains outstanding.
 
+The Release SDK install from `fc59fce` also regenerated and built the base
+Quantum of Solace, Quantum of Solace TU2, Blood Stone and 007 Legends targets
+in fresh ignored directories under the 007 repository. Their executable
+SHA-256s are, respectively, `E109675146BEF1C9A0E5C15EAFB97BC7098ACEA3E255BE63D96189D53E6769A5`,
+`6C6E85C3ACC2E84B24145743A247F95EB6D7460DAD57707B5495E125DE65CE46`,
+`0C0911E92406BE57BE2E56F781A3737001BCAD601451C994B13D78F39B6F959B` and
+`FCAC377B3D5F8399912203D0C108BF51D42C6508F45756C8713F70E565AE3935`.
+Runtime checks were not run: no `REXGLUE_SYSTEM_UPDATE` or local fallback
+bundle was present, so these builds do not embed the Guide required for the
+usual Guide exit flow. 007 Legends codegen also reports its existing
+1,437,835-byte function above the 1 MiB limit. The build is not runtime or
+compatibility evidence.
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main

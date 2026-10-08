@@ -1900,6 +1900,13 @@ with the existing `instr_mtmsrd` timeout excluded. It exposed and verified
 fused subtract sign handling for VXISI, NaN product classification and exact
 preservation of guest-written FEX on `mtfsf`. The timeout remains unresolved;
 this corpus result does not close #149 or establish title compatibility.
+
+The Release SDK install regenerated and built Quantum of Solace (base and
+TU2), Blood Stone and 007 Legends in fresh ignored title directories. Runtime
+validation was held because the local `$SystemUpdate` bundle was unavailable,
+which would leave the title without the Guide exit flow. Legends codegen also
+reports one 1,437,835-byte function over the 1 MiB limit. Executable hashes
+and these limits are recorded in [release evidence](release-evidence.md).
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at
