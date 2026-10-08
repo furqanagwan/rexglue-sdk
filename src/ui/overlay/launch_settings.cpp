@@ -35,30 +35,33 @@ void ReleaseLaunchPad(ImGuiIO& io) {
   }
 }
 
-LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source) {
+LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source, bool forward_to_imgui) {
   if (!source)
     return {};
   const auto pad = source();
   const auto state = pad.value_or(LaunchPadState{});
   // ImGui ignores activation while its navigation cursor is hidden. Make the
   // first A press usable without requiring a directional input beforehand.
-  if (state.activate || state.cancel || std::abs(state.x) > 0.25f || std::abs(state.y) > 0.25f)
+  if (forward_to_imgui &&
+      (state.activate || state.cancel || std::abs(state.x) > 0.25f || std::abs(state.y) > 0.25f))
     ImGui::SetNavCursorVisible(true);
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-  if (pad)
-    io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-  else
-    io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-  io.AddKeyEvent(ImGuiKey_GamepadFaceDown, state.activate);
-  io.AddKeyEvent(ImGuiKey_GamepadFaceRight, state.cancel);
-  auto direction = [&io](ImGuiKey key, float axis) {
-    const float value = std::isfinite(axis) ? std::clamp((axis - 0.25f) / 0.75f, 0.0f, 1.0f) : 0;
-    io.AddKeyAnalogEvent(key, value > 0, value);
-  };
-  direction(ImGuiKey_GamepadDpadLeft, -state.x);
-  direction(ImGuiKey_GamepadDpadRight, state.x);
-  direction(ImGuiKey_GamepadDpadUp, state.y);
-  direction(ImGuiKey_GamepadDpadDown, -state.y);
+  if (forward_to_imgui) {
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    if (pad)
+      io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+    else
+      io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+    io.AddKeyEvent(ImGuiKey_GamepadFaceDown, state.activate);
+    io.AddKeyEvent(ImGuiKey_GamepadFaceRight, state.cancel);
+    auto direction = [&io](ImGuiKey key, float axis) {
+      const float value = std::isfinite(axis) ? std::clamp((axis - 0.25f) / 0.75f, 0.0f, 1.0f) : 0;
+      io.AddKeyAnalogEvent(key, value > 0, value);
+    };
+    direction(ImGuiKey_GamepadDpadLeft, -state.x);
+    direction(ImGuiKey_GamepadDpadRight, state.x);
+    direction(ImGuiKey_GamepadDpadUp, state.y);
+    direction(ImGuiKey_GamepadDpadDown, -state.y);
+  }
   return state;
 }
 

@@ -788,9 +788,16 @@ std::optional<ui::GameSourceVisuals> ReXApp::GetGameSourceVisuals() {
   if (!REXCVAR_GET(xbox_guide) || shutting_down_.load())
     return std::nullopt;
   std::shared_ptr<const ui::guide::GuideAssets> assets;
+  bool loading = false;
   {
     std::lock_guard lock(guide_mutex_);
     assets = guide_assets_;
+    loading = !assets && guide_error_.empty() && !guide_stop_.load();
+  }
+  if (!assets && loading) {
+    ui::GameSourceVisuals visuals;
+    visuals.loading = true;
+    return visuals;
   }
   if (!assets)
     return std::nullopt;
