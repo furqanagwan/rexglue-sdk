@@ -23,9 +23,14 @@ option(REXGLUE_ENABLE_SANITIZERS "Enable UndefinedBehaviorSanitizer" OFF)
 option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (experimental)" OFF)
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
 option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter registry and overlay" ON)
-# Opt-in PC GDK build (RG-GDK-002). Off by default so standard Windows builds
-# need no GDK. The edition is pinned; see docs/gdk-toolchain.md.
-option(REXGLUE_USE_GDK "Build against an installed Microsoft GDK (PC) edition" OFF)
+# PC GDK is required (ADR-016). Keep the option name only to diagnose old
+# configure commands instead of silently producing a different SDK.
+option(REXGLUE_USE_GDK "Required Microsoft GDK (PC) integration" ON)
+if(NOT REXGLUE_USE_GDK)
+    message(FATAL_ERROR
+        "GDK-free builds are retired. ReXGlue requires the April 2026 PC GDK "
+        "(260404); use the win-amd64-gdk preset. See docs/gdk-toolchain.md.")
+endif()
 option(REXGLUE_SHADER_DXIL "Opt-in DXIL shader toolchain: Mesa spirv_to_dxil, D3D12 Agility SDK and DXC (RG-GDK-032 stage 1)" OFF)
 set(REXGLUE_GDK_EDITION "260404" CACHE STRING "Required GDK edition (_GRDK_EDITION)")
 set(REXGLUE_GDK_ROOT "$ENV{GameDKCoreLatest}" CACHE PATH "Installed GDK edition directory")

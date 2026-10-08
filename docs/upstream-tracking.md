@@ -1775,3 +1775,16 @@ consumer configurations are tested. Exact counts, title rebuilds, private captur
 locations and the initial test orchestration/file-lock failure are recorded in
 [release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
 Original Xbox execution and 1:1 online/visual parity remain unestablished.
+
+## Read-only Edge GPU review, 2026-10-07
+
+Reviewed `furqanagwan/xenia-edge:edge` at
+`669b4266f5682e5169d42552fdf64f02880652a4`; GitHub's comparison with
+`has207/xenia-edge:edge` is identical (zero ahead/behind). The pinned
+[GPU comparison](edge-gpu-review-20261007.md) distinguishes existing adaptations,
+the optional DXIL source pin, missing `getBCF` and primitive invalidation fixes,
+and coupled resolve/memexport changes requiring a separate design. Relevant
+source diffs/history were inspected; no GPU code was ported in the GDK-policy
+maintenance change. New candidates remain unvalidated and have no title
+compatibility claim. The review does not import CPU JIT/XeFu execution,
+Vulkan/Metal backends or a dependency on the reference emulator.
