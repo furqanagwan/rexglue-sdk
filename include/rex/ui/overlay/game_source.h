@@ -2,8 +2,12 @@
 #pragma once
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <future>
+#include <vector>
 #include <rex/system/game_source.h>
+#include <rex/ui/guide/file_browser.h>
+#include <rex/ui/guide/guide_list_page.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/overlay/launch_settings.h>
 #include <rex/ui/guide/xbox_guide.h>
@@ -14,9 +18,11 @@ struct GameSourceVisuals {
   std::shared_ptr<const guide::GuideAssets> assets;
   xui::RenderResources resources;
   std::function<void(std::string_view, std::string_view)> play_sound;
+  bool loading = false;
 };
 using GameSourceVisualsProvider = std::function<std::optional<GameSourceVisuals>()>;
 class GameSourceConsoleBox;
+class GameSourceGuidePage;
 class GameSourceConsoleDownloads;
 // Self-owned first-run dialog. An empty completion path means Leave Game.
 class GameSourceDialog : public ImGuiDialog {
@@ -36,10 +42,34 @@ class GameSourceDialog : public ImGuiDialog {
   void OnClose() override;
 
  private:
-  enum class ConsoleScreen { kSource, kDrives, kChecking, kVerified, kError, kSaveFailed, kCopied };
+  enum class ConsoleScreen {
+    kSource,
+    kBrowse,
+    kDrives,
+    kChecking,
+    kExtracting,
+    kVerified,
+    kError,
+    kSaveFailed,
+    kCopied
+  };
+  // The Guide's own file browser over drives, folders and ISO images.
   void Browse(bool folder);
+  // Windows' file dialog, for the host fallback without Guide assets.
+  void BrowseNative(bool folder);
+  void ShowBrowseScreen();
+  void ShowConsolePage(ConsoleScreen screen, std::string title,
+                       std::vector<guide::GuideListRow> rows, size_t initial = 0,
+                       std::string legend_b = "Back", std::string empty_details = {});
+  // One row per choice, each with `body` in the details pane.
   void ShowConsoleScreen(ConsoleScreen screen, std::string title, std::string body,
                          std::vector<std::string> choices, size_t initial = 0);
+  void ShowSourceScreen();
+  void ShowDriveScreen();
+  void HandleConsoleInput(const LaunchPadState& pad);
+  void HandleConsoleCancel();
+  // Back to the screen a source check started from.
+  void ReturnFromCheck();
   void BeginSourceCheck(std::filesystem::path path);
   void HandleConsoleChoice(size_t choice);
   void CompleteConsoleSelection(bool remember);
@@ -68,13 +98,25 @@ class GameSourceDialog : public ImGuiDialog {
   bool remember_ = true;
   LaunchPadSource pad_source_;
   GameSourceVisualsProvider visuals_;
-  std::unique_ptr<GameSourceConsoleBox> console_box_;
+  std::unique_ptr<GameSourceGuidePage> console_page_;
   bool console_initialized_ = false;
   bool console_mode_ = false;
   ConsoleScreen console_screen_ = ConsoleScreen::kSource;
+  ConsoleScreen check_origin_ = ConsoleScreen::kSource;
   std::vector<std::string> console_choices_;
+  // The screen to show once the Guide has loaded.
+  bool console_waiting_for_guide_ = false;
+  std::string console_title_;
+  std::vector<guide::GuideListRow> console_rows_;
+  size_t console_initial_choice_ = 0;
+  std::string console_legend_b_;
+  std::string console_empty_details_;
+  LaunchPadState previous_pad_;
+  int previous_pad_direction_ = 0;
+  std::chrono::steady_clock::time_point next_pad_navigation_{};
+  bool browse_folder_ = false;
+  std::unique_ptr<guide::GuideFileBrowser> browser_;
   std::vector<std::string> optical_drives_;
-  size_t optical_drive_page_ = 0;
   std::unique_ptr<GameSourceConsoleDownloads> console_downloads_;
   std::function<void(guide::GuideActivity)> activity_completed_;
 };

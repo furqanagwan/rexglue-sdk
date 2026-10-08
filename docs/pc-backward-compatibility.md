@@ -128,11 +128,16 @@ source before applying their update. Older generated hosts retain folder
 launching; they need regeneration for checked image selection.
 
 A new host checks its configured source before constructing the guest. If
-missing or mismatched, the first-run Guide screen offers an extracted folder,
-ISO or optical drive. Guide message boxes present source choices, validation
-results, errors and confirmation; Windows' native file dialog selects an ISO or
-folder. Source checks verify the XDVDFS structures and exact executable
-identity. Remember source persists an absolute `game_source` path; an explicit
+missing or mismatched, a first-run Guide page offers Disc Image (ISO),
+Extracted Game Folder or Disc Drive. It is the in-game Guide's own page, as
+Manage Storage shows it: the HUD frame at full height, centred on the Guide's
+852x480 canvas, with a scrolling list and a details pane. The ISO and folder
+choices open a Guide browser over local drives, folders and ISO files (with
+sizes); the details pane shows the focused item's full path. The d-pad or left
+stick moves (held to repeat), A selects, B goes up a level, and B on the first
+page exits before the game launches; arrows, Page Up/Down, Enter and Escape do
+the same. Source checks verify the XDVDFS structures and exact executable
+identity. Use This Source persists an absolute `game_source` path; an explicit
 `--game_data_root` takes precedence. These choices preserve save/profile paths.
 
 An image can run directly or use Extract to this PC. Copying runs in the
@@ -154,10 +159,11 @@ UI-thread reads return errors instead of waiting for their own dialog.
 
 Both dialogs support physical-controller navigation, with disconnected/held
 input released before guest handoff. Tests draw ImGui; physical pad behaviour
-and painted presentation are still unverified. When private Guide assets finish
-loading, source and recovery choices use the console's XuiMessageBox3 visual;
-without assets the host fallback remains available for development. Extraction
-progress uses the console Active Downloads scene with nonblocking cancellation.
+and painted presentation still need an owner check. When private Guide assets
+finish loading, source choices use the Guide page above and media recovery uses
+the console's XuiMessageBox3 visual; without assets the host fallback (with
+Windows' file dialog) remains available for development. Extraction progress
+stays on the Guide page with byte progress; A cancels without blocking.
 Completed/cancelled/failed copy results remain in the Guide's Active Downloads
 alongside title-update jobs.
 

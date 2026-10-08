@@ -21,7 +21,8 @@ struct LaunchPadState {
 };
 using LaunchPadSource = std::function<std::optional<LaunchPadState>()>;
 // Shared ImGui navigation for host menus. Release before disposing the reader.
-LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source);
+LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source,
+                             bool forward_to_imgui = true);
 void ReleaseLaunchPad(ImGuiIO& io);
 
 // Self-owned dialog, like ShowMessageBox. Its completion callback runs only
