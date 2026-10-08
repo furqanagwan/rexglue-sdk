@@ -816,7 +816,7 @@ void D3D12TextureCache::WriteActiveTextureBindfulSRV(
                               (host_shader_binding.dimension == xenos::FetchOpDimension::k1D ||
                                host_shader_binding.dimension == xenos::FetchOpDimension::k2D);
     const D3D12TextureBinding& d3d12_binding = d3d12_texture_bindings_[fetch_constant_index];
-    if (host_shader_binding.is_signed) {
+    if (texture_util::IsSignedViewBound(binding->swizzled_signs, host_shader_binding.is_signed)) {
       // Not supporting signed compressed textures - hopefully DXN and DXT5A are
       // not used as signed.
       if (texture_util::IsAnySignSigned(binding->swizzled_signs)) {
@@ -888,10 +888,11 @@ uint32_t D3D12TextureCache::GetActiveTextureBindlessSRVIndex(
                               (host_shader_binding.dimension == xenos::FetchOpDimension::k1D ||
                                host_shader_binding.dimension == xenos::FetchOpDimension::k2D);
     const D3D12TextureBinding& d3d12_binding = d3d12_texture_bindings_[fetch_constant_index];
+    const bool signed_view =
+        texture_util::IsSignedViewBound(binding->swizzled_signs, host_shader_binding.is_signed);
     if (force_special_view) {
       Texture* texture = nullptr;
-      bool use_signed =
-          host_shader_binding.is_signed && texture_util::IsAnySignSigned(binding->swizzled_signs);
+      bool use_signed = signed_view && texture_util::IsAnySignSigned(binding->swizzled_signs);
       if (use_signed) {
         texture = IsSignedVersionSeparateForFormat(binding->key) ? binding->texture_signed
                                                                  : binding->texture;
@@ -904,8 +905,8 @@ uint32_t D3D12TextureCache::GetActiveTextureBindlessSRVIndex(
                                                          use_signed, binding->host_swizzle);
       }
     } else {
-      descriptor_index = host_shader_binding.is_signed ? d3d12_binding.descriptor_index_signed
-                                                       : d3d12_binding.descriptor_index;
+      descriptor_index =
+          signed_view ? d3d12_binding.descriptor_index_signed : d3d12_binding.descriptor_index;
     }
   }
   if (descriptor_index == UINT32_MAX) {
@@ -940,7 +941,8 @@ D3D12TextureCache::SamplerParameters D3D12TextureCache::GetSamplerParameters(
   if (xenos::ClampModeUsesBorder(parameters.clamp_x) ||
       xenos::ClampModeUsesBorder(parameters.clamp_y) ||
       xenos::ClampModeUsesBorder(parameters.clamp_z)) {
-    parameters.border_color = fetch.border_color;
+    parameters.border_color =
+        binding.border_color_forced ? binding.forced_border_color : fetch.border_color;
   } else {
     parameters.border_color = xenos::BorderColor::k_ABGR_Black;
   }

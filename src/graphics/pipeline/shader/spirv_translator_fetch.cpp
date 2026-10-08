@@ -556,11 +556,10 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     case ucode::FetchOpcode::kTextureFetch:
       break;
     case ucode::FetchOpcode::kGetTextureBorderColorFrac:
-      // TODO(Triang3l): Bind a black texture with a white border to calculate
-      // the border color fraction (in the X component of the result).
-      assert_always();
-      EmitTranslationError("getBCF is unimplemented", false);
-      used_result_nonzero_components = 0;
+      // Cube maps don't use the border.
+      if (instr.dimension == xenos::FetchOpDimension::kCube) {
+        used_result_nonzero_components = 0;
+      }
       break;
     case ucode::FetchOpcode::kGetTextureComputedLod:
       break;
@@ -596,6 +595,27 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
   }
 
   spv::Id result[] = {const_float_0_, const_float_0_, const_float_0_, const_float_0_};
+  // Stores the needed components of the result.
+  auto store_result = [&]() {
+    spv::Id result_vector;
+    if (used_result_component_count > 1) {
+      id_vector_temp_.clear();
+      uint32_t result_components_remaining = used_result_components;
+      uint32_t result_component_index;
+      while (rex::bit_scan_forward(result_components_remaining, &result_component_index)) {
+        result_components_remaining &= ~(UINT32_C(1) << result_component_index);
+        id_vector_temp_.push_back(result[result_component_index]);
+      }
+      result_vector = builder_->createCompositeConstruct(
+          type_float_vectors_[used_result_component_count - 1], id_vector_temp_);
+    } else {
+      uint32_t result_component_index;
+      rex::bit_scan_forward(used_result_components, &result_component_index);
+      result_vector = result[result_component_index];
+    }
+    StoreResult(instr.result, result_vector);
+    BisectSnapshotAfterInstruction();
+  };
 
   if (instr.opcode == ucode::FetchOpcode::kGetTextureGradients) {
     // Doesn't need the texture, handle separately.
@@ -627,7 +647,13 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
           (derivative_component_index & 0b10) ? derivative_function_y : derivative_function_x);
     }
   } else {
-    // kTextureFetch, kGetTextureComputedLod or kGetTextureWeights.
+    // kTextureFetch, kGetTextureComputedLod, kGetTextureWeights or
+    // kGetTextureBorderColorFrac.
+
+    // getBCF samples the texture twice, with a transparent black and an opaque
+    // white border in place of the unsigned and the signed sample. The
+    // difference is the share of the border.
+    bool get_border_color_frac = instr.opcode == ucode::FetchOpcode::kGetTextureBorderColorFrac;
 
     // Whether to use gradients (implicit or explicit) for LOD calculation.
     bool use_computed_lod = TextureFetchUsesComputedLod(instr);
@@ -653,6 +679,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     bool point_snap = instr.CanSnapToTexelCenter(use_computed_lod);
 
     spv::Id sampler = spv::NoResult;
+    spv::Id sampler_signed = spv::NoResult;
     spv::Id image_2d_array_or_cube_unsigned = spv::NoResult;
     spv::Id image_2d_array_or_cube_signed = spv::NoResult;
     spv::Id image_3d_unsigned = spv::NoResult;
@@ -676,15 +703,27 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
           fetch_constant_index, instr.attributes.mag_filter, instr.attributes.min_filter,
           instr.opcode == ucode::FetchOpcode::kGetTextureComputedLod ? xenos::TextureFilter::kLinear
                                                                      : instr.attributes.mip_filter,
-          use_computed_lod ? instr.attributes.aniso_filter : xenos::AnisoFilter::kDisabled);
+          use_computed_lod ? instr.attributes.aniso_filter : xenos::AnisoFilter::kDisabled,
+          get_border_color_frac ? std::optional(xenos::BorderColor::k_ABGR_Black) : std::nullopt);
+      size_t sampler_signed_index =
+          get_border_color_frac
+              ? FindOrAddSamplerBinding(fetch_constant_index, instr.attributes.mag_filter,
+                                        instr.attributes.min_filter, instr.attributes.mip_filter,
+                                        use_computed_lod ? instr.attributes.aniso_filter
+                                                         : xenos::AnisoFilter::kDisabled,
+                                        xenos::BorderColor::k_ABGR_White)
+              : sampler_index;
       xenos::FetchOpDimension dimension_2d_array_or_cube =
           instr.dimension == xenos::FetchOpDimension::k3DOrStacked ? xenos::FetchOpDimension::k2D
                                                                    : instr.dimension;
       size_t image_2d_array_or_cube_unsigned_index =
           FindOrAddTextureBinding(fetch_constant_index, dimension_2d_array_or_cube, false);
       size_t image_2d_array_or_cube_signed_index =
-          FindOrAddTextureBinding(fetch_constant_index, dimension_2d_array_or_cube, true);
-      if (sampler_index == SIZE_MAX || image_2d_array_or_cube_unsigned_index == SIZE_MAX ||
+          get_border_color_frac
+              ? image_2d_array_or_cube_unsigned_index
+              : FindOrAddTextureBinding(fetch_constant_index, dimension_2d_array_or_cube, true);
+      if (sampler_index == SIZE_MAX || sampler_signed_index == SIZE_MAX ||
+          image_2d_array_or_cube_unsigned_index == SIZE_MAX ||
           image_2d_array_or_cube_signed_index == SIZE_MAX) {
         bindings_set_up = false;
       }
@@ -693,8 +732,11 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
       if (instr.dimension == xenos::FetchOpDimension::k3DOrStacked) {
         image_3d_unsigned_index = FindOrAddTextureBinding(
             fetch_constant_index, xenos::FetchOpDimension::k3DOrStacked, false);
-        image_3d_signed_index = FindOrAddTextureBinding(
-            fetch_constant_index, xenos::FetchOpDimension::k3DOrStacked, true);
+        image_3d_signed_index =
+            get_border_color_frac
+                ? image_3d_unsigned_index
+                : FindOrAddTextureBinding(fetch_constant_index,
+                                          xenos::FetchOpDimension::k3DOrStacked, true);
         if (image_3d_unsigned_index == SIZE_MAX || image_3d_signed_index == SIZE_MAX) {
           bindings_set_up = false;
         }
@@ -705,6 +747,10 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
         return;
       }
       sampler = builder_->createLoad(sampler_bindings_[sampler_index].variable, spv::NoPrecision);
+      sampler_signed = sampler_signed_index != sampler_index
+                           ? builder_->createLoad(sampler_bindings_[sampler_signed_index].variable,
+                                                  spv::NoPrecision)
+                           : sampler;
       const TextureBinding& image_2d_array_or_cube_unsigned_binding =
           texture_bindings_[image_2d_array_or_cube_unsigned_index];
       image_2d_array_or_cube_unsigned =
@@ -1037,9 +1083,10 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
       // only the denominator.
       spv::Id selected_mip_level = spv::NoResult;
       spv::Id selected_mip_locked = spv::NoResult;
-      bool selected_mip_grid_possible = instr.opcode == ucode::FetchOpcode::kTextureFetch &&
-                                        instr.dimension == xenos::FetchOpDimension::k2D &&
-                                        instr.attributes.unnormalized_coordinates;
+      bool selected_mip_grid_possible =
+          (instr.opcode == ucode::FetchOpcode::kTextureFetch || get_border_color_frac) &&
+          instr.dimension == xenos::FetchOpDimension::k2D &&
+          instr.attributes.unnormalized_coordinates;
       if (selected_mip_grid_possible) {
         // Word 4 has MipMinLevel in bits 2:5 and MipMaxLevel in bits 6:9.
         id_vector_temp_.clear();
@@ -1241,7 +1288,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
         result[coordinate_component_index] = result_component;
       }
     } else {
-      // kTextureFetch or kGetTextureComputedLod.
+      // kTextureFetch, kGetTextureComputedLod or kGetTextureBorderColorFrac.
 
       // Normalize the XY coordinates, and apply the offset. When the texture
       // is resolution-scaled, size has already been scaled up to host texels
@@ -1652,8 +1699,8 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
                               image_2d_array_or_cube_signed, sampler, swizzled_signs_all_signed);
         }
       } else {
-        // kTextureFetch.
-        assert_true(instr.opcode == ucode::FetchOpcode::kTextureFetch);
+        // kTextureFetch or kGetTextureBorderColorFrac.
+        assert_true(instr.opcode == ucode::FetchOpcode::kTextureFetch || get_border_color_frac);
 
         // Extract the signedness for each component of the swizzled result, and
         // get which bindings (unsigned and signed) are needed.
@@ -1664,7 +1711,11 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
         spv::Id const_uint_2 = builder_->makeUintConstant(2);
         spv::Id const_uint_sign_signed =
             builder_->makeUintConstant(uint32_t(xenos::TextureSign::kSigned));
-        {
+        if (get_border_color_frac) {
+          // Both border colors are always sampled.
+          is_all_signed = builder_->makeBoolConstant(false);
+          is_any_signed = builder_->makeBoolConstant(true);
+        } else {
           uint32_t result_remaining_components = used_result_nonzero_components;
           uint32_t result_component_index;
           while (rex::bit_scan_forward(result_remaining_components, &result_component_index)) {
@@ -2066,7 +2117,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
             texture_parameters.coords =
                 builder_->createCompositeConstruct(type_float3_, id_vector_temp_);
             SampleTexture(texture_parameters, image_operands_mask, image_3d_unsigned,
-                          image_3d_signed, sampler, is_any_unsigned, is_any_signed,
+                          image_3d_signed, sampler, sampler_signed, is_any_unsigned, is_any_signed,
                           sample_result_unsigned_3d, sample_result_signed_3d);
           }
           if_data_is_3d.makeBeginElse();
@@ -2184,8 +2235,9 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
             texture_parameters.coords =
                 builder_->createCompositeConstruct(type_float3_, id_vector_temp_);
             SampleTexture(texture_parameters, image_operands_mask, image_2d_array_or_cube_unsigned,
-                          image_2d_array_or_cube_signed, sampler, is_any_unsigned, is_any_signed,
-                          sample_result_unsigned_stacked, sample_result_signed_stacked);
+                          image_2d_array_or_cube_signed, sampler, sampler_signed, is_any_unsigned,
+                          is_any_signed, sample_result_unsigned_stacked,
+                          sample_result_signed_stacked);
             // Sample the second layer if linear filtering is potentially needed
             // (conditionally or unconditionally, depending on whether the
             // filter needs to be chosen at runtime), and filter.
@@ -2216,7 +2268,8 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
               spv::Id sample_result_signed_stacked_filtered;
               SampleTexture(texture_parameters, image_operands_mask,
                             image_2d_array_or_cube_unsigned, image_2d_array_or_cube_signed, sampler,
-                            is_any_unsigned, is_any_signed, sample_result_unsigned_stacked_filtered,
+                            sampler_signed, is_any_unsigned, is_any_signed,
+                            sample_result_unsigned_stacked_filtered,
                             sample_result_signed_stacked_filtered, layer_lerp_factor,
                             sample_result_unsigned_stacked, sample_result_signed_stacked);
               if (vol_filter_is_linear != spv::NoResult) {
@@ -2271,8 +2324,30 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
           texture_parameters.coords =
               builder_->createCompositeConstruct(type_float3_, id_vector_temp_);
           SampleTexture(texture_parameters, image_operands_mask, image_2d_array_or_cube_unsigned,
-                        image_2d_array_or_cube_signed, sampler, is_any_unsigned, is_any_signed,
-                        sample_result_unsigned, sample_result_signed);
+                        image_2d_array_or_cube_signed, sampler, sampler_signed, is_any_unsigned,
+                        is_any_signed, sample_result_unsigned, sample_result_signed);
+        }
+
+        if (get_border_color_frac) {
+          // The samples differ by the border share in components with texture
+          // data and not at all in constant ones.
+          spv::Id border_difference = builder_->createNoContractionBinOp(
+              spv::OpFSub, type_float4_, sample_result_signed, sample_result_unsigned);
+          spv::Id border_difference_components[4];
+          for (uint32_t i = 0; i < 4; ++i) {
+            border_difference_components[i] =
+                builder_->createCompositeExtract(border_difference, type_float_, i);
+          }
+          result[0] = builder_->createBinBuiltinCall(
+              type_float_, ext_inst_glsl_std_450_, GLSLstd450NMax,
+              builder_->createBinBuiltinCall(type_float_, ext_inst_glsl_std_450_, GLSLstd450NMax,
+                                             border_difference_components[0],
+                                             border_difference_components[1]),
+              builder_->createBinBuiltinCall(type_float_, ext_inst_glsl_std_450_, GLSLstd450NMax,
+                                             border_difference_components[2],
+                                             border_difference_components[3]));
+          store_result();
+          return;
         }
 
         // Swizzle the result components manually if needed, to `result`.
@@ -2728,25 +2803,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     }
   }
 
-  // Store the needed components of the result.
-  spv::Id result_vector;
-  if (used_result_component_count > 1) {
-    id_vector_temp_.clear();
-    uint32_t result_components_remaining = used_result_components;
-    uint32_t result_component_index;
-    while (rex::bit_scan_forward(result_components_remaining, &result_component_index)) {
-      result_components_remaining &= ~(UINT32_C(1) << result_component_index);
-      id_vector_temp_.push_back(result[result_component_index]);
-    }
-    result_vector = builder_->createCompositeConstruct(
-        type_float_vectors_[used_result_component_count - 1], id_vector_temp_);
-  } else {
-    uint32_t result_component_index;
-    rex::bit_scan_forward(used_result_components, &result_component_index);
-    result_vector = result[result_component_index];
-  }
-  StoreResult(instr.result, result_vector);
-  BisectSnapshotAfterInstruction();
+  store_result();
 }
 
 size_t SpirvShaderTranslator::FindOrAddTextureBinding(uint32_t fetch_constant,
@@ -2807,11 +2864,10 @@ size_t SpirvShaderTranslator::FindOrAddTextureBinding(uint32_t fetch_constant,
   return new_texture_binding_index;
 }
 
-size_t SpirvShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
-                                                      xenos::TextureFilter mag_filter,
-                                                      xenos::TextureFilter min_filter,
-                                                      xenos::TextureFilter mip_filter,
-                                                      xenos::AnisoFilter aniso_filter) {
+size_t SpirvShaderTranslator::FindOrAddSamplerBinding(
+    uint32_t fetch_constant, xenos::TextureFilter mag_filter, xenos::TextureFilter min_filter,
+    xenos::TextureFilter mip_filter, xenos::AnisoFilter aniso_filter,
+    std::optional<xenos::BorderColor> forced_border_color) {
   if (aniso_filter != xenos::AnisoFilter::kUseFetchConst) {
     // TODO(Triang3l): Limit to what's actually supported by the implementation.
     aniso_filter = std::min(aniso_filter, xenos::AnisoFilter::kMax_16_1);
@@ -2820,7 +2876,9 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
     const SamplerBinding& sampler_binding = sampler_bindings_[i];
     if (sampler_binding.fetch_constant == fetch_constant &&
         sampler_binding.mag_filter == mag_filter && sampler_binding.min_filter == min_filter &&
-        sampler_binding.mip_filter == mip_filter && sampler_binding.aniso_filter == aniso_filter) {
+        sampler_binding.mip_filter == mip_filter && sampler_binding.aniso_filter == aniso_filter &&
+        sampler_binding.border_color_forced == forced_border_color.has_value() &&
+        (!forced_border_color || sampler_binding.forced_border_color == *forced_border_color)) {
       return i;
     }
   }
@@ -2833,6 +2891,9 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
   new_sampler_binding.min_filter = min_filter;
   new_sampler_binding.mip_filter = mip_filter;
   new_sampler_binding.aniso_filter = aniso_filter;
+  new_sampler_binding.border_color_forced = forced_border_color.has_value();
+  new_sampler_binding.forced_border_color =
+      forced_border_color.value_or(xenos::BorderColor::k_ABGR_Black);
   std::ostringstream name;
   static constexpr char kFilterSuffixes[] = {'p', 'l', 'b', 'f'};
   name << "xe_sampler" << fetch_constant << '_' << kFilterSuffixes[uint32_t(mag_filter)]
@@ -2843,6 +2904,10 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
     } else {
       name << "_a" << (UINT32_C(1) << (uint32_t(aniso_filter) - 1));
     }
+  }
+  if (forced_border_color) {
+    name << (*forced_border_color == xenos::BorderColor::k_ABGR_White ? "_border_white"
+                                                                      : "_border_black");
   }
   new_sampler_binding.variable =
       builder_->createVariable(spv::NoPrecision, spv::StorageClassUniformConstant,
@@ -2861,10 +2926,11 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
 void SpirvShaderTranslator::SampleTexture(spv::Builder::TextureParameters& texture_parameters,
                                           spv::ImageOperandsMask image_operands_mask,
                                           spv::Id image_unsigned, spv::Id image_signed,
-                                          spv::Id sampler, spv::Id is_any_unsigned,
-                                          spv::Id is_any_signed, spv::Id& result_unsigned_out,
-                                          spv::Id& result_signed_out, spv::Id lerp_factor,
-                                          spv::Id lerp_first_unsigned, spv::Id lerp_first_signed) {
+                                          spv::Id sampler_unsigned, spv::Id sampler_signed,
+                                          spv::Id is_any_unsigned, spv::Id is_any_signed,
+                                          spv::Id& result_unsigned_out, spv::Id& result_signed_out,
+                                          spv::Id lerp_factor, spv::Id lerp_first_unsigned,
+                                          spv::Id lerp_first_signed) {
   for (uint32_t i = 0; i < 2; ++i) {
     SpirvBuilder::IfBuilder sign_if(i ? is_any_signed : is_any_unsigned,
                                     spv::SelectionControlDontFlattenMask, *builder_);
@@ -2874,7 +2940,7 @@ void SpirvShaderTranslator::SampleTexture(spv::Builder::TextureParameters& textu
       // OpSampledImage must be in the same block as where its result is used.
       texture_parameters.sampler = builder_->createBinOp(
           spv::OpSampledImage, builder_->makeSampledImageType(builder_->getTypeId(image)), image,
-          sampler);
+          i ? sampler_signed : sampler_unsigned);
       sign_result =
           builder_->createTextureCall(spv::NoPrecision, type_float4_, false, false, false, false,
                                       false, texture_parameters, image_operands_mask);

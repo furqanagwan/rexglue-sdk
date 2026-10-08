@@ -62,6 +62,8 @@ class DxbcShader : public Shader {
     xenos::TextureFilter min_filter;
     xenos::TextureFilter mip_filter;
     xenos::AnisoFilter aniso_filter;
+    uint32_t border_color_forced;
+    xenos::BorderColor forced_border_color;
   };
   const std::vector<SamplerBinding>& GetSamplerBindingsAfterTranslation() const {
     return sampler_bindings_;

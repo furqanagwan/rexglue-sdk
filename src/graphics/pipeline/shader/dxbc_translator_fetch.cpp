@@ -501,11 +501,10 @@ uint32_t DxbcShaderTranslator::FindOrAddTextureBinding(uint32_t fetch_constant,
   return texture_binding_index;
 }
 
-uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
-                                                       xenos::TextureFilter mag_filter,
-                                                       xenos::TextureFilter min_filter,
-                                                       xenos::TextureFilter mip_filter,
-                                                       xenos::AnisoFilter aniso_filter) {
+uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(
+    uint32_t fetch_constant, xenos::TextureFilter mag_filter, xenos::TextureFilter min_filter,
+    xenos::TextureFilter mip_filter, xenos::AnisoFilter aniso_filter,
+    std::optional<xenos::BorderColor> forced_border_color) {
   // In Direct3D 12, anisotropic filtering implies linear filtering.
   if (aniso_filter != xenos::AnisoFilter::kDisabled &&
       aniso_filter != xenos::AnisoFilter::kUseFetchConst) {
@@ -519,7 +518,9 @@ uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
     const SamplerBinding& sampler_binding = sampler_bindings_[i];
     if (sampler_binding.fetch_constant == fetch_constant &&
         sampler_binding.mag_filter == mag_filter && sampler_binding.min_filter == min_filter &&
-        sampler_binding.mip_filter == mip_filter && sampler_binding.aniso_filter == aniso_filter) {
+        sampler_binding.mip_filter == mip_filter && sampler_binding.aniso_filter == aniso_filter &&
+        sampler_binding.border_color_forced == forced_border_color.has_value() &&
+        (!forced_border_color || sampler_binding.forced_border_color == *forced_border_color)) {
       return i;
     }
   }
@@ -536,6 +537,9 @@ uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
   new_sampler_binding.min_filter = min_filter;
   new_sampler_binding.mip_filter = mip_filter;
   new_sampler_binding.aniso_filter = aniso_filter;
+  new_sampler_binding.border_color_forced = forced_border_color.has_value();
+  new_sampler_binding.forced_border_color =
+      forced_border_color.value_or(xenos::BorderColor::k_ABGR_Black);
   if (!bindless_resources_used_) {
     std::ostringstream name;
     name << "xe_sampler" << fetch_constant;
@@ -552,13 +556,21 @@ uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(uint32_t fetch_constant,
         name << "_a" << (UINT32_C(1) << (uint32_t(aniso_filter) - 1));
       }
     }
+    if (forced_border_color) {
+      name << (*forced_border_color == xenos::BorderColor::k_ABGR_White ? "_border_white"
+                                                                        : "_border_black");
+    }
     new_sampler_binding.bindful_name = name.str();
   }
   return uint32_t(sampler_bindings_.size() - 1);
 }
 
 void DxbcShaderTranslator::ProcessTextureFetchInstruction(
-    const ParsedTextureFetchInstruction& instr) {
+    const ParsedTextureFetchInstruction& original_instr) {
+  ParsedTextureFetchInstruction instr = original_instr;
+  if (instr.dimension == xenos::FetchOpDimension::k1D && instr.operands[0].component_count > 1) {
+    instr.dimension = xenos::FetchOpDimension::k2D;
+  }
   if (emit_source_map_) {
     instruction_disassembly_buffer_.Reset();
     instr.Disassemble(&instruction_disassembly_buffer_);
@@ -651,13 +663,14 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
   // and possibly the SRV - kTextureFetch, kGetTextureBorderColorFrac,
   // kGetTextureComputedLod, kGetTextureWeights.
 
-  if (instr.opcode == FetchOpcode::kGetTextureBorderColorFrac) {
-    // TODO(Triang3l): Bind a black texture with a white border to calculate the
-    // border color fraction (in the X component of the result).
-    assert_always();
-    EmitTranslationError("getBCF is unimplemented", false);
+  const bool get_border_color_frac = instr.opcode == FetchOpcode::kGetTextureBorderColorFrac;
+  if (get_border_color_frac && instr.dimension == xenos::FetchOpDimension::kCube) {
     StoreResult(instr.result, dxbc::Src::LF(0.0f));
     return;
+  }
+  if (get_border_color_frac) {
+    // All host components contribute, even when the guest only writes X.
+    used_result_nonzero_components = 0b1111;
   }
 
   if (instr.opcode != FetchOpcode::kTextureFetch &&
@@ -982,7 +995,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
         dxbc::Src::kXXXX));
     uint32_t signs_shift = (tfetch_index & 3) * 8;
     uint32_t signs_temp = UINT32_MAX;
-    if (instr.opcode == FetchOpcode::kTextureFetch) {
+    if (instr.opcode == FetchOpcode::kTextureFetch || get_border_color_frac) {
       signs_temp = PushSystemTemp();
       MarkSystemConstantUsed(SystemConstants::Index::kTextureSwizzledSigns);
       a_.OpUBFE(dxbc::Dest::R(signs_temp, used_result_nonzero_components), dxbc::Src::LU(2),
@@ -1592,7 +1605,18 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
       uint32_t sampler_binding_index = FindOrAddSamplerBinding(
           tfetch_index, instr.attributes.mag_filter, instr.attributes.min_filter,
           instr.attributes.mip_filter,
-          use_computed_lod ? instr.attributes.aniso_filter : xenos::AnisoFilter::kDisabled);
+          use_computed_lod ? instr.attributes.aniso_filter : xenos::AnisoFilter::kDisabled,
+          get_border_color_frac ? std::optional(xenos::BorderColor::k_ABGR_Black) : std::nullopt);
+      const uint32_t sampler_binding_index_white =
+          get_border_color_frac
+              ? FindOrAddSamplerBinding(tfetch_index, instr.attributes.mag_filter,
+                                        instr.attributes.min_filter, instr.attributes.mip_filter,
+                                        use_computed_lod ? instr.attributes.aniso_filter
+                                                         : xenos::AnisoFilter::kDisabled,
+                                        xenos::BorderColor::k_ABGR_White)
+              : sampler_binding_index;
+      dxbc::Src sampler_white(
+          dxbc::Src::S(sampler_binding_index_white, sampler_binding_index_white));
       dxbc::Src sampler(dxbc::Src::S(sampler_binding_index, sampler_binding_index));
       if (bindless_resources_used_) {
         // Load the sampler index to coord_and_sampler_temp.w and use relative
@@ -1608,6 +1632,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
                                sampler_bindless_descriptor_index >> 2)
                      .Select(sampler_bindless_descriptor_index & 3));
         sampler = dxbc::Src::S(0, dxbc::Index(coord_and_sampler_temp, 3));
+        sampler_white = sampler;
       }
 
       if (point_snap) {
@@ -1829,6 +1854,19 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
         }
       }
 
+      if (get_border_color_frac) {
+        is_all_signed_src = dxbc::Src::LU(0);
+        is_any_signed_src = dxbc::Src::LU(UINT32_MAX);
+      }
+      auto load_border_sampler = [&](uint32_t binding_index) {
+        if (get_border_color_frac && bindless_resources_used_) {
+          const uint32_t descriptor = sampler_bindings_[binding_index].bindless_descriptor_index;
+          a_.OpMov(dxbc::Dest::R(coord_and_sampler_temp, 0b1000),
+                   dxbc::Src::CB(cbuffer_index_descriptor_indices_,
+                                 uint32_t(CbufferRegister::kDescriptorIndices), descriptor >> 2)
+                       .Select(descriptor & 3));
+        }
+      };
       // Sample the texture - choose between 3D and stacked, and then sample
       // unsigned and signed SRVs and choose between them.
 
@@ -1860,7 +1898,8 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
         uint32_t texture_binding_index_unsigned =
             FindOrAddTextureBinding(tfetch_index, srv_dimension, false);
         uint32_t texture_binding_index_signed =
-            FindOrAddTextureBinding(tfetch_index, srv_dimension, true);
+            get_border_color_frac ? texture_binding_index_unsigned
+                                  : FindOrAddTextureBinding(tfetch_index, srv_dimension, true);
         const TextureBinding& texture_binding_unsigned =
             texture_bindings_[texture_binding_index_unsigned];
         const TextureBinding& texture_binding_signed =
@@ -1912,7 +1951,8 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           // 3D and cube have 3 coordinate dimensions).
           a_.OpIf(false, is_all_signed_src);
           {
-            // Sample the unsigned texture.
+            // Sample the unsigned texture, or the black-border view.
+            load_border_sampler(sampler_binding_index);
             if (bindless_resources_used_) {
               // Load the unsigned texture descriptor index.
               assert_true(srv_selection_temp != UINT32_MAX);
@@ -1941,7 +1981,8 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           a_.OpEndIf();
           a_.OpIf(true, is_any_signed_src);
           {
-            // Sample the signed texture.
+            // Sample the signed texture, or the same view with a white border.
+            load_border_sampler(sampler_binding_index_white);
             uint32_t signed_temp = PushSystemTemp();
             if (bindless_resources_used_) {
               // Load the signed texture descriptor index.
@@ -1960,16 +2001,22 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
             if (grad_v_temp != UINT32_MAX) {
               assert_not_zero(grad_component_count);
               a_.OpSampleD(dxbc::Dest::R(signed_temp, used_result_nonzero_components),
-                           dxbc::Src::R(coord_and_sampler_temp), 3, srv_signed, sampler,
+                           dxbc::Src::R(coord_and_sampler_temp), 3, srv_signed, sampler_white,
                            dxbc::Src::R(grad_h_lod_temp), dxbc::Src::R(grad_v_temp),
                            srv_grad_component_count);
             } else {
               a_.OpSampleL(dxbc::Dest::R(signed_temp, used_result_nonzero_components),
-                           dxbc::Src::R(coord_and_sampler_temp), 3, srv_signed, sampler, lod_src);
+                           dxbc::Src::R(coord_and_sampler_temp), 3, srv_signed, sampler_white,
+                           lod_src);
             }
-            a_.OpMovC(dxbc::Dest::R(layer_value_temp, used_result_nonzero_components),
-                      dxbc::Src::R(is_signed_temp), dxbc::Src::R(signed_temp),
-                      dxbc::Src::R(layer_value_temp));
+            if (get_border_color_frac) {
+              a_.OpAdd(dxbc::Dest::R(layer_value_temp), dxbc::Src::R(signed_temp),
+                       -dxbc::Src::R(layer_value_temp));
+            } else {
+              a_.OpMovC(dxbc::Dest::R(layer_value_temp, used_result_nonzero_components),
+                        dxbc::Src::R(is_signed_temp), dxbc::Src::R(signed_temp),
+                        dxbc::Src::R(layer_value_temp));
+            }
             // Release signed_temp.
             PopSystemTemp();
           }
@@ -2200,6 +2247,18 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     PopSystemTemp();
   }
 
+  if (get_border_color_frac) {
+    a_.OpMax(dxbc::Dest::R(system_temp_result_, 0b0001),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kXXXX),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kYYYY));
+    a_.OpMax(dxbc::Dest::R(system_temp_result_, 0b0001),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kXXXX),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kZZZZ));
+    a_.OpMax(dxbc::Dest::R(system_temp_result_, 0b0001),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kXXXX),
+             dxbc::Src::R(system_temp_result_, dxbc::Src::kWWWW));
+    used_result_nonzero_components = 0b0001;
+  }
   uint32_t used_result_zero_components = used_result_components & ~used_result_nonzero_components;
   if (used_result_zero_components) {
     a_.OpMov(dxbc::Dest::R(system_temp_result_, used_result_zero_components), dxbc::Src::LF(0.0f));

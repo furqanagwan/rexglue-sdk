@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -649,6 +650,8 @@ class SpirvShaderTranslator : public ShaderTranslator {
     xenos::TextureFilter min_filter;
     xenos::TextureFilter mip_filter;
     xenos::AnisoFilter aniso_filter;
+    bool border_color_forced;
+    xenos::BorderColor forced_border_color;
 
     spv::Id variable;
   };
@@ -867,17 +870,19 @@ class SpirvShaderTranslator : public ShaderTranslator {
 
   size_t FindOrAddTextureBinding(uint32_t fetch_constant, xenos::FetchOpDimension dimension,
                                  bool is_signed);
-  size_t FindOrAddSamplerBinding(uint32_t fetch_constant, xenos::TextureFilter mag_filter,
-                                 xenos::TextureFilter min_filter, xenos::TextureFilter mip_filter,
-                                 xenos::AnisoFilter aniso_filter);
+  size_t FindOrAddSamplerBinding(
+      uint32_t fetch_constant, xenos::TextureFilter mag_filter, xenos::TextureFilter min_filter,
+      xenos::TextureFilter mip_filter, xenos::AnisoFilter aniso_filter,
+      std::optional<xenos::BorderColor> forced_border_color = std::nullopt);
   // `texture_parameters` need to be set up except for `sampler`, which will be
   // set internally, optionally doing linear interpolation between the an
   // existing value and the new one (the result location may be the same as for
-  // the first lerp endpoint, but not across signedness).
+  // the first lerp endpoint, but not across signedness). getBCF samples one
+  // image in both slots, with its black and white border samplers.
   void SampleTexture(spv::Builder::TextureParameters& texture_parameters,
                      spv::ImageOperandsMask image_operands_mask, spv::Id image_unsigned,
-                     spv::Id image_signed, spv::Id sampler, spv::Id is_any_unsigned,
-                     spv::Id is_any_signed, spv::Id& result_unsigned_out,
+                     spv::Id image_signed, spv::Id sampler_unsigned, spv::Id sampler_signed,
+                     spv::Id is_any_unsigned, spv::Id is_any_signed, spv::Id& result_unsigned_out,
                      spv::Id& result_signed_out, spv::Id lerp_factor = spv::NoResult,
                      spv::Id lerp_first_unsigned = spv::NoResult,
                      spv::Id lerp_first_signed = spv::NoResult);

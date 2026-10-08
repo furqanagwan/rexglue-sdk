@@ -1161,6 +1161,15 @@ void ParseTextureFetchInstruction(const TextureFetchInstruction& op,
   src_op.component_count = opcode_info.override_component_count
                                ? opcode_info.override_component_count
                                : xenos::GetFetchOpDimensionComponentCount(op.dimension());
+  if ((op.opcode() == FetchOpcode::kTextureFetch ||
+       op.opcode() == FetchOpcode::kGetTextureBorderColorFrac) &&
+      op.dimension() == xenos::FetchOpDimension::k1D) {
+    const uint32_t src_swizzle = op.src_swizzle();
+    const uint32_t src_select_x = src_swizzle & 3;
+    if (((src_swizzle >> 2) & 3) != src_select_x || ((src_swizzle >> 4) & 3) != src_select_x) {
+      src_op.component_count = 2;
+    }
+  }
   uint32_t swizzle = op.src_swizzle();
   for (uint32_t j = 0; j < src_op.component_count; ++j, swizzle >>= 2) {
     src_op.components[j] = GetSwizzleFromComponentIndex(swizzle & 0x3);

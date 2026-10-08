@@ -76,8 +76,10 @@ For the April 2026 GDK PC capability map and issue ownership, see the
 For contributor boundaries, review gates and the current SDK work queue, see
 [development guidance](docs/development.md) and the
 [ecosystem maturity audit](docs/sdk-maturity-audit-20261007.md).
-Only NVIDIA GPU testing is available locally; AMD and Intel coverage is
-non-blocking and remains untested under [ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md).
+NVIDIA is the primary local GPU target. The synthetic getBCF fixtures also pass
+on this machine's Intel integrated GPU; that does not establish general Intel
+title compatibility. AMD GPU coverage remains non-blocking and untested under
+[ADR-007](docs/adr/ADR-007-local-gpu-validation-scope.md).
 
 For quick start guide, full CLI reference, and config file options, see the [wiki](https://github.com/rexglue/rexglue-sdk/wiki).
 

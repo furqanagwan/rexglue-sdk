@@ -22,7 +22,8 @@ Recorded on 2026-09-27 at `main` `11644e2` or later on one development machine:
 | SDK install and external consumer | Supported | `tests/gdk_consumer` against the installed prefix ([GDK toolchain](gdk-toolchain.md)); Quantum of Solace built from `out/install/win-amd64` and `out/install/win-amd64-gdk` | — |
 | Title project (`rexglue init`, `codegen`, build) | Supported for the title run | Quantum of Solace codegen, build and link against both installs ([baseline capture](baseline-capture.md)) | One title; other XEXs may need title-specific analysis |
 | D3D12 rendering, NVIDIA | Supported for the recorded scenes | GPU fixtures (RG-GDK-006 to 012); Quantum of Solace 90 s scene pass | Scene pass, not visual accuracy against hardware |
-| D3D12 rendering, AMD / Intel | Blocked | No hardware ([ADR-007](adr/ADR-007-local-gpu-validation-scope.md)); WARP runs are supplementary | Vendor-specific paths (sample layout, ROV) unverified |
+| D3D12 rendering, Intel Graphics | Limited synthetic coverage | getBCF readback fixtures in Debug/Release, DXBC/strict DXIL (2026-10-08) | No Intel title or broader regression run |
+| D3D12 rendering, AMD | Blocked | No AMD GPU available ([ADR-007](adr/ADR-007-local-gpu-validation-scope.md)); WARP runs are supplementary | Vendor-specific paths unverified |
 | Input, window and audio: SDL3 | Removed (RG-GDK-033, 2026-09-28) | Old configs naming `sdl` start the native backend with a warning (`unit_tests [audio][xaudio2]`) | — |
 | Input: XInput (default without the GDK) | Default | Quantum of Solace standard run with the ROG Raikiri (2026-09-28) | Subtypes from XInput; four pads not run |
 | Input: GameInput (default in GDK builds) | Default | [GameInput](gameinput.md); Quantum of Solace native run after the PR #82 fix | No guide button; inbox runtime 0.2309 / redist 3.5.270 only |
@@ -536,3 +537,14 @@ rebuild/smoke records and cleanup manifests remain, including
 `out/sdk-log-cleanup-20261008.json`. Binaries, inputs, saves, preferences and
 reference worktrees were preserved. Earlier log cleanup is a separate record;
 these figures count only this batch.
+
+## getBCF readback validation, 2026-10-08
+
+On the NVIDIA RTX 5080 Laptop GPU (driver `32.0.16.1742`) and Intel Graphics
+(driver `32.0.101.6129`), the two synthetic getBCF GPU cases pass with 290
+assertions in Debug and Release. Both default DXBC and strict DXIL paths pass on
+each adapter. RTV and ROV paths, point/linear filtering, signed textures, mips,
+volumes, stacked textures and cube controls are covered. These are synthetic
+shader readbacks, not title gameplay or broad vendor certification. The Debug
+tessellated-quad assertion `register_count() >= 2` also reproduces separately;
+its baseline and relationship to this work remain unknown.

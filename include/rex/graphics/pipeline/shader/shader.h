@@ -540,7 +540,8 @@ struct ParsedTextureFetchInstruction {
   // sample into the next texel: texture seams in 425307EC's virtual texture
   // tables (xenia-canary c3cd8617b1).
   bool CanSnapToTexelCenter(bool use_computed_lod) const {
-    return opcode == ucode::FetchOpcode::kTextureFetch &&
+    return (opcode == ucode::FetchOpcode::kTextureFetch ||
+            opcode == ucode::FetchOpcode::kGetTextureBorderColorFrac) &&
            dimension == xenos::FetchOpDimension::k2D && !attributes.unnormalized_coordinates &&
            AllowsPointSampling(use_computed_lod);
   }
