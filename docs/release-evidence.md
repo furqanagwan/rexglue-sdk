@@ -432,10 +432,9 @@ pairing. Configure and full builds succeed in Debug and Release.
 Private logs use the `out/maturity-*` prefix. No new game execution, GPU/vendor,
 deployment, physical-controller or save/load gate is established. The prior
 Debug GPU quad-tessellation assertion remains unresolved and was not rerun
-for this non-GPU change. No issue is closed by this batch. Public-payload
-download/extraction and hosted CI require their own run; the local setup check
-uses the installed GDK and does not prove that download path. Helix hardware
-support is not established.
+for this non-GPU change. No issue is closed by this batch. The local setup check
+uses the installed GDK; public-payload extraction and hosted software results
+are recorded below. Helix hardware support is not established.
 
 The first hosted run, [37690858740](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37690858740),
 successfully downloads, digest-checks and extracts the public GDK, configures,
@@ -444,7 +443,7 @@ fixture: `TEMP` and the CTest working directory are on different drives, so
 `std::filesystem::relative` cannot represent the fixture's path. Keep that
 relative-path fixture under the CTest working directory and require a fresh
 directory before writing. No production source validation is weakened and no
-test is excluded. The corrected workflow needs a subsequent complete run.
+test is excluded. The corrected workflow's complete result is recorded below.
 
 ## Primitive conversion cache correctness, 2026-10-07
 
@@ -505,3 +504,35 @@ physical controller, gameplay and save/load are not established by this smoke.
 Compact private rebuild/input/hash/smoke records are in
 `out/primitive-title-batch`; validation logs initially use `out/primitive-*`.
 There is no measured performance superiority claim and no issue closure.
+
+## Hosted validation and evidence cleanup, 2026-10-08
+
+The corrected GDK maintenance commit
+`99d4c0a8db459f2203dffc7049ced534576d3ad2` passes
+[run 37692972322](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37692972322).
+Debug and Release each select **2,017** tests: **1,999 passed, 18 skipped,
+zero failures**, in 155.29 and 83.44 seconds respectively. The primitive-cache
+implementation commit `60b761eeda2d36e93538f2d4fcc2f809197cad0f` passes
+[run 37695313281](https://github.com/furqanagwan/rexglue-sdk/actions/runs/37695313281).
+Both configurations select **2,024** tests: **2,006 passed, 18 skipped,
+zero failures**, in 108.20 and 61.37 seconds respectively. The seven added
+primitive cases run in both configurations.
+
+These runs download, SHA-256-check and extract the pinned public GDK 260404,
+then build with Clang 20.1.8 on the Windows VS2026 hosted runner. Its observed
+VS Enterprise toolchain is additional CI evidence, not a Microsoft-supported
+pairing claim. The seven installed-runtime cases remain excluded on hosted CI;
+the 18 skips include private console asset and audio fixtures. Local installed
+runtime checks above remain separate. Hosted checks do not establish GPU,
+title gameplay, deployment, controller or save compatibility, and do not resolve
+the broader Debug PPC corpus abort or Debug GPU tessellation assertion.
+
+After extracting compact results, **66** disposable logs from this batch were
+removed, reclaiming **28,050,710 bytes (26.8 MiB)**. Only explicitly scoped
+`out/maturity-*.log`, `out/primitive-*.log` and logs under
+`out/primitive-title-batch` were removed. Private JSON input hashes, title
+rebuild/smoke records and cleanup manifests remain, including
+`out/sdk-maturity-results-20261008.json` and
+`out/sdk-log-cleanup-20261008.json`. Binaries, inputs, saves, preferences and
+reference worktrees were preserved. Earlier log cleanup is a separate record;
+these figures count only this batch.
