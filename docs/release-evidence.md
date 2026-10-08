@@ -548,3 +548,13 @@ volumes, stacked textures and cube controls are covered. These are synthetic
 shader readbacks, not title gameplay or broad vendor certification. The Debug
 tessellated-quad assertion `register_count() >= 2` also reproduces separately;
 its baseline and relationship to this work remain unknown.
+
+## VIZ_QUERY focused regression check, 2026-10-08
+
+On the NVIDIA RTX 5080 Laptop GPU, the two synthetic VIZ consumer-draw tests
+pass in GDK Debug and Release (2/2 in each configuration). They cover a survey
+hidden behind depth skipping its consumer draw and a fully visible survey
+keeping its consumer draw. The tests use the SDK's synthetic fixture; they do
+not establish that a representative 007 title issues `VIZ_QUERY` or exercises
+conditional rendering. Issue [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65)
+therefore remains open for title-level evidence.
