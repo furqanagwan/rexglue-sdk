@@ -4,7 +4,7 @@ test_fpscr_fadd_inexact_is_reported_by_mffs:
   fadd f3, f1, f2
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0x82004000
+  #_ REGISTER_OUT f4 0x82064000
 
 test_fpscr_fadds_classifies_widened_single_subnormal:
   #_ REGISTER_IN f1 0x36A0000000000000
@@ -25,7 +25,7 @@ test_fpscr_record_form_reports_enabled_exception_in_cr1:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x0C000000
-  #_ REGISTER_OUT f4 0xC2004008
+  #_ REGISTER_OUT f4 0xC2064008
 
 test_fpscr_infinity_minus_infinity_records_its_cause:
   #_ REGISTER_IN f1 0x7FF0000000000000
@@ -42,7 +42,7 @@ test_fpscr_clearing_summary_keeps_unread_exception_cause:
   mcrfs 1, 0
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0x02004000
+  #_ REGISTER_OUT f4 0x02064000
 
 test_fpscr_fcmpu_signaling_nan_records_vxsnan:
   #_ REGISTER_IN f1 0x7FF0000000000001
@@ -102,7 +102,15 @@ test_fpscr_fctiw_inexact_sets_xx:
   mffs f4
   blr
   #_ REGISTER_OUT f2 0x0000000000000002
-  #_ REGISTER_OUT f4 0x82000000
+  #_ REGISTER_OUT f4 0x82060000
+
+test_fpscr_fcfid_tracks_inexact_conversion:
+  #_ REGISTER_IN f1 0x0020000000000001
+  fcfid f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x4340000000000000
+  #_ REGISTER_OUT f4 0x82024000
 
 test_fpscr_fctiw_out_of_range_sets_vxcvi:
   #_ REGISTER_IN f1 0x41E0000000000000
@@ -137,7 +145,7 @@ test_fpscr_fctiw_record_form_reports_enabled_inexact:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x0C000000
-  #_ REGISTER_OUT f4 0xC2000008
+  #_ REGISTER_OUT f4 0xC2060008
 
 test_fpscr_fres_zero_sets_zx:
   #_ REGISTER_IN f1 0x0000000000000000

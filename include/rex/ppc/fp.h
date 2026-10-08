@@ -478,20 +478,90 @@ inline uint32_t host_exception_causes(int raised) noexcept {
   return causes;
 }
 
+enum class TrackedOp { kRoundSingle, kAdd, kSub, kMul, kDiv, kMadd, kMsub, kNmadd, kNmsub, kSqrt };
+
+inline void set_rounding_flags(FPSCRRegister& fpscr, bool fraction_rounded, bool inexact) noexcept {
+  fpscr.guest_bits &= ~(FPSCRRegister::kFR | FPSCRRegister::kFI);
+  if (fraction_rounded)
+    fpscr.guest_bits |= FPSCRRegister::kFR;
+  if (inexact)
+    fpscr.guest_bits |= FPSCRRegister::kFI;
+}
+
+inline double sum_residual(double a, double b, double rounded) noexcept {
+  const double sum = a + b;
+  const double b_virtual = sum - a;
+  const double error = (a - (sum - b_virtual)) + (b - b_virtual);
+  return error + (sum - rounded);
+}
+
+/// Return the sign of exact-result minus rounded-result. This uses an
+/// error-free residual for addition and fused multiply-add to avoid comparing
+/// only the already-rounded host result.
+inline double rounding_residual(TrackedOp op, double a, double b, double c,
+                                double rounded) noexcept {
+  switch (op) {
+    case TrackedOp::kRoundSingle:
+      return a - rounded;
+    case TrackedOp::kAdd:
+      return sum_residual(a, b, rounded);
+    case TrackedOp::kSub:
+      return sum_residual(a, -b, rounded);
+    case TrackedOp::kMul:
+      return std::fma(a, b, -rounded);
+    case TrackedOp::kDiv: {
+      const double remainder = std::fma(-rounded, b, a);
+      return remainder / b;
+    }
+    case TrackedOp::kMadd:
+      return std::fma(a, b, c - rounded);
+    case TrackedOp::kMsub:
+      return std::fma(a, b, -c - rounded);
+    case TrackedOp::kNmadd:
+      return std::fma(a, b, c - rounded);
+    case TrackedOp::kNmsub:
+      return std::fma(a, b, -c - rounded);
+    case TrackedOp::kSqrt:
+      return std::fma(-rounded, rounded, a);
+  }
+  return 0.0;
+}
+
+inline bool fraction_incremented(TrackedOp op, double a, double b, double c,
+                                 double rounded) noexcept {
+  if (op == TrackedOp::kNmadd || op == TrackedOp::kNmsub)
+    rounded = -rounded;
+  if (rounded == 0.0 || !is_finite(rounded))
+    return false;
+  const double residual = rounding_residual(op, a, b, c, rounded);
+  return residual != 0.0 && std::signbit(residual) != std::signbit(rounded);
+}
+
 /// Execute a scalar floating-point instruction, record its sticky FPSCR state,
 /// and optionally update CR1 for the record form.
 template <typename Op>
 inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t invalid_causes,
-                      bool quiet, bool single_precision, double a, double b = 0.0,
-                      double c = 0.0) noexcept {
+                      bool quiet, bool single_precision, TrackedOp tracked_op, double a,
+                      double b = 0.0, double c = 0.0) noexcept {
   volatile double va = a, vb = b, vc = c;
   std::feclearexcept(FE_ALL_EXCEPT);
   volatile double vr = op(va, vb, vc);
   const int raised = quiet ? 0 : std::fetestexcept(FE_ALL_EXCEPT);
   const uint32_t causes = quiet ? 0 : (host_exception_causes(raised) | invalid_causes);
   fpscr.recordExceptions(causes);
-  if (!(invalid_causes && (fpscr.guest_bits & FPSCRRegister::kVE)))
+  const bool invalid = invalid_causes || (raised & FE_INVALID);
+  if (!(invalid && (fpscr.guest_bits & FPSCRRegister::kVE)))
     set_result_class(fpscr, vr, single_precision);
+  if (invalid || (raised & FE_DIVBYZERO)) {
+    set_rounding_flags(fpscr, false, false);
+  } else if (raised & FE_OVERFLOW) {
+    // FR is architecturally undefined for overflow; FI still reports the
+    // overflowed, inexact result.
+    set_rounding_flags(fpscr, false, (raised & FE_INEXACT) != 0);
+  } else {
+    const bool inexact = (raised & FE_INEXACT) != 0;
+    set_rounding_flags(fpscr, inexact && fraction_incremented(tracked_op, a, b, c, vr), inexact);
+  }
   if (cr1)
     set_cr1_from_fpscr(*cr1, fpscr);
   return vr;
@@ -512,6 +582,37 @@ inline double recorded(CRRegister& cr1, Op op, bool invalid, bool quiet, double 
   return vr;
 }
 
+inline uint64_t integer_magnitude(int64_t value) noexcept {
+  const uint64_t bits = uint64_t(value);
+  return value < 0 ? ~bits + 1 : bits;
+}
+
+inline uint64_t double_integer_magnitude(double value) noexcept {
+  const uint64_t encoded = bits(value) & kMagnitude;
+  const uint32_t exponent = uint32_t(encoded >> 52) & 0x7FF;
+  if (!exponent)
+    return 0;
+  const uint64_t significand = (encoded & 0x000FFFFFFFFFFFFFull) | (1ull << 52);
+  const int32_t shift = int32_t(exponent) - 1023 - 52;
+  return shift >= 0 ? significand << shift : significand >> -shift;
+}
+
+/// Convert a signed guest integer to double and track its rounding fields.
+inline double tracked_from_integer(FPSCRRegister& fpscr, CRRegister* cr1, int64_t value) noexcept {
+  volatile int64_t source = value;
+  volatile double result = double(source);
+  const uint64_t magnitude = integer_magnitude(value);
+  const uint64_t rounded_magnitude = double_integer_magnitude(result);
+  const bool inexact = rounded_magnitude != magnitude;
+  const bool fraction_rounded = inexact && rounded_magnitude > magnitude;
+  set_rounding_flags(fpscr, fraction_rounded, inexact);
+  fpscr.recordExceptions(inexact ? FPSCRRegister::kXX : 0);
+  set_result_class(fpscr, result);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return result;
+}
+
 /// Convert to an integer and accumulate the guest FPSCR exception state.
 inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, bool truncate,
                                bool to_doubleword) noexcept {
@@ -525,6 +626,9 @@ inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, 
     causes |= FPSCRRegister::kVXCVI;
   if (!invalid && rounded != x)
     causes |= FPSCRRegister::kXX;
+  const bool inexact = !invalid && rounded != x;
+  const bool fraction_rounded = inexact && std::fabs(rounded) > std::fabs(x);
+  set_rounding_flags(fpscr, fraction_rounded, inexact);
   fpscr.recordExceptions(causes);
   if (cr1)
     set_cr1_from_fpscr(*cr1, fpscr);

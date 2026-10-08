@@ -36,12 +36,32 @@ void emitFpArith(BuilderContext& ctx, std::string_view fn, int count,
   const std::string quiet_expr =
       quiet.empty() ? "false" : fmt::format("rex::ppc::fp::{}({})", quiet, args);
   const std::string causes_expr = fmt::format("rex::ppc::fp::{}({})", causes, args);
+  std::string_view tracked_op = "kSqrt";
+  if (fn == "to_single")
+    tracked_op = "kRoundSingle";
+  else if (fn == "add" || fn == "adds")
+    tracked_op = "kAdd";
+  else if (fn == "sub" || fn == "subs")
+    tracked_op = "kSub";
+  else if (fn == "mul" || fn == "muls")
+    tracked_op = "kMul";
+  else if (fn == "div" || fn == "divs")
+    tracked_op = "kDiv";
+  else if (fn == "madd" || fn == "madds")
+    tracked_op = "kMadd";
+  else if (fn == "msub" || fn == "msubs")
+    tracked_op = "kMsub";
+  else if (fn == "nmadd" || fn == "nmadds")
+    tracked_op = "kNmadd";
+  else if (fn == "nmsub" || fn == "nmsubs")
+    tracked_op = "kNmsub";
   ctx.println(
       "\t{}.f64 = rex::ppc::fp::tracked(ctx.fpscr, {}, [](double a, double b, double c) {{ "
-      "(void)b; (void)c; return rex::ppc::fp::{}({}); }}, {}, {}, {}, {});",
+      "(void)b; (void)c; return rex::ppc::fp::{}({}); }}, {}, {}, {}, {}, {});",
       ctx.f(ctx.insn.operands[0]),
       isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr", fn, names, causes_expr,
-      quiet_expr, (fn == "to_single" || fn.ends_with('s')) ? "true" : "false", args);
+      quiet_expr, (fn == "to_single" || fn.ends_with('s')) ? "true" : "false",
+      fmt::format("rex::ppc::fp::TrackedOp::{}", tracked_op), args);
 }
 
 /// fctiw/fctiwz/fctid/fctidz, with CR1 for the record forms.
@@ -92,7 +112,9 @@ bool build_fmr(BuilderContext& ctx) {
 
 bool build_fcfid(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  ctx.println("\t{}.f64 = double({}.s64);", ctx.f(ctx.insn.operands[0]),
+  ctx.println("\t{}.f64 = rex::ppc::fp::tracked_from_integer(ctx.fpscr, {}, {}.s64);",
+              ctx.f(ctx.insn.operands[0]),
+              isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr",
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
