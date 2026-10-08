@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -111,7 +112,7 @@ class DxbcShaderTranslator : public ShaderTranslator {
     // If anything in this is structure is changed in a way not compatible with
     // the previous layout, invalidate the pipeline storages by increasing this
     // version number (0xYYYYMMDD)!
-    static constexpr uint32_t kVersion = 0x20261003;
+    static constexpr uint32_t kVersion = 0x20261008;
 
     enum class DepthStencilMode : uint32_t {
       kNoModifiers,
@@ -513,6 +514,8 @@ class DxbcShaderTranslator : public ShaderTranslator {
     xenos::TextureFilter min_filter;
     xenos::TextureFilter mip_filter;
     xenos::AnisoFilter aniso_filter;
+    uint32_t border_color_forced;
+    xenos::BorderColor forced_border_color;
     std::string bindful_name;
   };
 
@@ -884,9 +887,10 @@ class DxbcShaderTranslator : public ShaderTranslator {
 
   uint32_t FindOrAddTextureBinding(uint32_t fetch_constant, xenos::FetchOpDimension dimension,
                                    bool is_signed);
-  uint32_t FindOrAddSamplerBinding(uint32_t fetch_constant, xenos::TextureFilter mag_filter,
-                                   xenos::TextureFilter min_filter, xenos::TextureFilter mip_filter,
-                                   xenos::AnisoFilter aniso_filter);
+  uint32_t FindOrAddSamplerBinding(
+      uint32_t fetch_constant, xenos::TextureFilter mag_filter, xenos::TextureFilter min_filter,
+      xenos::TextureFilter mip_filter, xenos::AnisoFilter aniso_filter,
+      std::optional<xenos::BorderColor> forced_border_color = std::nullopt);
   // Returns the number of texture SRV and sampler offsets that need to be
   // passed via a constant buffer to the shader.
   uint32_t GetBindlessResourceCount() const {

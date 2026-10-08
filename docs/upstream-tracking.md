@@ -1789,6 +1789,35 @@ maintenance change. New candidates remain unvalidated and have no title
 compatibility claim. The review does not import CPU JIT/XeFu execution,
 Vulkan/Metal backends or a dependency on the reference emulator.
 
+## getBCF translation, 2026-10-08
+
+Source: `has207/xenia-edge:edge`, commit
+[`669b4266f5682e5169d42552fdf64f02880652a4`](https://github.com/has207/xenia-edge/commit/669b4266f5682e5169d42552fdf64f02880652a4),
+2026-10-07, `[GPU] Implement getBCF by sampling with forced border colors`.
+The commit message describes sampling with transparent-black and opaque-white
+border samplers and returning the largest component difference. It names filter,
+LOD, mip, volume, stacked-texture and resolution-scale behavior, with cube maps
+returning zero. The source changes span the shader model, DXBC/SPIR-V
+translators, texture utilities and D3D12/Vulkan/Metal sampler caches. This port
+adapts the DXBC and SPIR-V paths and D3D12 metadata only; the other backends are
+outside the SDK target. No associated PR or source regression was identified in
+the reviewed commit history.
+
+Class A, GPU correctness. The local adaptation adds paired forced-border
+samplers, preserves fully signed SRV selection, and adds synthetic point/linear,
+signed, mip, volume, stacked and cube readbacks. Debug and Release fixtures pass
+on Intel Graphics (driver 32.0.101.6129) and NVIDIA RTX 5080 Laptop GPU (driver
+32.0.16.1742) through RTV and ROV. Strict DXIL fixture runs also pass in both
+configurations on both adapters; each adapter/configuration/path runs the 290
+assertions across the two fixtures. The reproducible shader-bytecode check,
+roadmap validator, documentation checker, clang-format check and `git diff --check`
+also pass. No AMD GPU is present for testing; CPU vendor does not
+establish GPU-driver parity. The three representative 007 title runs remain
+untested, so this is not a title compatibility claim or issue-closure evidence.
+A separate tessellated-quad fixture still asserts `register_count() >= 2`; its
+baseline and relationship to this work are unknown and it remains to be
+triaged.
+
 ## Primitive conversion cache invalidation, 2026-10-07
 
 Source: `has207/xenia-edge:edge`, commit
