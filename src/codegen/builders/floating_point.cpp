@@ -48,12 +48,9 @@ void emitFpArith(BuilderContext& ctx, std::string_view fn, int count,
 void emitFpConvert(BuilderContext& ctx, bool to_int64, bool truncate) {
   const auto d = ctx.f(ctx.insn.operands[0]);
   const auto b = ctx.f(ctx.insn.operands[1]);
-  if (isRecordForm(ctx.insn)) {
-    ctx.println("\trex::ppc::fp::set_cr1_convert({}, {}.f64, {}, {});", ctx.cr(1), b, truncate,
-                to_int64);
-  }
-  ctx.println("\t{}.s64 = rex::ppc::fp::{}({}.f64, {});", d, to_int64 ? "to_int64" : "to_int32", b,
-              truncate);
+  ctx.println("\t{}.s64 = rex::ppc::fp::tracked_convert(ctx.fpscr, {}, {}.f64, {}, {});", d,
+              isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr", b, truncate,
+              to_int64);
 }
 
 }  // namespace

@@ -448,13 +448,23 @@ inline double recorded(CRRegister& cr1, Op op, bool invalid, bool quiet, double 
   return vr;
 }
 
-/// fctiw./fctid.: invalid for a NaN or a value the target can't hold, inexact
-/// when rounding changed the value.
-inline void set_cr1_convert(CRRegister& cr1, double x, bool truncate, bool to_int64) noexcept {
-  const double limit = to_int64 ? 9223372036854775808.0 : 2147483648.0;
-  const double r = is_nan(x) ? 0.0 : (truncate ? std::trunc(x) : std::nearbyint(x));
-  const bool invalid = is_nan(x) || r >= limit || r < -limit;
-  set_cr1(cr1, invalid ? 0 : (r != x ? FE_INEXACT : 0), invalid);
+/// Convert to an integer and accumulate the guest FPSCR exception state.
+inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, bool truncate,
+                               bool to_doubleword) noexcept {
+  const double limit = to_doubleword ? 9223372036854775808.0 : 2147483648.0;
+  const double rounded = is_nan(x) ? 0.0 : (truncate ? std::trunc(x) : std::nearbyint(x));
+  const bool invalid = is_nan(x) || rounded >= limit || rounded < -limit;
+  uint32_t causes = 0;
+  if (is_snan(x))
+    causes |= FPSCRRegister::kVXSNAN;
+  else if (invalid)
+    causes |= FPSCRRegister::kVXCVI;
+  if (!invalid && rounded != x)
+    causes |= FPSCRRegister::kXX;
+  fpscr.recordExceptions(causes);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return to_doubleword ? to_int64(x, truncate) : to_int32(x, truncate);
 }
 
 /// frsqrte./fres.: the estimates raise nothing inexact, so the operand is the

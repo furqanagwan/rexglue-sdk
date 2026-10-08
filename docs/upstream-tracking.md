@@ -1372,7 +1372,7 @@ CR1 are checked by unit tests and `tests/ppc/asm/instr_fpscr_arithmetic.s`.
 `fcmpu` now records VXSNAN for signaling NaNs; `fcmpo` records VXVC for quiet
 NaNs and for signaling NaNs when VE is disabled, following IBM's [fcmpu]
 and [fcmpo] descriptions. FPCC/FPRF result-class fields are not yet updated by
-these helpers. Integer conversions, estimate instructions and other FPSCR
+these helpers. Integer conversion and estimate instructions and other FPSCR
 effects remain uncovered. The issue remains open for that coverage, the broader
 Edge corpus, title validation and release gates.
 
@@ -1868,14 +1868,24 @@ signaling NaNs; `fcmpo` sets VXVC for quiet NaNs and for signaling NaNs while
 VE is disabled. IBM's instruction references are linked above. FPCC/FPRF
 result-class fields are still not modeled by this follow-up.
 
+`fctiw/fctiwz/fctid/fctidz` now track XX for inexact results, VXCVI for quiet
+NaN/out-of-range conversions and VXSNAN for signaling NaNs. Record forms copy
+the accumulated FPSCR state into CR1. This follows the IBM conversion status
+descriptions, including the defined saturation results; FPRF/FR/FI fields
+remain outside the current implementation. See [fctiw] and [fctidz].
+
+[fctiw]: https://www.ibm.com/docs/en/aix/7.1.0?topic=set-fctiw-fcir-floating-convert-integer-word-instruction
+[fctidz]: https://www.ibm.com/docs/en/aix/7.2?topic=is-fctidz-floating-convert-integer-double-word-round-toward-zero-instruction
+
 GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. The full
-ordinary PPC executable passes 1,584 cases and 6,533 assertions in both
-configurations. The focused FPSCR arithmetic/compare, existing `mcrfs` and unit
-tests pass under CTest (13 cases per configuration). The tests cover inexact
-add, invalid infinity subtraction, unordered NaN comparisons, sticky/summary
-state, enabled FEX/CR1 and selective clearing. This is not full FPSCR coverage:
-result-class fields, conversions, estimates and title/gameplay gates remain
-open. No title compatibility claim follows from these synthetic tests.
+ordinary PPC executable passes 1,589 cases and 6,543 assertions in both
+configurations. The focused FPSCR arithmetic/compare/conversion, existing
+`mcrfs` and unit tests pass under CTest (18 cases per configuration). The tests
+cover inexact add/conversion, invalid arithmetic and conversions, unordered NaN
+comparisons, sticky/summary state, enabled FEX/CR1 and selective clearing. This
+is not full FPSCR coverage: result-class fields, estimate effects and
+title/gameplay gates remain open. No title compatibility claim follows from
+these synthetic tests.
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at

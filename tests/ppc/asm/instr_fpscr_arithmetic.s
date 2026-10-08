@@ -86,3 +86,46 @@ test_fpscr_fcmpo_signaling_nan_with_ve_enabled:
   blr
   #_ REGISTER_OUT r3 0x10000000
   #_ REGISTER_OUT f4 0xE1000080
+
+test_fpscr_fctiw_inexact_sets_xx:
+  #_ REGISTER_IN f1 0x3FF8000000000000
+  fctiw f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x0000000000000002
+  #_ REGISTER_OUT f4 0x82000000
+
+test_fpscr_fctiw_out_of_range_sets_vxcvi:
+  #_ REGISTER_IN f1 0x41E0000000000000
+  fctiw f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x000000007FFFFFFF
+  #_ REGISTER_OUT f4 0xA0000100
+
+test_fpscr_fctiw_quiet_nan_sets_vxcvi:
+  #_ REGISTER_IN f1 0x7FF8000000000001
+  fctiw f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0xFFFFFFFF80000000
+  #_ REGISTER_OUT f4 0xA0000100
+
+test_fpscr_fctiw_signaling_nan_sets_vxsnan:
+  #_ REGISTER_IN f1 0x7FF0000000000001
+  fctiw f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0xFFFFFFFF80000000
+  #_ REGISTER_OUT f4 0xA1000000
+
+test_fpscr_fctiw_record_form_reports_enabled_inexact:
+  #_ REGISTER_IN f1 0x3FF8000000000000
+  #_ REGISTER_IN f5 0x8
+  mtfsf 255, f5
+  fctiw. f2, f1
+  mfcr r3
+  mffs f4
+  blr
+  #_ REGISTER_OUT r3 0x0C000000
+  #_ REGISTER_OUT f4 0xC2000008
