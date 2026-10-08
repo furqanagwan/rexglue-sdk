@@ -47,8 +47,11 @@ class GameSourceConsoleBox {
   }
   std::optional<size_t> Draw(ImGuiIO& io, bool enabled) {
     auto& root = box_->root();
-    const auto origin = ImGui::GetCursorScreenPos();
-    const float scale = std::max(1.0f, ImGui::GetContentRegionAvail().x) / root.width();
+    const ImVec2 available = ImGui::GetContentRegionAvail();
+    const auto cursor = ImGui::GetCursorScreenPos();
+    const float scale = std::min(available.x / root.width(), available.y / root.height());
+    const ImVec2 origin(cursor.x + (available.x - root.width() * scale) * 0.5f,
+                        cursor.y + (available.y - root.height() * scale) * 0.5f);
     std::optional<size_t> chosen;
     const size_t initial = box_->focused_choice();
     ImGui::PushID("Console choices");
@@ -161,6 +164,7 @@ GameSourceDialog::GameSourceDialog(ImGuiDrawer* drawer, system::GameSourceIdenti
       expected_(std::move(expected)),
       config_(std::move(config)),
       completed_(std::move(completed)),
+      initial_source_(initial),
       executable_(std::move(executable)),
       extraction_root_(std::move(extraction_root)),
       error_(std::move(error)),
@@ -179,6 +183,205 @@ GameSourceDialog::~GameSourceDialog() {
     copy_progress_->cancel = true;
 }
 
+void GameSourceDialog::ShowConsoleScreen(ConsoleScreen screen, std::string title, std::string body,
+                                         std::vector<std::string> choices, size_t initial) {
+  console_initialized_ = true;
+  console_screen_ = screen;
+  console_choices_ = std::move(choices);
+  console_box_ = GameSourceConsoleBox::Create(visuals_, std::move(title), std::move(body),
+                                              console_choices_, initial);
+  console_mode_ = bool(console_box_);
+}
+
+void GameSourceDialog::BeginSourceCheck(std::filesystem::path path) {
+  path_.fill(0);
+  const auto text = rex::string::to_utf8(path.u16string());
+  if (text.size() >= path_.size()) {
+    ShowConsoleScreen(ConsoleScreen::kError, "Game files", "The selected path is too long.",
+                      {"Choose another source", "Leave Game"}, 0);
+    return;
+  }
+  std::memcpy(path_.data(), text.data(), text.size());
+  validated_.clear();
+  error_.clear();
+  checking_path_ = std::move(path);
+  const auto expected = expected_;
+  *check_cancel_ = false;
+  checking_ = std::async(std::launch::async, [path = checking_path_, expected,
+                                              executable = executable_, cancel = check_cancel_] {
+    return system::InspectGameSource(path, executable, expected,
+                                     [cancel] { return cancel->load(); });
+  });
+  ShowConsoleScreen(ConsoleScreen::kChecking, "Checking game files",
+                    "Checking the game title and executable. Please wait.", {"Please wait"});
+}
+
+void GameSourceDialog::CollectOpticalDrives() {
+  optical_drives_.clear();
+  const DWORD drives = GetLogicalDrives();
+  for (int i = 0; i < 26; ++i) {
+    if (!(drives & (1u << i)))
+      continue;
+    const std::wstring drive{wchar_t(L'A' + i), L':', L'\\'};
+    if (GetDriveTypeW(drive.c_str()) == DRIVE_CDROM)
+      optical_drives_.push_back(std::string(1, char('A' + i)) + ":");
+  }
+}
+
+void GameSourceDialog::CompleteConsoleSelection(bool remember) {
+  const auto path = rex::string::to_utf8(validated_.u16string());
+  if (!cvar::SetFlagByName("game_source", path)) {
+    ShowConsoleScreen(ConsoleScreen::kError, "Game files",
+                      "The source setting could not be applied.",
+                      {"Choose another source", "Leave Game"}, 0);
+  } else if (remember && !cvar::TrySaveConfig(config_)) {
+    ShowConsoleScreen(ConsoleScreen::kSaveFailed, "Game files",
+                      "The source could not be saved. Use it once, or choose another source.",
+                      {"Use once", "Choose another source", "Leave Game"}, 0);
+  } else {
+    selected_ = validated_;
+    Close();
+  }
+}
+
+void GameSourceDialog::StartExtraction() {
+  copy_progress_ = std::make_shared<CopyProgress>();
+  const auto destination = extraction_root_ / ("game-" + expected_.executable_checksum);
+  const auto source = validated_;
+  const auto expected = expected_;
+  const auto progress = copy_progress_;
+  const auto executable = executable_;
+  extracting_ =
+      std::async(std::launch::async, [source, destination, expected, progress, executable] {
+        return system::ExtractGameSource(
+            source, destination, expected,
+            [progress](uint64_t done, uint64_t total) {
+              progress->done = done;
+              progress->total = total;
+            },
+            [progress] { return progress->cancel.load(); }, executable);
+      });
+  console_box_.reset();
+}
+
+void GameSourceDialog::HandleConsoleChoice(size_t choice) {
+  if (choice >= console_choices_.size())
+    return;
+  switch (console_screen_) {
+    case ConsoleScreen::kSource:
+      if (choice == 0) {
+        Browse(false);
+      } else if (choice == 1) {
+        Browse(true);
+      } else if (choice == 2) {
+        CollectOpticalDrives();
+        if (optical_drives_.empty()) {
+          ShowConsoleScreen(ConsoleScreen::kError, "Disc drive", "No optical drive is available.",
+                            {"Choose another source", "Leave Game"}, 0);
+        } else {
+          optical_drive_page_ = 0;
+          std::vector<std::string> choices;
+          const auto first = optical_drive_page_ * 2;
+          for (size_t i = first; i < std::min(first + 2, optical_drives_.size()); ++i)
+            choices.push_back(optical_drives_[i]);
+          if (first + 2 < optical_drives_.size())
+            choices.push_back("More drives");
+          choices.push_back("Back");
+          ShowConsoleScreen(ConsoleScreen::kDrives, "Disc drive",
+                            "Choose the drive containing your Xbox 360 disc.", std::move(choices));
+        }
+      } else {
+        Close();
+      }
+      break;
+    case ConsoleScreen::kDrives: {
+      const size_t first = optical_drive_page_ * 2;
+      const size_t drive_count = std::min<size_t>(2, optical_drives_.size() - first);
+      if (choice < drive_count) {
+        BeginSourceCheck(std::filesystem::path("\\\\.\\" + optical_drives_[first + choice]));
+      } else if (first + 2 < optical_drives_.size() && choice == drive_count) {
+        ++optical_drive_page_;
+        std::vector<std::string> choices;
+        const auto next = optical_drive_page_ * 2;
+        for (size_t i = next; i < std::min(next + 2, optical_drives_.size()); ++i)
+          choices.push_back(optical_drives_[i]);
+        if (next + 2 < optical_drives_.size())
+          choices.push_back("More drives");
+        choices.push_back("Back");
+        ShowConsoleScreen(ConsoleScreen::kDrives, "Disc drive",
+                          "Choose the drive containing your Xbox 360 disc.", std::move(choices));
+      } else if (optical_drive_page_ && choice + 1 == console_choices_.size()) {
+        --optical_drive_page_;
+        std::vector<std::string> choices;
+        const auto previous = optical_drive_page_ * 2;
+        for (size_t i = previous; i < std::min(previous + 2, optical_drives_.size()); ++i)
+          choices.push_back(optical_drives_[i]);
+        if (previous + 2 < optical_drives_.size())
+          choices.push_back("More drives");
+        choices.push_back("Back");
+        ShowConsoleScreen(ConsoleScreen::kDrives, "Disc drive",
+                          "Choose the drive containing your Xbox 360 disc.", std::move(choices));
+      } else {
+        ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                          {"Choose a disc image (ISO)", "Choose an extracted folder",
+                           "Read from a disc drive", "Leave Game"},
+                          0);
+      }
+      break;
+    }
+    case ConsoleScreen::kChecking:
+      break;
+    case ConsoleScreen::kVerified:
+      if (console_choices_[choice] == "Use this source") {
+        CompleteConsoleSelection(true);
+      } else if (console_choices_[choice] == "Extract to this PC") {
+        StartExtraction();
+      } else if (console_choices_[choice] == "Choose another source") {
+        ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                          {"Choose a disc image (ISO)", "Choose an extracted folder",
+                           "Read from a disc drive", "Leave Game"},
+                          0);
+      } else {
+        Close();
+      }
+      break;
+    case ConsoleScreen::kError:
+      if (choice == 0) {
+        ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                          {"Choose a disc image (ISO)", "Choose an extracted folder",
+                           "Read from a disc drive", "Leave Game"},
+                          0);
+      } else {
+        Close();
+      }
+      break;
+    case ConsoleScreen::kSaveFailed:
+      if (choice == 0) {
+        CompleteConsoleSelection(false);
+      } else if (choice == 1) {
+        ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                          {"Choose a disc image (ISO)", "Choose an extracted folder",
+                           "Read from a disc drive", "Leave Game"},
+                          0);
+      } else {
+        Close();
+      }
+      break;
+    case ConsoleScreen::kCopied:
+      if (choice == 0) {
+        CompleteConsoleSelection(true);
+      } else if (choice == 1) {
+        ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                          {"Choose a disc image (ISO)", "Choose an extracted folder",
+                           "Read from a disc drive", "Leave Game"},
+                          0);
+      } else {
+        Close();
+      }
+      break;
+  }
+}
+
 void GameSourceDialog::Browse(bool folder) {
   const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   struct Uninitialize {
@@ -192,6 +395,9 @@ void GameSourceDialog::Browse(bool folder) {
   if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                               IID_PPV_ARGS(&dialog)))) {
     error_ = "The file picker could not be opened. Enter the path below.";
+    if (console_mode_)
+      ShowConsoleScreen(ConsoleScreen::kError, "Game files", error_,
+                        {"Choose another source", "Leave Game"}, 0);
     return;
   }
   DWORD options = 0;
@@ -211,12 +417,20 @@ void GameSourceDialog::Browse(bool folder) {
       SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &value))) {
     const auto text = rex::string::to_utf8(std::filesystem::path(value).u16string());
     if (text.size() < path_.size()) {
-      path_.fill(0);
-      std::memcpy(path_.data(), text.data(), text.size());
-      validated_.clear();
-      error_.clear();
+      const std::filesystem::path selected_path(value);
+      if (console_mode_) {
+        BeginSourceCheck(selected_path);
+      } else {
+        path_.fill(0);
+        std::memcpy(path_.data(), text.data(), text.size());
+        validated_.clear();
+        error_.clear();
+      }
     } else {
       error_ = "The selected path is too long.";
+      if (console_mode_)
+        ShowConsoleScreen(ConsoleScreen::kError, "Game files", error_,
+                          {"Choose another source", "Leave Game"}, 0);
     }
     CoTaskMemFree(value);
   }
@@ -245,9 +459,19 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
           path_.fill(0);
           std::memcpy(path_.data(), text.data(), text.size());
         }
+        if (console_mode_)
+          ShowConsoleScreen(ConsoleScreen::kCopied, "Game files copied",
+                            "The game files are ready on this PC.",
+                            {"Use this source", "Choose another source", "Leave Game"}, 0);
+      } else if (console_mode_) {
+        ShowConsoleScreen(ConsoleScreen::kError, "Game files could not be copied", error_,
+                          {"Choose another source", "Leave Game"}, 0);
       }
     } catch (const std::exception& error) {
       error_ = error.what();
+      if (console_mode_)
+        ShowConsoleScreen(ConsoleScreen::kError, "Game files could not be copied", error_,
+                          {"Choose another source", "Leave Game"}, 0);
     }
   }
   if (checking_.valid() &&
@@ -255,11 +479,88 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
     try {
       auto result = checking_.get();
       error_ = result.error;
-      if (result)
+      if (result) {
         validated_ = result.source_path;
+        if (console_mode_) {
+          const bool can_extract =
+              !extraction_root_.empty() && (filesystem::IsOpticalDiscPath(validated_) ||
+                                            std::filesystem::is_regular_file(validated_));
+          std::vector<std::string> choices{"Use this source"};
+          if (can_extract)
+            choices.push_back("Extract to this PC");
+          choices.push_back("Choose another source");
+          choices.push_back("Leave Game");
+          ShowConsoleScreen(ConsoleScreen::kVerified, "Game files verified",
+                            "This game source matches the executable in this build.",
+                            std::move(choices), 0);
+        }
+      } else if (console_mode_) {
+        ShowConsoleScreen(ConsoleScreen::kError, "Game files not recognized", error_,
+                          {"Choose another source", "Leave Game"}, 0);
+      }
     } catch (const std::exception& error) {
       error_ = error.what();
+      if (console_mode_)
+        ShowConsoleScreen(ConsoleScreen::kError, "Game files not recognized", error_,
+                          {"Choose another source", "Leave Game"}, 0);
     }
+  }
+  if (!console_initialized_) {
+    if (expected_.title_id && !expected_.executable_checksum.empty()) {
+      ShowConsoleScreen(ConsoleScreen::kSource, "Game files", "Choose your Xbox 360 game source.",
+                        {"Choose a disc image (ISO)", "Choose an extracted folder",
+                         "Read from a disc drive", "Leave Game"},
+                        0);
+    } else {
+      ShowConsoleScreen(ConsoleScreen::kError, "Game files",
+                        "This build has no source fingerprint. Regenerate its code to enable "
+                        "first-run source selection.",
+                        {"Leave Game"}, 0);
+    }
+  }
+  if (console_mode_ && !initial_source_.empty()) {
+    auto initial = std::move(initial_source_);
+    initial_source_.clear();
+    BeginSourceCheck(std::move(initial));
+  }
+  if (console_mode_) {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->Pos);
+    ImGui::SetNextWindowSize(viewport->Size);
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    constexpr ImGuiWindowFlags kOverlayFlags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    ImGui::Begin("##GameSourceGuideOverlay", nullptr, kOverlayFlags);
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        viewport->Pos,
+        ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y),
+        IM_COL32(0, 0, 0, 185));
+    if (extracting_.valid()) {
+      const uint64_t total = copy_progress_->total;
+      const uint64_t done = copy_progress_->done;
+      if (!console_downloads_)
+        console_downloads_ = GameSourceConsoleDownloads::Create(visuals_);
+      if (console_downloads_) {
+        guide::GuideActivity activity;
+        activity.title = "Game source extraction";
+        activity.status =
+            total ? std::to_string(unsigned(std::min(100.0, double(done) / double(total) * 100))) +
+                        "%"
+                  : "Checking source";
+        activity.details = "Copying game files to this PC. Select this item to cancel.";
+        activity.cancel = [progress = copy_progress_] { progress->cancel = true; };
+        console_downloads_->Draw(io, std::move(activity));
+      } else {
+        ImGui::ProgressBar(total ? float(double(done) / double(total)) : 0);
+      }
+    } else if (console_box_) {
+      const auto chosen = console_box_->Draw(io, !checking_.valid());
+      if (chosen)
+        HandleConsoleChoice(*chosen);
+    }
+    ImGui::End();
+    return;
   }
   ImGui::SetNextWindowSize(ImVec2(650, 0), ImGuiCond_FirstUseEver);
   ImGui::Begin("Choose game files", nullptr, ImGuiWindowFlags_NoCollapse);
@@ -271,23 +572,12 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
         "This build has no source fingerprint. Regenerate its code to enable first-run source "
         "selection.");
   ImGui::BeginDisabled(checking_.valid() || extracting_.valid());
-  const std::string choices[] = {"Choose a disc image (ISO)", "Read from disc drive",
-                                 "Choose an extracted folder"};
-  if (!console_box_)
-    console_box_ = GameSourceConsoleBox::Create(visuals_, "Game files",
-                                                "Choose your Xbox 360 game source.", choices);
-  std::optional<size_t> chosen;
-  if (console_box_ && !extracting_.valid())
-    chosen = console_box_->Draw(io, !checking_.valid() && !extracting_.valid());
-  if ((console_box_ && chosen == 2) ||
-      (!console_box_ && ImGui::Button("Choose an extracted folder")))
+  if (ImGui::Button("Choose an extracted folder"))
     Browse(true);
-  if (!console_box_)
-    ImGui::SameLine();
-  if ((console_box_ && chosen == 0) ||
-      (!console_box_ && ImGui::Button("Choose a disc image (ISO)")))
+  ImGui::SameLine();
+  if (ImGui::Button("Choose a disc image (ISO)"))
     Browse(false);
-  if ((console_box_ && chosen == 1) || (!console_box_ && ImGui::Button("Read from disc drive")))
+  if (ImGui::Button("Read from disc drive"))
     ImGui::OpenPopup("Optical drives");
   if (ImGui::BeginPopup("Optical drives")) {
     bool found = false;
