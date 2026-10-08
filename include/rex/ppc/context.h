@@ -166,6 +166,14 @@ struct FPSCRRegister {
   static constexpr uint32_t kVXSOFT = 0x00000400;
   static constexpr uint32_t kVXSQRT = 0x00000200;
   static constexpr uint32_t kVXCVI = 0x00000100;
+  static constexpr uint32_t kFR = 0x00040000;
+  static constexpr uint32_t kFI = 0x00020000;
+  static constexpr uint32_t kFPRF = 0x0001F000;
+  static constexpr uint32_t kFPCC = 0x0000F000;
+  static constexpr uint32_t kFPCCLess = 0x00008000;
+  static constexpr uint32_t kFPCCGreater = 0x00004000;
+  static constexpr uint32_t kFPCCEqual = 0x00002000;
+  static constexpr uint32_t kFPCCUnordered = 0x00001000;
   static constexpr uint32_t kVE = 0x00000080;
   static constexpr uint32_t kOE = 0x00000040;
   static constexpr uint32_t kUE = 0x00000020;

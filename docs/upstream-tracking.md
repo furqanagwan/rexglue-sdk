@@ -1369,12 +1369,12 @@ families, including their single-precision forms. The adaptation uses host fenv
 for OX/UX/ZX/XX and explicitly classifies PowerPC invalid subcauses that host
 fenv does not distinguish. Sticky FX, enabled FEX, invalid VX and record-form
 CR1 are checked by unit tests and `tests/ppc/asm/instr_fpscr_arithmetic.s`.
-`fcmpu` now records VXSNAN for signaling NaNs; `fcmpo` records VXVC for quiet
-NaNs and for signaling NaNs when VE is disabled, following IBM's [fcmpu]
-and [fcmpo] descriptions. FPCC/FPRF result-class fields are not yet updated by
-these helpers. Integer conversion and estimate instructions and other FPSCR
-effects remain uncovered. The issue remains open for that coverage, the broader
-Edge corpus, title validation and release gates.
+`fcmpu` records VXSNAN for signaling NaNs; `fcmpo` records VXVC for quiet NaNs
+and for signaling NaNs when VE is disabled, following IBM's [fcmpu] and [fcmpo]
+descriptions. The 2026-10-08 [arithmetic FPSCR follow-up](#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08)
+adds FPCC/FPRF result classification and partial conversion/estimate exception
+tracking. FR/FI behavior, estimate result classification, the broader Edge
+corpus, title validation and release gates remain open.
 
 [fcmpu]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-fcmpu-floating-compare-unordered-instruction
 [fcmpo]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fcmpo_instrs.html
@@ -1865,14 +1865,19 @@ bits for `mcrfs` compatibility. The tracked path also reports record-form CR1.
 
 The same change now tracks compare invalid causes: `fcmpu` sets VXSNAN for
 signaling NaNs; `fcmpo` sets VXVC for quiet NaNs and for signaling NaNs while
-VE is disabled. IBM's instruction references are linked above. FPCC/FPRF
-result-class fields are still not modeled by this follow-up.
+VE is disabled. Compare operations now set FPCC for less/greater/equal/unordered
+and preserve C, FR and FI. Arithmetic result tracking updates FPRF using the
+delivered result and target precision, including widened single-precision
+subnormals. For an enabled invalid operation, the previous FPRF value is
+preserved. The PowerPC User Instruction Set Architecture v2.02 specifies these
+field encodings and the exception behavior ([FPSCR fields and result classes]).
 
 `fctiw/fctiwz/fctid/fctidz` now track XX for inexact results, VXCVI for quiet
 NaN/out-of-range conversions and VXSNAN for signaling NaNs. Record forms copy
 the accumulated FPSCR state into CR1. This follows the IBM conversion status
-descriptions, including the defined saturation results; FPRF/FR/FI fields
-remain outside the current implementation. See [fctiw] and [fctidz].
+descriptions, including the defined saturation results; FPRF is undefined for
+these convert-to-integer instructions. FR/FI updates for conversions remain
+outside the current implementation. See [fctiw] and [fctidz].
 
 [fctiw]: https://www.ibm.com/docs/en/aix/7.1.0?topic=set-fctiw-fcir-floating-convert-integer-word-instruction
 [fctidz]: https://www.ibm.com/docs/en/aix/7.2?topic=is-fctidz-floating-convert-integer-double-word-round-toward-zero-instruction
@@ -1880,20 +1885,32 @@ remain outside the current implementation. See [fctiw] and [fctidz].
 `fres/frsqrte` now record zero-divide, signaling-NaN, negative-square-root
 and reciprocal-overflow causes, and their record forms report accumulated
 CR1. IBM's [fres] and [frsqrte] descriptions document these exception classes.
-Their result-class fields and other estimate families remain unmodeled.
+Their result-class fields, FR/FI effects and other estimate families remain
+unmodeled.
 
 [fres]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fres_instrs.html
 [frsqrte]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-frsqrte-floating-reciprocal-square-root-estimate-instruction
 
 GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. The full
-ordinary PPC executable passes 1,593 cases and 6,550 assertions in both
-configurations. The focused FPSCR arithmetic/compare/conversion, existing
-`mcrfs` and unit tests pass under CTest (22 cases per configuration). The tests
+ordinary PPC CTest selection passes all 1,594 cases in both configurations.
+The full unit CTest selection passes 539 cases with 14 documented private
+asset/fixture skips in each configuration. The focused FPSCR
+arithmetic/compare/conversion, existing `mcrfs` and unit tests pass under CTest
+(24 cases per configuration). The tests
 cover arithmetic/conversion exceptions, estimate zero-divide/overflow/invalid
 cases, unordered NaN comparisons, sticky/summary state, enabled FEX/CR1 and
-selective clearing. This is not full FPSCR coverage: result-class fields,
-other estimate effects and title/gameplay gates remain open. No title
+selective clearing. This is not full FPSCR coverage: estimate result-class and
+rounding effects, FR/FI rounding-direction tracking and title/gameplay gates
+remain open. No title
 compatibility claim follows from these synthetic tests.
+
+The FPSCR result-class follow-up adds the defined FPRF classes for tracked
+arithmetic results and FPCC relations for compares, with single-precision
+subnormal classification based on target precision. The focused selection now
+passes 24 CTest cases in both GDK Debug and Release. FPRF for estimate
+instructions and FR/FI rounding-direction tracking remain incomplete.
+
+[FPSCR fields and result classes]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf
 
 The refreshed generated GDK Debug corpus passes all 566 active CTest groups
 with the existing `instr_mtmsrd` timeout excluded. It exposed and verified

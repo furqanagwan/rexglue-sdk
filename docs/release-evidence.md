@@ -701,3 +701,22 @@ keeping its consumer draw. The tests use the SDK's synthetic fixture; they do
 not establish that a representative 007 title issues `VIZ_QUERY` or exercises
 conditional rendering. Issue [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65)
 therefore remains open for title-level evidence.
+
+## FPSCR result classification, 2026-10-08
+
+The PPC floating-point helpers now report the defined FPRF result classes for
+tracked arithmetic results and the FPCC relation for floating-point compares.
+Classification uses the instruction's result precision, including single
+subnormals held in widened FPRs. Compares preserve C, FR and FI; enabled invalid
+operations preserve FPRF. The implementation follows the field encodings and
+exception behavior in the [PowerPC User Instruction Set Architecture v2.02].
+
+After rebuilding `unit_tests` and `ppc_tests`, the focused unit, FPSCR
+arithmetic and FPSCR state selection passes 24/24 CTest cases in GDK Debug and
+Release. The full ordinary PPC selection passes 1,594/1,594 cases in each
+configuration. The full unit selection passes 539 cases with 14 documented
+private asset/fixture skips in each configuration. These are synthetic checks.
+FPSCR FR/FI rounding-direction behavior and result classification for estimate
+instructions remain incomplete; title/gameplay validation remains separate.
+
+[PowerPC User Instruction Set Architecture v2.02]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf

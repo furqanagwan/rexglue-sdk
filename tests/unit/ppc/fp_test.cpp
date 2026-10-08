@@ -4,12 +4,40 @@
  */
 
 #include <cstdint>
+#include <limits>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <rex/ppc/fp.h>
 
 namespace fp = rex::ppc::fp;
+
+TEST_CASE("FPSCR result classes match PowerPC FPRF encodings", "[ppc][fp]") {
+  using FPSCR = rex::ppc::FPSCRRegister;
+  CHECK(fp::result_class(fp::from_bits(fp::kDefaultNaN)) == 0b10001);
+  CHECK(fp::result_class(-std::numeric_limits<double>::infinity()) == 0b01001);
+  CHECK(fp::result_class(-1.0) == 0b01000);
+  CHECK(fp::result_class(-std::numeric_limits<double>::denorm_min()) == 0b11000);
+  CHECK(fp::result_class(-0.0) == 0b10010);
+  CHECK(fp::result_class(0.0) == 0b00010);
+  CHECK(fp::result_class(std::numeric_limits<double>::denorm_min()) == 0b10100);
+  CHECK(fp::result_class(double(std::numeric_limits<float>::denorm_min()), true) == 0b10100);
+  CHECK(fp::result_class(1.0) == 0b00100);
+  CHECK(fp::result_class(std::numeric_limits<double>::infinity()) == 0b00101);
+
+  rex::ppc::FPSCRRegister fpscr{};
+  fpscr.guest_bits = FPSCR::kFR | FPSCR::kFI;
+  rex::ppc::CRRegister cr{};
+  fp::compare(fpscr, cr, 1.0, 2.0, false);
+  CHECK((fpscr.guest_bits & FPSCR::kFPCC) == FPSCR::kFPCCLess);
+  CHECK((fpscr.guest_bits & (FPSCR::kFR | FPSCR::kFI)) == (FPSCR::kFR | FPSCR::kFI));
+  fp::compare(fpscr, cr, 2.0, 1.0, false);
+  CHECK((fpscr.guest_bits & FPSCR::kFPCC) == FPSCR::kFPCCGreater);
+  fp::compare(fpscr, cr, 1.0, 1.0, false);
+  CHECK((fpscr.guest_bits & FPSCR::kFPCC) == FPSCR::kFPCCEqual);
+  fp::compare(fpscr, cr, fp::from_bits(fp::kDefaultNaN), 1.0, false);
+  CHECK((fpscr.guest_bits & FPSCR::kFPCC) == FPSCR::kFPCCUnordered);
+}
 
 TEST_CASE("lfs and stfs keep a signalling NaN signalling", "[ppc][fp]") {
   // Single SNaN 0x7F800001 widens to 0x7FF0000020000000, quiet bit clear.
@@ -54,20 +82,30 @@ TEST_CASE("Scalar arithmetic accumulates FPSCR exception causes and summaries", 
   fpscr.csr = original_csr;
 
   // Inexact is sticky and sets FX when the cause flag first changes.
-  CHECK(fp::tracked(fpscr, nullptr, add, 0, false, 0.1, 0.2) != 0.0);
+  CHECK(fp::tracked(fpscr, nullptr, add, 0, false, false, 0.1, 0.2) != 0.0);
   CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX)) ==
         (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX));
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFPRF) ==
+        rex::ppc::FPSCRRegister::kFPCCGreater);
 
   // An invalid operation records its PowerPC subcause and invalid summary.
   fpscr.guest_bits = 0;
   const double infinity = fp::from_bits(fp::kInfinity);
   auto sub = [](double a, double b, double) { return fp::sub(a, b); };
-  fp::tracked(fpscr, nullptr, sub, fp::sub_invalid_causes(infinity, infinity), false, infinity,
-              infinity);
+  fp::tracked(fpscr, nullptr, sub, fp::sub_invalid_causes(infinity, infinity), false, false,
+              infinity, infinity);
   CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kVX |
                              rex::ppc::FPSCRRegister::kVXISI)) ==
         (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kVX |
          rex::ppc::FPSCRRegister::kVXISI));
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFPRF) == 0x11000);
+
+  // An enabled invalid exception leaves the result fields unchanged.
+  fpscr.guest_bits = rex::ppc::FPSCRRegister::kVE | rex::ppc::FPSCRRegister::kFPCCGreater;
+  fp::tracked(fpscr, nullptr, sub, fp::sub_invalid_causes(infinity, infinity), false, false,
+              infinity, infinity);
+  CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFPRF) ==
+        rex::ppc::FPSCRRegister::kFPCCGreater);
 
   // FEX reflects the corresponding enable and clears when the enabled cause is cleared.
   fpscr.storeFromGuest(rex::ppc::FPSCRRegister::kVE);

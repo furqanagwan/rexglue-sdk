@@ -334,6 +334,60 @@ inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
     causes |= FPSCRRegister::kVXVC;
   }
   fpscr.recordExceptions(causes);
+
+  // Compare updates FPCC, but preserves C, FR, and FI. An ordered compare
+  // that raises an enabled invalid exception still reports unordered FPCC.
+  uint32_t fpcc = FPSCRRegister::kFPCCUnordered;
+  if (!has_nan) {
+    fpcc = a < b ? FPSCRRegister::kFPCCLess
+                 : (a > b ? FPSCRRegister::kFPCCGreater : FPSCRRegister::kFPCCEqual);
+  }
+  fpscr.guest_bits = (fpscr.guest_bits & ~FPSCRRegister::kFPCC) | fpcc;
+}
+
+/// Return the PowerPC FPRF encoding for a floating-point result.
+inline uint32_t bits32(float x) noexcept;
+
+inline uint32_t result_class(double result, bool single_precision = false) noexcept {
+  constexpr uint32_t kQuietNaN = 0b10001;
+  constexpr uint32_t kNegativeInfinity = 0b01001;
+  constexpr uint32_t kNegativeNormal = 0b01000;
+  constexpr uint32_t kNegativeDenormal = 0b11000;
+  constexpr uint32_t kNegativeZero = 0b10010;
+  constexpr uint32_t kPositiveZero = 0b00010;
+  constexpr uint32_t kPositiveDenormal = 0b10100;
+  constexpr uint32_t kPositiveNormal = 0b00100;
+  constexpr uint32_t kPositiveInfinity = 0b00101;
+
+  if (single_precision) {
+    const uint32_t single = bits32(float(result));
+    const uint32_t magnitude = single & 0x7FFFFFFFu;
+    if (magnitude > 0x7F800000u)
+      return kQuietNaN;
+    if (magnitude == 0x7F800000u)
+      return (single >> 31) ? kNegativeInfinity : kPositiveInfinity;
+    if (magnitude == 0)
+      return (single >> 31) ? kNegativeZero : kPositiveZero;
+    if ((magnitude & 0x7F800000u) == 0)
+      return (single >> 31) ? kNegativeDenormal : kPositiveDenormal;
+    return (single >> 31) ? kNegativeNormal : kPositiveNormal;
+  }
+  if (is_nan(result))
+    return kQuietNaN;
+  const uint64_t magnitude = bits(result) & kMagnitude;
+  if (magnitude == kInfinity)
+    return std::signbit(result) ? kNegativeInfinity : kPositiveInfinity;
+  if (magnitude == 0)
+    return std::signbit(result) ? kNegativeZero : kPositiveZero;
+  if (is_denormal(result))
+    return std::signbit(result) ? kNegativeDenormal : kPositiveDenormal;
+  return std::signbit(result) ? kNegativeNormal : kPositiveNormal;
+}
+
+inline void set_result_class(FPSCRRegister& fpscr, double result,
+                             bool single_precision = false) noexcept {
+  const uint32_t encoded = result_class(result, single_precision) << 12;
+  fpscr.guest_bits = (fpscr.guest_bits & ~FPSCRRegister::kFPRF) | encoded;
 }
 
 inline uint32_t add_invalid_causes(double a, double b) noexcept {
@@ -428,13 +482,16 @@ inline uint32_t host_exception_causes(int raised) noexcept {
 /// and optionally update CR1 for the record form.
 template <typename Op>
 inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t invalid_causes,
-                      bool quiet, double a, double b = 0.0, double c = 0.0) noexcept {
+                      bool quiet, bool single_precision, double a, double b = 0.0,
+                      double c = 0.0) noexcept {
   volatile double va = a, vb = b, vc = c;
   std::feclearexcept(FE_ALL_EXCEPT);
   volatile double vr = op(va, vb, vc);
   const int raised = quiet ? 0 : std::fetestexcept(FE_ALL_EXCEPT);
   const uint32_t causes = quiet ? 0 : (host_exception_causes(raised) | invalid_causes);
   fpscr.recordExceptions(causes);
+  if (!(invalid_causes && (fpscr.guest_bits & FPSCRRegister::kVE)))
+    set_result_class(fpscr, vr, single_precision);
   if (cr1)
     set_cr1_from_fpscr(*cr1, fpscr);
   return vr;

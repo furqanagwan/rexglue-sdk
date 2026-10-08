@@ -38,10 +38,10 @@ void emitFpArith(BuilderContext& ctx, std::string_view fn, int count,
   const std::string causes_expr = fmt::format("rex::ppc::fp::{}({})", causes, args);
   ctx.println(
       "\t{}.f64 = rex::ppc::fp::tracked(ctx.fpscr, {}, [](double a, double b, double c) {{ "
-      "(void)b; (void)c; return rex::ppc::fp::{}({}); }}, {}, {}, {});",
+      "(void)b; (void)c; return rex::ppc::fp::{}({}); }}, {}, {}, {}, {});",
       ctx.f(ctx.insn.operands[0]),
       isRecordForm(ctx.insn) ? fmt::format("&{}", ctx.cr(1)) : "nullptr", fn, names, causes_expr,
-      quiet_expr, args);
+      quiet_expr, (fn == "to_single" || fn.ends_with('s')) ? "true" : "false", args);
 }
 
 /// fctiw/fctiwz/fctid/fctidz, with CR1 for the record forms.

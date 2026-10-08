@@ -4,7 +4,16 @@ test_fpscr_fadd_inexact_is_reported_by_mffs:
   fadd f3, f1, f2
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0x82000000
+  #_ REGISTER_OUT f4 0x82004000
+
+test_fpscr_fadds_classifies_widened_single_subnormal:
+  #_ REGISTER_IN f1 0x36A0000000000000
+  #_ REGISTER_IN f2 0x0000000000000000
+  fadds f3, f1, f2
+  mffs f4
+  blr
+  #_ REGISTER_OUT f3 0x36A0000000000000
+  #_ REGISTER_OUT f4 0x00014000
 
 test_fpscr_record_form_reports_enabled_exception_in_cr1:
   #_ REGISTER_IN f1 0x3FB999999999999A
@@ -16,7 +25,7 @@ test_fpscr_record_form_reports_enabled_exception_in_cr1:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x0C000000
-  #_ REGISTER_OUT f4 0xC2000008
+  #_ REGISTER_OUT f4 0xC2004008
 
 test_fpscr_infinity_minus_infinity_records_its_cause:
   #_ REGISTER_IN f1 0x7FF0000000000000
@@ -24,7 +33,7 @@ test_fpscr_infinity_minus_infinity_records_its_cause:
   fsub f3, f1, f2
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0xA0800000
+  #_ REGISTER_OUT f4 0xA0811000
 
 test_fpscr_clearing_summary_keeps_unread_exception_cause:
   #_ REGISTER_IN f1 0x3FB999999999999A
@@ -33,7 +42,7 @@ test_fpscr_clearing_summary_keeps_unread_exception_cause:
   mcrfs 1, 0
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0x02000000
+  #_ REGISTER_OUT f4 0x02004000
 
 test_fpscr_fcmpu_signaling_nan_records_vxsnan:
   #_ REGISTER_IN f1 0x7FF0000000000001
@@ -43,7 +52,7 @@ test_fpscr_fcmpu_signaling_nan_records_vxsnan:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x10000000
-  #_ REGISTER_OUT f4 0xA1000000
+  #_ REGISTER_OUT f4 0xA1001000
 
 test_fpscr_fcmpu_quiet_nan_does_not_signal:
   #_ REGISTER_IN f1 0x7FF8000000000001
@@ -53,7 +62,7 @@ test_fpscr_fcmpu_quiet_nan_does_not_signal:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x10000000
-  #_ REGISTER_OUT f4 0x00000000
+  #_ REGISTER_OUT f4 0x00001000
 
 test_fpscr_fcmpo_quiet_nan_records_invalid_compare:
   #_ REGISTER_IN f1 0x7FF8000000000001
@@ -63,7 +72,7 @@ test_fpscr_fcmpo_quiet_nan_records_invalid_compare:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x10000000
-  #_ REGISTER_OUT f4 0xA0080000
+  #_ REGISTER_OUT f4 0xA0081000
 
 test_fpscr_fcmpo_signaling_nan_records_invalid_compare_when_ve_disabled:
   #_ REGISTER_IN f1 0x7FF0000000000001
@@ -73,7 +82,7 @@ test_fpscr_fcmpo_signaling_nan_records_invalid_compare_when_ve_disabled:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x10000000
-  #_ REGISTER_OUT f4 0xA1080000
+  #_ REGISTER_OUT f4 0xA1081000
 
 test_fpscr_fcmpo_signaling_nan_with_ve_enabled:
   #_ REGISTER_IN f1 0x7FF0000000000001
@@ -85,7 +94,7 @@ test_fpscr_fcmpo_signaling_nan_with_ve_enabled:
   mffs f4
   blr
   #_ REGISTER_OUT r3 0x10000000
-  #_ REGISTER_OUT f4 0xE1000080
+  #_ REGISTER_OUT f4 0xE1001080
 
 test_fpscr_fctiw_inexact_sets_xx:
   #_ REGISTER_IN f1 0x3FF8000000000000
