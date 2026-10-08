@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <windows.h>
 #include <fstream>
+#include <iterator>
 #include <array>
 #include <rex/hash.h>
 #include <rex/system/game_source.h>
@@ -22,6 +23,62 @@ std::vector<uint8_t> SourceXex() {
   bytes[45] = 0x34;
   bytes[46] = 0x56;
   bytes[47] = 0x78;
+  return bytes;
+}
+// An unencrypted, uncompressed XEX whose image holds an XDBF resource named
+// by its title ID, with an English title string.
+std::vector<uint8_t> NamedXex(std::string_view title) {
+  constexpr uint32_t kBase = 0x82000000, kHeaderSize = 0x400, kResource = 0x10;
+  std::vector<uint8_t> xdbf;
+  auto be = [](std::vector<uint8_t>& out, uint64_t value, int bytes) {
+    for (int i = bytes - 1; i >= 0; --i)
+      out.push_back(uint8_t(value >> (8 * i)));
+  };
+  std::vector<uint8_t> xstr;
+  be(xstr, 0x58535452, 4);  // 'XSTR'
+  be(xstr, 1, 4);
+  be(xstr, 0, 4);
+  be(xstr, 1, 2);
+  be(xstr, 0x8000, 2);
+  be(xstr, title.size(), 2);
+  xstr.insert(xstr.end(), title.begin(), title.end());
+  be(xdbf, 0x58444246, 4);  // 'XDBF'
+  be(xdbf, 1, 4);
+  be(xdbf, 1, 4);  // entries
+  be(xdbf, 1, 4);  // used
+  be(xdbf, 0, 4);
+  be(xdbf, 0, 4);
+  be(xdbf, 3, 2);  // string table
+  be(xdbf, 1, 8);  // English
+  be(xdbf, 0, 4);
+  be(xdbf, xstr.size(), 4);
+  xdbf.insert(xdbf.end(), xstr.begin(), xstr.end());
+
+  std::vector<uint8_t> bytes(kHeaderSize);
+  auto put = [&bytes](size_t offset, uint32_t value) {
+    for (int i = 0; i < 4; ++i)
+      bytes[offset + i] = uint8_t(value >> (24 - 8 * i));
+  };
+  std::memcpy(bytes.data(), "XEX2", 4);
+  put(0x08, kHeaderSize);
+  put(0x10, 0x200);  // security info
+  put(0x14, 3);
+  put(0x18, 0x00040006);  // execution info
+  put(0x1C, 0x100);
+  put(0x20, 0x000002FF);  // resources
+  put(0x24, 0x140);
+  put(0x28, 0x000003FF);  // file format: not encrypted or compressed
+  put(0x2C, 0x180);
+  put(0x100 + 12, 0x12345678);
+  put(0x140, 20);
+  std::memcpy(bytes.data() + 0x144, "12345678", 8);
+  put(0x14C, kBase + kResource);
+  put(0x150, uint32_t(xdbf.size()));
+  put(0x180, 8);
+  put(0x200 + 4, kResource + uint32_t(xdbf.size()));
+  put(0x200 + 0x110, kBase);
+  bytes.resize(kHeaderSize + kResource);
+  bytes.insert(bytes.end(), xdbf.begin(), xdbf.end());
   return bytes;
 }
 std::vector<uint8_t> SourceIso() {
@@ -218,4 +275,72 @@ TEST_CASE("Game source XEX header inspection bounds optional headers", "[game_so
     bytes[27] = 0;
   }
   CHECK(rex::system::XexSourceTitleId(bytes) == 0);
+}
+
+TEST_CASE("Game source XEX title names come from the image's XDBF resource", "[game_source]") {
+  auto bytes = NamedXex("Test Game\xE2\x84\xA2");
+  CHECK(rex::system::XexTitleName(bytes) == "Test Game\xE2\x84\xA2");
+  CHECK(rex::system::XexTitleName(SourceXex()).empty());  // no resources
+  SECTION("Resource outside the image") {
+    bytes[0x14F] = 0xFF;
+  }
+  SECTION("Truncated image") {
+    bytes.resize(0x420);
+  }
+  SECTION("String longer than its table") {
+    bytes[bytes.size() - 14] = 0xFF;  // the title length's high byte
+  }
+  SECTION("Resource names another title") {
+    bytes[0x144] = '9';
+  }
+  SECTION("Unsupported compression") {
+    bytes[0x187] = 3;
+  }
+  SECTION("No XDBF magic") {
+    bytes[0x410] = 'Y';
+  }
+  CHECK(rex::system::XexTitleName(bytes).empty());
+}
+
+TEST_CASE("A source holding another game names both games", "[game_source]") {
+  const auto root = std::filesystem::current_path() /
+                    ("rex-source-name-test-" + std::to_string(GetCurrentProcessId()));
+  REQUIRE_FALSE(std::filesystem::exists(root));
+  std::filesystem::create_directories(root);
+  struct Clean {
+    std::filesystem::path root;
+    ~Clean() {
+      std::error_code ec;
+      std::filesystem::remove_all(root, ec);
+    }
+  } clean{root};
+  const auto xex = NamedXex("Test Game\xE2\x84\xA2");
+  {
+    std::ofstream file(root / "default.xex", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(xex.data()), xex.size());
+  }
+  rex::system::GameSourceIdentity expected{0x41560817, "", "007: Quantum of Solace"};
+  auto mismatch = rex::system::InspectGameSource(root, "default.xex", expected);
+  CHECK_FALSE(mismatch);
+  CHECK(mismatch.identity.title_name == "Test Game");
+  CHECK(mismatch.error ==
+        "This is Test Game (12345678). This build is for 007: Quantum of Solace (41560817).");
+  // Builds generated before names were recorded keep the title ID alone.
+  expected.title_name.clear();
+  CHECK(rex::system::InspectGameSource(root, "default.xex", expected).error ==
+        "This is Test Game (12345678). This build is for title 41560817.");
+}
+
+// Local only: REXGLUE_TITLE_XEX names a retail default.xex (encrypted and
+// LZX-compressed, as discs ship) whose XDBF title should be read.
+TEST_CASE("A retail XEX's title name decodes from its encrypted image", "[game_source][local]") {
+  const char* path = std::getenv("REXGLUE_TITLE_XEX");
+  if (!path || !*path)
+    SKIP("REXGLUE_TITLE_XEX is not set");
+  std::ifstream file(std::filesystem::path(path), std::ios::binary);
+  const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), {});
+  const auto name = rex::system::XexTitleName(bytes);
+  INFO(path);
+  CHECK_FALSE(name.empty());
+  WARN("Title name: " << name);
 }

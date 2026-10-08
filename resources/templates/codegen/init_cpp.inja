@@ -62,6 +62,7 @@ const rex::PPCImageInfo PPCImageConfig = {
     .source_title_id = {{ source_title_id }},
     .source_executable_checksum = "{{ source_executable_checksum }}",
     .source_executable_path = "{{ source_executable_path }}",
+    .source_title_name = "{{ source_title_name }}",
 };
 
 PPCFuncMapping PPCFuncMappings[] = {

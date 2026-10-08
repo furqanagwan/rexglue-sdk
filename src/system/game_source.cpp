@@ -10,6 +10,7 @@
 #include <rex/filesystem/devices/optical_disc_reader.h>
 #include <rex/filesystem/file.h>
 #include <rex/hash.h>
+#include <rex/system/util/xdbf_utils.h>
 
 namespace rex::system {
 uint32_t XexSourceTitleId(std::span<const uint8_t> bytes) {
@@ -122,6 +123,11 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
     result.error = "The executable checksum could not be calculated.";
     return result;
   }
+  // A different game: keep its bytes to name it in the message.
+  const bool other_title = expected.title_id && expected.title_id != result.identity.title_id;
+  std::vector<uint8_t> whole;
+  if (other_title)
+    whole.reserve(entry->size());
   std::array<uint8_t, 256 * 1024> chunk;
   for (size_t offset = 0; offset < entry->size();) {
     if (cancelled && cancelled()) {
@@ -134,13 +140,21 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
       result.error = "The executable checksum read failed; reconnect its drive and retry.";
       return result;
     }
+    if (other_title)
+      whole.insert(whole.end(), chunk.begin(), chunk.begin() + count);
     offset += count;
   }
   const auto hash = XXH3_128bits_digest(state.get());
   result.identity.executable_checksum = fmt::format("{:016x}{:016x}", hash.high64, hash.low64);
-  if (expected.title_id && expected.title_id != result.identity.title_id) {
-    result.error = fmt::format("This build expects title {:08X}; the source is title {:08X}.",
-                               expected.title_id, result.identity.title_id);
+  if (other_title) {
+    result.identity.title_name = util::TitleDisplayName(XexTitleName(whole));
+    auto name = [](const GameSourceIdentity& identity) {
+      return identity.title_name.empty()
+                 ? fmt::format("title {:08X}", identity.title_id)
+                 : fmt::format("{} ({:08X})", identity.title_name, identity.title_id);
+    };
+    result.error =
+        fmt::format("This is {}. This build is for {}.", name(result.identity), name(expected));
   } else if (!expected.executable_checksum.empty() &&
              expected.executable_checksum != result.identity.executable_checksum) {
     result.error = "This executable revision does not match the one used to build this recomp.";

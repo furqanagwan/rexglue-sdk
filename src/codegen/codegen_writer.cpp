@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -27,6 +29,7 @@
 #include <rex/codegen/output_partition.h>
 #include <rex/codegen/template_registry.h>
 #include <rex/system/game_source.h>
+#include <rex/system/util/xdbf_utils.h>
 #include <rex/logging.h>
 #include <rex/runtime.h>
 #include <rex/system/export_resolver.h>
@@ -61,8 +64,13 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
   if (!cfg.filePath.empty() && std::filesystem::is_regular_file(source_path)) {
     auto source =
         rex::system::InspectGameSource(source_path.parent_path(), source_path.filename().string());
-    if (source)
+    if (source) {
       source_identity = std::move(source.identity);
+      std::ifstream file(source_path, std::ios::binary);
+      const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), {});
+      source_identity.title_name =
+          rex::system::util::TitleDisplayName(rex::system::XexTitleName(bytes));
+    }
   }
 
   // Compute code_base and code_size from binary sections
@@ -172,6 +180,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
       {"title_updates", titleUpdatesJson},
       {"source_title_id", source_identity.title_id},
       {"source_executable_checksum", source_identity.executable_checksum},
+      {"source_title_name", CStringBody(source_identity.title_name)},
       {"source_executable_path",
        CStringBody(ctx.sourceGuestPath().empty()
                        ? (cfg.filePath.empty()

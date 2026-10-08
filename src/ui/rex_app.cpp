@@ -339,7 +339,8 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
     paths.game_data_root = rex::to_path(configured_source);
   const system::GameSourceIdentity expected{
       ppc_info_.source_title_id,
-      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : ""};
+      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : "",
+      ppc_info_.source_title_name ? ppc_info_.source_title_name : ""};
   std::string source_error;
   const std::string executable =
       ppc_info_.source_executable_path ? ppc_info_.source_executable_path : "default.xex";
@@ -837,7 +838,8 @@ void ReXApp::InstallMediaRecovery(std::string executable) {
   const auto source_path = game_data_root_;
   const system::GameSourceIdentity expected{
       ppc_info_.source_title_id,
-      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : ""};
+      ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : "",
+      ppc_info_.source_title_name ? ppc_info_.source_title_name : ""};
   // Legacy/custom hosts without a pinned source fingerprint retain ordinary
   // read errors; they cannot certify replacement media is the same disc.
   if (!expected.title_id || expected.executable_checksum.empty())

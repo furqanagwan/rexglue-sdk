@@ -104,6 +104,9 @@ struct PPCImageInfo {
   u32 source_title_id = 0;
   const char* source_executable_checksum = "";
   const char* source_executable_path = "default.xex";
+  /// The source XEX's XDBF display name, for naming it when a source holds
+  /// another game; empty for older generated code.
+  const char* source_title_name = "";
 };
 
 }  // namespace rex

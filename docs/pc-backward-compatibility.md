@@ -65,7 +65,7 @@ prove parity with the installed reference or compatibility with every game.
 | Language | One resolver now supplies XGetLanguage, XConfig and XDBF title/achievement metadata. `user_language=0` follows Windows; explicit IDs 1–12 remain supported. Title language availability still depends on the game. |
 | Native EXE art | `title-art` and the CMake icon helper now generate/embed multi-size title icons. [SDK #164](https://github.com/furqanagwan/rexglue-sdk/issues/164) stays open: existing title installations and Xbox app cached artwork have not been updated/verified. |
 | Xbox library / packaging | Existing gameconfig and library-art tools produce package metadata and library tiles. Loose config and an EXE icon do not register a Store product. Own package registration and Xbox app presentation remain deployment gates. |
-| First-run game source | Checked ISO/disc/folder selection, persisted sources, cancellable extraction and Retry/Leave Game recovery now exist in the SDK. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for interactive scene, physical-drive/title validation and friendly mismatch names; see [ADR-014](adr/ADR-014-game-source-and-media-recovery.md). |
+| First-run game source | Checked ISO/disc/folder selection, persisted sources, cancellable extraction and Retry/Leave Game recovery now exist in the SDK. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for physical-drive, media-removal and title-update launch validation; see [ADR-014](adr/ADR-014-game-source-and-media-recovery.md). |
 | Original / title update launch | Existing separate static executables and update manifest preserve generated-code boundaries; see [title updates](title-updates.md). End-to-end original/TU switching needs representative-title evidence. |
 | Guide / notifications / keyboard | Sources and issues belong to [xbox-guide](https://github.com/furqanagwan/xbox-guide). [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1) remains open for complete console scene support; closed fidelity work still has owner checks. Private assets are required for real scene tests. |
 | Profiles / local achievements | Existing guest profiles, local achievement persistence and Guide presentation. These are local guest services; Xbox account linking and service achievements remain separate integration work. |
@@ -167,8 +167,14 @@ stays on the Guide page with byte progress; A cancels without blocking.
 Completed/cancelled/failed copy results remain in the Guide's Active Downloads
 alongside title-update jobs.
 
-Friendly mismatch game names, original/TU title launches, painted scene/pad
-interaction and real media-removal checks remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).
+A source holding another game names both, each with its title ID: "This is
+007: Blood Stone (ID). This build is for Quantum of Solace (ID)." The build's name is
+recorded at code generation from the original XEX's XDBF title; the source's
+is read from its executable's encrypted image only when the title IDs differ.
+Builds generated before this show the title ID alone until regenerated.
+
+Title-update launches, physical optical drives and real media-removal checks
+remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).
 
 ## Native title art
 

@@ -140,6 +140,28 @@ real-title launch and rendered interactive presentation remain unverified.
 Console XuiMessageBox3, Active Downloads and friendly mismatch names remain
 open. Issue #154 is not closed and whole-experience parity is not claimed.
 
+## Source picker as a Guide page and mismatch names (2026-10-08)
+
+The first-run picker is the in-game Guide's list page (xbox-guide
+`GuideListPage`/`GuideFileBrowser`, pinned `1aeef33`). Owner check: Quantum of
+Solace built against this SDK, launched without a source, browsed to its ISO
+with a controller, verified it and launched (NVIDIA, fullscreen, disposable
+user folder). Extraction, the wrong-game page and the disc-drive page were not
+seen on screen.
+
+A source holding another game names both. Codegen records the original XEX's
+XDBF title (`source_title_name`); the check decodes the chosen XEX's image
+(AES-CBC, basic or LZX compression, retail then development key) only when the
+title IDs differ, with every offset bounded. Synthetic tests cover a named
+image and six malformed variants; a local test decoded the retail Quantum of
+Solace, Blood Stone and Legends executables (encrypted, LZX). Existing
+generated titles keep the ID-only message until regenerated.
+
+Debug CTest: 2,711 selections, two failures, both recorded before this
+change: the tessellated-quad GPU fixture (regression strategy) and
+`ppc_corpus.instr_mtmsrd`'s Debug abort (below). Title-update launches,
+physical optical drives and media removal remain #154 gates.
+
 ## Console source scenes (2026-10-07)
 
 Revision: topic `pc-guide-source-scenes`, based on `98f006b`; Guide
