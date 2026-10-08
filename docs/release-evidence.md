@@ -484,6 +484,13 @@ This is not a full CTest or title validation. FPSCR result-class fields and
 other estimate effects remain outside this evidence. See the
 [upstream ledger](upstream-tracking.md#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08).
 
+The generated GDK Debug corpus was rebuilt after the scalar FPSCR changes.
+All 566 active CTest groups pass when the existing `instr_mtmsrd` timeout case
+is excluded. Corpus validation caught and drove fixes for fused subtract
+infinity cancellation, NaN product classification, and preserving guest-written
+FEX during `mtfsf`. This result is corpus evidence only; `instr_mtmsrd` remains
+an unresolved timeout and gameplay validation remains outstanding.
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main

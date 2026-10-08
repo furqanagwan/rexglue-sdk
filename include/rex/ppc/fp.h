@@ -377,16 +377,23 @@ inline uint32_t sqrt_invalid_causes(double a) noexcept {
 }
 
 /// x86 skips the invalid signal for 0 x inf when the addend is a quiet NaN.
-inline uint32_t madd_invalid_causes(double a, double c, double b) noexcept {
+inline uint32_t madd_invalid_causes(double a, double c, double b,
+                                    bool subtract_addend = false) noexcept {
   const uint64_t ma = bits(a) & kMagnitude, mc = bits(c) & kMagnitude;
   uint32_t causes = snan_causes(a, c, b);
   if ((ma == 0 && mc == kInfinity) || (ma == kInfinity && mc == 0))
     causes |= FPSCRRegister::kVXIMZ;
-  const bool product_infinite = (ma == kInfinity && mc != 0) || (mc == kInfinity && ma != 0);
+  const bool product_infinite =
+      !is_nan(a) && !is_nan(c) && ((ma == kInfinity && mc != 0) || (mc == kInfinity && ma != 0));
   const bool product_negative = std::signbit(a) != std::signbit(c);
-  if (product_infinite && std::isinf(b) && product_negative != std::signbit(b))
+  const bool addend_negative = std::signbit(b) != subtract_addend;
+  if (product_infinite && !is_nan(b) && std::isinf(b) && product_negative != addend_negative)
     causes |= FPSCRRegister::kVXISI;
   return causes;
+}
+
+inline uint32_t msub_invalid_causes(double a, double c, double b) noexcept {
+  return madd_invalid_causes(a, c, b, true);
 }
 
 inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {

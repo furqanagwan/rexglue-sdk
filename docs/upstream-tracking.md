@@ -1894,6 +1894,12 @@ cases, unordered NaN comparisons, sticky/summary state, enabled FEX/CR1 and
 selective clearing. This is not full FPSCR coverage: result-class fields,
 other estimate effects and title/gameplay gates remain open. No title
 compatibility claim follows from these synthetic tests.
+
+The refreshed generated GDK Debug corpus passes all 566 active CTest groups
+with the existing `instr_mtmsrd` timeout excluded. It exposed and verified
+fused subtract sign handling for VXISI, NaN product classification and exact
+preservation of guest-written FEX on `mtfsf`. The timeout remains unresolved;
+this corpus result does not close #149 or establish title compatibility.
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at

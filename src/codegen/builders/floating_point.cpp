@@ -225,13 +225,13 @@ bool build_fmadds(BuilderContext& ctx) {
 
 bool build_fmsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  emitFpArith(ctx, "msub", 3, "madd_invalid_causes");
+  emitFpArith(ctx, "msub", 3, "msub_invalid_causes");
   return true;
 }
 
 bool build_fmsubs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  emitFpArith(ctx, "msubs", 3, "madd_invalid_causes", "single_denormal");
+  emitFpArith(ctx, "msubs", 3, "msub_invalid_causes", "single_denormal");
   return true;
 }
 
@@ -249,13 +249,13 @@ bool build_fnmadds(BuilderContext& ctx) {
 
 bool build_fnmsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  emitFpArith(ctx, "nmsub", 3, "madd_invalid_causes");
+  emitFpArith(ctx, "nmsub", 3, "msub_invalid_causes");
   return true;
 }
 
 bool build_fnmsubs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  emitFpArith(ctx, "nmsubs", 3, "madd_invalid_causes", "single_denormal");
+  emitFpArith(ctx, "nmsubs", 3, "msub_invalid_causes", "single_denormal");
   return true;
 }
 

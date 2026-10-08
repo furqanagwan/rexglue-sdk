@@ -202,7 +202,6 @@ struct FPSCRRegister {
 
   inline void storeFromGuest(uint32_t value) noexcept {
     guest_bits = value & ~kRoundMask;
-    updateFex();
     csr &= ~RoundMaskVal;
     csr |= Platform::GuestToHost[value & kRoundMask];
     setcsr(csr);
