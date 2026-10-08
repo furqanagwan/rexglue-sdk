@@ -323,6 +323,19 @@ inline uint32_t snan_causes(double a, double b = 0.0, double c = 0.0) noexcept {
   return any_snan(a, b, c) ? FPSCRRegister::kVXSNAN : 0;
 }
 
+/// Compare operands and record the invalid causes specified by fcmpu/fcmpo.
+inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
+                    bool ordered) noexcept {
+  cr.compare(a, b);
+  uint32_t causes = snan_causes(a, b);
+  const bool has_nan = is_nan(a) || is_nan(b);
+  const bool has_quiet_nan = (is_nan(a) && !is_snan(a)) || (is_nan(b) && !is_snan(b));
+  if (ordered && (has_quiet_nan || (has_nan && !(fpscr.guest_bits & FPSCRRegister::kVE)))) {
+    causes |= FPSCRRegister::kVXVC;
+  }
+  fpscr.recordExceptions(causes);
+}
+
 inline uint32_t add_invalid_causes(double a, double b) noexcept {
   uint32_t causes = snan_causes(a, b);
   if (std::isinf(a) && std::isinf(b) && std::signbit(a) != std::signbit(b))

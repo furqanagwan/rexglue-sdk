@@ -136,15 +136,13 @@ bool build_frsp(BuilderContext& ctx) {
 
 bool build_fcmpu(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
-  ctx.println("\t{}.compare({}.f64, {}.f64);", ctx.cr(ctx.insn.operands[0]),
-              ctx.f(ctx.insn.operands[1]), ctx.f(ctx.insn.operands[2]));
+  ctx.println("\trex::ppc::fp::compare(ctx.fpscr, {}, {}.f64, {}.f64, {});",
+              ctx.cr(ctx.insn.operands[0]), ctx.f(ctx.insn.operands[1]),
+              ctx.f(ctx.insn.operands[2]), ctx.insn.opcode->name[4] == 'o');
   return true;
 }
 
 bool build_fcmpo(BuilderContext& ctx) {
-  // fcmpo is identical to fcmpu for recompilation purposes.
-  // The difference is that fcmpo sets FPSCR exception flags for SNaN operands,
-  // which we don't need to emulate.
   return build_fcmpu(ctx);
 }
 

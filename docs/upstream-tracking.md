@@ -1368,11 +1368,16 @@ add, subtract, multiply, divide, fused multiply-add/subtract and square-root
 families, including their single-precision forms. The adaptation uses host fenv
 for OX/UX/ZX/XX and explicitly classifies PowerPC invalid subcauses that host
 fenv does not distinguish. Sticky FX, enabled FEX, invalid VX and record-form
-CR1 are checked by unit tests and
-`tests/ppc/asm/instr_fpscr_arithmetic.s`. This does not yet cover FP compares,
-integer conversions, estimate instructions or every operation that can affect
-FPSCR. The issue remains open for that coverage, the broader Edge corpus, title
-validation and release gates.
+CR1 are checked by unit tests and `tests/ppc/asm/instr_fpscr_arithmetic.s`.
+`fcmpu` now records VXSNAN for signaling NaNs; `fcmpo` records VXVC for quiet
+NaNs and for signaling NaNs when VE is disabled, following IBM's [fcmpu]
+and [fcmpo] descriptions. FPCC/FPRF result-class fields are not yet updated by
+these helpers. Integer conversions, estimate instructions and other FPSCR
+effects remain uncovered. The issue remains open for that coverage, the broader
+Edge corpus, title validation and release gates.
+
+[fcmpu]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-fcmpu-floating-compare-unordered-instruction
+[fcmpo]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fcmpo_instrs.html
 
 ## RG-GDK-048: achievement enumerator offset (2026-10-01)
 
@@ -1858,13 +1863,19 @@ records PowerPC invalid subcauses. `FX`, `VX` and enabled `FEX` are derived as
 arithmetic executes, while `mtfsf` continues to preserve guest-written status
 bits for `mcrfs` compatibility. The tracked path also reports record-form CR1.
 
-GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. In Debug,
-all 1,579 ordinary PPC cases pass in one run (6,523 assertions). The focused
-FPSCR arithmetic and existing `mcrfs` tests pass in both configurations (8
-CTest cases each). The tests cover inexact add, invalid infinity subtraction,
-sticky/summary state, enabled FEX/CR1 and selective clearing. This is not full
-FPSCR coverage: comparisons, conversions, estimates and title/gameplay gates
-remain open. No title compatibility claim follows from these synthetic tests.
+The same change now tracks compare invalid causes: `fcmpu` sets VXSNAN for
+signaling NaNs; `fcmpo` sets VXVC for quiet NaNs and for signaling NaNs while
+VE is disabled. IBM's instruction references are linked above. FPCC/FPRF
+result-class fields are still not modeled by this follow-up.
+
+GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. The full
+ordinary PPC executable passes 1,584 cases and 6,533 assertions in both
+configurations. The focused FPSCR arithmetic/compare, existing `mcrfs` and unit
+tests pass under CTest (13 cases per configuration). The tests cover inexact
+add, invalid infinity subtraction, unordered NaN comparisons, sticky/summary
+state, enabled FEX/CR1 and selective clearing. This is not full FPSCR coverage:
+result-class fields, conversions, estimates and title/gameplay gates remain
+open. No title compatibility claim follows from these synthetic tests.
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at
