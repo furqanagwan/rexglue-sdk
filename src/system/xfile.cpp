@@ -14,6 +14,7 @@
 #include <rex/math.h>
 #include <rex/memory.h>
 #include <rex/stream.h>
+#include <rex/system/file_read_statistics.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xevent.h>
 #include <rex/system/xfile.h>
@@ -104,6 +105,7 @@ X_STATUS XFile::QueryDirectory(X_FILE_DIRECTORY_INFORMATION* out_info, size_t le
 
 X_STATUS XFile::Read(uint32_t buffer_guest_address, uint32_t buffer_length, uint64_t byte_offset,
                      uint32_t* out_bytes_read, uint32_t apc_context, bool notify_completion) {
+  ScopedFileReadTimer read_timer(out_bytes_read);
   std::lock_guard<std::mutex> lock(file_lock_);
   // A new request clears the file's event (NT notification event).
   if (notify_completion) {
@@ -204,6 +206,7 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address, uint32_t buffer_leng
 
 X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length, uint64_t byte_offset,
                             uint32_t* out_bytes_read, uint32_t apc_context) {
+  ScopedFileReadTimer read_timer(out_bytes_read);
   std::lock_guard<std::mutex> lock(file_lock_);
   async_event_->Reset();
   X_STATUS result = X_STATUS_SUCCESS;

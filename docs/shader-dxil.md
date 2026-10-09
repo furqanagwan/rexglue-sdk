@@ -197,6 +197,22 @@ same section (2026-10-04) was no faster: 38-52 fps with 66 frames over
 150 ms in swap (up to 780 ms), against 41-60 fps and 51 for warm DXIL, so
 those long frames are not DXIL-specific.
 
+Paired run, 2026-10-09 (Quantum of Solace, GDK Release, NVIDIA RTX 5080
+Laptop, one build of SDK `99158cb` plus file-read statistics, cold shader cache
+both times, 90 s from launch with no input, only `gpu_shader_path` differs):
+
+| | DXBC | DXIL |
+| --- | --- | --- |
+| Errors or failed pipelines | none | none |
+| Longest frame | 2.6 s (level load) | 21.5 s (level load, pipelines created cold) |
+| 5-second windows with a frame over 300 ms | 1 (417 ms) | 5 (up to 750 ms), in the first 40 s of play |
+| Frame rate once loaded | about 50–60 fps | about 50–60 fps |
+
+Screenshots every 4 s show correct rendering on both paths. No input means
+the two runs reach different points of the level at the same time stamp, so
+this is not a frame-exact comparison. The cold-cache stall is the known one
+above; a warm cache removes it.
+
 ## Not yet
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):

@@ -9,6 +9,7 @@ set(REXSYSTEM_SOURCES
     user_module.cpp
     xthread.cpp
     xevent.cpp
+    file_read_statistics.cpp
     xfile.cpp
     xmutant.cpp
     xsemaphore.cpp
