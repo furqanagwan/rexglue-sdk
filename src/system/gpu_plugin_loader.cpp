@@ -48,6 +48,20 @@ std::vector<platform::DynamicLibrary>& LoadedPlugins() {
 
 }  // namespace
 
+std::string ResolveGpuPluginName(std::string_view configured, bool default_plugin_staged) {
+  if (configured == kNoGpuPlugin) {
+    return {};
+  }
+  if (!configured.empty()) {
+    return std::string(configured);
+  }
+  return default_plugin_staged ? std::string(kDefaultGpuPlugin) : std::string();
+}
+
+bool IsGpuPluginStaged(std::string_view name) {
+  return std::filesystem::exists(rex::filesystem::GetExecutableFolder() / PluginFileName(name));
+}
+
 std::unique_ptr<IGraphicsSystem> LoadGpuPlugin(std::string_view name, std::string_view backend) {
   auto path = rex::filesystem::GetExecutableFolder() / PluginFileName(name);
   if (!std::filesystem::exists(path)) {

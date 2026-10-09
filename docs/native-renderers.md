@@ -28,7 +28,7 @@ the emulated path.
 | --- | --- |
 | Replace a guest function with host code | `REX_HOOK` / `REX_HOOK_RAW` (`include/rex/hook.h`), codegen function overrides and mid-asm hooks (`docs/code-patches.md` covers byte patches) |
 | Call back into guest code from host code | `REX_IMPORT`, `CallFrame`, `StackFrame` |
-| Swap the GPU implementation | The `gpu_plugin` boundary (`include/rex/system/gpu_plugin.h`); an empty value disables GPU emulation |
+| Swap the GPU implementation | The `gpu_plugin` boundary (`include/rex/system/gpu_plugin.h`); an empty value loads `xenos` when `rexgpu-xenos.dll` is next to the executable, and `none` disables GPU emulation |
 | Xenos formats, tiling, fetch constants | `src/graphics/pipeline/texture` (untiling, conversion), `include/rex/graphics/xenos.h` |
 | Xenos microcode to host shaders | DXBC translator, runtime and EDRAM-aware (`dxbc_translator*.cpp`); DXIL path planned (ADR-008, #53) |
 | Reference images | Emulated path, PIX frame capture (`d3d12_capture_frame`), baseline screenshots (`scripts/capture_baseline.py`) |
