@@ -67,6 +67,16 @@ function(rexglue_configure_target target_name)
 
     target_compile_definitions(${target_name} PRIVATE
         REXGLUE_BUILD_CONFIG="$<CONFIG>")
+    if(REXGLUE_TITLE_VERSION)
+        target_compile_definitions(${target_name} PRIVATE
+            REXGLUE_TITLE_VERSION="${REXGLUE_TITLE_VERSION}")
+    endif()
+    if(REXGLUE_UPDATE_REPOSITORY)
+        list(APPEND ARG_CVAR_DEFAULTS "update_repository=${REXGLUE_UPDATE_REPOSITORY}")
+    endif()
+    if(REXGLUE_UPDATE_ASSET)
+        list(APPEND ARG_CVAR_DEFAULTS "update_asset=${REXGLUE_UPDATE_ASSET}")
+    endif()
     # The title's own cvar defaults ("name=value" each), under its config
     # file and the command line (ADR-009: titles opt in by name).
     if(ARG_CVAR_DEFAULTS)
@@ -318,6 +328,12 @@ endfunction()
 #==========================================================
 set(REXGLUE_SYSTEM_UPDATE "$ENV{REXGLUE_SYSTEM_UPDATE}" CACHE PATH
     "Console $SystemUpdate (dashboard 2.0.17559) built into each title for the Xbox guide")
+set(REXGLUE_TITLE_VERSION "" CACHE STRING
+    "The game's release version (for example 0.1.0-alpha.2); empty turns its updates off")
+set(REXGLUE_UPDATE_REPOSITORY "" CACHE STRING
+    "GitHub repository (owner/name) whose releases update the game")
+set(REXGLUE_UPDATE_ASSET "" CACHE STRING
+    "Release file pattern for the game's update, with * for the version")
 set(REXGLUE_GUIDE_FLASH "$ENV{REXGLUE_GUIDE_FLASH}" CACHE PATH
     "Optional Xbox PC backward-compatibility Content/Flash folder for the Xbox guide")
 

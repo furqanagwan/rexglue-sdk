@@ -259,6 +259,7 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   /// Populates `resolved_defaults_` with the PathConfig produced by
   /// OnConfigurePaths.
   virtual bool SetupEnvironment();
+  void ConfigureGameUpdates();
 
   /// Construct Runtime with the given paths, call runtime_->Setup, load the
   /// XEX image, initialize the rexcrt heap. Runs OnPostSetup at the end.

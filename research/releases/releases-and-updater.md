@@ -152,8 +152,14 @@ listed in the new zip.
   - `UnpackZip` unpacks a release with Windows' own `tar.exe`, and
     `StartUpdateHelper` copies the helper out of the game folder and starts it
     with the game's process ID, so it can wait for the game to close.
-  - Still to come: the download (the Guide's WinHTTP downloader) and the
-    Guide's update page.
+  - The Guide (xbox-guide `app_update.h`, `guide_game_update.cpp`):
+    Games & Apps > **Game Update** checks once a day, downloads with the
+    Guide's WinHTTP downloader, verifies, unpacks and starts the helper.
+  - A title opts in when it's built with `REXGLUE_TITLE_VERSION`,
+    `REXGLUE_UPDATE_REPOSITORY` and `REXGLUE_UPDATE_ASSET` (CMake cache
+    settings): the version is compiled in, and the repository and asset
+    become the `update_repository` and `update_asset` defaults.
+    `check_for_updates = false` turns the daily check off.
 - Each title opts in with its release repository in its config:
   `update_repository = "furqanagwan/007"` and `update_asset = "007-QuantumOfSolace-*-win-x64.zip"`.
 - Uses WinHTTP (already part of Windows), so there are no new dependencies.

@@ -52,6 +52,7 @@
 #include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/guide/guide_notification.h>
+#include <rex/ui/guide/app_update.h>
 #include <rex/ui/guide/title_update.h>
 #include <rex/ui/guide/xbox_guide.h>
 #include <rex/kernel/xam/module.h>
@@ -77,6 +78,15 @@ REXCVAR_DEFINE_STRING(gpu_plugin, "", "GPU",
                       "GPU emulation plugin to load at startup (e.g. 'xenos'); empty loads 'xenos' "
                       "when it is next to the executable, 'none' disables GPU emulation")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+REXCVAR_DEFINE_STRING(update_repository, "", "Updates",
+                      "GitHub repository (owner/name) whose releases update this game; empty "
+                      "turns updates off");
+REXCVAR_DEFINE_STRING(update_asset, "", "Updates",
+                      "Release file to update from, with * for the version (for example "
+                      "007-QuantumOfSolace-*-win-x64.zip)");
+REXCVAR_DEFINE_BOOL(check_for_updates, true, "Updates",
+                    "Check the game's GitHub releases for a newer version once a day");
 
 REXCVAR_DEFINE_STRING(gaming_runtime, "auto", "GDK",
                       "Microsoft Gaming Runtime at startup: auto (initialize it in GDK builds and "
@@ -410,6 +420,20 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
   return true;
 }
 
+void ReXApp::ConfigureGameUpdates() {
+#ifdef REXGLUE_TITLE_VERSION
+  const std::string version = REXGLUE_TITLE_VERSION;
+#else
+  const std::string version;
+#endif
+  const auto executable = rex::filesystem::GetExecutablePath();
+  ui::guide::ConfigureAppUpdate({version, REXCVAR_GET(update_repository), REXCVAR_GET(update_asset),
+                                 local_dir_, executable.parent_path(), executable});
+  if (REXCVAR_GET(check_for_updates)) {
+    ui::guide::CheckForAppUpdate(/*force=*/false);
+  }
+}
+
 bool ReXApp::SetupEnvironment() {
   auto exe_dir = rex::filesystem::GetExecutableFolder();
   // Where an Xbox PC game keeps its files (docs/data-locations.md): saves
@@ -520,6 +544,7 @@ bool ReXApp::SetupEnvironment() {
     REXLOG_DEBUG("Loaded config: {}", config_path_.string());
 
   local_dir_ = locations.local;
+  ConfigureGameUpdates();
   // Title updates are optional (docs/title-updates.md): the player's choice in
   // the guide (title_update) picks the executable, and the original is always
   // the fallback. An update build given --update_data_root runs as asked.
