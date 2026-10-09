@@ -13,6 +13,7 @@ add_executable(unit_tests
     filesystem/disc_image_test.cpp
     core/vfs_overwrite_test.cpp
     core/hash_test.cpp
+    core/utf8_ascii_case_test.cpp
     core/stream_test.cpp
     core/chrono_test.cpp
     core/log_prune_test.cpp

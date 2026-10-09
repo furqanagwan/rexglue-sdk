@@ -256,6 +256,8 @@ uint32_t GraphicsSystem::ReadRegister(uint32_t addr) {
       return 0x08100748;
     case 0x0F01:  // RB_BC_CONTROL
       return 0x0000200E;
+    case XE_GPU_REG_RB_HSIO_INTERFACE_ALIGNER_VALUE:
+      return 0x00BBBBBB;
     case 0x194C: {  // R500_D1MODE_V_COUNTER
       system::X_VIDEO_MODE video_mode;
       kernel::xboxkrnl::VdQueryVideoMode(&video_mode);
@@ -288,6 +290,8 @@ void GraphicsSystem::WriteRegister(uint32_t addr, uint32_t value) {
     case 0x01C5:  // CP_RB_WPTR
       command_processor_->UpdateWritePointer(value);
       break;
+    case XE_GPU_REG_RB_BC_CONTROL:
+    case XE_GPU_REG_RB_HSIO_INTERFACE_ALIGNER_VALUE:
     case 0x1844:  // AVIVO_D1GRPH_PRIMARY_SURFACE_ADDRESS
       break;
     default:

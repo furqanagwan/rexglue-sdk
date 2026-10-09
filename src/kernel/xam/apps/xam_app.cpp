@@ -30,6 +30,14 @@ X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
   // NOTE: buffer_length may be zero or valid.
   auto buffer = memory_->TranslateVirtual(buffer_ptr);
   switch (message) {
+    case 0x0002C009: {
+      if (!buffer_ptr) {
+        return X_E_INVALIDARG;
+      }
+      REXKRNL_DEBUG("XamApp: Kinect identity callback {:08X}",
+                    memory::load_and_swap<uint32_t>(buffer));
+      return X_E_SUCCESS;
+    }
     case 0x0002000E: {
       struct message_data {
         rex::be<uint32_t> user_index;
