@@ -973,6 +973,11 @@ bool CommandProcessor::ExecutePacketType3(memory::RingBuffer* reader, uint32_t p
       result = true;
       break;
     }
+    case PM4_WAIT_IB_PFD_COMPLETE: {
+      reader->AdvanceRead(count * sizeof(uint32_t));
+      result = true;
+      break;
+    }
     case PM4_WAIT_FOR_IDLE: {
       // This opcode is used by 5454084E while going / being ingame.
       assert_true(count == 1);

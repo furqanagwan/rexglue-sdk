@@ -2022,3 +2022,46 @@ expected, in Debug/Release. This exercises the real plugin, converted index
 buffer and guest write watches rather than relying only on CPU allocation counts.
 The affected RTV/ROV readback also passes strict DXIL in the opt-in GDK Release
 configuration; the default shader path remains DXBC.
+
+## furqanagwan/xenia-edge fork sync of 2026-10-09 (reviewed 2026-10-09)
+
+Compared `furqanagwan/xenia-edge:edge` at `417b37dfeb` with the 2026-10-07
+review point `669b4266f5`: 34 commits, 29 excluding merges. Classes follow the
+A–H scheme above.
+
+**Ported in this change**
+
+| Edge commit | Change | Class | Adaptation and test |
+| --- | --- | --- | --- |
+| `19c23eb112` (Tim, 2026-10-07) | `upper_ascii` lowered instead of raising | A | Same one-line fix in `src/core/utf8.cpp`. It also repairs the Windows reserved-name check during disc extraction, which compared upper-cased names. `unit_tests [utf8]` |
+| `3e9d62ffc4` (knuckleslee, 2026-09-29) | Handle `PM4_WAIT_IB_PFD_COMPLETE` | A | Indirect buffers run synchronously, so the packet is skipped. ReXGlue already advanced past unknown packets but asserted in Debug and logged each time |
+| `0b041cd2a3` (The-Little-Wol, 2026-10-04) | `RB_HSIO_INTERFACE_ALIGNER_VALUE` register | A | Register added; reads return `0x00BBBBBB`; writes to it and to `RB_BC_CONTROL` are accepted silently |
+| `0b0d57a1bc` (knuckleslee, 2026-10-03) | XAM message `0x2C009` (Kinect identity callback) | B | Accepted with `X_E_SUCCESS`; the callback is not invoked. Fixes 5345084D stopping Kinect at startup upstream; no local Kinect title |
+
+**Relevant, not yet ported (GPU, need a design and title checks)**
+
+| Edge commit | Change | Notes |
+| --- | --- | --- |
+| `ac37478be6`, `7347cd12ef` | `k_DXT3A_AS_1_1_1_1` component bit order; resolve copy command 2 into that format | Shader and resolve changes; rebuild DXBC bytecode; 5345084D upstream |
+| `6579cc2a4c` | Host viewport may start at a negative coordinate | `GetHostViewportInfo` change; predicated-tiling titles |
+| `e1f4a0d009` | Tiling window offsets moved into EDRAM bases | Large render-target-cache change; depth garbage in tiled titles |
+| `cc4981a465` | Rasterize at Xenos MSAA sample positions | Large D3D12 render-target and DXBC output-merger change |
+
+**Deferred or not applicable**
+
+- `22a39ec9d6` `XamUpdateGet*SystemVersion` returns Edge's build 1888, which
+  contradicts the kernel version ReXGlue reports (build 0xFFFF); deferred.
+- `5629c82ab1` XHttp stubs, `82d0cd1f44` XAM UI stubs (multiplayer and Gold
+  upgrade, NUI dirty disc), `7ba916c010` XEX header logging,
+  `f41ee57bc3` user-properties mutex (ReXGlue has no equivalent property
+  store), `1406d87095` null audio driver: no local title needs them; revisit
+  on demand.
+- `828014b908` storage-devices-changed notification: ReXGlue never sends it
+  on registration.
+- `669c9709d2` rename by guest-path name: POSIX only; Windows `filename()`
+  already splits on `\`.
+- `b083312b8b` `kInvalidVertex` draws, `6260a87b85` wide 1D fetch: already
+  recorded above.
+- Posix, Linux, Vulkan, `xb` build and OG Xbox commits: out of scope
+  (`f65fda3320`, `6435e79904`, `b9e00e6cce`, `8249bbe381`, `bdcc36f3b3`,
+  `2416330549`, `2e6898afc1`, `44f5b4a860`, `c8f214e2a9`, `4a3ecf02d5`).
