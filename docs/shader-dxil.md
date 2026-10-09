@@ -136,9 +136,10 @@ ways, so the paths mix freely within a frame:
     samples to the open query's Total counter, at the same slot the DXBC
     shaders use (`zpd_fsi_counter_index`). While that pipeline is being
     created, the draw uses the DXIL pipeline without counting, as DXBC does.
-- **DXBC**, as before, for hybrid counting draws without a guest pixel shader
-  (the depth-only counting shader is DXBC) and shaders a
-  title replaces (replacements are DXBC). A shader that fails to translate or
+    A draw without a guest pixel shader gets the translator's depth-only
+    counting shader (`CreateDepthOnlyFragmentShader` with `zpd_total`, and
+    float24 variants), converted at startup like the other helpers.
+- **DXBC**, as before, for shaders a title replaces (replacements are DXBC). A shader that fails to translate or
   convert, or a failing pipeline, also falls back, logged.
   `gpu_shader_path_dxil_strict` fails such draws instead (testing).
 
@@ -232,7 +233,7 @@ wide 1D changes (2026-10-09): no errors, correct rendering; see
 ## Not yet
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
-a depth-only hybrid counting shader in DXIL, a tessellating title and a ROV title
+a tessellating title and a ROV title
 scene on the DXIL path (only fixtures so far). Edge's shared parsing fixes (1D
 fetches with XY coordinates, and the second component of scalar operands
 beside three-source vector ops) and its wide 1D textures are in on both

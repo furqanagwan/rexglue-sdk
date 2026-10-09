@@ -3949,6 +3949,23 @@ bool PipelineCache::InitializeDxilHelperPixelShaders() {
       return false;
     }
   }
+  if (zpd_hybrid_supported_) {
+    dxil_zpd_total_depth_only_pixel_shader_ =
+        convert(translator.CreateDepthOnlyFragmentShader(DepthStencilMode::kNoModifiers, true));
+    if (dxil_zpd_total_depth_only_pixel_shader_.empty()) {
+      return false;
+    }
+    if (render_target_cache_.depth_float24_convert_in_pixel_shader()) {
+      dxil_zpd_total_float24_truncate_pixel_shader_ = convert(
+          translator.CreateDepthOnlyFragmentShader(DepthStencilMode::kFloat24Truncating, true));
+      dxil_zpd_total_float24_round_pixel_shader_ = convert(
+          translator.CreateDepthOnlyFragmentShader(DepthStencilMode::kFloat24Rounding, true));
+      if (dxil_zpd_total_float24_truncate_pixel_shader_.empty() ||
+          dxil_zpd_total_float24_round_pixel_shader_.empty()) {
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -3967,9 +3984,22 @@ const std::vector<uint8_t>* PipelineCache::GetDxilHelperPixelShader(
   }
   // As the DXBC path: float24 depth converted in the shader, else an empty
   // shader so D3D doesn't drop a draw writing nothing (occlusion queries).
-  if (render_target_cache_.depth_float24_convert_in_pixel_shader() &&
+  const bool float24_converted =
+      render_target_cache_.depth_float24_convert_in_pixel_shader() &&
       (description.depth_func != xenos::CompareFunction::kAlways || description.depth_write) &&
-      description.depth_format == xenos::DepthRenderTargetFormat::kD24FS8) {
+      description.depth_format == xenos::DepthRenderTargetFormat::kD24FS8;
+  if (description.zpd_total) {
+    if (dxil_zpd_total_depth_only_pixel_shader_.empty()) {
+      return nullptr;
+    }
+    if (float24_converted) {
+      return render_target_cache_.depth_float24_round()
+                 ? &dxil_zpd_total_float24_round_pixel_shader_
+                 : &dxil_zpd_total_float24_truncate_pixel_shader_;
+    }
+    return &dxil_zpd_total_depth_only_pixel_shader_;
+  }
+  if (float24_converted) {
     return render_target_cache_.depth_float24_round() ? &dxil_float24_round_pixel_shader_
                                                       : &dxil_float24_truncate_pixel_shader_;
   }
@@ -4019,7 +4049,7 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
   }
   bool edram_rov_used =
       render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
-  if (zpd_total && (edram_rov_used || !dxbc_pixel_shader)) {
+  if (zpd_total && edram_rov_used) {
     return DxilPipelineResult::kUnsupported;
   }
 
@@ -4067,7 +4097,7 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
   PipelineRuntimeDescription runtime_description;
   if (!GetCurrentStateDescription(dxbc_vertex_shader, dxbc_pixel_shader,
                                   primitive_processing_result, normalized_depth_control,
-                                  normalized_color_mask, false, viz_survey,
+                                  normalized_color_mask, zpd_total, viz_survey,
                                   bound_depth_and_color_render_target_bits,
                                   bound_depth_and_color_render_target_formats, runtime_description,
                                   /*for_placeholder=*/true)) {
