@@ -126,7 +126,7 @@ class PipelineCache {
       uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
       reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
       uint32_t bound_depth_and_color_render_target_bits,
-      const uint32_t* bound_depth_and_color_render_targets_formats, bool viz_survey,
+      const uint32_t* bound_depth_and_color_render_targets_formats, bool zpd_total, bool viz_survey,
       void** pipeline_handle_out, SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out);
 #endif
 

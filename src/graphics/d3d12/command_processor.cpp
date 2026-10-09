@@ -2647,27 +2647,28 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   bool use_dxil = false;
 #if REXGLUE_SHADER_DXIL
   // SPIR-V -> DXIL (gpu_shader_path=dxil, RG-GDK-032) when this draw can take
-  // it; the DXBC path otherwise. Hybrid occlusion query counting stays on
-  // DXBC.
+  // it; the DXBC path otherwise.
   const SpirvShader* dxil_vertex_shader = nullptr;
   const SpirvShader* dxil_pixel_shader = nullptr;
-  if (pipeline_cache_->IsDxilShaderPathEnabled() && !zpd_hybrid) {
+  auto configure_dxil_pipeline = [&](bool zpd_total) {
     SpirvShader* dxil_vs = nullptr;
     SpirvShader* dxil_ps = nullptr;
     PipelineCache::DxilPipelineResult dxil_result = pipeline_cache_->ConfigurePipelineDxil(
         vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
         interpolator_mask, ps_param_gen_pos, normalized_depth_control, normalized_color_mask,
         bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
-        viz_survey, &pipeline_handle, &dxil_vs, &dxil_ps);
-    if (dxil_result == PipelineCache::DxilPipelineResult::kFailed &&
-        REXCVAR_GET(gpu_shader_path_dxil_strict)) {
-      REXGPU_ERROR("gpu_shader_path_dxil_strict: the draw's DXIL pipeline failed");
-      return false;
-    }
+        zpd_total, viz_survey, &pipeline_handle, &dxil_vs, &dxil_ps);
     use_dxil = dxil_result == PipelineCache::DxilPipelineResult::kConfigured;
     dxil_vertex_shader = dxil_vs;
     dxil_pixel_shader = dxil_ps;
     root_signature = use_dxil ? root_signature_dxil_ : nullptr;
+    return dxil_result;
+  };
+  if (pipeline_cache_->IsDxilShaderPathEnabled() &&
+      configure_dxil_pipeline(zpd_hybrid) == PipelineCache::DxilPipelineResult::kFailed &&
+      REXCVAR_GET(gpu_shader_path_dxil_strict)) {
+    REXGPU_ERROR("gpu_shader_path_dxil_strict: the draw's DXIL pipeline failed");
+    return false;
   }
 #endif
   if (!use_dxil &&
@@ -2709,7 +2710,13 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
         pixel_shader_translation = static_cast<D3D12Shader::D3D12Translation*>(
             pixel_shader->GetOrCreateTranslation(pixel_shader_modification.value));
       }
-      if (!pipeline_cache_->ConfigurePipeline(
+      bool configured_without_zpd = false;
+#if REXGLUE_SHADER_DXIL
+      configured_without_zpd = use_dxil && configure_dxil_pipeline(false) ==
+                                               PipelineCache::DxilPipelineResult::kConfigured;
+#endif
+      if (!configured_without_zpd &&
+          !pipeline_cache_->ConfigurePipeline(
               vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
               normalized_depth_control, normalized_color_mask, false, viz_survey,
               bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
@@ -5615,7 +5622,7 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
 
   SpirvShaderTranslator::SystemConstants sc;
   std::memset(&sc, 0, sizeof(sc));
-  sc.zpd_fsi_counter_index = UINT32_MAX;
+  sc.zpd_fsi_counter_index = zpd_active_query_is_hybrid_ ? zpd_active_query_index_ : UINT32_MAX;
 
   auto pa_cl_vte_cntl = regs.Get<reg::PA_CL_VTE_CNTL>();
   auto rb_colorcontrol = regs.Get<reg::RB_COLORCONTROL>();

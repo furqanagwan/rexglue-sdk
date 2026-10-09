@@ -130,7 +130,14 @@ ways, so the paths mix freely within a frame:
     conversion, and on ROV the EDRAM depth-only and VIZ survey shaders per
     guest sample count (carried in the description's pixel shader
     modification, since 2x is drawn as 4x).
-- **DXBC**, as before, for hybrid occlusion query counting and shaders a
+  - **Hybrid occlusion queries** (`occlusion_query_full_counters` on host
+    render targets): a depth or stencil tested draw without depth writes
+    gets the `zpd_total` pixel shader modification, which adds its covered
+    samples to the open query's Total counter, at the same slot the DXBC
+    shaders use (`zpd_fsi_counter_index`). While that pipeline is being
+    created, the draw uses the DXIL pipeline without counting, as DXBC does.
+- **DXBC**, as before, for hybrid counting draws without a guest pixel shader
+  (the depth-only counting shader is DXBC) and shaders a
   title replaces (replacements are DXBC). A shader that fails to translate or
   convert, or a failing pipeline, also falls back, logged.
   `gpu_shader_path_dxil_strict` fails such draws instead (testing).
@@ -163,6 +170,11 @@ paths), passes in strict mode, and so do the ROV occlusion query and VIZ
 cases on DXIL. The log shows each linked tessellation conversion, and the
 dumped SPIR-V shows the ROV pixel shaders built with their FSI
 modifications. The default build's 58 GPU tests pass too.
+
+Hybrid occlusion counting on DXIL (2026-10-09, NVIDIA): the five `[hybrid]`
+ZPD cases pass in strict mode, and `gpu.dxil_parity` passes. With the DXIL
+counter index forced off, 9 of their assertions fail, so the DXIL shaders are
+the ones counting.
 
 ## Titles
 
@@ -216,7 +228,7 @@ above; a warm cache removes it.
 ## Not yet
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
-hybrid occlusion counting on DXIL, a tessellating title and a ROV title
+a depth-only hybrid counting shader in DXIL, a tessellating title and a ROV title
 scene on the DXIL path (only fixtures so far), and the wide 1D texture
 mapping `kTexture1DWideMaxRows` belongs to. Edge's shared parsing fixes (1D
 fetches with XY coordinates, and the second component of scalar operands

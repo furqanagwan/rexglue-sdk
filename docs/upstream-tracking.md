@@ -2080,3 +2080,17 @@ with XY coordinates, 545407D4) was already in through the getBCF port
 `shader_parse_tests` (new, default build; fails on the old parser), the
 Release suite and `gpu.dxil_parity`. Known regressions: none at the pin; the
 007 titles are checked in the next title batch.
+
+## RG-GDK-032: hybrid occlusion counting on the DXIL path (2026-10-09)
+
+No new upstream code. The SPIR-V translator's `zpd_total` modification and
+`FBO_AddMSAASamplesToZPDTotal` came with the stage 2 port (has207/xenia-edge
+`0788c561e3`); this wires them up in ReXGlue's D3D12 draw path, as Edge's
+`d3d12_command_processor.cc` sets `set_zpd_total` for hybrid draws. Class C
+(DXIL path only; DXBC unchanged). Not taken: Edge's later ZPD rewrite as a
+running sample counter (`3d233a5b2e`), which ReXGlue's segment model doesn't
+use. Adaptation: draws without a guest pixel shader stay on DXBC's depth-only
+counting shader; a pending counting pipeline draws with the DXIL pipeline
+without counting. Tests: `[hybrid]` ZPD fixtures and `gpu.dxil_parity` in
+strict mode, with a mutation check (counter index off: 9 assertions fail).
+Known regressions: none.
