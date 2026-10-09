@@ -468,6 +468,9 @@ class PipelineCache {
   std::vector<uint8_t> dxil_depth_only_pixel_shader_;
   std::vector<uint8_t> dxil_float24_truncate_pixel_shader_;
   std::vector<uint8_t> dxil_float24_round_pixel_shader_;
+  std::vector<uint8_t> dxil_zpd_total_depth_only_pixel_shader_;
+  std::vector<uint8_t> dxil_zpd_total_float24_truncate_pixel_shader_;
+  std::vector<uint8_t> dxil_zpd_total_float24_round_pixel_shader_;
   // ROV: the EDRAM depth / stencil (or VIZ survey) pixel shaders by guest
   // xenos::MsaaSamples, which a DXIL pipeline without a guest pixel shader
   // carries in its pixel_shader_modification.

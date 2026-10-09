@@ -2129,3 +2129,16 @@ taken. Tests: Release suite and `gpu.dxil_parity` (async draw fixtures); a
 paired QoS DXIL run, cold cache, same save: level-load frame 25.5 s → 7.5 s,
 5 s windows with a frame over 300 ms after the load 16 → 0. Known regressions: none.
 Notes: `research/gpu/async-pipeline-creation.md`.
+
+## RG-GDK-032: hybrid occlusion counting without a pixel shader on DXIL (2026-10-09)
+
+No new upstream code: the SPIR-V translator's depth-only `zpd_total`
+fragment shader came with the stage 2 port (has207/xenia-edge `0788c561e3`).
+Class C (DXIL path only). Hybrid draws without a guest pixel shader no
+longer fall back to DXBC: `InitializeDxilHelperPixelShaders` converts the
+counting depth-only shader (and its float24 variants) and
+`GetDxilHelperPixelShader` picks it for a `zpd_total` description. Tests:
+the `[hybrid]` ZPD fixtures and `gpu.dxil_parity`, strict; mutation check
+(the plain depth-only shader in its place fails "RTV full counters count a
+draw without a pixel shader"). Not run in a title: QoS doesn't enable
+`occlusion_query_full_counters`. Known regressions: none.
