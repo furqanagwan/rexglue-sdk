@@ -23,6 +23,7 @@ set(REXSYSTEM_SOURCES
     guest_path.cpp
     user_language.cpp
     game_source.cpp
+    xex_title_name.cpp
     game_media_recovery.cpp
     gaming_runtime.cpp
 

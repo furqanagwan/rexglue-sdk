@@ -65,7 +65,7 @@ prove parity with the installed reference or compatibility with every game.
 | Language | One resolver now supplies XGetLanguage, XConfig and XDBF title/achievement metadata. `user_language=0` follows Windows; explicit IDs 1–12 remain supported. Title language availability still depends on the game. |
 | Native EXE art | `title-art` and the CMake icon helper now generate/embed multi-size title icons. [SDK #164](https://github.com/furqanagwan/rexglue-sdk/issues/164) stays open: existing title installations and Xbox app cached artwork have not been updated/verified. |
 | Xbox library / packaging | Existing gameconfig and library-art tools produce package metadata and library tiles. Loose config and an EXE icon do not register a Store product. Own package registration and Xbox app presentation remain deployment gates. |
-| First-run game source | Checked ISO/disc/folder selection, persisted sources, cancellable extraction and Retry/Leave Game recovery now exist in the SDK. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for interactive scene, physical-drive/title validation and friendly mismatch names; see [ADR-014](adr/ADR-014-game-source-and-media-recovery.md). |
+| First-run game source | Checked ISO/disc/folder selection, persisted sources, cancellable extraction and Retry/Leave Game recovery now exist in the SDK. [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154) remains open for physical-drive, media-removal and title-update launch validation; see [ADR-014](adr/ADR-014-game-source-and-media-recovery.md). |
 | Original / title update launch | Existing separate static executables and update manifest preserve generated-code boundaries; see [title updates](title-updates.md). End-to-end original/TU switching needs representative-title evidence. |
 | Guide / notifications / keyboard | Sources and issues belong to [xbox-guide](https://github.com/furqanagwan/xbox-guide). [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1) remains open for complete console scene support; closed fidelity work still has owner checks. Private assets are required for real scene tests. |
 | Profiles / local achievements | Existing guest profiles, local achievement persistence and Guide presentation. These are local guest services; Xbox account linking and service achievements remain separate integration work. |
@@ -128,9 +128,16 @@ source before applying their update. Older generated hosts retain folder
 launching; they need regeneration for checked image selection.
 
 A new host checks its configured source before constructing the guest. If
-missing or mismatched, Choose game files offers an extracted folder, ISO or
-optical drive. Check source verifies the XDVDFS structures and exact executable
-identity. Remember source persists an absolute `game_source` path; an explicit
+missing or mismatched, a first-run Guide page offers Disc Image (ISO),
+Extracted Game Folder or Disc Drive. It is the in-game Guide's own page, as
+Manage Storage shows it: the HUD frame at full height, centred on the Guide's
+852x480 canvas, with a scrolling list and a details pane. The ISO and folder
+choices open a Guide browser over local drives, folders and ISO files (with
+sizes); the details pane shows the focused item's full path. The d-pad or left
+stick moves (held to repeat), A selects, B goes up a level, and B on the first
+page exits before the game launches; arrows, Page Up/Down, Enter and Escape do
+the same. Source checks verify the XDVDFS structures and exact executable
+identity. Use This Source persists an absolute `game_source` path; an explicit
 `--game_data_root` takes precedence. These choices preserve save/profile paths.
 
 An image can run directly or use Extract to this PC. Copying runs in the
@@ -152,15 +159,22 @@ UI-thread reads return errors instead of waiting for their own dialog.
 
 Both dialogs support physical-controller navigation, with disconnected/held
 input released before guest handoff. Tests draw ImGui; physical pad behaviour
-and painted presentation are still unverified. When private Guide assets finish loading, source and recovery choices use the
-console's XuiMessageBox3 visual; while loading or without assets the controls
-use the host fallback. Extraction progress uses the console Active Downloads
-scene with nonblocking cancellation. Completed/cancelled/failed copy results
-remain in the Guide's Active Downloads alongside title-update jobs. The source
-file picker and validation controls stay host-native.
+and painted presentation still need an owner check. When private Guide assets
+finish loading, source choices use the Guide page above and media recovery uses
+the console's XuiMessageBox3 visual; without assets the host fallback (with
+Windows' file dialog) remains available for development. Extraction progress
+stays on the Guide page with byte progress; A cancels without blocking.
+Completed/cancelled/failed copy results remain in the Guide's Active Downloads
+alongside title-update jobs.
 
-Friendly mismatch game names, original/TU title launches, painted scene/pad
-interaction and real media-removal checks remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).
+A source holding another game names both, each with its title ID: "This is
+007: Blood Stone (ID). This build is for Quantum of Solace (ID)." The build's name is
+recorded at code generation from the original XEX's XDBF title; the source's
+is read from its executable's encrypted image only when the title IDs differ.
+Builds generated before this show the title ID alone until regenerated.
+
+Title-update launches, physical optical drives and real media-removal checks
+remain gates for [SDK #154](https://github.com/furqanagwan/rexglue-sdk/issues/154).
 
 ## Native title art
 

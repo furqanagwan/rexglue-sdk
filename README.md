@@ -237,11 +237,13 @@ package and its own config: a manifest `[[title_update]]` entry
 
 The existing Xbox 360 Guide remains the presentation for in-game features.
 An optional host settings screen is available with `--launch_menu=true` for
-graphics, audio and language settings before launch. Regenerated titles also validate the original source executable and
-offer a first-run folder/ISO/disc selector, optional cancellable extraction
-and Retry/Leave Game on media read failure. Sources use checked file I/O;
-source/recovery choices and copy progress use the console scenes when Guide
-assets are available. Physical drive, painted scene and real-title checks remain.
+graphics, audio and language settings before launch. Regenerated titles also
+validate the original source executable and offer a first-run folder/ISO/disc
+selector, optional cancellable extraction and Retry/Leave Game on media read
+failure. With Guide assets available, source selection, validation,
+confirmation, errors and extraction progress use Xbox 360 Guide scenes; Windows
+supplies the ISO/folder browser. Sources use checked file I/O. Physical drive,
+painted scene and real-title checks remain.
 See [PC experience and remaining gates](docs/pc-backward-compatibility.md).
 
 ### Xbox guide

@@ -13,6 +13,36 @@
 #include <rex/ui/windowed_app_context_win.h>
 
 namespace {
+// Local only: the owner's private Guide assets. REXGLUE_GUIDE_BUNDLE names a
+// title build's embedded Xbox 360 bundle (rexglue_guide/<name>_xbox_guide.bin);
+// otherwise REXGLUE_SYSTEM_UPDATE, or REXGLUE_GUIDE_FLASH for the BC Guide.
+// Null with an empty error when none is set.
+std::shared_ptr<const rex::ui::guide::GuideAssets> LoadLocalGuide(bool original_xbox,
+                                                                  std::string* error) {
+  const auto presentation = original_xbox ? rex::ui::guide::GuidePresentation::OriginalXbox
+                                          : rex::ui::guide::GuidePresentation::Xbox360;
+  const char* bundle = original_xbox ? nullptr : std::getenv("REXGLUE_GUIDE_BUNDLE");
+  if (bundle && *bundle) {
+    std::ifstream file(std::filesystem::path(bundle), std::ios::binary);
+    const std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), {});
+    auto assets = rex::ui::guide::GuideAssets::LoadBundle(data, error, presentation);
+    if (!assets && error->empty())
+      *error = "The Guide bundle did not load.";
+    return assets;
+  }
+  const char* path = std::getenv(original_xbox ? "REXGLUE_GUIDE_FLASH" : "REXGLUE_SYSTEM_UPDATE");
+  if (!path || !*path)
+    return nullptr;
+  auto modules = rex::ui::xui::SystemUpdate::ReadModules(std::filesystem::path(path), error);
+  std::shared_ptr<const rex::ui::guide::GuideAssets> assets =
+      modules ? rex::ui::guide::GuideAssets::FromUpdate(
+                    rex::ui::xui::SystemUpdate::FromModules(*modules, error), error, presentation)
+              : nullptr;
+  if (!assets && error->empty())
+    *error = "The Guide assets did not load.";
+  return assets;
+}
+
 struct SourceHarness {
   SourceHarness() : context(GetModuleHandleW(nullptr), SW_HIDE) {
     rex::cvar::testing::ResetAllForTesting();
@@ -59,7 +89,8 @@ struct SourceHarness {
     std::filesystem::remove(root, ec);
     rex::cvar::testing::ResetAllForTesting();
   }
-  void Show(rex::ui::LaunchPadSource pad = {}, rex::ui::GameSourceVisualsProvider visuals = {}) {
+  void Show(rex::ui::LaunchPadSource pad = {}, rex::ui::GameSourceVisualsProvider visuals = {},
+            bool empty_initial = false) {
     dialog = new rex::ui::GameSourceDialog(
         drawer.get(), expected, root / "settings.toml",
         [this](std::filesystem::path source) {
@@ -67,7 +98,8 @@ struct SourceHarness {
           ++completed;
           selected = std::move(source);
         },
-        root, "", "default.xex", {}, std::move(pad), std::move(visuals));
+        empty_initial ? std::filesystem::path{} : root, "", "default.xex", {}, std::move(pad),
+        std::move(visuals));
     Frame();
     Frame();
   }
@@ -84,6 +116,13 @@ struct SourceHarness {
     auto* wizard = ImGui::FindWindowByName("Choose game files");
     REQUIRE(wizard);
     ImGui::ActivateItemByID(wizard->GetID(label));
+    Frame();
+  }
+  void PressConsole(size_t choice) {
+    auto* overlay = ImGui::FindWindowByName("##GameSourceGuideOverlay");
+    REQUIRE(overlay);
+    const auto seed = overlay->GetID("Console choices");
+    ImGui::ActivateItemByID(ImHashStr(("Button" + std::to_string(choice)).c_str(), 0, seed));
     Frame();
   }
   rex::ui::Win32WindowedAppContext context;
@@ -227,32 +266,22 @@ TEST_CASE("Source and recovery controller navigation releases disconnected and d
 TEST_CASE("Source and recovery dialogs use the private console message-box controls",
           "[ui][game_source][message_box][local]") {
   const bool original_xbox = GENERATE(false, true);
-  const char* asset_variable = original_xbox ? "REXGLUE_GUIDE_FLASH" : "REXGLUE_SYSTEM_UPDATE";
-  const char* path = std::getenv(asset_variable);
-  INFO(asset_variable);
-  if (!path || !*path)
-    SKIP("Selected private Guide assets are not set");
   std::string error;
-  auto modules = rex::ui::xui::SystemUpdate::ReadModules(std::filesystem::path(path), &error);
-  REQUIRE(modules);
-  std::shared_ptr<const rex::ui::guide::GuideAssets> assets =
-      rex::ui::guide::GuideAssets::FromUpdate(
-          rex::ui::xui::SystemUpdate::FromModules(*modules, &error), &error,
-          original_xbox ? rex::ui::guide::GuidePresentation::OriginalXbox
-                        : rex::ui::guide::GuidePresentation::Xbox360);
+  const auto assets = LoadLocalGuide(original_xbox, &error);
+  if (!assets && error.empty())
+    SKIP("Selected private Guide assets are not set");
+  INFO(error);
   REQUIRE(assets);
   rex::ui::GameSourceVisualsProvider visuals = [assets] {
     return std::optional(rex::ui::GameSourceVisuals{assets, {}, {}});
   };
   SourceHarness h;
-  SECTION("Source choice uses the console's third-button visual") {
-    h.Show({}, visuals);
-    auto* window = ImGui::FindWindowByName("Choose game files");
-    REQUIRE(window);
-    const auto seed = window->GetID("Console choices");
-    ImGui::ActivateItemByID(ImHashStr("Button1", 0, seed));
-    h.Frame();
-    CHECK_FALSE(GImGui->OpenPopupStack.empty());  // native Disc choice reached the drive picker
+  SECTION("Source choices are an in-game Guide list page") {
+    h.Show({}, visuals, true);
+    REQUIRE(ImGui::FindWindowByName("##GameSourceGuideOverlay"));
+    CHECK(ImGui::FindWindowByName("Choose game files") == nullptr);
+    h.PressConsole(1);
+    CHECK(GImGui->OpenPopupStack.empty());
     CHECK(h.completed == 0);
   }
   SECTION("Extraction uses Active Downloads and publishes completed copy history") {
@@ -290,10 +319,11 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
         [&](rex::ui::guide::GuideActivity item) { history.push_back(std::move(item)); });
     h.Frame();
     h.Frame();
-    h.Press("Check source");
     for (int i = 0; i < 1000 && history.empty(); ++i) {
       h.Frame();
-      h.Press("Extract to this PC");
+      if (!history.empty())
+        break;
+      h.PressConsole(1);
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     REQUIRE(history.size() == 1);
@@ -302,9 +332,32 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
     CHECK(h.completed == 0);
     const auto copied = h.root / "extracted" / ("game-" + h.expected.executable_checksum);
     CHECK(std::filesystem::is_regular_file(copied / "default.xex"));
-    h.Press("Use this source");
+    h.PressConsole(0);
     CHECK(h.completed == 1);
     CHECK(h.selected == copied);
+  }
+  SECTION("Guide source choices navigate and activate with a controller") {
+    rex::ui::LaunchPadState pad;
+    h.Show([&] { return std::optional(pad); }, visuals, true);
+    pad.y = -1;
+    h.Frame();
+    pad.y = 0;
+    h.Frame();
+    pad.activate = true;
+    h.Frame();
+    pad.activate = false;
+    h.Frame();
+    CHECK(h.completed == 0);
+    CHECK(ImGui::FindWindowByName("##GameSourceGuideOverlay"));
+    pad.cancel = true;
+    h.Frame();
+    CHECK(h.completed == 0);
+    pad.cancel = false;
+    h.Frame();
+    pad.cancel = true;
+    h.Frame();
+    CHECK(h.completed == 1);
+    CHECK(h.selected.empty());
   }
   SECTION("Controller A uses the recovery dialog's safe initial Leave choice") {
     rex::ui::LaunchPadState pad;
@@ -349,5 +402,81 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
     CHECK(retried);
     CHECK(dialog == nullptr);
     delete dialog;
+  }
+}
+
+TEST_CASE("Xbox 360 Guide source picker is a Guide page driven by the controller",
+          "[ui][game_source][message_box][local]") {
+  std::string error;
+  const auto assets = LoadLocalGuide(false, &error);
+  if (!assets && error.empty())
+    SKIP("Private Xbox 360 Guide assets are not set");
+  INFO(error);
+  REQUIRE(assets);
+  rex::ui::GameSourceVisualsProvider visuals = [assets] {
+    return std::optional(rex::ui::GameSourceVisuals{assets, {}, {}});
+  };
+  auto press = [](SourceHarness& h, bool& button) {
+    button = true;
+    h.Frame();
+    button = false;
+    h.Frame();
+  };
+
+  SECTION("Waits while Guide assets load, then shows the Guide scene") {
+    bool loading = true;
+    rex::ui::GameSourceVisualsProvider delayed_visuals = [&]() {
+      if (loading) {
+        rex::ui::GameSourceVisuals pending;
+        pending.loading = true;
+        return std::optional(std::move(pending));
+      }
+      return visuals();
+    };
+    SourceHarness h;
+    h.Show({}, delayed_visuals, true);
+    CHECK(ImGui::FindWindowByName("##GameSourceGuideLoading"));
+    CHECK(ImGui::FindWindowByName("Choose game files") == nullptr);
+    loading = false;
+    h.Frame();
+    CHECK(ImGui::FindWindowByName("##GameSourceGuideOverlay"));
+  }
+
+  SECTION("D-pad moves through every source, B exits from the first page") {
+    SourceHarness h;
+    rex::ui::LaunchPadState pad;
+    h.Show([&] { return std::optional(pad); }, visuals, true);
+    // Disc Drive, the last source: down twice, held down stays on it.
+    for (int i = 0; i < 3; ++i) {
+      pad.y = -1;
+      h.Frame();
+      pad.y = 0;
+      h.Frame();
+    }
+    press(h, pad.activate);
+    CHECK(h.completed == 0);
+    // Disc drive page or "no optical drive"; either way B returns.
+    press(h, pad.cancel);
+    CHECK(h.completed == 0);
+    press(h, pad.cancel);
+    CHECK(h.completed == 1);
+    CHECK(h.selected.empty());
+  }
+
+  SECTION("ISO opens the Guide's drive and folder browser; B backs out a level at a time") {
+    SourceHarness h;
+    rex::ui::LaunchPadState pad;
+    h.Show([&] { return std::optional(pad); }, visuals, true);
+    press(h, pad.activate);  // Disc Image (ISO): the drives
+    CHECK(GImGui->OpenPopupStack.empty());
+    CHECK(h.completed == 0);
+    press(h, pad.activate);  // into the first drive
+    CHECK(h.completed == 0);
+    press(h, pad.cancel);  // back to the drives
+    press(h, pad.cancel);  // back to the sources
+    CHECK(h.completed == 0);
+    press(h, pad.cancel);
+    CHECK(h.completed == 1);
+    CHECK(h.selected.empty());
   }
 }
