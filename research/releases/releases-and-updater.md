@@ -53,13 +53,12 @@ the other required DLLs, `README.txt` and `version.txt`. Nothing else.
   used. The release check script fails if a Guide bundle is present.
 - **Saves, logs, caches and debug files (`.pdb`).**
 
-### Open question for the owner
+### Owner decision (2026-10-09)
 
-The executable contains the game's code, translated to C++ and compiled. That
-is derived from the original game, unlike an emulator. Other recompilation
-projects handle this differently: some ship builds, others ship only the tools
-and have players build their own. Decide before the first public release;
-everything below works either way.
+Releases ship the built executables. Players supply only their own disc
+image: they start the game, pick their ISO once in the Guide source picker,
+and play. Distribution is GitHub releases only; the games will never be
+published on the Microsoft Store, so there is no MSIXVC packaging.
 
 ## Changelog
 
@@ -163,8 +162,7 @@ listed in the new zip.
 
 1. 007: `CHANGELOG.md`, the Publish-Release.ps1 script, and a release check that
    rejects Guide bundles, `.pdb`, `.iso` and `.xex`.
-2. Owner decision on shipping executables (see above), then publish
-   `v0.1.0-alpha.1`.
+2. Publish `v0.1.0-alpha.1`.
 3. SDK: updater library and tests (version comparison, checksum,
    staging, rollback).
 4. SDK: `rexglue-updater.exe` helper.
