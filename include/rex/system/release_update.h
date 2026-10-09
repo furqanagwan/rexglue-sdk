@@ -67,4 +67,21 @@ bool InstallStagedUpdate(const std::filesystem::path& install_folder,
 bool RestorePreviousVersion(const std::filesystem::path& install_folder,
                             const std::filesystem::path& previous_folder, std::string* error);
 
+bool UnpackZip(const std::filesystem::path& zip, const std::filesystem::path& destination,
+               std::string* error);
+
+struct UpdateHelperLaunch {
+  std::filesystem::path helper;
+  std::filesystem::path install_folder;
+  std::filesystem::path package_root;
+  std::filesystem::path previous_folder;
+  std::filesystem::path relaunch;
+  bool rollback = false;
+};
+
+std::wstring BuildUpdateHelperCommandLine(const UpdateHelperLaunch& launch,
+                                          uint32_t wait_process_id);
+bool StartUpdateHelper(const UpdateHelperLaunch& launch, const std::filesystem::path& helper_copy,
+                       std::string* error);
+
 }  // namespace rex::system::update
