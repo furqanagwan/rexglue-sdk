@@ -970,15 +970,16 @@ void TextureCache::BindingInfoFromFetchConstant(const xenos::xe_gpu_texture_fetc
     // No texture data at all.
     return;
   }
+  uint32_t pitch = fetch.pitch;
   if (fetch.dimension == xenos::DataDimension::k1D) {
     bool is_invalid_1d = false;
-    // TODO(Triang3l): Support long 1D textures.
     if (width_minus_1 >= xenos::kTexture2DCubeMaxWidthHeight) {
-      REXGPU_ERROR(
-          "1D texture is too wide ({}) - ignoring! Report the game to Xenia "
-          "developers",
-          width_minus_1 + 1);
-      is_invalid_1d = true;
+      const texture_util::Wide1DTextureLayout wide_layout =
+          texture_util::GetWide1DTextureLayout(width_minus_1 + 1);
+      width_minus_1 = wide_layout.row_width - 1;
+      height_minus_1 = wide_layout.row_count - 1;
+      mip_max_level = 0;
+      pitch = wide_layout.row_width >> 5;
     }
     assert_false(fetch.tiled);
     if (fetch.tiled) {
@@ -1009,7 +1010,7 @@ void TextureCache::BindingInfoFromFetchConstant(const xenos::xe_gpu_texture_fetc
   key_out.width_minus_1 = width_minus_1;
   key_out.height_minus_1 = height_minus_1;
   key_out.depth_or_array_size_minus_1 = depth_or_array_size_minus_1;
-  key_out.pitch = fetch.pitch;
+  key_out.pitch = pitch;
   key_out.mip_max_level = mip_max_level;
   key_out.tiled = fetch.tiled;
   key_out.packed_mips = fetch.packed_mips;

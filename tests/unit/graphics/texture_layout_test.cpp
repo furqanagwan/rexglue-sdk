@@ -234,3 +234,30 @@ TEST_CASE("The tiled 3D upper bound is exact for a box from the origin",
   }
   CHECK(failures == 0);
 }
+
+TEST_CASE("Wide 1D textures map to 8192-texel rows up to the row cap",
+          "[graphics][texture_layout]") {
+  CHECK(texture_util::GetWide1DTextureLayout(8193).row_width == 8192);
+  CHECK(texture_util::GetWide1DTextureLayout(8193).row_count == 2);
+  CHECK(texture_util::GetWide1DTextureLayout(16384).row_count == 2);
+  CHECK(texture_util::GetWide1DTextureLayout(786432).row_count == 96);
+  CHECK(texture_util::GetWide1DTextureLayout(xenos::kTexture1DMaxWidth).row_count ==
+        xenos::kTexture1DWideMaxRows);
+}
+
+TEST_CASE("A wide 1D texture's rows are contiguous in guest memory", "[graphics][texture_layout]") {
+  const auto layout =
+      texture_util::GetGuestTextureLayout(xenos::DataDimension::k1D, 8192 >> 5, 8192, 96, 1, false,
+                                          xenos::TextureFormat::k_8_8_8_8, false, true, 0);
+  CHECK(layout.base.row_pitch_bytes == 8192 * 4);
+  CHECK(layout.base.y_extent_blocks == 96);
+  CHECK(layout.base.level_data_extent_bytes == 786432 * 4);
+}
+
+TEST_CASE("A normal 1D texture stays one row high", "[graphics][texture_layout]") {
+  const auto layout =
+      texture_util::GetGuestTextureLayout(xenos::DataDimension::k1D, 256 >> 5, 256, 1, 1, false,
+                                          xenos::TextureFormat::k_8_8_8_8, false, true, 0);
+  CHECK(layout.base.y_extent_blocks == 1);
+  CHECK(layout.base.level_data_extent_bytes == 256 * 4);
+}

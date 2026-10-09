@@ -565,12 +565,62 @@ uint32_t DxbcShaderTranslator::FindOrAddSamplerBinding(
   return uint32_t(sampler_bindings_.size() - 1);
 }
 
+void DxbcShaderTranslator::EmitWide1DTextureCoordinates(
+    const ParsedTextureFetchInstruction& instr, const dxbc::Src& coord_operand, float offset_x,
+    uint32_t tfetch_index, uint32_t coord_temp, uint32_t width_minus_1_temp, bool promoted_1d) {
+  const float row_width = float(xenos::kTexture2DCubeMaxWidthHeight);
+  const uint32_t padding_mask = promoted_1d ? 0b0100 : 0b0110;
+  a_.OpUBFE(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::LU(2), dxbc::Src::LU(9),
+            RequestTextureFetchConstantWord(tfetch_index, 5));
+  a_.OpIEq(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(coord_temp, dxbc::Src::kWWWW),
+           dxbc::Src::LU(uint32_t(xenos::DataDimension::k1D)));
+  a_.OpIf(true, dxbc::Src::R(coord_temp, dxbc::Src::kWWWW));
+  a_.OpUGE(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(width_minus_1_temp, dxbc::Src::kXXXX),
+           dxbc::Src::LU(xenos::kTexture2DCubeMaxWidthHeight));
+  a_.OpIf(true, dxbc::Src::R(coord_temp, dxbc::Src::kWWWW));
+  a_.OpIAdd(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(width_minus_1_temp, dxbc::Src::kXXXX),
+            dxbc::Src::LI(1));
+  a_.OpUToF(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(coord_temp, dxbc::Src::kWWWW));
+  if (instr.attributes.unnormalized_coordinates) {
+    a_.OpAdd(dxbc::Dest::R(coord_temp, 0b0010), coord_operand.SelectFromSwizzled(0),
+             dxbc::Src::LF(offset_x));
+  } else {
+    a_.OpMAd(dxbc::Dest::R(coord_temp, 0b0010), coord_operand.SelectFromSwizzled(0),
+             dxbc::Src::R(coord_temp, dxbc::Src::kWWWW), dxbc::Src::LF(offset_x));
+  }
+  a_.OpDiv(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(coord_temp, dxbc::Src::kYYYY),
+           dxbc::Src::LF(row_width));
+  a_.OpRoundNI(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ));
+  a_.OpFrc(dxbc::Dest::R(coord_temp, 0b0001), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ));
+  a_.OpIAdd(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(width_minus_1_temp, dxbc::Src::kXXXX),
+            dxbc::Src::LI(1));
+  a_.OpUToF(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ));
+  a_.OpDiv(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ),
+           dxbc::Src::LF(row_width));
+  a_.OpRoundPI(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ));
+  a_.OpMin(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ),
+           dxbc::Src::LF(float(xenos::kTexture1DWideMaxRows)));
+  a_.OpAdd(dxbc::Dest::R(coord_temp, 0b1000), dxbc::Src::R(coord_temp, dxbc::Src::kWWWW),
+           dxbc::Src::LF(0.5f));
+  a_.OpDiv(dxbc::Dest::R(coord_temp, 0b0010), dxbc::Src::R(coord_temp, dxbc::Src::kWWWW),
+           dxbc::Src::R(coord_temp, dxbc::Src::kZZZZ));
+  a_.OpMov(dxbc::Dest::R(coord_temp, 0b0100), dxbc::Src::LF(0.0f));
+  a_.OpElse();
+  a_.OpMov(dxbc::Dest::R(coord_temp, padding_mask), dxbc::Src::LF(0.0f));
+  a_.OpEndIf();
+  a_.OpElse();
+  a_.OpMov(dxbc::Dest::R(coord_temp, padding_mask), dxbc::Src::LF(0.0f));
+  a_.OpEndIf();
+}
+
 void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     const ParsedTextureFetchInstruction& original_instr) {
   ParsedTextureFetchInstruction instr = original_instr;
-  if (instr.dimension == xenos::FetchOpDimension::k1D && instr.operands[0].component_count > 1) {
+  const bool fetch_1d = original_instr.dimension == xenos::FetchOpDimension::k1D;
+  if (fetch_1d && instr.operands[0].component_count > 1) {
     instr.dimension = xenos::FetchOpDimension::k2D;
   }
+  const bool promoted_1d = fetch_1d && instr.dimension == xenos::FetchOpDimension::k2D;
   if (emit_source_map_) {
     instruction_disassembly_buffer_.Reset();
     instr.Disassemble(&instruction_disassembly_buffer_);
@@ -698,7 +748,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
   }
 
   // Texel center snap instead of the epsilon, see CanSnapToTexelCenter.
-  bool point_snap = instr.CanSnapToTexelCenter(use_computed_lod);
+  bool point_snap = original_instr.CanSnapToTexelCenter(use_computed_lod);
 
   // Get offsets applied to the coordinates before sampling.
   // `offsets` is used for float4 literal construction,
@@ -815,12 +865,10 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     size_needed_components |= offsets_not_zero | (point_snap ? 0b0011 : 0);
     switch (instr.dimension) {
       case xenos::FetchOpDimension::k1D:
-        if (instr.attributes.unnormalized_coordinates) {
-          size_needed_components |= 0b0001;
-        }
+        size_needed_components |= 0b0001;
         break;
       case xenos::FetchOpDimension::k2D:
-        if (instr.attributes.unnormalized_coordinates) {
+        if (promoted_1d || instr.attributes.unnormalized_coordinates) {
           size_needed_components |= 0b0011;
         }
         break;
@@ -850,18 +898,41 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     // the texture is 3D unconditionally.
     size_needed_components |= 0b1000;
   }
+  if (promoted_1d && size_needed_components) {
+    size_needed_components |= 0b0011;
+  }
   uint32_t size_and_is_3d_temp = size_needed_components ? PushSystemTemp() : UINT32_MAX;
+  uint32_t size_1d_width_minus_1_temp = UINT32_MAX;
   if (size_needed_components) {
     switch (instr.dimension) {
       case xenos::FetchOpDimension::k1D:
-        a_.OpUBFE(dxbc::Dest::R(size_and_is_3d_temp, 0b0001), dxbc::Src::LU(24), dxbc::Src::LU(0),
+        a_.OpUBFE(dxbc::Dest::R(size_and_is_3d_temp, 0b0001),
+                  dxbc::Src::LU(xenos::kTexture1DMaxWidthLog2), dxbc::Src::LU(0),
                   RequestTextureFetchConstantWord(tfetch_index, 2));
+        size_1d_width_minus_1_temp = PushSystemTemp();
+        a_.OpMov(dxbc::Dest::R(size_1d_width_minus_1_temp, 0b0001),
+                 dxbc::Src::R(size_and_is_3d_temp, dxbc::Src::kXXXX));
         break;
       case xenos::FetchOpDimension::k2D:
       case xenos::FetchOpDimension::kCube:
         a_.OpUBFE(dxbc::Dest::R(size_and_is_3d_temp, size_needed_components),
                   dxbc::Src::LU(13, 13, 0, 0), dxbc::Src::LU(0, 13, 0, 0),
                   RequestTextureFetchConstantWord(tfetch_index, 2));
+        if (promoted_1d) {
+          size_1d_width_minus_1_temp = PushSystemTemp();
+          a_.OpUBFE(dxbc::Dest::R(size_1d_width_minus_1_temp, 0b0001),
+                    dxbc::Src::LU(xenos::kTexture1DMaxWidthLog2), dxbc::Src::LU(0),
+                    RequestTextureFetchConstantWord(tfetch_index, 2));
+          a_.OpMov(dxbc::Dest::R(size_1d_width_minus_1_temp, 0b0010), dxbc::Src::LU(0));
+          a_.OpUBFE(dxbc::Dest::R(size_and_is_3d_temp, 0b1000), dxbc::Src::LU(2), dxbc::Src::LU(9),
+                    RequestTextureFetchConstantWord(tfetch_index, 5));
+          a_.OpIEq(dxbc::Dest::R(size_and_is_3d_temp, 0b1000),
+                   dxbc::Src::R(size_and_is_3d_temp, dxbc::Src::kWWWW),
+                   dxbc::Src::LU(uint32_t(xenos::DataDimension::k1D)));
+          a_.OpMovC(dxbc::Dest::R(size_and_is_3d_temp, 0b0011),
+                    dxbc::Src::R(size_and_is_3d_temp, dxbc::Src::kWWWW),
+                    dxbc::Src::R(size_1d_width_minus_1_temp), dxbc::Src::R(size_and_is_3d_temp));
+        }
         break;
       case xenos::FetchOpDimension::k3DOrStacked:
         // tfetch3D is used for both stacked and 3D - first, check if 3D.
@@ -1214,12 +1285,16 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     }
     switch (instr.dimension) {
       case xenos::FetchOpDimension::k1D:
-        // Pad to 2D array coordinates.
-        a_.OpMov(dxbc::Dest::R(coord_and_sampler_temp, 0b0110), dxbc::Src::LF(0.0f));
-        break;
       case xenos::FetchOpDimension::k2D:
-        // Pad to 2D array coordinates.
-        a_.OpMov(dxbc::Dest::R(coord_and_sampler_temp, 0b0100), dxbc::Src::LF(0.0f));
+        if (size_1d_width_minus_1_temp != UINT32_MAX) {
+          EmitWide1DTextureCoordinates(instr, coord_operand, offsets[0], tfetch_index,
+                                       coord_and_sampler_temp, size_1d_width_minus_1_temp,
+                                       promoted_1d);
+        } else {
+          a_.OpMov(
+              dxbc::Dest::R(coord_and_sampler_temp, fetch_1d && !promoted_1d ? 0b0110 : 0b0100),
+              dxbc::Src::LF(0.0f));
+        }
         break;
       case xenos::FetchOpDimension::kCube: {
         // Transform from the major axis SC/TC plus 1 into cube coordinates.
@@ -2229,6 +2304,9 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
     }
   }
 
+  if (size_1d_width_minus_1_temp != UINT32_MAX) {
+    PopSystemTemp();
+  }
   if (size_and_is_3d_temp != UINT32_MAX) {
     PopSystemTemp();
   }

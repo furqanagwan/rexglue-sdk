@@ -624,6 +624,10 @@ class DxbcShaderTranslator : public ShaderTranslator {
 
   void ProcessVertexFetchInstruction(const ParsedVertexFetchInstruction& instr) override;
   void ProcessTextureFetchInstruction(const ParsedTextureFetchInstruction& instr) override;
+  void EmitWide1DTextureCoordinates(const ParsedTextureFetchInstruction& instr,
+                                    const dxbc::Src& coord_operand, float offset_x,
+                                    uint32_t tfetch_index, uint32_t coord_temp,
+                                    uint32_t width_minus_1_temp, bool promoted_1d);
   void ProcessAluInstruction(const ParsedAluInstruction& instr,
                              uint8_t memexport_eM_potentially_written_before) override;
 

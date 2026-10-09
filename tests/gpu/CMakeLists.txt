@@ -24,6 +24,7 @@ add_executable(gpu_tests
     tessellation_fixture_test.cpp
     primitive_cache_fixture_test.cpp
     border_fraction_fixture_test.cpp
+    wide_1d_texture_fixture_test.cpp
 )
 
 # The replacement shader the fixture swaps in, compiled like a title's

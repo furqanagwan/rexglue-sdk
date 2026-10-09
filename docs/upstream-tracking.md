@@ -2094,3 +2094,25 @@ counting shader; a pending counting pipeline draws with the DXIL pipeline
 without counting. Tests: `[hybrid]` ZPD fixtures and `gpu.dxil_parity` in
 strict mode, with a mutation check (counter index off: 9 assertions fail).
 Known regressions: none.
+
+## RG-GDK-032: wide 1D textures on both paths (2026-10-09)
+
+has207/xenia-edge `947075f880` ("[GPU] Implement wide 1D texture support",
+2026-08-04), `7cd47947b0` ("[GPU] Select promoted tfetch1D layouts at
+runtime", 2026-08-18) and `6260a87b85` ("[GPU] Fix fetching from wide 1D
+textures at large coordinates", 2026-10-03). Titles: 5345084D, 555308CE
+(Edge's reports; not tested here). Class B (compatibility; DXBC and DXIL).
+1D textures wider than 8,192 texels become 2D textures of 8,192-texel rows
+(at most 128) instead of being dropped, and 1D fetches map their coordinate
+to a row at runtime. The SPIR-V translator already had the first two commits
+from the stage 2 pin; this adds the texture cache, the guest layout, the
+DXBC translator and the third commit on both translators. Adaptation: the
+DXBC remap is a separate `EmitWide1DTextureCoordinates`; promoted fetches
+keep ReXGlue's static 2D dimension, with the 1D/2D size picked at runtime;
+point-sample snapping follows the original fetch dimension, so promoted
+fetches no longer snap (as on Edge). Not taken: Edge's two-component 1D
+gradients and ignoring register gradients for 1D. Tests:
+`tests/gpu/wide_1d_texture_fixture_test.cpp` (14 wide samples fail without
+the texture cache change), `texture_layout_test.cpp`, the Release suite and
+`gpu.dxil_parity`. Known regressions: none at the pin; the 007 titles are
+checked in the next title batch. Notes: `research/gpu/wide-1d-textures.md`.
