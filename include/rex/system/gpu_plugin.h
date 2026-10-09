@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include <rex/system/interfaces/graphics.h>
@@ -50,6 +51,12 @@ using GpuCreateFn = IGraphicsSystem* (*)(uint32_t abi_version, const GpuCreateIn
 // graphics system. Returns nullptr after logging a detailed error (missing
 // file, missing exports, ABI mismatch, or factory failure). The library
 // handle is retained for process lifetime; plugins are never unloaded.
+inline constexpr std::string_view kDefaultGpuPlugin = "xenos";
+inline constexpr std::string_view kNoGpuPlugin = "none";
+
+std::string ResolveGpuPluginName(std::string_view configured, bool default_plugin_staged);
+bool IsGpuPluginStaged(std::string_view name);
+
 std::unique_ptr<IGraphicsSystem> LoadGpuPlugin(std::string_view name,
                                                std::string_view backend = "any");
 

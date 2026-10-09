@@ -74,8 +74,8 @@ REXCVAR_DEFINE_BOOL(launch_menu, false, "UI/Window", "Show game settings before 
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_STRING(gpu_plugin, "", "GPU",
-                      "GPU emulation plugin to load at startup (e.g. 'xenos'); empty disables "
-                      "GPU emulation")
+                      "GPU emulation plugin to load at startup (e.g. 'xenos'); empty loads 'xenos' "
+                      "when it is next to the executable, 'none' disables GPU emulation")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 REXCVAR_DEFINE_STRING(gaming_runtime, "auto", "GDK",
@@ -903,7 +903,8 @@ void ReXApp::ReleaseMediaRecoveryUi() {
 }
 
 bool ReXApp::SetupPresentation() {
-  config_.gpu_plugin = REXCVAR_GET(gpu_plugin);
+  config_.gpu_plugin = rex::system::ResolveGpuPluginName(
+      REXCVAR_GET(gpu_plugin), rex::system::IsGpuPluginStaged(rex::system::kDefaultGpuPlugin));
   config_.audio_factory = [](rex::runtime::FunctionDispatcher* dispatcher)
       -> std::unique_ptr<rex::system::IAudioSystem> {
     return rex::audio::CreateDefaultAudioSystem(dispatcher);
