@@ -255,6 +255,9 @@ class D3D12CommandProcessor : public CommandProcessor {
   struct FrameTimings {
     uint64_t render_targets = 0;
     uint64_t pipelines = 0;
+    uint64_t pipeline_awaits = 0;
+    uint32_t pipeline_await_count = 0;
+    uint64_t dxil_pipeline_setup = 0;
     uint64_t textures = 0;
     uint64_t copies = 0;
     uint64_t fence_waits = 0;
