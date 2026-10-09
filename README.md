@@ -26,6 +26,11 @@ C++ and registers its functions with the runtime; this is not a general-purpose
 XEX launcher with a PPC interpreter/JIT fallback. GPU shader translation remains
 part of Xenos compatibility and is separate from CPU recompilation.
 
+Regenerate title code to pick up PPC instruction corrections, including Xenon's
+128-byte `dcbz` and the missing overflow/vector forms. The pinned instruction
+corpus and remaining FPSCR limits are recorded in
+[release evidence](docs/release-evidence.md).
+
 ```mermaid
 flowchart LR
   G[Developer-supplied Xbox 360 modules] --> R[PPC to C++ codegen]

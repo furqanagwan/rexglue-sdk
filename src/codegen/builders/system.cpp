@@ -36,6 +36,18 @@ bool build_sync(BuilderContext& ctx) {
   return true;
 }
 
+bool build_isync(BuilderContext& ctx) {
+  // Generated code does not fetch or execute guest instructions dynamically.
+  (void)ctx;
+  return true;
+}
+
+bool build_icbi(BuilderContext& ctx) {
+  // Instruction cache invalidation has no effect on static native code.
+  (void)ctx;
+  return true;
+}
+
 bool build_lwsync(BuilderContext& ctx) {
   // Lightweight memory barrier, x86 has strong ordering so this is a no-op
   (void)ctx;
@@ -148,12 +160,12 @@ bool build_dcbtst(BuilderContext& ctx) {
 }
 
 bool build_dcbz(BuilderContext& ctx) {
-  // Compute EA, align to 32-byte cache line, apply physical offset
+  // Xenon has 128-byte cache blocks for both dcbz and dcbzl.
   ctx.print("\t{} = (", ctx.ea());
   if (ctx.insn.operands[0] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[0]));
-  ctx.println("{}.u32) & ~31;", ctx.r(ctx.insn.operands[1]));
-  ctx.println("\tmemset((void*)REX_RAW_ADDR({}), 0, 32);", ctx.ea());
+  ctx.println("{}.u32) & ~127;", ctx.r(ctx.insn.operands[1]));
+  ctx.println("\tmemset((void*)REX_RAW_ADDR({}), 0, 128);", ctx.ea());
   return true;
 }
 
@@ -197,6 +209,22 @@ bool build_mr(BuilderContext& ctx) {
 bool build_mcrf(BuilderContext& ctx) {
   // Trivally copy one Control Register Field to another:
   ctx.println("\t{0} = {1};", ctx.cr(ctx.insn.operands[0]), ctx.cr(ctx.insn.operands[1]));
+  return true;
+}
+
+bool build_mcrfs(BuilderContext& ctx) {
+  const uint32_t shift = 4 * (7 - ctx.insn.operands[1]);
+  // Only exception flags are cleared; rounding, enables and result flags survive.
+  // In particular, clearing a field must not reset RN through guest_bits, which
+  // intentionally excludes the host-backed rounding bits.
+  constexpr uint32_t kExceptionFlags = 0x9FF80700;
+  const uint32_t clear_mask = (0xFu << shift) & kExceptionFlags;
+  ctx.println("\t{{");
+  ctx.println("\t\tconst uint32_t fpscr = ctx.fpscr.loadFromHost();");
+  ctx.println("\t\t{}.set_raw((fpscr >> {}) & 0xF);", ctx.cr(ctx.insn.operands[0]), shift);
+  if (clear_mask)
+    ctx.println("\t\tctx.fpscr.storeFromGuest(fpscr & 0x{:08X});", ~clear_mask);
+  ctx.println("\t}}");
   return true;
 }
 
@@ -253,7 +281,7 @@ bool build_mfmsr(BuilderContext& ctx) {
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
     // Check global lock and return appropriate value
     // Returns 0x8000 if unlocked (interrupts enabled), 0 if locked
-    ctx.println("\t{}.u64 = REX_CHECK_GLOBAL_LOCK();", ctx.r(ctx.insn.operands[0]));
+    ctx.println("\t{}.u64 = 0x1030 | REX_CHECK_GLOBAL_LOCK();", ctx.r(ctx.insn.operands[0]));
   }
   return true;
 }
@@ -319,18 +347,18 @@ bool build_mtmsrd(BuilderContext& ctx) {
   if (!ctx.config().skipMsr) {
     // Memory barrier for MSR write
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
-    // Update MSR bits
-    ctx.println("\tctx.msr = ({}.u32 & 0x8020) | (ctx.msr & ~0x8020);",
+    // Preserve the modeled MSR mask, but change the interrupt lock only when
+    // EE changes. Register identity cannot identify an interrupt transition:
+    // ordinary mtmsr writes and nested save/restore pairs use arbitrary GPRs.
+    ctx.println("\t{{");
+    ctx.println("\t\tconst uint32_t next_msr = ({}.u32 & 0x8020) | (ctx.msr & ~0x8020);",
                 ctx.r(ctx.insn.operands[0]));
-    // Global lock mechanism:
-    // R13 = enter lock (disable interrupts)
-    // Other = leave lock (enable interrupts)
-    uint32_t src_reg = ctx.insn.operands[0];
-    if (src_reg == 13) {
-      ctx.println("\tREX_ENTER_GLOBAL_LOCK();");
-    } else {
-      ctx.println("\tREX_LEAVE_GLOBAL_LOCK();");
-    }
+    ctx.println("\t\tif ((ctx.msr ^ next_msr) & 0x8000) {{");
+    ctx.println("\t\t\tif (next_msr & 0x8000) {{ REX_LEAVE_GLOBAL_LOCK(); }}");
+    ctx.println("\t\t\telse {{ REX_ENTER_GLOBAL_LOCK(); }}");
+    ctx.println("\t\t}}");
+    ctx.println("\t\tctx.msr = next_msr;");
+    ctx.println("\t}}");
   }
   return true;
 }
@@ -340,7 +368,7 @@ bool build_mtfsf(BuilderContext& ctx) {
   uint32_t mask = 0;
   for (int j = 0; j < 8; j++) {
     if (fm & (1 << (7 - j)))
-      mask |= 0xF << (4 * j);
+      mask |= 0xFu << (4 * (7 - j));
   }
   if (mask == 0xFFFFFFFF) {
     ctx.println("\tctx.fpscr.storeFromGuest({}.u32);", ctx.f(ctx.insn.operands[1]));

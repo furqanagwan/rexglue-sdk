@@ -90,6 +90,7 @@ inline std::string Hex(uint64_t v) {
 inline std::string RunCase(const Case& c, const Op* ops, const uint8_t* pool) {
   uint8_t* memory = GetMemory().virtual_membase();
   PPCContext ctx{};
+  PPCInterruptTestScope interrupt_scope;
   // A case starts from the reset FPSCR (round to nearest, no flush), not from
   // whatever rounding mode or flush the previous case left on the host.
   ctx.fpscr.setcsr(0x1F80);

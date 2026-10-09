@@ -319,10 +319,135 @@ inline bool any_snan(double a, double b = 0.0, double c = 0.0) noexcept {
   return is_snan(a) || is_snan(b) || is_snan(c);
 }
 
+inline uint32_t snan_causes(double a, double b = 0.0, double c = 0.0) noexcept {
+  return any_snan(a, b, c) ? FPSCRRegister::kVXSNAN : 0;
+}
+
+/// Compare operands and record the invalid causes specified by fcmpu/fcmpo.
+inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
+                    bool ordered) noexcept {
+  cr.compare(a, b);
+  uint32_t causes = snan_causes(a, b);
+  const bool has_nan = is_nan(a) || is_nan(b);
+  const bool has_quiet_nan = (is_nan(a) && !is_snan(a)) || (is_nan(b) && !is_snan(b));
+  if (ordered && (has_quiet_nan || (has_nan && !(fpscr.guest_bits & FPSCRRegister::kVE)))) {
+    causes |= FPSCRRegister::kVXVC;
+  }
+  fpscr.recordExceptions(causes);
+
+  // Compare updates FPCC, but preserves C, FR, and FI. An ordered compare
+  // that raises an enabled invalid exception still reports unordered FPCC.
+  uint32_t fpcc = FPSCRRegister::kFPCCUnordered;
+  if (!has_nan) {
+    fpcc = a < b ? FPSCRRegister::kFPCCLess
+                 : (a > b ? FPSCRRegister::kFPCCGreater : FPSCRRegister::kFPCCEqual);
+  }
+  fpscr.guest_bits = (fpscr.guest_bits & ~FPSCRRegister::kFPCC) | fpcc;
+}
+
+/// Return the PowerPC FPRF encoding for a floating-point result.
+inline uint32_t bits32(float x) noexcept;
+
+inline uint32_t result_class(double result, bool single_precision = false) noexcept {
+  constexpr uint32_t kQuietNaN = 0b10001;
+  constexpr uint32_t kNegativeInfinity = 0b01001;
+  constexpr uint32_t kNegativeNormal = 0b01000;
+  constexpr uint32_t kNegativeDenormal = 0b11000;
+  constexpr uint32_t kNegativeZero = 0b10010;
+  constexpr uint32_t kPositiveZero = 0b00010;
+  constexpr uint32_t kPositiveDenormal = 0b10100;
+  constexpr uint32_t kPositiveNormal = 0b00100;
+  constexpr uint32_t kPositiveInfinity = 0b00101;
+
+  if (single_precision) {
+    const uint32_t single = bits32(float(result));
+    const uint32_t magnitude = single & 0x7FFFFFFFu;
+    if (magnitude > 0x7F800000u)
+      return kQuietNaN;
+    if (magnitude == 0x7F800000u)
+      return (single >> 31) ? kNegativeInfinity : kPositiveInfinity;
+    if (magnitude == 0)
+      return (single >> 31) ? kNegativeZero : kPositiveZero;
+    if ((magnitude & 0x7F800000u) == 0)
+      return (single >> 31) ? kNegativeDenormal : kPositiveDenormal;
+    return (single >> 31) ? kNegativeNormal : kPositiveNormal;
+  }
+  if (is_nan(result))
+    return kQuietNaN;
+  const uint64_t magnitude = bits(result) & kMagnitude;
+  if (magnitude == kInfinity)
+    return std::signbit(result) ? kNegativeInfinity : kPositiveInfinity;
+  if (magnitude == 0)
+    return std::signbit(result) ? kNegativeZero : kPositiveZero;
+  if (is_denormal(result))
+    return std::signbit(result) ? kNegativeDenormal : kPositiveDenormal;
+  return std::signbit(result) ? kNegativeNormal : kPositiveNormal;
+}
+
+inline void set_result_class(FPSCRRegister& fpscr, double result,
+                             bool single_precision = false) noexcept {
+  const uint32_t encoded = result_class(result, single_precision) << 12;
+  fpscr.guest_bits = (fpscr.guest_bits & ~FPSCRRegister::kFPRF) | encoded;
+}
+
+inline uint32_t add_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  if (std::isinf(a) && std::isinf(b) && std::signbit(a) != std::signbit(b))
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
+}
+
+inline uint32_t sub_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  if (std::isinf(a) && std::isinf(b) && std::signbit(a) == std::signbit(b))
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
+}
+
+inline uint32_t mul_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  const uint64_t ma = bits(a) & kMagnitude, mb = bits(b) & kMagnitude;
+  if ((ma == 0 && mb == kInfinity) || (ma == kInfinity && mb == 0))
+    causes |= FPSCRRegister::kVXIMZ;
+  return causes;
+}
+
+inline uint32_t div_invalid_causes(double a, double b) noexcept {
+  uint32_t causes = snan_causes(a, b);
+  const uint64_t ma = bits(a) & kMagnitude, mb = bits(b) & kMagnitude;
+  if (ma == kInfinity && mb == kInfinity)
+    causes |= FPSCRRegister::kVXIDI;
+  if (ma == 0 && mb == 0)
+    causes |= FPSCRRegister::kVXZDZ;
+  return causes;
+}
+
+inline uint32_t sqrt_invalid_causes(double a) noexcept {
+  uint32_t causes = snan_causes(a);
+  const uint64_t magnitude = bits(a) & kMagnitude;
+  if ((bits(a) >> 63) && magnitude != 0 && !is_nan(a))
+    causes |= FPSCRRegister::kVXSQRT;
+  return causes;
+}
+
 /// x86 skips the invalid signal for 0 x inf when the addend is a quiet NaN.
-inline bool madd_invalid(double a, double c, double b) noexcept {
+inline uint32_t madd_invalid_causes(double a, double c, double b,
+                                    bool subtract_addend = false) noexcept {
   const uint64_t ma = bits(a) & kMagnitude, mc = bits(c) & kMagnitude;
-  return any_snan(a, c, b) || (ma == 0 && mc == kInfinity) || (ma == kInfinity && mc == 0);
+  uint32_t causes = snan_causes(a, c, b);
+  if ((ma == 0 && mc == kInfinity) || (ma == kInfinity && mc == 0))
+    causes |= FPSCRRegister::kVXIMZ;
+  const bool product_infinite =
+      !is_nan(a) && !is_nan(c) && ((ma == kInfinity && mc != 0) || (mc == kInfinity && ma != 0));
+  const bool product_negative = std::signbit(a) != std::signbit(c);
+  const bool addend_negative = std::signbit(b) != subtract_addend;
+  if (product_infinite && !is_nan(b) && std::isinf(b) && product_negative != addend_negative)
+    causes |= FPSCRRegister::kVXISI;
+  return causes;
+}
+
+inline uint32_t msub_invalid_causes(double a, double c, double b) noexcept {
+  return madd_invalid_causes(a, c, b, true);
 }
 
 inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {
@@ -331,6 +456,115 @@ inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {
   cr1.gt = 0;                                                                          // FEX
   cr1.eq = vx;                                                                         // VX
   cr1.so = (raised & FE_OVERFLOW) != 0;                                                // OX
+}
+
+inline void set_cr1_from_fpscr(CRRegister& cr1, const FPSCRRegister& fpscr) noexcept {
+  cr1.lt = (fpscr.guest_bits & FPSCRRegister::kFX) != 0;
+  cr1.gt = (fpscr.guest_bits & FPSCRRegister::kFEX) != 0;
+  cr1.eq = (fpscr.guest_bits & FPSCRRegister::kVX) != 0;
+  cr1.so = (fpscr.guest_bits & FPSCRRegister::kOX) != 0;
+}
+
+inline uint32_t host_exception_causes(int raised) noexcept {
+  uint32_t causes = 0;
+  if (raised & FE_DIVBYZERO)
+    causes |= FPSCRRegister::kZX;
+  if (raised & FE_OVERFLOW)
+    causes |= FPSCRRegister::kOX;
+  if (raised & FE_UNDERFLOW)
+    causes |= FPSCRRegister::kUX;
+  if (raised & FE_INEXACT)
+    causes |= FPSCRRegister::kXX;
+  return causes;
+}
+
+enum class TrackedOp { kRoundSingle, kAdd, kSub, kMul, kDiv, kMadd, kMsub, kNmadd, kNmsub, kSqrt };
+
+inline void set_rounding_flags(FPSCRRegister& fpscr, bool fraction_rounded, bool inexact) noexcept {
+  fpscr.guest_bits &= ~(FPSCRRegister::kFR | FPSCRRegister::kFI);
+  if (fraction_rounded)
+    fpscr.guest_bits |= FPSCRRegister::kFR;
+  if (inexact)
+    fpscr.guest_bits |= FPSCRRegister::kFI;
+}
+
+inline double sum_residual(double a, double b, double rounded) noexcept {
+  const double sum = a + b;
+  const double b_virtual = sum - a;
+  const double error = (a - (sum - b_virtual)) + (b - b_virtual);
+  return error + (sum - rounded);
+}
+
+/// Return the sign of exact-result minus rounded-result. This uses an
+/// error-free residual for addition and fused multiply-add to avoid comparing
+/// only the already-rounded host result.
+inline double rounding_residual(TrackedOp op, double a, double b, double c,
+                                double rounded) noexcept {
+  switch (op) {
+    case TrackedOp::kRoundSingle:
+      return a - rounded;
+    case TrackedOp::kAdd:
+      return sum_residual(a, b, rounded);
+    case TrackedOp::kSub:
+      return sum_residual(a, -b, rounded);
+    case TrackedOp::kMul:
+      return std::fma(a, b, -rounded);
+    case TrackedOp::kDiv: {
+      const double remainder = std::fma(-rounded, b, a);
+      return remainder / b;
+    }
+    case TrackedOp::kMadd:
+      return std::fma(a, b, c - rounded);
+    case TrackedOp::kMsub:
+      return std::fma(a, b, -c - rounded);
+    case TrackedOp::kNmadd:
+      return std::fma(a, b, c - rounded);
+    case TrackedOp::kNmsub:
+      return std::fma(a, b, -c - rounded);
+    case TrackedOp::kSqrt:
+      return std::fma(-rounded, rounded, a);
+  }
+  return 0.0;
+}
+
+inline bool fraction_incremented(TrackedOp op, double a, double b, double c,
+                                 double rounded) noexcept {
+  if (op == TrackedOp::kNmadd || op == TrackedOp::kNmsub)
+    rounded = -rounded;
+  if (rounded == 0.0 || !is_finite(rounded))
+    return false;
+  const double residual = rounding_residual(op, a, b, c, rounded);
+  return residual != 0.0 && std::signbit(residual) != std::signbit(rounded);
+}
+
+/// Execute a scalar floating-point instruction, record its sticky FPSCR state,
+/// and optionally update CR1 for the record form.
+template <typename Op>
+inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t invalid_causes,
+                      bool quiet, bool single_precision, TrackedOp tracked_op, double a,
+                      double b = 0.0, double c = 0.0) noexcept {
+  volatile double va = a, vb = b, vc = c;
+  std::feclearexcept(FE_ALL_EXCEPT);
+  volatile double vr = op(va, vb, vc);
+  const int raised = quiet ? 0 : std::fetestexcept(FE_ALL_EXCEPT);
+  const uint32_t causes = quiet ? 0 : (host_exception_causes(raised) | invalid_causes);
+  fpscr.recordExceptions(causes);
+  const bool invalid = invalid_causes || (raised & FE_INVALID);
+  if (!(invalid && (fpscr.guest_bits & FPSCRRegister::kVE)))
+    set_result_class(fpscr, vr, single_precision);
+  if (invalid || (raised & FE_DIVBYZERO)) {
+    set_rounding_flags(fpscr, false, false);
+  } else if (raised & FE_OVERFLOW) {
+    // FR is architecturally undefined for overflow; FI still reports the
+    // overflowed, inexact result.
+    set_rounding_flags(fpscr, false, (raised & FE_INEXACT) != 0);
+  } else {
+    const bool inexact = (raised & FE_INEXACT) != 0;
+    set_rounding_flags(fpscr, inexact && fraction_incremented(tracked_op, a, b, c, vr), inexact);
+  }
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return vr;
 }
 
 /// Runs `op` on the operands with the host status flags cleared and sets CR1
@@ -348,28 +582,87 @@ inline double recorded(CRRegister& cr1, Op op, bool invalid, bool quiet, double 
   return vr;
 }
 
-/// fctiw./fctid.: invalid for a NaN or a value the target can't hold, inexact
-/// when rounding changed the value.
-inline void set_cr1_convert(CRRegister& cr1, double x, bool truncate, bool to_int64) noexcept {
-  const double limit = to_int64 ? 9223372036854775808.0 : 2147483648.0;
-  const double r = is_nan(x) ? 0.0 : (truncate ? std::trunc(x) : std::nearbyint(x));
-  const bool invalid = is_nan(x) || r >= limit || r < -limit;
-  set_cr1(cr1, invalid ? 0 : (r != x ? FE_INEXACT : 0), invalid);
+inline uint64_t integer_magnitude(int64_t value) noexcept {
+  const uint64_t bits = uint64_t(value);
+  return value < 0 ? ~bits + 1 : bits;
 }
 
-/// frsqrte./fres.: the estimates raise nothing inexact, so the operand is the
-/// whole answer: invalid for a signalling NaN (and, for the square root, a
-/// negative non-zero number), divide by zero for a zero, and for fres
-/// overflow when the reciprocal leaves single range.
-inline void set_cr1_estimate(CRRegister& cr1, double x, bool sqrt_estimate) noexcept {
+inline uint64_t double_integer_magnitude(double value) noexcept {
+  const uint64_t encoded = bits(value) & kMagnitude;
+  const uint32_t exponent = uint32_t(encoded >> 52) & 0x7FF;
+  if (!exponent)
+    return 0;
+  const uint64_t significand = (encoded & 0x000FFFFFFFFFFFFFull) | (1ull << 52);
+  const int32_t shift = int32_t(exponent) - 1023 - 52;
+  return shift >= 0 ? significand << shift : significand >> -shift;
+}
+
+/// Convert a signed guest integer to double and track its rounding fields.
+inline double tracked_from_integer(FPSCRRegister& fpscr, CRRegister* cr1, int64_t value) noexcept {
+  volatile int64_t source = value;
+  volatile double result = double(source);
+  const uint64_t magnitude = integer_magnitude(value);
+  const uint64_t rounded_magnitude = double_integer_magnitude(result);
+  const bool inexact = rounded_magnitude != magnitude;
+  const bool fraction_rounded = inexact && rounded_magnitude > magnitude;
+  set_rounding_flags(fpscr, fraction_rounded, inexact);
+  fpscr.recordExceptions(inexact ? FPSCRRegister::kXX : 0);
+  set_result_class(fpscr, result);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return result;
+}
+
+/// Convert to an integer and accumulate the guest FPSCR exception state.
+inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, bool truncate,
+                               bool to_doubleword) noexcept {
+  const double limit = to_doubleword ? 9223372036854775808.0 : 2147483648.0;
+  const double rounded = is_nan(x) ? 0.0 : (truncate ? std::trunc(x) : std::nearbyint(x));
+  const bool invalid = is_nan(x) || rounded >= limit || rounded < -limit;
+  uint32_t causes = 0;
+  if (is_snan(x))
+    causes |= FPSCRRegister::kVXSNAN;
+  else if (invalid)
+    causes |= FPSCRRegister::kVXCVI;
+  if (!invalid && rounded != x)
+    causes |= FPSCRRegister::kXX;
+  const bool inexact = !invalid && rounded != x;
+  const bool fraction_rounded = inexact && std::fabs(rounded) > std::fabs(x);
+  set_rounding_flags(fpscr, fraction_rounded, inexact);
+  fpscr.recordExceptions(causes);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return to_doubleword ? to_int64(x, truncate) : to_int32(x, truncate);
+}
+
+/// Execute fres/frsqrte and accumulate the exception state defined by the
+/// operand. These estimate instructions do not report inexact, and FR/FI are
+/// architecturally undefined for them, so both are left unchanged. FPRF takes
+/// the result class (single precision for fres) unless an enabled invalid or
+/// zero-divide exception suppresses the result.
+inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
+                               bool sqrt_estimate) noexcept {
   const uint64_t magnitude = bits(x) & kMagnitude;
-  bool invalid = is_snan(x);
-  if (sqrt_estimate)
-    invalid = invalid || ((bits(x) >> 63) && magnitude != 0 && !is_nan(x));
-  int raised = magnitude == 0 ? FE_DIVBYZERO : 0;
+  uint32_t causes = snan_causes(x);
+  if (sqrt_estimate && (bits(x) >> 63) && magnitude != 0 && !is_nan(x))
+    causes |= FPSCRRegister::kVXSQRT;
+  else if (magnitude == 0)
+    causes |= FPSCRRegister::kZX;
   if (!sqrt_estimate && magnitude != 0 && magnitude < 0x37F0000000000000ull)
-    raised |= FE_OVERFLOW;
-  set_cr1(cr1, raised, invalid);
+    causes |= FPSCRRegister::kOX;
+  // |x| > 2^126 makes 1/x tiny in single precision.
+  if (!sqrt_estimate && magnitude > 0x47D0000000000000ull && magnitude < kInfinity)
+    causes |= FPSCRRegister::kUX;
+  fpscr.recordExceptions(causes);
+  const double result = sqrt_estimate ? rsqrte(x) : double(float(1.0 / x));
+  const bool suppressed =
+      ((causes & FPSCRRegister::kInvalidCauses) && (fpscr.guest_bits & FPSCRRegister::kVE)) ||
+      ((causes & FPSCRRegister::kZX) && (fpscr.guest_bits & FPSCRRegister::kZE));
+  if (!suppressed)
+    set_result_class(fpscr, result, !sqrt_estimate);
+  if (cr1)
+    set_cr1_from_fpscr(*cr1, fpscr);
+  return result;
 }
 
 //=============================================================================

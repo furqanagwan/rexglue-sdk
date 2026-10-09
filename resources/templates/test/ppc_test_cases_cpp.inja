@@ -42,6 +42,7 @@ TEST_CASE("{{ test.name }}", "[ppc][{{ test.category }}][{{ test.stem }}]") {
     auto& mem = get_memory();
     uint8_t* memory = mem.virtual_membase();
     PPCContext ctx{};
+    PPCInterruptTestScope interrupt_scope;
     ctx.fpscr.loadFromHost();
 
 ## for reg in test.inputs.registers

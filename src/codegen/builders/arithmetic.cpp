@@ -284,4 +284,149 @@ bool build_subfme(BuilderContext& ctx) {
   return true;
 }
 
+//=============================================================================
+// Overflow-enable (OE) forms: XER[OV] for the result, XER[SO] sticky
+//=============================================================================
+// OV is worked out from the operands before the base instruction runs (its
+// result may overwrite a source), so the base instruction's record form sees
+// the updated SO in CR0. Additions and subtractions judge overflow on 64
+// bits, as has207/xenia-edge 10da45ea4 does: SO is sticky, so a false
+// positive from a 32-bit view would never clear.
+
+namespace {
+
+// Sets OV to `ov`, a C++ expression over `a`, `b` and `r` (64-bit unsigned).
+void emitOverflow(BuilderContext& ctx, const std::string& setup, const char* ov) {
+  ctx.println("\t{{");
+  ctx.println("\t\t{}", setup);
+  ctx.println("\t\t{}.ov = uint8_t({});", ctx.xer(), ov);
+  ctx.println("\t\t{0}.so = uint8_t({0}.so | {0}.ov);", ctx.xer());
+  ctx.println("\t}}");
+}
+
+bool finishOverflow(BuilderContext& ctx, bool (*base)(BuilderContext&), bool doubleword = true) {
+  if (!base(ctx))
+    return false;
+  // The shared record helper compares the low word; OE doubleword forms must
+  // compare the full result. Emit after the base builder to replace CR0.
+  if (doubleword && isRecordForm(ctx.insn)) {
+    ctx.println("\t{}.compare<int64_t>({}.s64, 0, {});", ctx.cr(0), ctx.r(ctx.insn.operands[0]),
+                ctx.xer());
+  }
+  return true;
+}
+
+// a + b (+ carry_in): overflow when both addends' signs differ from the sum's.
+bool addOverflow(BuilderContext& ctx, const std::string& a, const std::string& b,
+                 const std::string& carry, bool (*base)(BuilderContext&)) {
+  emitOverflow(ctx, fmt::format("const uint64_t a = {}, b = {}, r = a + b + {};", a, b, carry),
+               "((a ^ r) & (b ^ r)) >> 63");
+  return finishOverflow(ctx, base);
+}
+
+std::string R(BuilderContext& ctx, size_t i) {
+  return fmt::format("{}.u64", ctx.r(ctx.insn.operands[i]));
+}
+std::string NotR(BuilderContext& ctx, size_t i) {
+  return fmt::format("~{}.u64", ctx.r(ctx.insn.operands[i]));
+}
+std::string Ca(BuilderContext& ctx) {
+  return fmt::format("uint64_t({}.ca)", ctx.xer());
+}
+
+}  // namespace
+
+bool build_addo(BuilderContext& ctx) {
+  return addOverflow(ctx, R(ctx, 1), R(ctx, 2), "0", build_add);
+}
+bool build_addco(BuilderContext& ctx) {
+  return addOverflow(ctx, R(ctx, 1), R(ctx, 2), "0", build_addc);
+}
+bool build_addeo(BuilderContext& ctx) {
+  return addOverflow(ctx, R(ctx, 1), R(ctx, 2), Ca(ctx), build_adde);
+}
+bool build_addmeo(BuilderContext& ctx) {
+  return addOverflow(ctx, R(ctx, 1), "~uint64_t(0)", Ca(ctx), build_addme);
+}
+bool build_addzeo(BuilderContext& ctx) {
+  return addOverflow(ctx, R(ctx, 1), "uint64_t(0)", Ca(ctx), build_addze);
+}
+// subf rD,rA,rB is rB + ~rA + 1.
+bool build_subfo(BuilderContext& ctx) {
+  return addOverflow(ctx, NotR(ctx, 1), R(ctx, 2), "1", build_subf);
+}
+bool build_subfco(BuilderContext& ctx) {
+  return addOverflow(ctx, NotR(ctx, 1), R(ctx, 2), "1", build_subfc);
+}
+bool build_subfeo(BuilderContext& ctx) {
+  return addOverflow(ctx, NotR(ctx, 1), R(ctx, 2), Ca(ctx), build_subfe);
+}
+bool build_subfmeo(BuilderContext& ctx) {
+  return addOverflow(ctx, NotR(ctx, 1), "~uint64_t(0)", Ca(ctx), build_subfme);
+}
+bool build_subfzeo(BuilderContext& ctx) {
+  return addOverflow(ctx, NotR(ctx, 1), "uint64_t(0)", Ca(ctx), build_subfze);
+}
+
+bool build_nego(BuilderContext& ctx) {
+  emitOverflow(ctx, fmt::format("const uint64_t a = {};", R(ctx, 1)), "a == 0x8000000000000000ull");
+  return finishOverflow(ctx, build_neg);
+}
+
+bool build_mullwo(BuilderContext& ctx) {
+  // The product of the low words overflows when it doesn't fit 32 signed bits.
+  emitOverflow(ctx,
+               fmt::format("const int64_t p = int64_t({}.s32) * int64_t({}.s32);",
+                           ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2])),
+               "p != int64_t(int32_t(p))");
+  return finishOverflow(ctx, build_mullw, false);
+}
+
+bool build_mulldo(BuilderContext& ctx) {
+  emitOverflow(ctx,
+               fmt::format("const __int128 p = __int128({}.s64) * __int128({}.s64);",
+                           ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2])),
+               "p != __int128(int64_t(p))");
+  return finishOverflow(ctx, build_mulld);
+}
+
+bool build_divwo(BuilderContext& ctx) {
+  emitOverflow(ctx,
+               fmt::format("const int32_t a = {}.s32, b = {}.s32;", ctx.r(ctx.insn.operands[1]),
+                           ctx.r(ctx.insn.operands[2])),
+               "b == 0 || (a == INT32_MIN && b == -1)");
+  return finishOverflow(ctx, build_divw, false);
+}
+
+bool build_divwuo(BuilderContext& ctx) {
+  emitOverflow(ctx, fmt::format("const uint32_t b = {}.u32;", ctx.r(ctx.insn.operands[2])),
+               "b == 0");
+  return finishOverflow(ctx, build_divwu, false);
+}
+
+bool build_divdo(BuilderContext& ctx) {
+  emitOverflow(ctx,
+               fmt::format("const int64_t a = {}.s64, b = {}.s64;", ctx.r(ctx.insn.operands[1]),
+                           ctx.r(ctx.insn.operands[2])),
+               "b == 0 || (a == INT64_MIN && b == -1)");
+  return finishOverflow(ctx, build_divd);
+}
+
+bool build_divduo(BuilderContext& ctx) {
+  emitOverflow(ctx, fmt::format("const uint64_t b = {}.u64;", ctx.r(ctx.insn.operands[2])),
+               "b == 0");
+  return finishOverflow(ctx, build_divdu);
+}
+
+bool build_mcrxr(BuilderContext& ctx) {
+  // CR field = XER[SO, OV, CA, 0]; those XER bits are cleared.
+  const auto cr = ctx.cr(ctx.insn.operands[0]);
+  ctx.println("\t{}.lt = {}.so;", cr, ctx.xer());
+  ctx.println("\t{}.gt = {}.ov;", cr, ctx.xer());
+  ctx.println("\t{}.eq = {}.ca;", cr, ctx.xer());
+  ctx.println("\t{}.so = 0;", cr);
+  ctx.println("\t{0}.so = 0;\n\t{0}.ov = 0;\n\t{0}.ca = 0;", ctx.xer());
+  return true;
+}
+
 }  // namespace rex::codegen
