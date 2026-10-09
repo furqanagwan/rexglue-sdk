@@ -811,3 +811,32 @@ requests it again when the outer paint ends. With only this change in
 the popup ("Achievement unlocked / 10G - Licence to Kill"). One reproduction
 and one fixed run were compared; other titles and the original-Xbox popup were
 not run.
+
+## Shader parsing, DXIL occlusion and wide 1D title batch, 2026-10-09
+
+SDK `6c20b62` (PRs #238, #239, #240), GDK Release, NVIDIA RTX 5080 Laptop.
+Each title built twice from one codegen: against the default SDK install
+and against the `REXGLUE_SHADER_DXIL` install (run with
+`gpu_shader_path=dxil`). One fullscreen run each, 90 s from launch with no
+input, fresh profile and cold shader cache, frame stats every 5 s and a
+screenshot every 4 s.
+
+| Run | Exit | Errors | Median fps | Longest frame | 5 s windows with a frame over 300 ms |
+| --- | --- | --- | --- | --- | --- |
+| Quantum of Solace, DXBC | clean | 0 | 56 | 6.3 s (level load) | 1 |
+| Quantum of Solace, DXIL | clean | 0 | 43 | 8.8 s (level load, pipelines created cold) | 5 |
+| Blood Stone, DXBC | clean | 0 | 30 (title's cap) | 412 ms | 1 |
+| Blood Stone, DXIL | clean | 0 | 29 | 2.8 s | 1 |
+| 007 Legends, DXBC | clean | 0 | 60 | 285 ms | 0 |
+| 007 Legends, DXIL | clean | 0 | 59 | 2.2 s | 2 |
+
+Warnings are the titles' usual missing-file probes and kernel stubs, the
+same on both paths. No "1D texture is too wide", failed DXIL pipeline or
+device-removed messages. The screenshots change throughout every run (the
+only repeat is three QoS DXIL shots during its 8.8 s level-load stall) and
+show correct rendering on both paths: QoS gameplay, Blood Stone gameplay
+and Legends' in-engine cutscenes. Without input the two paths reach
+different points by the same time, so this is not a frame-exact comparison.
+DXIL's longer frames are the known cold-cache pipeline creation (see
+[DXIL shader toolchain](shader-dxil.md)). Raw logs and screenshots were
+removed after these numbers were taken.
