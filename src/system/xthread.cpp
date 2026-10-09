@@ -1022,10 +1022,12 @@ struct ThreadSavedState {
     vec128_t v[128];
     uint32_t cr[8];
     uint32_t fpscr;
+    uint32_t guest_fpscr;
     uint8_t xer_ca;
     uint8_t xer_ov;
     uint8_t xer_so;
     uint8_t vscr_sat;
+    uint8_t vscr_nj;
     uint32_t pc;
   } context;
 };
@@ -1135,10 +1137,12 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
 
   // Other state
   state.context.fpscr = ctx->fpscr.csr;
+  state.context.guest_fpscr = ctx->fpscr.guest_bits;
   state.context.xer_ca = ctx->xer.ca;
   state.context.xer_ov = ctx->xer.ov;
   state.context.xer_so = ctx->xer.so;
   state.context.vscr_sat = ctx->vscr_sat;
+  state.context.vscr_nj = ctx->vscr_nj;
 }
 
 // Load ThreadSavedState into PPCContext
@@ -1246,10 +1250,12 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
 
   // Other state
   ctx->fpscr.csr = state.context.fpscr;
+  ctx->fpscr.guest_bits = state.context.guest_fpscr;
   ctx->xer.ca = state.context.xer_ca;
   ctx->xer.ov = state.context.xer_ov;
   ctx->xer.so = state.context.xer_so;
   ctx->vscr_sat = state.context.vscr_sat;
+  ctx->vscr_nj = state.context.vscr_nj;
 }
 
 bool XThread::Save(stream::ByteStream* stream) {

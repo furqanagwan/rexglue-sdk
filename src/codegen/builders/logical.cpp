@@ -247,6 +247,15 @@ bool build_rldcl(BuilderContext& ctx) {
   return true;
 }
 
+bool build_rotld(BuilderContext& ctx) {
+  // The disassembler uses rotld for rldcl with a zero mask.
+  ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F);",
+              ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
+              ctx.r(ctx.insn.operands[2]));
+  emitRecordFormCompare(ctx);
+  return true;
+}
+
 bool build_rldcr(BuilderContext& ctx) {
   uint64_t mask = compute_mask(0, ctx.insn.operands[3]);
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F) & 0x{:X};",

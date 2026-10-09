@@ -410,6 +410,149 @@ same private evidence folder. All owned processes are closed. The current
 pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
 format checks; these do not replace the missing owner/hardware/service gates.
 
+## PPC instruction coverage follow-up, 2026-10-07
+
+Candidate source: `b8d57d4845052d603d0532944f56af57b37a55d3`, PR #162,
+integrating main `5dad97248d70126c901d2425ce942e5dc9694a28`. Windows x64,
+VS Community 18.10.3, Clang 22.1.8, April 2026 GDK 260404; NVIDIA RTX 5080
+Laptop, driver 32.0.16.1742 for the existing GPU fixtures and title starts.
+This is CPU instruction work; no shader path/default or vendor support changes.
+
+- Standard Release full build/CTest: 2,214 discovered, 2,199 passed,
+  15 skipped, zero failures, 216.88 s. Logs: `out/ppc149-standard-release-ctest.log`
+  and `out/ppc149-win-amd64-release-retry-build.log`.
+- Standard Debug full build/CTest: 2,214 discovered, 2,199 passed,
+  14 skipped and the previously reproduced quad tessellation assertion,
+  236.18 s. All discovered unit and ordinary PPC tests pass or skip.
+  Logs: `out/ppc149-standard-debug-{build,ctest}.log`.
+- GDK Debug and Release full builds, then unit/PPC/corpus CTest selection:
+  each discovers 2,693 entries, 2,679 passed, 14 skipped, zero failures
+  (125.14 s Debug, 87.94 s Release). These are CPU/unit selections, not
+  new full GDK GPU/deployment results. Logs:
+  `out/ppc149-gdk-{debug,release}-ctest.log` and associated build logs.
+- Direct ordinary PPC checks pass 1,575 cases / 6,518 assertions in both
+  GDK configurations and the final standard Release recheck. The pinned
+  corpus generator emits 169,459 cases, reports 917 skipped, and all 563
+  active Catch2 file groups pass. Four wholly skipped files account for the
+  difference from the 567 registered CTest file entries. All 3,333 #149
+  expected-failure entries are removed; eight hand-written corpus errors
+  remain expected. The corpus and skip-list source pin are unchanged.
+- CPU/context unit selection passes 23 cases / 99 assertions. Non-volatile
+  restoration now verifies that guest-written FPSCR bits survive alongside
+  the host-backed control word. MSR tests cover both write instructions,
+  nested disable/restore, repeated enables and case isolation. The new
+  `mcrfs` checks retain RN and result flags while clearing exception flags.
+
+An exploratory all-in-one GDK Debug `unit_tests.exe` invocation aborts at
+`Memory::Memory`'s `active_memory_ == 0` assertion. A baseline combined run was
+not established, so it is not classified as a pre-existing regression. The
+supported CTest invocation isolates each unit case in its own process and all
+551 GDK unit entries pass or skip. The abort is retained in
+`out/ppc149-gdk-debug-unit.log`; it is not reported as a passing combined run.
+An initial filtered CTest attempt also encountered stale kernel test imports
+after rebuilding only selected targets; the subsequent full GDK Debug build
+and successful discovery/run above replace that incomplete-build result.
+
+Fresh title generation/builds use separate `recompiled-ppc149-20261007`
+projects and the isolated SDK install `out/ppc149-title-sdk`. The original
+five XEX inputs and six existing installed EXEs match their prior recorded
+SHA-256 values (`out/ppc149-original-artifact-checks.json`). Previous staging
+builds are kept for paired startup checks. Each process receives a read-only
+game root, separate user/cache/log paths and `launch_menu=false`.
+Private logs and generated/game material are not distributed.
+
+Title results are recorded under `out/ppc149-title-rebuild` and
+`out/ppc149-title-soaks`. Paired runs observe startup, advancing GPU-frame
+reports and controlled closure; they are not gameplay, save/load, visual
+comparison or performance benchmarks. Concurrent build activity means frame
+counts cannot establish a performance improvement. The QoS TU2 executable is
+a build result, not a validated TU2 playthrough.
+
+| Title | Fresh generation/configure/build | Previous/candidate startup |
+| --- | --- | --- |
+| Quantum of Solace (base and TU2 built) | Pass | Base: both 90 seconds, advancing frames |
+| Blood Stone | Pass | Both 90 seconds, advancing frames |
+| 007 Legends | Pass | Both 90 seconds, advancing frames |
+| FIFA Street (including two guest DLLs) | Pass | Both 90 seconds, advancing frames |
+| NHL Legacy Edition | Pass | Both 90 seconds, advancing frames |
+
+All ten runs retain a visible window through the observation interval, exit
+with status zero after controlled closure, and require no forced cleanup.
+The log scan finds no fatal error, unimplemented PPC instruction, missing
+function or device-removal message during these intervals. This does not
+establish that unvisited code paths are supported. FIFA Street's generation
+retains its previous unresolved-function/heap warnings; NHL retains its
+previous large-function warning. Known FIFA crowd-colour and NHL RTV rendering
+issues are not claimed resolved. QoS TU2's previously recorded missing
+function remains outside the base-title run. The private paired frame record
+is `out/ppc149-title-soaks/frame-evidence.json`.
+
+Arithmetic-produced FPSCR exception causes and derived summary bits remain
+unimplemented; `mcrfs` is verified for guest-written fields. The existing
+modeled MSR mask and critical-region adapter are not a complete guest interrupt
+controller. These limits and representative gameplay gates keep #149 open;
+instruction-corpus success does not certify every title or opcode. The
+provenance and reviewed upstream regression are in
+[the tracking ledger](upstream-tracking.md#rg-gdk-053-main-integration-and-corpus-follow-up-2026-10-07).
+
+## PPC arithmetic FPSCR follow-up, 2026-10-08
+
+On Windows x64 with April 2026 GDK 260404 and the Visual Studio developer
+shell, Debug and Release `unit_tests` and `ppc_tests` targets build. Eighteen
+PPC arithmetic/compare/conversion/estimate cases, three existing `mcrfs` cases
+and one unit case pass under CTest in each configuration. The full ordinary PPC
+executable passes 1,593 cases and 6,550 assertions in both Debug and Release.
+This is not a full CTest or title validation. FPSCR result-class fields and
+other estimate effects remain outside this evidence. See the
+[upstream ledger](upstream-tracking.md#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08).
+
+The generated GDK Debug corpus was rebuilt after the scalar FPSCR changes.
+All 566 active CTest groups pass when the existing `instr_mtmsrd` timeout case
+is excluded. Corpus validation caught and drove fixes for fused subtract
+infinity cancellation, NaN product classification, and preserving guest-written
+FEX during `mtfsf`. This result is corpus evidence only; `instr_mtmsrd` remains
+an unresolved timeout and gameplay validation remains outstanding.
+
+The Release SDK install from `fc59fce` also regenerated and built the base
+Quantum of Solace, Quantum of Solace TU2, Blood Stone and 007 Legends targets
+in fresh ignored directories under the 007 repository. Their executable
+SHA-256s are, respectively, `1941E6B19839367A9B9C2062A3E7F82076A181BA5834F5114B2F665C80834241`,
+`F30937215738BEE9242E3CA8F0F514619704E8D7512DF432EDCAF4C59376CB28`,
+`FEC03869A9C702372EA2A4F8CDA9F85A0C81CB3FFE626D5CC3394C6B4FB46E78` and
+`3D2643D3EC1F0CE1F6D02794F1EFF36F30E0BF8C9798611AF3EA7BBFB6320246`.
+Runtime checks were not run: no `REXGLUE_SYSTEM_UPDATE` or local fallback
+bundle was present, so these builds do not embed the Guide required for the
+usual Guide exit flow. 007 Legends codegen also reports its existing
+1,437,835-byte function above the 1 MiB limit. The build is not runtime or
+compatibility evidence.
+
+## Native title artwork follow-up, 2026-10-08
+
+`scripts/test_title_art.py` passes using synthetic artwork: the external CMake
+consumer embeds base/update ICO resources, Shell extracts both icon sizes,
+resource inspection finds RT_ICON/RT_GROUP_ICON and the linker manifest, the
+five PNG outputs have the requested dimensions, and overwrite protection
+preserves caller-owned files. The base/TU2 Quantum of Solace, Blood Stone and
+007 Legends executables built from the isolated SDK install also pass the
+native Shell/resource check with their title artwork. Xbox PC Add game
+appearance is unverified, so issue #164 stays open; no installed title or
+Xbox library entry was changed. `scripts/validate_gameconfig.ps1` passes
+against the installed 260404 `GameConfigSchema.xsd` for minimal and supplied-ID
+configs, verifies required image dimensions, refuses silent identity overwrite
+and confirms the schema validator rejects an invalid version.
+
+## Game source and media recovery review, 2026-10-08
+
+The focused source-selection/XDVDFS/media-recovery CTest selection passes in
+GDK Debug and Release (13 entries each; one private Guide message-box test is
+skipped because `$SystemUpdate` is unavailable). It covers XEX identity and
+checksum checks, extraction without overwriting existing data, XDVDFS reads
+and short reads on open files, replacement-media rejection, retry/leave
+behavior, shutdown cancellation and first-run UI validation. The optical-drive
+and ISO/folder picker flows were not driven end to end, and physical same-disc
+removal/reinsert was not exercised, so issue #154 remains open; synthetic
+file failures do not establish hardware drive behavior.
+
 ## Required GDK maintenance and ecosystem audit, 2026-10-07
 
 Branch `sdk-gdk-only-maturity` starts at SDK main
@@ -580,3 +723,73 @@ keeping its consumer draw. The tests use the SDK's synthetic fixture; they do
 not establish that a representative 007 title issues `VIZ_QUERY` or exercises
 conditional rendering. Issue [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65)
 therefore remains open for title-level evidence.
+
+## FPSCR result classification, 2026-10-08
+
+The PPC floating-point helpers now report the defined FPRF result classes for
+tracked arithmetic results and the FPCC relation for floating-point compares.
+Classification uses the instruction's result precision, including single
+subnormals held in widened FPRs. Compares preserve C, FR and FI; enabled invalid
+operations preserve FPRF. The implementation follows the field encodings and
+exception behavior in the [PowerPC User Instruction Set Architecture v2.02].
+
+After rebuilding `unit_tests` and `ppc_tests`, the focused unit, FPSCR
+arithmetic and FPSCR state selection passes 28/28 CTest cases in GDK Debug and
+Release. The full ordinary PPC selection passes 1,595/1,595 cases in each
+configuration. The full unit selection passes 542 cases with 14 documented
+private asset/fixture skips in each configuration. These are synthetic checks.
+Estimate-instruction classification followed on 2026-10-09 (below);
+title/gameplay validation remains separate.
+
+The FR/FI follow-up verifies rounding direction and inexact status for scalar
+arithmetic, fused operations, square root, `frsp`, integer conversion and
+integer-to-double conversion. Directed rounding and ties are covered by unit
+tests. Representative-title validation remains open.
+
+The 2026-10-09 estimate follow-up sets FPRF for `fres` and `frsqrte`, records
+`fres` underflow for operands above 2^126, and preserves FPRF when an enabled
+invalid or zero-divide exception suppresses the result. GDK Debug and Release
+each pass the focused FPSCR selection (29/29 CTest cases) and the ordinary PPC
+executable (1,599 cases / 6,559 assertions). These are synthetic checks;
+hardware confirmation of `fres` underflow signalling is unavailable.
+
+[PowerPC User Instruction Set Architecture v2.02]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf
+
+## PR #162 corpus and 007 title batch, 2026-10-09
+
+Candidate: PR #162 at `51aeb8d` (estimate FPRF, with `main` merged in).
+
+- **Corpus:** the GDK Release PPC corpus, regenerated by this branch's
+  `rexglue`, passes **567/567** CTest groups with nothing excluded, including
+  `ppc_corpus.instr_mtmsrd`. The earlier `instr_mtmsrd` hang and Debug abort came
+  from a corpus build generated by a `main`-based `rexglue` (before the
+  EE-transition `mtmsr` lowering), whose code released the interrupt lock
+  without taking it. The regenerated case follows EE transitions; the
+  identical ordinary `tests/ppc/asm/instr_mtmsrd.s` passes in GDK Debug. A full
+  Debug corpus run was not repeated.
+- **Titles:** the SDK was installed to a separate candidate prefix. Quantum of
+  Solace (base and TU2 targets), Blood Stone and 007 Legends were regenerated
+  with `rexglue codegen` and built in private candidate copies; the owner's
+  working builds and saves were not touched. The Guide was built from the
+  retained console-only modules; all three bundles keep SHA-256
+  `d6aec228966231e6f5a4de2926507e23a5a2c48ffca9989bd9896e50d51bba30`.
+- **Startup:** one fullscreen candidate run per base title, with an empty,
+  disposable user-data folder, stayed alive for **90 seconds** and closed
+  through its window without forced cleanup. Logs at warning level hold no
+  fatal, assert, missing-function or device-removal entries. The only
+  warnings are already-known ones: Quantum of Solace's language-file probes,
+  Blood Stone's localisation folder probes and Legends'
+  `XamContentResolve` (see the upstream ledger). Blood Stone wrote checkpoint
+  and profile saves and Legends an autosave into the disposable folder.
+
+| Title | Executable SHA-256 |
+| --- | --- |
+| Quantum of Solace | `d9520ac4b969b252e8603b6357e73a82a5c683dd6b73ae79183f5a5291402d24` |
+| Blood Stone | `5458ea02dd28b4a03dfb5e9f4d0b74eb350a9a9acfa96f24bb2022ec7a3fc5d8` |
+| 007 Legends | `ac0fa16ba6fe2992542dd65f1a46ce68647b34b54e18c753aabe7fd577a183b7` |
+
+Runtime `rexruntime.dll` `524a9ceb38554d3934820207095690a0c6b0af1b8680cacc271cf4b157466ed7`,
+`rexgpu-xenos.dll` `21fb4c8bb8537074a04ebdbce7d83377482df7760be234d9a0586399e36a6520`.
+This is a startup observation without input: gameplay, Guide exit, save/load
+and visual correctness are not established, and the TU2 target was built but
+not run.

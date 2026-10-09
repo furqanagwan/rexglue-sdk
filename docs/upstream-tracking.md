@@ -1342,6 +1342,43 @@ Known regressions: none reported upstream. #1250 is split out to RG-GDK-045
 Canary #1072 (`d119505289`), #1137 (`6a45452087`) and #1177 (`0c843efb32`),
 and #1072 has an open D3D12 device-loss report (Canary #1134).
 
+## RG-GDK-053: PPC instruction gaps (2026-10-01, in progress)
+
+Tracking [SDK issue #149](https://github.com/furqanagwan/rexglue-sdk/issues/149).
+The 007 generated binaries contain no stubs for these instructions; no title
+compatibility improvement has been demonstrated. Upstream regression status
+for these CPU changes is unknown. These are adaptations to static C++ codegen,
+not ports of the Edge JIT.
+
+| Reference | Class and motivation | Local adaptation | Evidence |
+| --- | --- | --- | --- |
+| has207/xenia-edge [`10da45ea4073d0a2ca82dfcf25c57d83ea3d879f`](https://github.com/has207/xenia-edge/commit/10da45ea4073d0a2ca82dfcf25c57d83ea3d879f), 2026-10-01, "Implement XER[OV] and XER[SO] for the PPC OE forms" | A, arithmetic correctness; sticky SO and 64-bit overflow | OE add, subtract, negate, multiply and divide dispatch and XER test directives; OE doubleword record forms compare all 64 bits | `instr_overflow.s` plus pinned Edge `instr_addo.s`, `instr_divwo.s`, `instr_mcrxr.s`, `instr_mullwo.s`, `instr_nego.s`; `mcrxr` mnemonic encoded as `.long` for the bundled assembler |
+| xenia-canary [`72ce1309715b30d07035c8511dffc13c0b92a2d9`](https://github.com/xenia-canary/xenia-canary/commit/72ce1309715b30d07035c8511dffc13c0b92a2d9), 2026-06-14, "Xbox360 cache line is always 128 bytes" | B, fixes 4E4D07E0 and 4E4D083D | Align `dcbz` to a 128-byte block and clear 128 bytes as `dcbzl` already does | `instr_dcbz.s` checks whole block and adjacent sentinel |
+| has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, missing VMX unsigned-word carry, average and maximum forms, and VMX128 shift-table aliases | Four static vector builders with lane-wise unsigned arithmetic; `lvsl128` and `lvsr128` reuse existing shift-table builders | `instr_vector_gap.s` plus pinned Edge `instr_vaddcuw.s`, `instr_vsubcuw.s`, `instr_vavguw.s`, `instr_vmaxuw.s`, `instr_lvsl128.s` and `instr_lvsr128.s` |
+| has207/xenia-edge `vpkpx` implementation and [`instr__gen_vpkpx.s`](https://github.com/has207/xenia-edge/blob/b5cc59e854/src/xenia/cpu/ppc/testing/instr__gen_vpkpx.s) at `b5cc59e854`, reviewed 2026-10-01 | A, missing pixel pack opcode | Snapshot both source vectors, then pack the specified alpha bit and RGB high five bits per pixel | Pinned Edge `instr_vpkpx.s` and `instr_vpkpx_small.s` (destination/source alias case); full generated corpus not yet imported |
+| has207/xenia-edge PPC corpus at [`b5cc59e854`](https://github.com/has207/xenia-edge/tree/b5cc59e854/src/xenia/cpu/ppc/testing), reviewed 2026-10-01 | A, VSCR NJ and SAT state | Context carries NJ through guest thread save/restore; `mtvscr` changes the vector FP flush mode and resets codegen's CSR state; saturating vector arithmetic and packs set sticky SAT | Pinned `instr_mfvscr.s`, `instr_seq_njm.s`; `instr_vscr_sat.s` checks sticky and reset behavior |
+| has207/xenia-edge [`f4af1e2a77703ca60a4dae512fb047cfe73ecb11`](https://github.com/has207/xenia-edge/commit/f4af1e2a77703ca60a4dae512fb047cfe73ecb11), 2026-02-13, "Implement and fix FPSCR-related instructions" | A, missing `mcrfs` | Track guest FPSCR bits separately from the host rounding control word; move and clear a selected field; fix `mtfsf` field mask direction | Pinned `instr_mcrfs.s` plus `instr_fpscr_state.s` with CR and preserved-rounding assertions |
+
+Other scalar and system dispatch additions in this issue use existing static
+builders or narrow no-op implementations; pinned Edge `instr_icbi.s`,
+`instr_isync.s`, `instr_mfmsr.s`, `instr_mtmsr.s` and `instr_mtmsrd.s` cover them.
+Their title and vendor regressions have not yet been measured. Scalar
+arithmetic-produced FPSCR causes and derived summary bits are now tracked for
+add, subtract, multiply, divide, fused multiply-add/subtract and square-root
+families, including their single-precision forms. The adaptation uses host fenv
+for OX/UX/ZX/XX and explicitly classifies PowerPC invalid subcauses that host
+fenv does not distinguish. Sticky FX, enabled FEX, invalid VX and record-form
+CR1 are checked by unit tests and `tests/ppc/asm/instr_fpscr_arithmetic.s`.
+`fcmpu` records VXSNAN for signaling NaNs; `fcmpo` records VXVC for quiet NaNs
+and for signaling NaNs when VE is disabled, following IBM's [fcmpu] and [fcmpo]
+descriptions. The 2026-10-08 [arithmetic FPSCR follow-up](#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08)
+adds FPCC/FPRF result classification and partial conversion/estimate exception
+tracking; later follow-ups add FR/FI and estimate result classification.
+The broader Edge corpus, title validation and release gates remain open.
+
+[fcmpu]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-fcmpu-floating-compare-unordered-instruction
+[fcmpo]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fcmpo_instrs.html
+
 ## RG-GDK-048: achievement enumerator offset (2026-10-01)
 
 xenia-canary PR #861 "[XAM] Fixed enumeration of achievements once again",
@@ -1776,6 +1813,133 @@ locations and the initial test orchestration/file-lock failure are recorded in
 [release evidence](release-evidence.md#guide-selection-by-title-host-2026-10-07).
 Original Xbox execution and 1:1 online/visual parity remain unestablished.
 
+## RG-GDK-053: main integration and corpus follow-up, 2026-10-07
+
+PR #162 is updated from its `91ffc711` head against SDK main
+`5dad97248d70126c901d2425ce942e5dc9694a28`, preserving main's guest FPSCR
+storage, FP helpers, reservations and table-driven test generator. The existing
+`b5cc59e854020f8406c0b3a96eff6a3d036a514b` corpus exposes additional `lmw` and
+VMX128 cache-hint aliases. These use the existing memory/vector semantics;
+five unchanged source test files are also copied into the ordinary PPC suite.
+`lmw` snapshots its effective address, sign-extends its displacement and
+zero-extends each big-endian word. Local tests cover a negative displacement.
+
+Re-review of Edge's `ppc_emit_fpu.cc` history found the follow-up
+[`a5532a0d193130af1b5dd821c8c83daec27f6d11`](https://github.com/has207/xenia-edge/commit/a5532a0d193130af1b5dd821c8c83daec27f6d11)
+(2026-10-05), "Clear only the exception bits in mcrfs". Class A/B: the original
+`f4af1e2a7` implementation cleared control/status bits, losing XeFu's rounding
+mode when reading field 7. Adapted the exception-only mask to static generation;
+RN is read from the host-backed FPSCR rather than its RN-free `guest_bits`.
+Local assembly tests check CR transfer, exception clearing, preserved rounding
+and result flags. IBM's [mcrfs description](https://www.ibm.com/docs/en/aix/7.2.0?topic=set-mcrfs-move-condition-register-from-fpscr-instruction)
+corroborates selective clearing. No XeFu execution result is claimed.
+
+The complete ordinary instruction run exposed a second integration regression:
+the existing `mtmsrd` lowering treated r13 as lock entry and every other GPR
+as lock exit. Mapping `mtmsr` to it made standalone writes decrement an unheld
+lock, contaminating subsequent `mfmsr` cases; Debug asserts on this path.
+The modeled MSR mask and host critical-region mechanism remain, but locking
+now follows EE transitions, allowing nested disable/restore pairs and repeated
+enable writes. Generated test scopes release interrupt locks on case exit,
+including exception paths; this is test isolation, not a title runtime reset.
+Local assembly checks exercise both instructions and the enabled/disabled
+`mfmsr` values. This does not implement a complete guest interrupt controller.
+
+The reviewed Release corpus run removes all 3,333 #149 mismatches; the eight
+previously classified hand-written corpus errors remain expected. Tests still
+use the pinned corpus and skip list, not the newer upstream corpus. Arithmetic
+exception causes and derived FPSCR summary bits remain a separate incomplete
+runtime contract: `mcrfs` is validated for guest-written fields, not full
+floating-point exception production. Final configuration/title evidence belongs
+in [release evidence](release-evidence.md); no compatibility issue is closed
+from the corpus result alone.
+
+## RG-GDK-053: arithmetic FPSCR follow-up (2026-10-08)
+
+Implemented sticky FPSCR updates for scalar arithmetic families in
+`src/codegen/builders/floating_point.cpp`. Host fenv supplies inexact,
+overflow, underflow and divide-by-zero flags; explicit operand classification
+records PowerPC invalid subcauses. `FX`, `VX` and enabled `FEX` are derived as
+arithmetic executes, while `mtfsf` continues to preserve guest-written status
+bits for `mcrfs` compatibility. The tracked path also reports record-form CR1.
+
+The same change now tracks compare invalid causes: `fcmpu` sets VXSNAN for
+signaling NaNs; `fcmpo` sets VXVC for quiet NaNs and for signaling NaNs while
+VE is disabled. Compare operations now set FPCC for less/greater/equal/unordered
+and preserve C, FR and FI. Arithmetic result tracking updates FPRF using the
+delivered result and target precision, including widened single-precision
+subnormals. For an enabled invalid operation, the previous FPRF value is
+preserved. The PowerPC User Instruction Set Architecture v2.02 specifies these
+field encodings and the exception behavior ([FPSCR fields and result classes]).
+
+`fctiw/fctiwz/fctid/fctidz` now track XX for inexact results, VXCVI for quiet
+NaN/out-of-range conversions and VXSNAN for signaling NaNs. Record forms copy
+the accumulated FPSCR state into CR1. This follows the IBM conversion status
+descriptions, including the defined saturation results; FPRF is undefined for
+these convert-to-integer instructions. Conversion FR/FI is tracked from the
+rounded integer result, including directed rounding and inexact cases. The
+`fcfid` family also records inexact status and FR/FI when an integer cannot be
+represented exactly as a double. See [fctiw] and [fctidz].
+
+[fctiw]: https://www.ibm.com/docs/en/aix/7.1.0?topic=set-fctiw-fcir-floating-convert-integer-word-instruction
+[fctidz]: https://www.ibm.com/docs/en/aix/7.2?topic=is-fctidz-floating-convert-integer-double-word-round-toward-zero-instruction
+
+`fres/frsqrte` now record zero-divide, signaling-NaN, negative-square-root
+and reciprocal-overflow causes, and their record forms report accumulated
+CR1. IBM's [fres] and [frsqrte] descriptions document these exception classes.
+FR/FI is architecturally undefined for these estimate instructions and is
+left unchanged.
+
+[fres]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fres_instrs.html
+[frsqrte]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-frsqrte-floating-reciprocal-square-root-estimate-instruction
+
+GDK Debug and Release builds of `unit_tests` and `ppc_tests` pass. The full
+ordinary PPC CTest selection passes all 1,595 cases in both configurations.
+The full unit CTest selection passes 542 cases with 14 documented private
+asset/fixture skips in each configuration. The focused FPSCR
+arithmetic/compare/conversion, existing `mcrfs` and unit tests pass under CTest
+(28 cases per configuration). The tests
+cover arithmetic/conversion exceptions, estimate zero-divide/overflow/invalid
+cases, unordered NaN comparisons, sticky/summary state, enabled FEX/CR1 and
+selective clearing. This is not full FPSCR coverage: estimate result-class
+tracking and title/gameplay gates remain open. No title
+compatibility claim follows from these synthetic tests.
+
+The FPSCR result-class follow-up adds the defined FPRF classes for tracked
+arithmetic results and FPCC relations for compares, with single-precision
+subnormal classification based on target precision. The FR/FI follow-up
+tracks inexact rounding direction for scalar arithmetic, fused arithmetic,
+square root, single-precision rounding, integer conversion and integer-to-
+double conversion. Directed-rounding and tie cases are covered. The focused
+selection now passes 28 CTest cases in both GDK Debug and Release.
+
+The estimate follow-up (2026-10-09) sets FPRF for `fres` (single-precision
+class) and `frsqrte` (double-precision class), records `fres` underflow (UX)
+when |x| > 2^126 makes the single reciprocal tiny, and leaves FPRF unchanged
+when an enabled invalid or zero-divide exception suppresses the result, per
+the [FPSCR fields and result classes] in ISA v2.02. Four new
+`instr_fpscr_arithmetic.s` cases cover a normal result, a tiny single result,
+a zero `frsqrte` operand and an enabled invalid `frsqrte`; three existing
+estimate cases now expect the result class. GDK Debug and Release: the focused
+FPSCR selection passes 29/29 CTest cases and the ordinary PPC executable
+passes 1,599 cases / 6,559 assertions. Whether Xenon's `fres` signals UX for
+an exact tiny result is not verified on hardware; the ISA's tininess rule is
+used. Vector estimates do not touch FPSCR.
+
+[FPSCR fields and result classes]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf
+
+The refreshed generated GDK Debug corpus passes all 566 active CTest groups
+with the existing `instr_mtmsrd` timeout excluded. It exposed and verified
+fused subtract sign handling for VXISI, NaN product classification and exact
+preservation of guest-written FEX on `mtfsf`. The timeout remains unresolved;
+this corpus result does not close #149 or establish title compatibility.
+
+The Release SDK install regenerated and built Quantum of Solace (base and
+TU2), Blood Stone and 007 Legends in fresh ignored title directories. Runtime
+validation was held because the local `$SystemUpdate` bundle was unavailable,
+which would leave the title without the Guide exit flow. Legends codegen also
+reports one 1,437,835-byte function over the 1 MiB limit. Executable hashes
+and these limits are recorded in [release evidence](release-evidence.md).
 ## Read-only Edge GPU review, 2026-10-07
 
 Reviewed `furqanagwan/xenia-edge:edge` at

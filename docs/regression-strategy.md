@@ -502,6 +502,20 @@ Each case starts from a reset FPSCR (round to nearest, no flush) and a zeroed
 test data window, as Edge's runner does; without that, rounding modes and
 memory left by earlier cases changed later results.
 
+RG-GDK-053's 2026-10-07 candidate removes the remaining 3,333 #149 entries.
+The original pinned corpus/skip list is retained; eight hand-written corpus
+errors still fail as expected. There are 567 CTest file entries, of which 563
+contain active cases (four files are wholly skipped by the source skip list).
+The generator emits 169,459 cases and reports 917 skipped. A direct corpus run
+therefore executes 563 Catch2 groups, not 567 active groups.
+
+MSR cases also need independent interrupt state: raw writes can finish with
+EE disabled. The generated test scope releases its owned critical-region
+nesting on case exit, including exceptions. This cleanup is confined to tests;
+title code must balance its real interrupt disable/restore transitions. The
+ordinary suite additionally tests nested MSR writes, repeated enables and
+`mfmsr` values in each state. See [the follow-up provenance](upstream-tracking.md#rg-gdk-053-main-integration-and-corpus-follow-up-2026-10-07).
+
 ## Regression tracking index
 
 These are **upstream-reported risks**, not newly proven ReXGlue regressions.

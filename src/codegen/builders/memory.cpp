@@ -153,6 +153,20 @@ bool build_lwz(BuilderContext& ctx) {
   return true;
 }
 
+bool build_lmw(BuilderContext& ctx) {
+  // Snapshot the address before loads, including when RA is a destination.
+  const auto first = ctx.insn.operands[0];
+  const auto ra = ctx.insn.operands[2];
+  const auto displacement = static_cast<int16_t>(ctx.insn.operands[1]);
+  if (ra)
+    ctx.println("\t{} = {}.u32 + int32_t({});", ctx.ea(), ctx.r(ra), displacement);
+  else
+    ctx.println("\t{} = uint32_t(int32_t({}));", ctx.ea(), displacement);
+  for (uint32_t reg = first; reg < 32; ++reg)
+    ctx.println("\t{}.u64 = REX_LOAD_U32({} + {});", ctx.r(reg), ctx.ea(), (reg - first) * 4);
+  return true;
+}
+
 bool build_lwzu(BuilderContext& ctx) {
   emitLoadWithUpdate(ctx, "REX_LOAD_U32");
   return true;
