@@ -2116,3 +2116,16 @@ gradients and ignoring register gradients for 1D. Tests:
 the texture cache change), `texture_layout_test.cpp`, the Release suite and
 `gpu.dxil_parity`. Known regressions: none at the pin; the 007 titles are
 checked in the next title batch. Notes: `research/gpu/wide-1d-textures.md`.
+
+## RG-GDK-032: frame end doesn't wait for queued pipelines (2026-10-09)
+
+has207/xenia-edge `4366b05dae` ("[D3D12] async shader compilation actually
+fully async", 2026-01-06). Class A (correctness of async compilation; DXBC
+and DXIL). With `async_shader_compilation`, `PipelineCache::EndSubmission`
+no longer creates and awaits every queued pipeline; skipped draws never
+record one that isn't ready. Adaptation: the wait stays when async
+compilation is off; Edge's `use_try_claim` hunk (placeholder pipelines) not
+taken. Tests: Release suite and `gpu.dxil_parity` (async draw fixtures); a
+paired QoS DXIL run, cold cache, same save: level-load frame 25.5 s → 7.5 s,
+5 s windows with a frame over 300 ms after the load 16 → 0. Known regressions: none.
+Notes: `research/gpu/async-pipeline-creation.md`.
