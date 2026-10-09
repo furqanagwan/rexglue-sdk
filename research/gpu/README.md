@@ -4,6 +4,10 @@ How the Xbox 360's Xenos GPU behaves and how ReXGlue maps it to Direct3D 12.
 Notes move here from code comments as each part of `src/graphics` is cleaned
 up (see the [audit plan](../audit/2026-10-09-codebase-audit.md)).
 
+Topics:
+
+- [Shader operand components](shader-operand-components.md)
+
 Existing records still in `docs/`:
 
 - [Edge GPU review, 2026-10-07](../../docs/edge-gpu-review-20261007.md)

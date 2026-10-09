@@ -151,6 +151,23 @@ set_target_properties(primitive_tests PROPERTIES
 catch_discover_tests(primitive_tests TEST_PREFIX "primitive." ADD_TAGS_AS_LABELS
     PROPERTIES LABELS "unit" TIMEOUT 60)
 
+add_executable(shader_parse_tests
+    graphics/alu_scalar_operand_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/shader/shader.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/shader/translator.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/pipeline/shader/translator_disasm.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/format/ucode.cpp
+    ${PROJECT_SOURCE_DIR}/src/graphics/flags.cpp
+)
+target_include_directories(shader_parse_tests PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/renderdoc)
+target_link_libraries(shader_parse_tests PRIVATE rexruntime Catch2::Catch2WithMain)
+target_compile_options(shader_parse_tests PRIVATE
+    -UTRACY_ENABLE -UREXGLUE_ENABLE_PROFILING -UREXGLUE_ENABLE_PERF_COUNTERS)
+set_target_properties(shader_parse_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>)
+catch_discover_tests(shader_parse_tests TEST_PREFIX "shader." ADD_TAGS_AS_LABELS
+    PROPERTIES LABELS "unit" TIMEOUT 60)
+
 catch_discover_tests(unit_tests
     TEST_PREFIX "unit."
     ADD_TAGS_AS_LABELS
