@@ -344,4 +344,14 @@ void GetClampModesForDimension(const xenos::xe_gpu_texture_fetch_t& fetch,
 // DxbcShaderTranslator::SystemConstants::texture_integer_scale_bits).
 uint32_t GetIntegerScaleBits(const xenos::xe_gpu_texture_fetch_t& fetch, uint8_t swizzled_signs);
 
+struct Wide1DTextureLayout {
+  uint32_t row_width;
+  uint32_t row_count;
+};
+
+constexpr Wide1DTextureLayout GetWide1DTextureLayout(uint32_t width) {
+  const uint32_t row_width = xenos::kTexture2DCubeMaxWidthHeight;
+  return {row_width, std::min((width + row_width - 1) / row_width, xenos::kTexture1DWideMaxRows)};
+}
+
 }  // namespace rex::graphics::texture_util

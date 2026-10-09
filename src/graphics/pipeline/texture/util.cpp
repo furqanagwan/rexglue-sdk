@@ -221,7 +221,7 @@ TextureGuestLayout GetGuestTextureLayout(xenos::DataDimension dimension,
     // GetPackedMipOffset may result in packing along Y for `width > height`
     // textures.
     assert_false(has_packed_levels);
-    height_texels = 1;
+    height_texels = std::max(height_texels, uint32_t(1));
   }
   uint32_t depth = dimension == xenos::DataDimension::k3D ? depth_or_array_size : 1;
   switch (dimension) {

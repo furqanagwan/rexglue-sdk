@@ -7,6 +7,7 @@ up (see the [audit plan](../audit/2026-10-09-codebase-audit.md)).
 Topics:
 
 - [Shader operand components](shader-operand-components.md)
+- [Wide 1D textures](wide-1d-textures.md)
 
 Existing records still in `docs/`:
 
