@@ -138,10 +138,19 @@ listed in the new zip.
 ### Where the code goes
 
 - `rexglue-sdk`:
-  - A new src/updater folder holds the release check, download, verification and
-    staging, as a library with no guest dependencies.
-  - A new tools/rexglue-updater folder holds the helper executable.
-  - A Guide page for the update screen.
+  - `rex::system::update` (`include/rex/system/release_update.h`, in
+    `rexruntime`): version ordering, reading GitHub's release list, choosing
+    the update, SHA-256 checks, installing the unpacked files with
+    `previous\` kept, and rollback. Unit tests:
+    `tests/unit/system/release_update_test.cpp`.
+  - `rexglue-updater.exe` (`src/updater`): the helper. It compiles the same
+    code in rather than loading `rexruntime.dll`, because it replaces that
+    file. `rexglue_configure_target` stages it next to every title. Run as
+    `--wait <pid> --install <dir> --package <dir> --previous <dir> --launch <exe>`,
+    or `--rollback` without `--package`. The game copies it out of the install
+    folder before starting it.
+  - Still to come: the download (the Guide's WinHTTP downloader), unpacking
+    with Windows' own `tar.exe`, and the Guide's update page.
 - Each title opts in with its release repository in its config:
   `update_repository = "furqanagwan/007"` and `update_asset = "007-QuantumOfSolace-*-win-x64.zip"`.
 - Uses WinHTTP (already part of Windows), so there are no new dependencies.

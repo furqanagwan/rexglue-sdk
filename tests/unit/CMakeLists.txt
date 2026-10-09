@@ -41,6 +41,7 @@ add_executable(unit_tests
     system/game_source_test.cpp
     system/file_read_statistics_test.cpp
     system/gpu_plugin_name_test.cpp
+    system/release_update_test.cpp
     system/game_media_recovery_test.cpp
     audio/xma_context_test.cpp
     audio/audio_client_lifetime_test.cpp
