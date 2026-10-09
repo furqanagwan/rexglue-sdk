@@ -12,6 +12,7 @@ Each folder covers one area. Each file is one topic, named for the topic
 | [audit](audit/) | Codebase health reviews and the cleanup plan |
 | [cpu](cpu/) | PowerPC instructions, FPSCR, recompiler behavior |
 | [gpu](gpu/) | Xenos, EDRAM, shaders, Direct3D 12 |
+| [io](io/) | Files, storage, disc images |
 | [language](language/) | Language and toolchain decisions |
 | [releases](releases/) | Versioning, releases and the updater |
 
