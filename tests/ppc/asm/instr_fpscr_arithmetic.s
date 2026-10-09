@@ -153,7 +153,7 @@ test_fpscr_fres_zero_sets_zx:
   mffs f4
   blr
   #_ REGISTER_OUT f2 0x7FF0000000000000
-  #_ REGISTER_OUT f4 0x84000000
+  #_ REGISTER_OUT f4 0x84005000
 
 test_fpscr_fres_overflow_sets_ox:
   #_ REGISTER_IN f1 0x37E0000000000000
@@ -161,14 +161,14 @@ test_fpscr_fres_overflow_sets_ox:
   mffs f4
   blr
   #_ REGISTER_OUT f2 0x7FF0000000000000
-  #_ REGISTER_OUT f4 0x90000000
+  #_ REGISTER_OUT f4 0x90005000
 
 test_fpscr_frsqrte_negative_sets_vxsqrt:
   #_ REGISTER_IN f1 0xBFF0000000000000
   frsqrte f2, f1
   mffs f4
   blr
-  #_ REGISTER_OUT f4 0xA0000200
+  #_ REGISTER_OUT f4 0xA0011200
 
 test_fpscr_fres_record_form_reports_enabled_divide_by_zero:
   #_ REGISTER_IN f1 0x0000000000000000
@@ -180,3 +180,34 @@ test_fpscr_fres_record_form_reports_enabled_divide_by_zero:
   blr
   #_ REGISTER_OUT r3 0x0C000000
   #_ REGISTER_OUT f4 0xC4000010
+
+test_fpscr_fres_normal_sets_result_class:
+  #_ REGISTER_IN f1 0x4000000000000000
+  fres f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f2 0x3FE0000000000000
+  #_ REGISTER_OUT f4 0x4000
+
+test_fpscr_fres_tiny_result_sets_ux_and_single_denormal_class:
+  #_ REGISTER_IN f1 0x47E0000000000000
+  fres f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f4 0x88014000
+
+test_fpscr_frsqrte_zero_sets_zx_and_infinity_class:
+  #_ REGISTER_IN f1 0x0000000000000000
+  frsqrte f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f4 0x84005000
+
+test_fpscr_frsqrte_enabled_invalid_preserves_result_class:
+  #_ REGISTER_IN f1 0xBFF0000000000000
+  #_ REGISTER_IN f5 0x80
+  mtfsf 255, f5
+  frsqrte f2, f1
+  mffs f4
+  blr
+  #_ REGISTER_OUT f4 0xE0000280

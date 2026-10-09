@@ -1373,8 +1373,8 @@ CR1 are checked by unit tests and `tests/ppc/asm/instr_fpscr_arithmetic.s`.
 and for signaling NaNs when VE is disabled, following IBM's [fcmpu] and [fcmpo]
 descriptions. The 2026-10-08 [arithmetic FPSCR follow-up](#rg-gdk-053-arithmetic-fpscr-follow-up-2026-10-08)
 adds FPCC/FPRF result classification and partial conversion/estimate exception
-tracking. FR/FI behavior, estimate result classification, the broader Edge
-corpus, title validation and release gates remain open.
+tracking; later follow-ups add FR/FI and estimate result classification.
+The broader Edge corpus, title validation and release gates remain open.
 
 [fcmpu]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-fcmpu-floating-compare-unordered-instruction
 [fcmpo]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fcmpo_instrs.html
@@ -1887,8 +1887,8 @@ represented exactly as a double. See [fctiw] and [fctidz].
 `fres/frsqrte` now record zero-divide, signaling-NaN, negative-square-root
 and reciprocal-overflow causes, and their record forms report accumulated
 CR1. IBM's [fres] and [frsqrte] descriptions document these exception classes.
-Their result-class fields and other estimate families remain unmodeled; FR/FI
-is architecturally undefined for these estimate instructions.
+FR/FI is architecturally undefined for these estimate instructions and is
+left unchanged.
 
 [fres]: https://www.ibm.com/docs/ssw_aix_71/assembler/idalangref_fres_instrs.html
 [frsqrte]: https://www.ibm.com/docs/en/aix/7.2.0?topic=set-frsqrte-floating-reciprocal-square-root-estimate-instruction
@@ -1911,8 +1911,20 @@ subnormal classification based on target precision. The FR/FI follow-up
 tracks inexact rounding direction for scalar arithmetic, fused arithmetic,
 square root, single-precision rounding, integer conversion and integer-to-
 double conversion. Directed-rounding and tie cases are covered. The focused
-selection now passes 28 CTest cases in both GDK Debug and Release. FPRF for
-estimate instructions remains incomplete.
+selection now passes 28 CTest cases in both GDK Debug and Release.
+
+The estimate follow-up (2026-10-09) sets FPRF for `fres` (single-precision
+class) and `frsqrte` (double-precision class), records `fres` underflow (UX)
+when |x| > 2^126 makes the single reciprocal tiny, and leaves FPRF unchanged
+when an enabled invalid or zero-divide exception suppresses the result, per
+the [FPSCR fields and result classes] in ISA v2.02. Four new
+`instr_fpscr_arithmetic.s` cases cover a normal result, a tiny single result,
+a zero `frsqrte` operand and an enabled invalid `frsqrte`; three existing
+estimate cases now expect the result class. GDK Debug and Release: the focused
+FPSCR selection passes 29/29 CTest cases and the ordinary PPC executable
+passes 1,599 cases / 6,559 assertions. Whether Xenon's `fres` signals UX for
+an exact tiny result is not verified on hardware; the ISA's tininess rule is
+used. Vector estimates do not touch FPSCR.
 
 [FPSCR fields and result classes]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf
 

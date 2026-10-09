@@ -738,13 +738,19 @@ arithmetic and FPSCR state selection passes 28/28 CTest cases in GDK Debug and
 Release. The full ordinary PPC selection passes 1,595/1,595 cases in each
 configuration. The full unit selection passes 542 cases with 14 documented
 private asset/fixture skips in each configuration. These are synthetic checks.
-FPRF result classification for estimate instructions remains incomplete;
+Estimate-instruction classification followed on 2026-10-09 (below);
 title/gameplay validation remains separate.
 
 The FR/FI follow-up verifies rounding direction and inexact status for scalar
 arithmetic, fused operations, square root, `frsp`, integer conversion and
 integer-to-double conversion. Directed rounding and ties are covered by unit
-tests. Full FPSCR estimate classification and representative-title validation
-remain open.
+tests. Representative-title validation remains open.
+
+The 2026-10-09 estimate follow-up sets FPRF for `fres` and `frsqrte`, records
+`fres` underflow for operands above 2^126, and preserves FPRF when an enabled
+invalid or zero-divide exception suppresses the result. GDK Debug and Release
+each pass the focused FPSCR selection (29/29 CTest cases) and the ordinary PPC
+executable (1,599 cases / 6,559 assertions). These are synthetic checks;
+hardware confirmation of `fres` underflow signalling is unavailable.
 
 [PowerPC User Instruction Set Architecture v2.02]: https://powerpc.dev/general/PPC_Vers202_Book1_public.pdf

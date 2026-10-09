@@ -636,7 +636,10 @@ inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, 
 }
 
 /// Execute fres/frsqrte and accumulate the exception state defined by the
-/// operand. These estimate instructions do not report inexact.
+/// operand. These estimate instructions do not report inexact, and FR/FI are
+/// architecturally undefined for them, so both are left unchanged. FPRF takes
+/// the result class (single precision for fres) unless an enabled invalid or
+/// zero-divide exception suppresses the result.
 inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
                                bool sqrt_estimate) noexcept {
   const uint64_t magnitude = bits(x) & kMagnitude;
@@ -647,10 +650,19 @@ inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
     causes |= FPSCRRegister::kZX;
   if (!sqrt_estimate && magnitude != 0 && magnitude < 0x37F0000000000000ull)
     causes |= FPSCRRegister::kOX;
+  // |x| > 2^126 makes 1/x tiny in single precision.
+  if (!sqrt_estimate && magnitude > 0x47D0000000000000ull && magnitude < kInfinity)
+    causes |= FPSCRRegister::kUX;
   fpscr.recordExceptions(causes);
+  const double result = sqrt_estimate ? rsqrte(x) : double(float(1.0 / x));
+  const bool suppressed =
+      ((causes & FPSCRRegister::kInvalidCauses) && (fpscr.guest_bits & FPSCRRegister::kVE)) ||
+      ((causes & FPSCRRegister::kZX) && (fpscr.guest_bits & FPSCRRegister::kZE));
+  if (!suppressed)
+    set_result_class(fpscr, result, !sqrt_estimate);
   if (cr1)
     set_cr1_from_fpscr(*cr1, fpscr);
-  return sqrt_estimate ? rsqrte(x) : double(float(1.0 / x));
+  return result;
 }
 
 //=============================================================================
