@@ -792,4 +792,22 @@ Runtime `rexruntime.dll` `524a9ceb38554d3934820207095690a0c6b0af1b8680cacc271cf4
 `rexgpu-xenos.dll` `21fb4c8bb8537074a04ebdbce7d83377482df7760be234d9a0586399e36a6520`.
 This is a startup observation without input: gameplay, Guide exit, save/load
 and visual correctness are not established, and the TU2 target was built but
+
+## Achievement popup display freeze, 2026-10-09
+
+Owner report: in Quantum of Solace the picture froze for good when an
+achievement unlocked, while sound and controller input kept working.
+Reproduced without input on a candidate build: "Licence to Kill" unlocks about
+40 seconds in, after which screenshots stop changing while guest frame pacing
+stays near 60 fps. Temporary logging showed the cause. The popup's first
+frame creates the Guide media, including its XAudio2 engine, inside a UI
+paint. That setup pumped window messages, and `Window::OnPaint` dropped the
+nested `WM_PAINT`. The Presenter requests a paint only when none is pending,
+so its pending flag was never cleared and painting never resumed.
+
+`Window::OnPaint` now remembers a paint that arrives during painting and
+requests it again when the outer paint ends. With only this change in
+`rexruntime.dll`, the same run keeps presenting through the unlock and shows
+the popup ("Achievement unlocked / 10G - Licence to Kill"). One reproduction
+and one fixed run were compared; other titles and the original-Xbox popup were
 not run.
