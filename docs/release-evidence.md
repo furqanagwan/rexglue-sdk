@@ -580,3 +580,22 @@ keeping its consumer draw. The tests use the SDK's synthetic fixture; they do
 not establish that a representative 007 title issues `VIZ_QUERY` or exercises
 conditional rendering. Issue [#65](https://github.com/furqanagwan/rexglue-sdk/issues/65)
 therefore remains open for title-level evidence.
+
+## Achievement popup display freeze, 2026-10-09
+
+Owner report: in Quantum of Solace the picture froze for good when an
+achievement unlocked, while sound and controller input kept working.
+Reproduced without input on a candidate build: "Licence to Kill" unlocks about
+40 seconds in, after which screenshots stop changing while guest frame pacing
+stays near 60 fps. Temporary logging showed the cause. The popup's first
+frame creates the Guide media, including its XAudio2 engine, inside a UI
+paint. That setup pumped window messages, and `Window::OnPaint` dropped the
+nested `WM_PAINT`. The Presenter requests a paint only when none is pending,
+so its pending flag was never cleared and painting never resumed.
+
+`Window::OnPaint` now remembers a paint that arrives during painting and
+requests it again when the outer paint ends. With only this change in
+`rexruntime.dll`, the same run keeps presenting through the unlock and shows
+the popup ("Achievement unlocked / 10G - Licence to Kill"). One reproduction
+and one fixed run were compared; other titles and the original-Xbox popup were
+not run.

@@ -755,6 +755,8 @@ class Window {
   // complex than just a small state update, and recursive painting is
   // completely unsupported by the Presenter.
   bool is_painting_ = false;
+  // A paint arrived during painting and must be requested again afterwards.
+  bool paint_requested_while_painting_ = false;
 };
 
 }  // namespace ui

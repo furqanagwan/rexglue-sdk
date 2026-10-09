@@ -676,6 +676,10 @@ void Window::OnRestored(WindowDestructionReceiver& destruction_receiver) {
 
 void Window::OnPaint(bool force_paint) {
   if (is_painting_) {
+    // Something inside the paint pumped messages (XAudio2 or COM setup can).
+    // The Presenter only asks for a paint while none is pending, so dropping
+    // this one would stop painting for good; repeat it after this paint.
+    paint_requested_while_painting_ = true;
     return;
   }
   is_painting_ = true;
@@ -683,6 +687,9 @@ void Window::OnPaint(bool force_paint) {
     presenter_->PaintFromUIThread(force_paint);
   }
   is_painting_ = false;
+  if (std::exchange(paint_requested_while_painting_, false)) {
+    RequestPaint();
+  }
 }
 
 void Window::OnFileDrop(FileDropEvent& e, WindowDestructionReceiver& destruction_receiver) {
