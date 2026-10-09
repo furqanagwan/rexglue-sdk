@@ -4,7 +4,8 @@
 - Publish the 007 games as GitHub releases of `furqanagwan/007`, versioned
   `0.1.0-alpha.1`, `0.1.0-alpha.2` and so on, with a `CHANGELOG.md`.
 - Builds are made on the owner's PC, because building needs the game's files.
-- Release builds leave out the built-in Guide assets.
+- Release builds include the built-in Xbox 360 Guide and the Guide-style ISO
+  picker.
 - A small updater offers new versions and never installs one without asking.
   It keeps the previous version for rollback, and it never touches saves or
   settings.
@@ -45,19 +46,17 @@ the other required DLLs, `README.txt` and `version.txt`. Nothing else.
 
 - **Game files.** The player picks their own disc image or folder on first
   run (the Guide source picker).
-- **Microsoft's Guide assets.** A title built with `REXGLUE_SYSTEM_UPDATE`
-  embeds the console's Guide scenes, fonts and sounds in the executable.
-  Release builds must leave it unset. Players who want the console Guide
-  put their own `$SystemUpdate` (dashboard 2.0.17559) beside the executable or
-  in `%LOCALAPPDATA%\ReXGlue\$SystemUpdate`; otherwise the SDK's own overlay is
-  used. The release check script fails if a Guide bundle is present.
 - **Saves, logs, caches and debug files (`.pdb`).**
 
 ### Owner decision (2026-10-09)
 
-Releases ship the built executables. Players supply only their own disc
-image: they start the game, pick their ISO once in the Guide source picker,
-and play. Distribution is GitHub releases only; the games will never be
+Releases ship the built executables with the Xbox 360 Guide built in
+(`REXGLUE_SYSTEM_UPDATE` set to dashboard 2.0.17559), so the Guide and the
+Guide-style source picker work with nothing extra to install. Players supply
+only their own disc image: they start the game, pick their ISO once in the
+picker, and play. The executable therefore carries the Guide's scenes,
+fonts and sounds from Microsoft's dashboard update; the repositories
+themselves still contain none of them. Distribution is GitHub releases only; the games will never be
 published on the Microsoft Store, so there is no MSIXVC packaging.
 
 ## Changelog
@@ -89,10 +88,10 @@ In the 007 repository, a new script (Publish-Release.ps1, run as `Publish-Releas
 1. Check that the SDK checkout is a clean, tagged `main` commit, and that
    the 007 repository is clean on `main`.
 2. Install the SDK to a fresh prefix, then regenerate and build each game in
-   a clean folder **without** `REXGLUE_SYSTEM_UPDATE`.
+   a clean folder with `REXGLUE_SYSTEM_UPDATE` set, so the Guide is built in.
 3. Run each game once, fullscreen, for 90 seconds (the existing smoke check).
-4. Zip each game, write `SHA256SUMS.txt`, and check that no Guide bundle,
-   `.pdb`, `.iso` or `.xex` is inside.
+4. Zip each game, write `SHA256SUMS.txt`, and check that the Guide is built
+   in and no `.pdb`, `.iso` or `.xex` is inside.
 5. `gh release create v0.1.0-alpha.1 --prerelease --notes-file <changelog section> <zips> SHA256SUMS.txt`.
 
 GitHub Actions can't build releases, because codegen needs the game's
@@ -109,8 +108,7 @@ executable. CI keeps checking the repository itself.
   "Update available: 0.1.0-alpha.2". Nothing downloads yet.
 - Guide > Settings > System > **Update** shows the version, the changelog, and
   **Install** / **Not now** / **Skip this version**. It uses the Xbox 360
-  Guide's update page look when the Guide assets are present, and the SDK
-  overlay otherwise.
+  Guide's update page look.
 - **Install:**
   1. Download the zip to `%LOCALAPPDATA%\<name>\updates\<version>\`.
   2. Check its SHA-256 against `SHA256SUMS.txt`.
@@ -161,7 +159,7 @@ listed in the new zip.
 ## Tasks
 
 1. 007: `CHANGELOG.md`, the Publish-Release.ps1 script, and a release check that
-   rejects Guide bundles, `.pdb`, `.iso` and `.xex`.
+   requires the built-in Guide and rejects `.pdb`, `.iso` and `.xex`.
 2. Publish `v0.1.0-alpha.1`.
 3. SDK: updater library and tests (version comparison, checksum,
    staging, rollback).
