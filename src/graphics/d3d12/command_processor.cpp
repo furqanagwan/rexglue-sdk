@@ -2651,6 +2651,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   const SpirvShader* dxil_vertex_shader = nullptr;
   const SpirvShader* dxil_pixel_shader = nullptr;
   auto configure_dxil_pipeline = [&](bool zpd_total) {
+    TickAccumulator setup_time(frame_timings_.dxil_pipeline_setup);
     SpirvShader* dxil_vs = nullptr;
     SpirvShader* dxil_ps = nullptr;
     PipelineCache::DxilPipelineResult dxil_result = pipeline_cache_->ConfigurePipelineDxil(
@@ -2690,7 +2691,11 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
       bool draw_target_small = render_target_cache_->IsLastUpdateDrawTargetSmall();
       if (!draw_target_recurring || draw_target_small || memexport_used) {
         auto await_start = std::chrono::steady_clock::now();
-        pipeline_cache_->AwaitPipeline(pipeline_handle);
+        {
+          TickAccumulator await_time(frame_timings_.pipeline_awaits);
+          pipeline_cache_->AwaitPipeline(pipeline_handle);
+        }
+        ++frame_timings_.pipeline_await_count;
         REXGPU_DEBUG("Awaited the pipeline for a draw into {} ({}): {:.2f} ms",
                      render_target_cache_->GetLastUpdateDrawTargetName(),
                      draw_target_small        ? "small render target"
@@ -3262,12 +3267,16 @@ bool D3D12CommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_s
 std::string D3D12CommandProcessor::TakeFrameTimingDetail() {
   const double ms_per_tick = 1000.0 / double(rex::chrono::Clock::QueryHostTickFrequency());
   std::string detail = fmt::format(
-      " (draws {:.1f}: render targets {:.1f}, pipelines {:.1f}, textures {:.1f}; resolves "
-      "{:.1f}; GPU fence waits {:.1f}; submissions {:.1f}; swap {:.1f} ms)",
+      " (draws {:.1f}: render targets {:.1f}, pipelines {:.1f} including DXIL setup {:.1f} and "
+      "{} awaited in {:.1f}, textures {:.1f}; resolves {:.1f}; GPU fence waits {:.1f}; "
+      "submissions {:.1f}; swap {:.1f} ms)",
       double(frame_timings_.draws) * ms_per_tick,
       double(frame_timings_.render_targets) * ms_per_tick,
-      double(frame_timings_.pipelines) * ms_per_tick, double(frame_timings_.textures) * ms_per_tick,
-      double(frame_timings_.copies) * ms_per_tick, double(frame_timings_.fence_waits) * ms_per_tick,
+      double(frame_timings_.pipelines) * ms_per_tick,
+      double(frame_timings_.dxil_pipeline_setup) * ms_per_tick, frame_timings_.pipeline_await_count,
+      double(frame_timings_.pipeline_awaits) * ms_per_tick,
+      double(frame_timings_.textures) * ms_per_tick, double(frame_timings_.copies) * ms_per_tick,
+      double(frame_timings_.fence_waits) * ms_per_tick,
       double(frame_timings_.submissions) * ms_per_tick, double(frame_timings_.swaps) * ms_per_tick);
   frame_timings_ = {};
   return detail;

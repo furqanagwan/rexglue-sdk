@@ -33,3 +33,26 @@ The hitches after the load were the frame-end wait (they show as "swap" in
 the `Long frame` log line). What's left is the level-load frame: draws that
 wait for their own pipeline, and SPIR-V translation, which still runs on the
 draw thread for DXIL.
+
+## What the level-load frame is made of
+
+The `Long frame` log line splits pipeline time into DXIL setup (choosing
+the modifications and translating to SPIR-V on the draw thread) and the
+draws that waited for their own pipeline. QoS on DXIL, cold cache, same save,
+with the frame-end change (2026-10-09):
+
+| Frame | Pipelines | DXIL setup | Awaited |
+| --- | --- | --- | --- |
+| First level load, 7.6 s | 7.1 s | 0.4 s | 265 pipelines, 6.7 s |
+| Next area, 5.0 s | 5.0 s | 0.1 s | 191 pipelines, 4.9 s |
+
+So almost all of it is the deliberate waits: during a load every render
+target is new, so every draw counts as "not drawn recently" and waits, at
+about 25 ms a pipeline, one after another. SPIR-V translation is not the
+problem. DXBC's level load was 6.3 s in the same batch, so this isn't
+DXIL-specific.
+
+These waits keep one-off renders correct, so they stay. They only happen
+with a cold cache: the second launch restores the pipelines from storage
+before play. For players, a release can ship a recorded cache
+(`docs/shader-cache.md`), which removes the first-launch wait too.
