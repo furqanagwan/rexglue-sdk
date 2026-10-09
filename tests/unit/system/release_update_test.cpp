@@ -1,4 +1,5 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -166,4 +167,47 @@ TEST_CASE("Rolling back without a previous version fails", "[system][update]") {
   std::string error;
   CHECK_FALSE(RestorePreviousVersion(folder.path, folder.path / "previous", &error));
   CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("A release zip unpacks with Windows' tar", "[system][update]") {
+  TemporaryFolder folder;
+  const fs::path source = folder.path / "source";
+  WriteText(source / "007-Game-0.1.0-alpha.2-win-x64" / "game.exe", "new game");
+  WriteText(source / "007-Game-0.1.0-alpha.2-win-x64" / "shader_cache" / "a.xsh", "cache");
+  const fs::path zip = folder.path / "package.zip";
+  const fs::path windows_tar = fs::path(std::getenv("SystemRoot")) / "System32" / "tar.exe";
+  const std::string create = "\"\"" + windows_tar.string() + "\" -a -c -f \"" + zip.string() +
+                             "\" -C \"" + source.string() + "\" 007-Game-0.1.0-alpha.2-win-x64\"";
+  REQUIRE(std::system(create.c_str()) == 0);
+
+  std::string error;
+  const fs::path unpacked = folder.path / "unpacked";
+  REQUIRE(UnpackZip(zip, unpacked, &error));
+  const fs::path root = FindPackageRoot(unpacked);
+  CHECK(root.filename() == "007-Game-0.1.0-alpha.2-win-x64");
+  CHECK(ReadText(root / "game.exe") == "new game");
+  CHECK(ReadText(root / "shader_cache" / "a.xsh") == "cache");
+
+  CHECK_FALSE(UnpackZip(folder.path / "missing.zip", folder.path / "nothing", &error));
+  CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("The helper command line names every folder and the game to restart",
+          "[system][update]") {
+  UpdateHelperLaunch launch;
+  launch.helper = LR"(C:\cache\rexglue-updater.exe)";
+  launch.install_folder = LR"(C:\Games\007 QoS)";
+  launch.package_root = LR"(C:\cache\updates\0.1.0-alpha.2\pkg)";
+  launch.previous_folder = LR"(C:\Games\007 QoS\previous)";
+  launch.relaunch = LR"(C:\Games\007 QoS\quantumofsolace.exe)";
+  CHECK(BuildUpdateHelperCommandLine(launch, 42) ==
+        LR"("C:\cache\rexglue-updater.exe" --wait 42 --install "C:\Games\007 QoS" )"
+        LR"(--previous "C:\Games\007 QoS\previous" --package )"
+        LR"("C:\cache\updates\0.1.0-alpha.2\pkg" --launch )"
+        LR"("C:\Games\007 QoS\quantumofsolace.exe")");
+  launch.rollback = true;
+  CHECK(BuildUpdateHelperCommandLine(launch, 7) ==
+        LR"("C:\cache\rexglue-updater.exe" --wait 7 --install "C:\Games\007 QoS" )"
+        LR"(--previous "C:\Games\007 QoS\previous" --rollback --launch )"
+        LR"("C:\Games\007 QoS\quantumofsolace.exe")");
 }

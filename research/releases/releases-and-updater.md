@@ -149,8 +149,11 @@ listed in the new zip.
     `--wait <pid> --install <dir> --package <dir> --previous <dir> --launch <exe>`,
     or `--rollback` without `--package`. The game copies it out of the install
     folder before starting it.
-  - Still to come: the download (the Guide's WinHTTP downloader), unpacking
-    with Windows' own `tar.exe`, and the Guide's update page.
+  - `UnpackZip` unpacks a release with Windows' own `tar.exe`, and
+    `StartUpdateHelper` copies the helper out of the game folder and starts it
+    with the game's process ID, so it can wait for the game to close.
+  - Still to come: the download (the Guide's WinHTTP downloader) and the
+    Guide's update page.
 - Each title opts in with its release repository in its config:
   `update_repository = "furqanagwan/007"` and `update_asset = "007-QuantumOfSolace-*-win-x64.zip"`.
 - Uses WinHTTP (already part of Windows), so there are no new dependencies.

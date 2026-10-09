@@ -370,4 +370,79 @@ bool RestorePreviousVersion(const fs::path& install_folder, const fs::path& prev
   return ok;
 }
 
+bool UnpackZip(const fs::path& zip, const fs::path& destination, std::string* error) {
+  std::error_code code;
+  fs::create_directories(destination, code);
+  wchar_t system_folder[MAX_PATH] = {};
+  GetSystemDirectoryW(system_folder, MAX_PATH);
+  const fs::path tar = fs::path(system_folder) / L"tar.exe";
+  std::wstring command_line = L"\"" + tar.wstring() + L"\" -xf \"" + zip.wstring() + L"\" -C \"" +
+                              destination.wstring() + L"\"";
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process = {};
+  if (!CreateProcessW(tar.c_str(), command_line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                      nullptr, nullptr, &startup, &process)) {
+    if (error) {
+      *error = fmt::format("starting {} failed (error {})", tar.string(), GetLastError());
+    }
+    return false;
+  }
+  WaitForSingleObject(process.hProcess, INFINITE);
+  DWORD exit_code = 1;
+  GetExitCodeProcess(process.hProcess, &exit_code);
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  if (exit_code != 0 && error) {
+    *error = fmt::format("unpacking {} failed (tar exit code {})", zip.string(), exit_code);
+  }
+  return exit_code == 0;
+}
+
+std::wstring BuildUpdateHelperCommandLine(const UpdateHelperLaunch& launch,
+                                          uint32_t wait_process_id) {
+  auto quoted = [](const fs::path& path) { return L"\"" + path.wstring() + L"\""; };
+  std::wstring command_line =
+      quoted(launch.helper) + L" --wait " + std::to_wstring(wait_process_id) + L" --install " +
+      quoted(launch.install_folder) + L" --previous " + quoted(launch.previous_folder);
+  if (launch.rollback) {
+    command_line += L" --rollback";
+  } else {
+    command_line += L" --package " + quoted(launch.package_root);
+  }
+  if (!launch.relaunch.empty()) {
+    command_line += L" --launch " + quoted(launch.relaunch);
+  }
+  return command_line;
+}
+
+bool StartUpdateHelper(const UpdateHelperLaunch& launch, const fs::path& helper_copy,
+                       std::string* error) {
+  std::error_code code;
+  fs::create_directories(helper_copy.parent_path(), code);
+  fs::copy_file(launch.helper, helper_copy, fs::copy_options::overwrite_existing, code);
+  if (code) {
+    if (error) {
+      *error = fmt::format("copying {}: {}", launch.helper.string(), code.message());
+    }
+    return false;
+  }
+  UpdateHelperLaunch copied = launch;
+  copied.helper = helper_copy;
+  std::wstring command_line = BuildUpdateHelperCommandLine(copied, GetCurrentProcessId());
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process = {};
+  if (!CreateProcessW(helper_copy.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0, nullptr,
+                      helper_copy.parent_path().c_str(), &startup, &process)) {
+    if (error) {
+      *error = fmt::format("starting {} failed (error {})", helper_copy.string(), GetLastError());
+    }
+    return false;
+  }
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  return true;
+}
+
 }  // namespace rex::system::update
