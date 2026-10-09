@@ -4006,7 +4006,7 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     uint32_t interpolator_mask, uint32_t ps_param_gen_pos,
     reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
     uint32_t bound_depth_and_color_render_target_bits,
-    const uint32_t* bound_depth_and_color_render_target_formats, bool viz_survey,
+    const uint32_t* bound_depth_and_color_render_target_formats, bool zpd_total, bool viz_survey,
     void** pipeline_handle_out, SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out) {
   // Vertex shaders, and domain shaders with the host tessellation stages; the
   // *AsTriangleStrip fallbacks are Vulkan-only.
@@ -4017,6 +4017,9 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
   }
   bool edram_rov_used =
       render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
+  if (zpd_total && (edram_rov_used || !dxbc_pixel_shader)) {
+    return DxilPipelineResult::kUnsupported;
+  }
 
   // A title's replacement shaders are DXBC: their draws stay on that path.
   if (!shader_replacements_.empty()) {
@@ -4045,6 +4048,11 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
                                           normalized_depth_control, normalized_color_mask,
                                           /*apply_polygon_offset_in_shader=*/false)
                                     : 0;
+  if (zpd_total) {
+    SpirvShaderTranslator::Modification counting_modification(pixel_modification);
+    counting_modification.pixel.set_zpd_total(true);
+    pixel_modification = counting_modification.value;
+  }
   // SPIR-V here for the draw's bindings; DXIL when the pipeline is created.
   const Shader::Translation* vertex_spirv = GetDxilSpirv(*vertex_shader, vertex_modification);
   const Shader::Translation* pixel_spirv =
