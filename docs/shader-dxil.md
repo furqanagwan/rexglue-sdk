@@ -225,6 +225,10 @@ the two runs reach different points of the level at the same time stamp, so
 this is not a frame-exact comparison. The cold-cache stall is the known one
 above; a warm cache removes it.
 
+All three 007 titles on both paths after the parsing, hybrid occlusion and
+wide 1D changes (2026-10-09): no errors, correct rendering; see
+[release evidence](release-evidence.md).
+
 ## Not yet
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
