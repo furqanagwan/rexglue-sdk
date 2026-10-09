@@ -1,6 +1,6 @@
 """Check that the handoff documents point at things that exist (RG-GDK-025).
 
-README.md, AGENTS.md, CONTRIBUTING.md and docs/**/*.md are what an agent or
+README.md, AGENTS.md, CONTRIBUTING.md, docs/**/*.md and research/**/*.md are what an agent or
 developer follows with no other context. Every relative Markdown link and every
 backticked repository path in them must resolve. The exact issue bodies under
 docs/roadmap are checked by validate_roadmap.py instead.
@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # Backticked text starting with one of these is a repository path.
 PATH_ROOTS = ('src/', 'include/', 'tests/', 'scripts/', 'docs/', 'cmake/', 'resources/',
-              'tools/', 'thirdparty/', '.github/')
+              'tools/', 'thirdparty/', '.github/', 'research/')
 LINK = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
 CODE = re.compile(r'`([^`\n]+)`')
 
@@ -25,6 +25,7 @@ def documents(root):
     for path in sorted((root / 'docs').rglob('*.md')):
         if 'roadmap' not in path.relative_to(root).parts[1:2]:
             yield path
+    yield from sorted((root / 'research').rglob('*.md'))
 
 
 def is_checkable_path(text):
