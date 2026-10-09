@@ -109,6 +109,22 @@ function(rexglue_configure_target target_name)
         endforeach()
     endif()
 
+    if(TARGET rexglue-updater)
+        add_dependencies(${target_name} rexglue-updater)
+        set(_updater_target rexglue-updater)
+    elseif(TARGET rex::updater)
+        set(_updater_target rex::updater)
+    endif()
+    if(_updater_target)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${_updater_target}>
+                $<TARGET_FILE_DIR:${target_name}>
+            VERBATIM
+        )
+        unset(_updater_target)
+    endif()
+
     # Stage requested GPU emulation plugins next to the executable. Plugins
     # are runtime-loaded (never linked), so TARGET_RUNTIME_DLLS misses them.
     foreach(_plugin IN LISTS ARG_GPU_PLUGINS)

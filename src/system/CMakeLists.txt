@@ -10,6 +10,7 @@ set(REXSYSTEM_SOURCES
     xthread.cpp
     xevent.cpp
     file_read_statistics.cpp
+    release_update.cpp
     xfile.cpp
     xmutant.cpp
     xsemaphore.cpp
@@ -84,6 +85,7 @@ target_include_directories(rexruntime PUBLIC
 )
 target_include_directories(rexruntime PRIVATE
     ${REXGLUE_ROOT}/thirdparty
+    ${REXGLUE_ROOT}/thirdparty/inja/third_party/include
 )
 
 target_link_libraries(rexruntime
@@ -114,7 +116,7 @@ if(REXGLUE_ENABLE_PERF_COUNTERS)
 endif()
 
 if(WIN32)
-    target_link_libraries(rexruntime PRIVATE ws2_32)
+    target_link_libraries(rexruntime PRIVATE ws2_32 bcrypt)
     target_link_libraries(rexruntime PUBLIC dxgi dxguid)
     target_compile_definitions(rexruntime PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
