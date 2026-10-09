@@ -910,7 +910,9 @@ void PipelineCache::EndSubmission() {
     shader_storage_file_flush_needed_ = false;
     pipeline_storage_file_flush_needed_ = false;
   }
-  if (!creation_threads_.empty()) {
+  if (!creation_threads_.empty() && REXCVAR_GET(async_shader_compilation)) {
+    creation_request_cond_.notify_one();
+  } else if (!creation_threads_.empty()) {
     CreateQueuedPipelinesOnProcessorThread();
     // Await creation of all queued pipelines.
     bool await_creation_completion_event;
