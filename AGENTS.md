@@ -71,6 +71,11 @@ whenever a configuration's status changes.
 
 ## Conventions and Git workflow
 
+Code has no comments apart from license headers: names say what code does.
+Hardware behavior, workarounds, provenance and measurements go in
+[research](research/README.md), one Markdown file per topic, updated in the
+same pull request as the code. Use C++23, PascalCase functions and types,
+snake_case files, and no `unk` names in new code.
 Follow `.clang-format` (Google-derived, two spaces, 100 columns), `.editorconfig`
 and [development guidance](docs/development.md), plus local namespace/typed-import
 conventions. Keep guest endian, pointer width,
