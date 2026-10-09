@@ -619,7 +619,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       scalar_operand_component_count = scalar_opcode_info.single_operand_is_two_component ? 2 : 1;
       for (uint32_t i = 0; i < scalar_operand_component_count; ++i) {
         scalar_operands[i] = scalar_src_ptr[ucode::AluInstruction::GetSwizzledComponentIndex(
-            scalar_src_swizzle, (3 + i) & 3)];
+            scalar_src_swizzle, i == 0 ? 3 : vector_opcode_info.ScalarSecondSourceComponent())];
       }
     } break;
     case 2: {

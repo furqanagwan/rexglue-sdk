@@ -2065,3 +2065,18 @@ A–H scheme above.
 - Posix, Linux, Vulkan, `xb` build and OG Xbox commits: out of scope
   (`f65fda3320`, `6435e79904`, `b9e00e6cce`, `8249bbe381`, `bdcc36f3b3`,
   `2416330549`, `2e6898afc1`, `44f5b4a860`, `c8f214e2a9`, `4a3ecf02d5`).
+
+## RG-GDK-032: Edge shader parsing fixes on both paths (2026-10-09)
+
+has207/xenia-edge `92ada8ebc0` ("[GPU] Fix scalar ALU swizzles with
+three-source vector ops", 2026-08-13). Class A (correctness, all titles,
+DXBC and DXIL). A two-component single-operand scalar op (`adds`, `maxs`,
+...) reads source 3's Z rather than X as its right-hand operand when the paired
+vector op uses three sources. Adaptation: `AluVectorOpcodeInfo::ScalarSecondSourceComponent`
+shared by the parser and the shader interpreter; no comments, the rule is in
+`research/gpu/shader-operand-components.md`. Edge `fbdb1f2817` (1D fetches
+with XY coordinates, 545407D4) was already in through the getBCF port
+(`80bb713`) on both translators, so nothing further was taken. Tests:
+`shader_parse_tests` (new, default build; fails on the old parser), the
+Release suite and `gpu.dxil_parity`. Known regressions: none at the pin; the
+007 titles are checked in the next title batch.

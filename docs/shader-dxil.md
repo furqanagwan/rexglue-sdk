@@ -217,10 +217,12 @@ above; a warm cache removes it.
 
 The rest of [#53](https://github.com/furqanagwan/rexglue-sdk/issues/53):
 hybrid occlusion counting on DXIL, a tessellating title and a ROV title
-scene on the DXIL path (only fixtures so far), and Edge's shared parsing
-changes held back so DXBC stays unchanged (1D fetches with XY coordinates, the second
-component of scalar operands of three-operand vector ops) with the wide 1D
-texture mapping `kTexture1DWideMaxRows` belongs to. Then stages 3–6: the
+scene on the DXIL path (only fixtures so far), and the wide 1D texture
+mapping `kTexture1DWideMaxRows` belongs to. Edge's shared parsing fixes (1D
+fetches with XY coordinates, and the second component of scalar operands
+beside three-source vector ops) are in on both paths; see
+[shader operand components](../research/gpu/shader-operand-components.md).
+Then stages 3–6: the
 host shaders, the render target cache, title-scene parity and only then a
 default switch. `dxcompiler.dll` (runtime HLSL, which Microsoft's BC also
 ships) isn't deployed: nothing compiles HLSL at runtime.
