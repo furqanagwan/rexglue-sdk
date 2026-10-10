@@ -100,10 +100,10 @@ struct X_OBJECT_CREATE_INFORMATION {
 struct X_OBJECT_TYPE {
   rex::be<uint32_t> constructor;
   rex::be<uint32_t> destructor;
-  rex::be<uint32_t> unk_08;
-  rex::be<uint32_t> unk_0C;
-  rex::be<uint32_t> unk_10;
-  rex::be<uint32_t> unk_14;
+  rex::be<uint32_t> close_procedure;
+  rex::be<uint32_t> delete_procedure;
+  rex::be<uint32_t> parse_procedure;
+  rex::be<uint32_t> default_object;
   rex::be<uint32_t> pool_tag;
 };
 

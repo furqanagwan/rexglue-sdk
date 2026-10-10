@@ -83,8 +83,8 @@ u32 XamEnumerate_entry(u32 handle, u32 flags, mapped_void buffer, u32 buffer_len
   return result;
 }
 
-u32 XamCreateEnumeratorHandle_entry(u32 unk1, u32 unk2, u32 unk3, u32 unk4, u32 unk5, u32 unk6,
-                                    u32 unk7, u32 unk8) {
+u32 XamCreateEnumeratorHandle_entry(u32 user_index, u32 app_id, u32 open_message, u32 close_message,
+                                    u32 extra_size, u32 item_count, u32 flags, u32 out_handle) {
   return X_ERROR_INVALID_PARAMETER;
 }
 

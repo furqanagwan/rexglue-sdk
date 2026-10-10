@@ -92,10 +92,10 @@ struct X_KPROCESS {
   rex::be<int32_t> quantum;
   rex::be<uint32_t> clrdataa_masked_ptr;
   rex::be<uint32_t> thread_count;
-  uint8_t unk_18;
-  uint8_t unk_19;
-  uint8_t unk_1A;
-  uint8_t unk_1B;
+  uint8_t process_priority_class;
+  uint8_t default_thread_priority;
+  uint8_t max_dynamic_priority;
+  uint8_t disable_quantum_decay;
   rex::be<uint32_t> kernel_stack_size;
   rex::be<uint32_t> tls_static_data_address;
   rex::be<uint32_t> tls_data_size;
@@ -321,8 +321,8 @@ class KernelState {
   void SignalAllWaitableObjects();
   void WaitForThreadsToExit(const std::vector<object_ref<XThread>>& threads, uint32_t timeout_ms);
   void LoadKernelModule(object_ref<KernelModule> kernel_module);
-  void InitializeProcess(X_KPROCESS* process, uint32_t process_type, uint8_t unk_18, uint8_t unk_19,
-                         uint8_t unk_1A);
+  void InitializeProcess(X_KPROCESS* process, uint32_t process_type, uint8_t process_priority_class,
+                         uint8_t default_thread_priority, uint8_t max_dynamic_priority);
   void SetProcessTLSVars(X_KPROCESS* process, uint32_t num_slots, uint32_t tls_data_size,
                          uint32_t tls_raw_data_address);
   void LoadAchievementsData();

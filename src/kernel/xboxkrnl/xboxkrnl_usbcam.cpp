@@ -18,7 +18,7 @@
 
 namespace rex::kernel::xboxkrnl {
 
-u32 XUsbcamCreate_entry(u32 buffer, u32 buffer_size, mapped_void unk3_ptr) {
+u32 XUsbcamCreate_entry(u32 buffer, u32 buffer_size, mapped_void handle_out) {
   return X_STATUS_SUCCESS;
 }
 

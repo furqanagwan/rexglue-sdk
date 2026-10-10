@@ -412,8 +412,8 @@ u32 XamUserGetMembershipTier_entry(u32 user_index) {
   return 6;
 }
 
-u32 XamUserAreUsersFriends_entry(u32 user_index, u32 unk1, u32 unk2, mapped_u32 out_value,
-                                 u32 overlapped_ptr) {
+u32 XamUserAreUsersFriends_entry(u32 user_index, u32 xuids_ptr, u32 xuids_count,
+                                 mapped_u32 out_value, u32 overlapped_ptr) {
   uint32_t are_friends = 0;
   X_RESULT result;
 
@@ -449,7 +449,7 @@ u32 XamUserAreUsersFriends_entry(u32 user_index, u32 unk1, u32 unk2, mapped_u32 
   }
 }
 
-u32 XamShowSigninUI_entry(u32 unk, u32 unk_mask) {
+u32 XamShowSigninUI_entry(u32 users_needed, u32 flags) {
   REX_KERNEL_STATE()->BroadcastNotification(0x0000000A, 1);
 
   REX_KERNEL_STATE()->BroadcastNotification(0x00000009, 0);
@@ -649,7 +649,7 @@ u32 XamParseGamerTileKey_entry(mapped_u32 key_ptr, mapped_u32 out1_ptr, mapped_u
   return X_ERROR_SUCCESS;
 }
 
-u32 XamReadTileToTexture_entry(u32 unknown, u32 title_id, u64 tile_id, u32 user_index,
+u32 XamReadTileToTexture_entry(u32 tile_type, u32 title_id, u64 tile_id, u32 user_index,
                                mapped_void buffer_ptr, u32 stride, u32 height, u32 overlapped_ptr) {
   if (!tile_id) {
     return X_ERROR_INVALID_PARAMETER;

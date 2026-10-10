@@ -40,7 +40,7 @@ rex::input::InputSystem* input_system() {
 
 void XamResetInactivity_entry() {}
 
-u32 XamEnableInactivityProcessing_entry(u32 unk, u32 enable) {
+u32 XamEnableInactivityProcessing_entry(u32 inactivity_index, u32 enable) {
   return X_ERROR_SUCCESS;
 }
 
@@ -161,7 +161,7 @@ u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
   return result;
 }
 
-i32 XamUserGetDeviceContext_entry(u32 user_index, u32 unk, mapped_u32 out_ptr) {
+i32 XamUserGetDeviceContext_entry(u32 user_index, u32 device_type, mapped_u32 out_ptr) {
   *out_ptr = 0;
   if (!user_index || (user_index & 0xFF) == 0xFF) {
     return X_E_SUCCESS;

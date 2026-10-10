@@ -26,7 +26,7 @@ u32 XamVoiceIsActiveProcess_entry() {
   return 0;
 }
 
-u32 XamVoiceCreate_entry(u32 unk1, u32 unk2, mapped_u32 out_voice_ptr) {
+u32 XamVoiceCreate_entry(u32 user_index, u32 max_attached_packets, mapped_u32 out_voice_ptr) {
   out_voice_ptr.Zero();
   return X_ERROR_ACCESS_DENIED;
 }

@@ -42,7 +42,8 @@ u32 XamContentGetLicenseMask_entry(mapped_u32 mask_ptr, mapped_void overlapped_p
 }
 
 u32 XamContentResolve_entry(u32 user_index, mapped_void content_data_ptr, mapped_void buffer_ptr,
-                            u32 buffer_size, u32 unk1, u32 unk2, u32 unk3) {
+                            u32 buffer_size, u32 create_directory, u32 root_name_ptr,
+                            u32 overlapped_ptr) {
   auto content_data = content_data_ptr.as<XCONTENT_DATA*>();
 
   assert_always();

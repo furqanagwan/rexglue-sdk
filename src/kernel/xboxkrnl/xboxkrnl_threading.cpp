@@ -618,8 +618,8 @@ u32 NtCreateMutant_entry(mapped_u32 handle_out, ppc_ptr_t<X_OBJECT_ATTRIBUTES> o
   return X_STATUS_SUCCESS;
 }
 
-u32 NtReleaseMutant_entry(u32 mutant_handle, u32 unknown) {
-  assert_zero(unknown);
+u32 NtReleaseMutant_entry(u32 mutant_handle, u32 previous_count) {
+  assert_zero(previous_count);
   uint32_t priority_increment = 0;
   bool abandon = false;
   bool wait = false;
@@ -682,10 +682,9 @@ void KeInitializeTimerEx_entry(ppc_ptr_t<X_KTIMER> timer_ptr, u32 timer_type, u3
   timer_ptr->period = 0;
 }
 
-u32 NtSetTimerEx_entry(u32 timer_handle, mapped_u64 due_time_ptr, mapped_void routine_ptr,
-                       u32 unk_one, mapped_void routine_arg, u32 resume, u32 period_ms,
-                       u32 unk_zero) {
-  assert_true(unk_one == 1);
+u32 NtSetTimerEx_entry(u32 timer_handle, mapped_u64 due_time_ptr, mapped_void routine_ptr, u32 mode,
+                       mapped_void routine_arg, u32 resume, u32 period_ms, u32 unk_zero) {
+  assert_true(mode == 1);
   assert_true(unk_zero == 0);
 
   uint64_t due_time = *due_time_ptr;
