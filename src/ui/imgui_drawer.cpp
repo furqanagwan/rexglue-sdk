@@ -644,6 +644,10 @@ void ImGuiDrawer::OnKey(KeyEvent& e, bool is_down) {
   }
 }
 
+float ImGuiDrawer::PixelsPerPoint() const {
+  return float(window_->GetDpi()) / float(window_->GetMediumDpi());
+}
+
 void ImGuiDrawer::UpdateMousePosition(float x, float y) {
   auto& io = GetIO();
   float physical_to_logical = float(window_->GetMediumDpi()) / float(window_->GetDpi());
