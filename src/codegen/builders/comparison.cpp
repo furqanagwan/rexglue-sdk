@@ -14,10 +14,6 @@
 
 namespace rex::codegen {
 
-//=============================================================================
-// Signed 64-bit Comparisons
-//=============================================================================
-
 bool BuildCmpd(BuilderContext& ctx) {
   emitCompareRegister(ctx, "int64_t", "s64");
   return true;
@@ -27,10 +23,6 @@ bool BuildCmpdi(BuilderContext& ctx) {
   emitCompareImmediate(ctx, "int64_t", "s64", true);
   return true;
 }
-
-//=============================================================================
-// Unsigned 64-bit Comparisons
-//=============================================================================
 
 bool BuildCmpld(BuilderContext& ctx) {
   emitCompareRegister(ctx, "uint64_t", "u64");
@@ -42,10 +34,6 @@ bool BuildCmpldi(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Unsigned 32-bit Comparisons
-//=============================================================================
-
 bool BuildCmplw(BuilderContext& ctx) {
   emitCompareRegister(ctx, "uint32_t", "u32");
   return true;
@@ -55,10 +43,6 @@ bool BuildCmplwi(BuilderContext& ctx) {
   emitCompareImmediate(ctx, "uint32_t", "u32", false);
   return true;
 }
-
-//=============================================================================
-// Signed 32-bit Comparisons
-//=============================================================================
 
 bool BuildCmpw(BuilderContext& ctx) {
   emitCompareRegister(ctx, "int32_t", "s32");
@@ -70,4 +54,4 @@ bool BuildCmpwi(BuilderContext& ctx) {
   return true;
 }
 
-}  // namespace rex::codegen
+}

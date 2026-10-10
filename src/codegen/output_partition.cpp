@@ -26,7 +26,6 @@ namespace rex::codegen {
 
 namespace {
 
-/// Bump when the sidecar layout changes.
 constexpr int kPartitionVersion = 2;
 
 size_t ChooseFileCount(std::span<const FunctionSize> entries, size_t maxFileBytes) {
@@ -39,7 +38,7 @@ size_t ChooseFileCount(std::span<const FunctionSize> entries, size_t maxFileByte
   return std::max<size_t>(1, (total + maxFileBytes - 1) / maxFileBytes);
 }
 
-}  // namespace
+}
 
 OutputPartition OutputPartition::Load(const std::filesystem::path& path) {
   OutputPartition partition;
@@ -85,7 +84,6 @@ OutputPartition OutputPartition::Load(const std::filesystem::path& path) {
 }
 
 std::string OutputPartition::Serialize() const {
-  // Ordered so the sidecar is byte-stable across runs.
   std::map<std::string, size_t> ordered;
   for (const auto& [address, file] : addressToFile_) {
     ordered.emplace(fmt::format("{:08X}", address), file);
@@ -140,7 +138,6 @@ std::vector<std::vector<size_t>> OutputPartition::Assign(std::span<const Functio
               [&](size_t lhs, size_t rhs) { return entries[lhs].address < entries[rhs].address; });
   }
 
-  // Rebuilt, not updated, so functions that disappeared leave the sidecar.
   addressToFile_.clear();
   for (size_t b = 0; b < buckets.size(); ++b) {
     for (size_t entry : buckets[b]) {
@@ -150,4 +147,4 @@ std::vector<std::vector<size_t>> OutputPartition::Assign(std::span<const Functio
   return buckets;
 }
 
-}  // namespace rex::codegen
+}

@@ -16,14 +16,6 @@ namespace rex::codegen {
 
 namespace {
 
-/**
- * Emit frD = rex::ppc::fp::<fn>(operands...) for an arithmetic instruction.
- *
- * The helpers in rex/ppc/fp.h apply PowerPC's NaN and denormal rules. A record
- * form (fadd. ...) also sets CR1 from the exceptions the operation raised.
- * `causes` classifies invalid-operation subcauses not exposed by host fenv;
- * `quiet` reports nothing raised for a single-precision denormal operand.
- */
 void emitFpArith(BuilderContext& ctx, std::string_view fn, int count,
                  std::string_view causes = "snan_causes", std::string_view quiet = "") {
   std::string args, params, names;
@@ -64,7 +56,6 @@ void emitFpArith(BuilderContext& ctx, std::string_view fn, int count,
       fmt::format("rex::ppc::fp::TrackedOp::{}", tracked_op), args);
 }
 
-/// fctiw/fctiwz/fctid/fctidz, with CR1 for the record forms.
 void emitFpConvert(BuilderContext& ctx, bool to_int64, bool truncate) {
   const auto d = ctx.f(ctx.insn.operands[0]);
   const auto b = ctx.f(ctx.insn.operands[1]);
@@ -73,11 +64,7 @@ void emitFpConvert(BuilderContext& ctx, bool to_int64, bool truncate) {
               to_int64);
 }
 
-}  // namespace
-
-//=============================================================================
-// Sign Manipulation
-//=============================================================================
+}
 
 bool BuildFabs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
@@ -99,10 +86,6 @@ bool BuildFneg(BuilderContext& ctx) {
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
-
-//=============================================================================
-// Move and Conversion
-//=============================================================================
 
 bool BuildFmr(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
@@ -149,10 +132,6 @@ bool BuildFrsp(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Comparison
-//=============================================================================
-
 bool BuildFcmpu(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\trex::ppc::fp::compare(ctx.fpscr, {}, {}.f64, {}.f64, {});",
@@ -164,10 +143,6 @@ bool BuildFcmpu(BuilderContext& ctx) {
 bool BuildFcmpo(BuilderContext& ctx) {
   return BuildFcmpu(ctx);
 }
-
-//=============================================================================
-// Addition
-//=============================================================================
 
 bool BuildFadd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
@@ -181,10 +156,6 @@ bool BuildFadds(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Subtraction
-//=============================================================================
-
 bool BuildFsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "sub", 2, "sub_invalid_causes");
@@ -196,10 +167,6 @@ bool BuildFsubs(BuilderContext& ctx) {
   emitFpArith(ctx, "subs", 2, "sub_invalid_causes", "single_denormal");
   return true;
 }
-
-//=============================================================================
-// Multiplication
-//=============================================================================
 
 bool BuildFmul(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
@@ -213,10 +180,6 @@ bool BuildFmuls(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Division
-//=============================================================================
-
 bool BuildFdiv(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "div", 2, "div_invalid_causes");
@@ -228,10 +191,6 @@ bool BuildFdivs(BuilderContext& ctx) {
   emitFpArith(ctx, "divs", 2, "div_invalid_causes");
   return true;
 }
-
-//=============================================================================
-// Fused Multiply-Add
-//=============================================================================
 
 bool BuildFmadd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
@@ -281,10 +240,6 @@ bool BuildFnmsubs(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Reciprocal and Square Root
-//=============================================================================
-
 bool BuildFres(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = rex::ppc::fp::tracked_estimate(ctx.fpscr, {}, {}.f64, false);",
@@ -315,10 +270,6 @@ bool BuildFsqrts(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Selection
-//=============================================================================
-
 bool BuildFsel(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = {}.f64 >= 0.0 ? {}.f64 : {}.f64;", ctx.f(ctx.insn.operands[0]),
@@ -327,4 +278,4 @@ bool BuildFsel(BuilderContext& ctx) {
   return true;
 }
 
-}  // namespace rex::codegen
+}

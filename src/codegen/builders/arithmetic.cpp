@@ -13,10 +13,6 @@
 #include "helpers.h"
 namespace rex::codegen {
 
-//=============================================================================
-// Addition
-//=============================================================================
-
 bool BuildAdd(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 + {}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
@@ -70,7 +66,6 @@ bool BuildAddze(BuilderContext& ctx) {
 }
 
 bool BuildAddme(BuilderContext& ctx) {
-  // addme: rD = rA + CA - 1 (which is rA + CA + 0xFFFFFFFFFFFFFFFF)
   ctx.println("\t{}.u8 = ({}.u32 + 0xFFFFFFFFu < {}.u32) | ({}.u32 + 0xFFFFFFFFu + {}.ca < {}.ca);",
               ctx.temp(), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[1]), ctx.xer(), ctx.xer());
@@ -82,7 +77,6 @@ bool BuildAddme(BuilderContext& ctx) {
 }
 
 bool BuildAddc(BuilderContext& ctx) {
-  // addc: rD = rA + rB, CA = carry out
   ctx.println("\t{}.ca = {}.u32 + {}.u32 < {}.u32;", ctx.xer(), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]), ctx.r(ctx.insn.operands[1]));
   ctx.println("\t{}.u64 = {}.u64 + {}.u64;", ctx.r(ctx.insn.operands[0]),
@@ -91,15 +85,7 @@ bool BuildAddc(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Division
-//=============================================================================
-// PPC division instructions do NOT trap on divide-by-zero - they produce undefined results.
-// We generate safe division that returns 0 when the divisor is zero.
-
 bool BuildDivd(BuilderContext& ctx) {
-  // divd rD,rA,rB: rD = rA / rB (64-bit signed)
-  // Safe division: return 0 if divisor is zero or INT64_MIN / -1 (UB in C)
   auto rD = ctx.r(ctx.insn.operands[0]);
   auto rA = ctx.r(ctx.insn.operands[1]);
   auto rB = ctx.r(ctx.insn.operands[2]);
@@ -111,8 +97,6 @@ bool BuildDivd(BuilderContext& ctx) {
 }
 
 bool BuildDivdu(BuilderContext& ctx) {
-  // divdu rD,rA,rB: rD = rA / rB (64-bit unsigned)
-  // Safe division: return 0 if divisor is zero
   auto rD = ctx.r(ctx.insn.operands[0]);
   auto rA = ctx.r(ctx.insn.operands[1]);
   auto rB = ctx.r(ctx.insn.operands[2]);
@@ -122,8 +106,6 @@ bool BuildDivdu(BuilderContext& ctx) {
 }
 
 bool BuildDivw(BuilderContext& ctx) {
-  // divw rD,rA,rB: rD = rA / rB (32-bit signed)
-  // Safe division: return 0 if divisor is zero or INT32_MIN / -1 (UB in C)
   auto rD = ctx.r(ctx.insn.operands[0]);
   auto rA = ctx.r(ctx.insn.operands[1]);
   auto rB = ctx.r(ctx.insn.operands[2]);
@@ -136,8 +118,6 @@ bool BuildDivw(BuilderContext& ctx) {
 }
 
 bool BuildDivwu(BuilderContext& ctx) {
-  // divwu rD,rA,rB: rD = rA / rB (32-bit unsigned)
-  // Safe division: return 0 if divisor is zero
   auto rD = ctx.r(ctx.insn.operands[0]);
   auto rA = ctx.r(ctx.insn.operands[1]);
   auto rB = ctx.r(ctx.insn.operands[2]);
@@ -145,10 +125,6 @@ bool BuildDivwu(BuilderContext& ctx) {
   emitRecordFormCompare(ctx);
   return true;
 }
-
-//=============================================================================
-// Multiplication
-//=============================================================================
 
 bool BuildMulhw(BuilderContext& ctx) {
   ctx.println("\t{}.s64 = (int64_t({}.s32) * int64_t({}.s32)) >> 32;", ctx.r(ctx.insn.operands[0]),
@@ -166,7 +142,6 @@ bool BuildMulhwu(BuilderContext& ctx) {
 }
 
 bool BuildMulld(BuilderContext& ctx) {
-  // Use unsigned multiplication to avoid signed overflow UB (PPC wraps on overflow)
   ctx.println("\t{}.s64 = static_cast<int64_t>({}.u64 * {}.u64);", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
@@ -174,7 +149,6 @@ bool BuildMulld(BuilderContext& ctx) {
 }
 
 bool BuildMulli(BuilderContext& ctx) {
-  // Use unsigned multiplication to avoid signed overflow UB (PPC wraps on overflow)
   ctx.println("\t{}.s64 = static_cast<int64_t>({}.u64 * static_cast<uint64_t>({}));",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               static_cast<int32_t>(ctx.insn.operands[2]));
@@ -189,7 +163,6 @@ bool BuildMullw(BuilderContext& ctx) {
 }
 
 bool BuildMulhd(BuilderContext& ctx) {
-  // mulhd: rD = high 64 bits of (rA * rB) (signed)
   ctx.println(
       "\t{}.s64 = static_cast<int64_t>((static_cast<__int128>(static_cast<int64_t>({}.s64)) * "
       "static_cast<__int128>(static_cast<int64_t>({}.s64))) >> 64);",
@@ -199,7 +172,6 @@ bool BuildMulhd(BuilderContext& ctx) {
 }
 
 bool BuildMulhdu(BuilderContext& ctx) {
-  // mulhdu: rD = high 64 bits of (rA * rB) (unsigned)
   ctx.println(
       "\t{}.u64 = static_cast<uint64_t>((static_cast<__uint128_t>({}.u64) * "
       "static_cast<__uint128_t>({}.u64)) >> 64);",
@@ -208,21 +180,12 @@ bool BuildMulhdu(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Negation
-//=============================================================================
-
 bool BuildNeg(BuilderContext& ctx) {
-  // Use unsigned negation to avoid signed overflow UB when negating INT64_MIN
   ctx.println("\t{}.s64 = static_cast<int64_t>(-{}.u64);", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
 }
-
-//=============================================================================
-// Subtraction
-//=============================================================================
 
 bool BuildSubf(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 - {}.u64;", ctx.r(ctx.insn.operands[0]),
@@ -261,7 +224,6 @@ bool BuildSubfic(BuilderContext& ctx) {
 }
 
 bool BuildSubfze(BuilderContext& ctx) {
-  // subfze: rD = ~rA + CA (subtract from zero extended)
   ctx.println("\t{}.u8 = ~{}.u32 + {}.ca < ~{}.u32;", ctx.temp(), ctx.r(ctx.insn.operands[1]),
               ctx.xer(), ctx.r(ctx.insn.operands[1]));
   ctx.println("\t{}.u64 = ~{}.u64 + {}.ca;", ctx.r(ctx.insn.operands[0]),
@@ -272,7 +234,6 @@ bool BuildSubfze(BuilderContext& ctx) {
 }
 
 bool BuildSubfme(BuilderContext& ctx) {
-  // subfme: rD = ~rA + CA - 1 (subtract from minus one extended)
   ctx.println(
       "\t{}.u8 = (~{}.u32 + 0xFFFFFFFFu < ~{}.u32) | (~{}.u32 + 0xFFFFFFFFu + {}.ca < {}.ca);",
       ctx.temp(), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
@@ -284,18 +245,8 @@ bool BuildSubfme(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Overflow-enable (OE) forms: XER[OV] for the result, XER[SO] sticky
-//=============================================================================
-// OV is worked out from the operands before the base instruction runs (its
-// result may overwrite a source), so the base instruction's record form sees
-// the updated SO in CR0. Additions and subtractions judge overflow on 64
-// bits, as has207/xenia-edge 10da45ea4 does: SO is sticky, so a false
-// positive from a 32-bit view would never clear.
-
 namespace {
 
-// Sets OV to `ov`, a C++ expression over `a`, `b` and `r` (64-bit unsigned).
 void emitOverflow(BuilderContext& ctx, const std::string& setup, const char* ov) {
   ctx.println("\t{{");
   ctx.println("\t\t{}", setup);
@@ -307,8 +258,7 @@ void emitOverflow(BuilderContext& ctx, const std::string& setup, const char* ov)
 bool finishOverflow(BuilderContext& ctx, bool (*base)(BuilderContext&), bool doubleword = true) {
   if (!base(ctx))
     return false;
-  // The shared record helper compares the low word; OE doubleword forms must
-  // compare the full result. Emit after the base builder to replace CR0.
+
   if (doubleword && isRecordForm(ctx.insn)) {
     ctx.println("\t{}.compare<int64_t>({}.s64, 0, {});", ctx.cr(0), ctx.r(ctx.insn.operands[0]),
                 ctx.xer());
@@ -316,7 +266,6 @@ bool finishOverflow(BuilderContext& ctx, bool (*base)(BuilderContext&), bool dou
   return true;
 }
 
-// a + b (+ carry_in): overflow when both addends' signs differ from the sum's.
 bool addOverflow(BuilderContext& ctx, const std::string& a, const std::string& b,
                  const std::string& carry, bool (*base)(BuilderContext&)) {
   emitOverflow(ctx, fmt::format("const uint64_t a = {}, b = {}, r = a + b + {};", a, b, carry),
@@ -334,7 +283,7 @@ std::string Ca(BuilderContext& ctx) {
   return fmt::format("uint64_t({}.ca)", ctx.xer());
 }
 
-}  // namespace
+}
 
 bool BuildAddo(BuilderContext& ctx) {
   return addOverflow(ctx, R(ctx, 1), R(ctx, 2), "0", BuildAdd);
@@ -351,7 +300,7 @@ bool BuildAddmeo(BuilderContext& ctx) {
 bool BuildAddzeo(BuilderContext& ctx) {
   return addOverflow(ctx, R(ctx, 1), "uint64_t(0)", Ca(ctx), BuildAddze);
 }
-// subf rD,rA,rB is rB + ~rA + 1.
+
 bool BuildSubfo(BuilderContext& ctx) {
   return addOverflow(ctx, NotR(ctx, 1), R(ctx, 2), "1", BuildSubf);
 }
@@ -374,7 +323,6 @@ bool BuildNego(BuilderContext& ctx) {
 }
 
 bool BuildMullwo(BuilderContext& ctx) {
-  // The product of the low words overflows when it doesn't fit 32 signed bits.
   emitOverflow(ctx,
                fmt::format("const int64_t p = int64_t({}.s32) * int64_t({}.s32);",
                            ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2])),
@@ -419,7 +367,6 @@ bool BuildDivduo(BuilderContext& ctx) {
 }
 
 bool BuildMcrxr(BuilderContext& ctx) {
-  // CR field = XER[SO, OV, CA, 0]; those XER bits are cleared.
   const auto cr = ctx.cr(ctx.insn.operands[0]);
   ctx.println("\t{}.lt = {}.so;", cr, ctx.xer());
   ctx.println("\t{}.gt = {}.ov;", cr, ctx.xer());
@@ -429,4 +376,4 @@ bool BuildMcrxr(BuilderContext& ctx) {
   return true;
 }
 
-}  // namespace rex::codegen
+}

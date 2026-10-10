@@ -27,15 +27,6 @@ namespace rex::codegen {
 
 namespace {
 
-//=============================================================================
-// Entries reached by a tail branch into another function (RG-FIX-002)
-//=============================================================================
-
-// A direct tail branch proves that a shared constant-return leaf is also an
-// entry. Restrict this to `li r3,N; blr`: an arbitrary shared epilogue may
-// depend on the caller's frame or localized registers and cannot safely be
-// emitted as an independent function. Jump-table references alone do not
-// establish an entry. Returns how many entries were added.
 size_t registerTailBranchesIntoBodies(CodegenContext& ctx) {
   auto& graph = ctx.graph;
   std::vector<uint32_t> targets;
@@ -45,8 +36,7 @@ size_t registerTailBranchesIntoBodies(CodegenContext& ctx) {
           graph.isEntryPoint(jump.target)) {
         continue;
       }
-      // Exception-region scanning may not retain the conditional flag. Verify
-      // the source opcode too: only a direct b with LK=0 proves this tail entry.
+
       const auto* source = ctx.binary().findSection(jump.site);
       if (!source || !source->executable || source->end() - jump.site < 4 ||
           (load_and_swap<uint32_t>(source->translate(jump.site)) & 0xFC000001u) != 0x48000000u) {
@@ -64,7 +54,7 @@ size_t registerTailBranchesIntoBodies(CodegenContext& ctx) {
         continue;
       }
       const auto* code = section->translate(jump.target);
-      // addi r3,r0,IMM is the li pseudo-instruction; the immediate is unrestricted.
+
       if ((load_and_swap<uint32_t>(code) & 0xFFFF0000u) != 0x38600000u ||
           load_and_swap<uint32_t>(code + 4) != 0x4E800020u) {
         continue;
@@ -87,9 +77,6 @@ size_t registerTailBranchesIntoBodies(CodegenContext& ctx) {
   return added;
 }
 
-//=============================================================================
-// Merge to resolve jumps then seal functions
-//=============================================================================
 void mergeAndSeal(CodegenContext& ctx) {
   REXCODEGEN_TRACE("Analyze: resolving jumps and sealing functions...");
 
@@ -128,8 +115,6 @@ void mergeAndSeal(CodegenContext& ctx) {
     }
 
     if (changesThisIteration == 0) {
-      // Only once nothing else resolves: register the entries that other
-      // functions branch into, then resolve against them.
       if (registerTailBranchesIntoBodies(ctx) == 0) {
         break;
       }
@@ -152,7 +137,7 @@ void mergeAndSeal(CodegenContext& ctx) {
   }
 }
 
-}  // anonymous namespace
+}
 
 namespace phases {
 
@@ -162,6 +147,6 @@ VoidResult Merge(CodegenContext& ctx, ProgressReporter* reporter) {
   return Ok();
 }
 
-}  // namespace phases
+}
 
-}  // namespace rex::codegen
+}

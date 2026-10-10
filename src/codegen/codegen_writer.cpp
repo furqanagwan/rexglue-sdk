@@ -40,7 +40,6 @@
 
 namespace {
 
-// The text between the quotes of a C string literal holding `text`.
 std::string CStringBody(std::string_view text) {
   std::string out;
   for (char c : text) {
@@ -73,7 +72,6 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
     }
   }
 
-  // Compute code_base and code_size from binary sections
   size_t codeMin = ~size_t(0);
   size_t codeMax = 0;
   for (const auto& section : ctx.binary().sections()) {
@@ -85,7 +83,6 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
     }
   }
 
-  // Build functions JSON array
   nlohmann::json functionsJson = nlohmann::json::array();
   for (const auto* fn : functions) {
     std::string funcName;
@@ -112,7 +109,6 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
     });
   }
 
-  // Build config flags
   nlohmann::json configFlags = {
       {"skip_lr", cfg.skipLr},
       {"ctr_as_local", cfg.ctrAsLocalVariable},
@@ -192,7 +188,7 @@ nlohmann::json buildTemplateData(const rex::codegen::CodegenContext& ctx,
   };
 }
 
-}  // namespace
+}
 
 namespace rex::codegen {
 
@@ -219,12 +215,11 @@ bool IsGeneratedOutputName(std::string_view filename, std::string_view projectNa
   return filename.starts_with(projectPrefix);
 }
 
-constexpr size_t kOutputBufferReserveSize = 32 * 1024 * 1024;  // 32 MB
+constexpr size_t kOutputBufferReserveSize = 32 * 1024 * 1024;
 
 CodegenWriter::CodegenWriter(CodegenContext& ctx, Runtime* runtime)
     : ctx_(ctx), runtime_(runtime) {}
 
-// Convenience accessors
 FunctionGraph& CodegenWriter::graph() {
   return ctx_.graph;
 }
@@ -252,23 +247,19 @@ bool CodegenWriter::write(bool force) {
   writtenFiles_.clear();
   unchangedFiles_.clear();
 
-  // --- Validation gate (from recompile.cpp) ---
   if (ctx_.errors.HasErrors() && !force) {
     REXCODEGEN_ERROR("Code generation blocked: {} validation errors. Use --force to override.",
                      ctx_.errors.Count());
     return false;
   }
 
-  // --- Output directory setup (from recompile.cpp) ---
   std::filesystem::path outputPath = ctx_.configDir() / config().outDirectoryPath;
   REXCODEGEN_TRACE("Output path: {}", outputPath.string());
   std::filesystem::create_directories(outputPath);
 
-  // --- Everything below from recompiler.cpp recompile() ---
   REXCODEGEN_TRACE("Recompile: starting");
   out.reserve(kOutputBufferReserveSize);
 
-  // Build sorted function list from graph
   std::vector<const FunctionNode*> functions;
   functions.reserve(graph().functionCount());
   for (const auto& [addr, node] : graph().functions()) {
@@ -277,7 +268,6 @@ bool CodegenWriter::write(bool force) {
   std::sort(functions.begin(), functions.end(),
             [](const auto* a, const auto* b) { return a->base() < b->base(); });
 
-  // Build rexcrt reverse map and rename graph nodes
   std::unordered_map<uint32_t, std::string> rexcrtByAddr;
   for (const auto& [name, addr] : config().rexcrtFunctions) {
     auto crtName = fmt::format("rexcrt_{}", name);
@@ -295,33 +285,27 @@ bool CodegenWriter::write(bool force) {
 
   auto tmplData = buildTemplateData(ctx_, functions, rexcrtByAddr);
 
-  // Generate {project}_pch.h (config + macros, stable enough to precompile)
   REXCODEGEN_TRACE("Recompile: generating {}_pch.h", projectName);
   out = renderWithJson(registry, "codegen/pch_h", tmplData);
   SaveCurrentOutData(fmt::format("{}_pch.h", projectName));
 
-  // Generate {project}_funcs.h (every guest function declaration)
   REXCODEGEN_TRACE("Recompile: generating {}_funcs.h", projectName);
   out = renderWithJson(registry, "codegen/funcs_h", tmplData);
   SaveCurrentOutData(fmt::format("{}_funcs.h", projectName));
 
-  // Generate {project}_init.h (the full surface, for init.cpp and consumers)
   REXCODEGEN_TRACE("Recompile: generating {}_init.h", projectName);
   out = renderWithJson(registry, "codegen/init_h", tmplData);
   SaveCurrentOutData(fmt::format("{}_init.h", projectName));
 
-  // Generate {project}_init.cpp (PPCImageConfig + PPCFuncMappings)
   REXCODEGEN_TRACE("Recompile: generating {}_init.cpp", projectName);
   out = renderWithJson(registry, "codegen/init_cpp", tmplData);
   SaveCurrentOutData(fmt::format("{}_init.cpp", projectName));
 
-  // Generate {project}_register.cpp (registration function for hash-based dispatch)
   REXCODEGEN_TRACE("Recompile: generating {}_register.cpp", projectName);
   tmplData["is_dll"] = ctx_.isDllModule();
   out = renderWithJson(registry, "codegen/register_cpp", tmplData);
   SaveCurrentOutData(fmt::format("{}_register.cpp", projectName));
 
-  // Filter out imports and rexcrt functions before recompilation
   std::erase_if(functions, [](const FunctionNode* fn) {
     return fn->authority() == FunctionAuthority::IMPORT;
   });
@@ -329,7 +313,6 @@ bool CodegenWriter::write(bool force) {
     return rexcrtByAddr.contains(static_cast<uint32_t>(fn->base()));
   });
 
-  // Build EmitContext -- resolver is now properly connected
   EmitContext emitCtx{binary(), config(), graph(),
                       static_cast<uint32_t>(analysisState().entryPoint), nullptr};
   if (runtime_)
@@ -366,7 +349,6 @@ bool CodegenWriter::write(bool force) {
   auto buckets = partition.Assign(sizes, maxFileBytes);
 
   for (size_t index = 0; index < buckets.size(); ++index) {
-    // Buckets are address-ordered, so a call can precede its definition.
     std::unordered_set<std::string> needed;
     for (size_t entry : buckets[index]) {
       needed.insert(references[entry].begin(), references[entry].end());
@@ -393,7 +375,6 @@ bool CodegenWriter::write(bool force) {
 
   REXCODEGEN_TRACE("Recompilation complete.");
 
-  // Generate sources.cmake
   REXCODEGEN_TRACE("Recompile: generating sources.cmake");
   {
     auto& recompFiles = tmplData["recomp_files"];
@@ -405,7 +386,6 @@ bool CodegenWriter::write(bool force) {
     SaveCurrentOutData("sources.cmake");
   }
 
-  // Write all buffered files to disk
   return FlushPendingWrites();
 }
 
@@ -422,7 +402,6 @@ bool CodegenWriter::FlushPendingWrites() {
   std::unordered_set<std::string> emitted;
   emitted.reserve(pendingWrites.size());
 
-  // A swallowed failure would be stamped as success and skipped on the next run.
   bool ok = true;
 
   for (const auto& [filename, content] : pendingWrites) {
@@ -468,4 +447,4 @@ bool CodegenWriter::FlushPendingWrites() {
   return ok;
 }
 
-}  // namespace rex::codegen
+}

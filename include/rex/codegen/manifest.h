@@ -21,63 +21,35 @@
 
 namespace rex::codegen {
 
-/**
- * Codegen settings for a single binary inside a manifest. The entrypoint
- * uses an empty `guestPath`; module entries set it to the canonicalized
- * guest-visible path the host runtime resolves against.
- */
 struct BinaryConfig {
   RecompilerConfig recompiler;
   std::string guestPath;
 };
 
-/**
- * A title update to build as its own executable ([[title_update]]): the
- * entrypoint again, with the update's XEX patches applied and its own config.
- */
 struct TitleUpdateBuild {
-  uint32_t version = 0;           ///< The title update's version (its LIVE package's)
-  std::filesystem::path package;  ///< Its LIVE/CON package, or a folder of its files
-  BinaryConfig binary;            ///< The entrypoint's settings with this version's own
-                                  ///< out_directory_path and includes
+  uint32_t version = 0;
+  std::filesystem::path package;
+  BinaryConfig binary;
 };
 
-/**
- * Canonicalize a module guest path: device-stripped, slashes/case normalized,
- * with `<project>/assets/` stripped when a matching project name is given.
- */
 std::string CanonicalizeModuleGuestPath(std::string_view path, std::string_view project_name = {});
 
-/**
- * Parsed manifest TOML. Construct via Load(); treat as read-only after.
- */
 struct ManifestConfig {
   std::string projectName;
-  std::optional<std::string> sdkVersion;       ///< Last SDK that ran codegen on this project
-  std::filesystem::path manifestPath;          ///< File this manifest was loaded from
-  std::optional<std::string> gameRoot;         ///< Game asset root, relative to manifestDir.
-                                               ///< Set by `rexglue init` to anchor DLL guest paths.
-  std::filesystem::path manifestDir;           ///< Directory containing the manifest
-  BinaryConfig entrypoint;                     ///< Entrypoint codegen settings (inline)
-  std::vector<BinaryConfig> modules;           ///< DLL module codegen settings (inline)
-  std::vector<TitleUpdateBuild> titleUpdates;  ///< Title updates, each its own executable
+  std::optional<std::string> sdkVersion;
+  std::filesystem::path manifestPath;
+  std::optional<std::string> gameRoot;
 
-  /**
-   * Load a manifest TOML file. Returns nullopt on parse failure.
-   */
+  std::filesystem::path manifestDir;
+  BinaryConfig entrypoint;
+  std::vector<BinaryConfig> modules;
+  std::vector<TitleUpdateBuild> titleUpdates;
+
   static std::optional<ManifestConfig> Load(const std::filesystem::path& path);
 
-  /**
-   * True when `path` parses as a manifest (i.e. has a `[project]` section).
-   */
   static bool IsManifest(const std::filesystem::path& path);
 
-  /**
-   * Insert or overwrite [project].sdk_version in the manifest file at `path`.
-   * Preserves the rest of the file's content. Returns false on parse or write
-   * failure.
-   */
   static bool WriteSdkVersionStamp(const std::filesystem::path& path, std::string_view version);
 };
 
-}  // namespace rex::codegen
+}

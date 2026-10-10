@@ -11,34 +11,22 @@
 
 #include <rex/cvar.h>
 
-// clang-format off
-
-//=============================================================================
-// Codegen/Output
-//=============================================================================
-
 REXCVAR_DEFINE_UINT32(max_file_size_bytes, 1048576, "Codegen",
                       "Target source file size in bytes; sets how many recomp files a project "
                       "is split into, chosen once and then persisted")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(65536, 67108864);
 
-REXCVAR_DEFINE_UINT32(progress_log_frequency, 100, "Codegen",
-                      "Log progress every N functions")
+REXCVAR_DEFINE_UINT32(progress_log_frequency, 100, "Codegen", "Log progress every N functions")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
-
-//=============================================================================
-// Codegen/Analysis
-//=============================================================================
 
 REXCVAR_DEFINE_UINT32(max_discovery_iterations, 1000, "Codegen",
                       "Max iterations for function discovery convergence")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
-REXCVAR_DEFINE_UINT32(max_vtable_iterations, 100, "Codegen",
-                      "Max iterations for vtable discovery")
+REXCVAR_DEFINE_UINT32(max_vtable_iterations, 100, "Codegen", "Max iterations for vtable discovery")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
@@ -47,37 +35,28 @@ REXCVAR_DEFINE_UINT32(max_resolve_iterations, 100, "Codegen",
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
-REXCVAR_DEFINE_UINT32(max_eh_states, 100, "Codegen",
-                      "Max C++ EH states before rejecting handler")
+REXCVAR_DEFINE_UINT32(max_eh_states, 100, "Codegen", "Max C++ EH states before rejecting handler")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
-REXCVAR_DEFINE_UINT32(max_eh_try_blocks, 50, "Codegen",
-                      "Max try blocks before rejecting handler")
+REXCVAR_DEFINE_UINT32(max_eh_try_blocks, 50, "Codegen", "Max try blocks before rejecting handler")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
-REXCVAR_DEFINE_UINT32(max_eh_ip_map_entries, 200, "Codegen",
-                      "Max IP-to-state map entries")
+REXCVAR_DEFINE_UINT32(max_eh_ip_map_entries, 200, "Codegen", "Max IP-to-state map entries")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
-REXCVAR_DEFINE_UINT32(max_seh_scope_entries, 100, "Codegen",
-                      "Max SEH scope table entries")
+REXCVAR_DEFINE_UINT32(max_seh_scope_entries, 100, "Codegen", "Max SEH scope table entries")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
-
-//=============================================================================
-// Codegen/Discovery
-//=============================================================================
 
 REXCVAR_DEFINE_UINT32(backward_scan_limit, 64, "Codegen",
                       "Max instructions to scan backward for jump table patterns")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 10000);
 
-REXCVAR_DEFINE_UINT32(max_jump_table_entries, 512, "Codegen",
-                      "Max entries per detected jump table")
+REXCVAR_DEFINE_UINT32(max_jump_table_entries, 512, "Codegen", "Max entries per detected jump table")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 100000);
 
@@ -85,5 +64,3 @@ REXCVAR_DEFINE_UINT32(max_blocks_per_function, 10000, "Codegen",
                       "Safety limit on blocks per function")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 1000000);
-
-// clang-format on

@@ -31,32 +31,26 @@
 
 namespace rex::codegen::ppc {
 struct Instruction;
-}  // namespace rex::codegen::ppc
+}
 
 namespace rex::runtime {
 class ExportResolver;
-}  // namespace rex::runtime
+}
 
 namespace rex::codegen {
 
-// Forward declarations
 class FunctionGraph;
 class FunctionNode;
 class BinaryView;
 struct RecompilerConfig;
 
-/// Lightweight context passed to FunctionNode::emitCpp() and BuilderContext.
-/// Non-owning references -- caller must ensure lifetimes.
-/// An instruction word a switchable patch changes: codegen emits both
-/// versions, chosen at run time by the patch's flag.
 struct SwitchedWord {
   uint32_t original = 0;
   uint32_t patched = 0;
-  uint32_t patch_index = 0;  ///< Index into the title's switchable patch table
+  uint32_t patch_index = 0;
   std::string patch_name;
 };
 
-/// A register a switchable patch sets before the instruction at its address.
 struct SwitchedSet {
   uint32_t reg = 0;
   uint64_t value = 0;
@@ -69,14 +63,11 @@ struct EmitContext {
   const BinaryView& binary;
   const RecompilerConfig& config;
   const FunctionGraph& graph;
-  uint32_t entryPoint = 0;                      ///< For "xstart" naming
-  runtime::ExportResolver* resolver = nullptr;  ///< For import ordinal resolution (nullable)
+  uint32_t entryPoint = 0;
+  runtime::ExportResolver* resolver = nullptr;
 
-  /// Every function name emitted as a call. The writer turns this into the
-  /// per-file declaration header, so a missed name is a compile error.
   std::unordered_set<std::string>* referenced = nullptr;
 
-  /// Instruction words switchable patches change, by guest address.
   const std::map<uint32_t, SwitchedWord>* switched = nullptr;
   const std::multimap<uint32_t, SwitchedSet>* switched_sets = nullptr;
 
@@ -86,108 +77,83 @@ struct EmitContext {
   }
 };
 
-//=============================================================================
-// Authority Levels
-//=============================================================================
-// Determines boundary mutability and merge eligibility.
-// Only GAP_FILL can be absorbed during vacancy merging.
-// All others represent immutable entry points.
 enum class FunctionAuthority : uint8_t {
-  GAP_FILL = 0,    // Speculative - found in unclaimed gap, CAN be absorbed
-  DISCOVERED = 1,  // Found via bl/bcl - immutable entry point
-  VTABLE = 2,      // Found in vtable - immutable entry point
-  HELPER = 3,      // Save/restore helpers - fixed, overlaps allowed
-  PDATA = 4,       // From .pdata - entry fixed, can extend
-  CONFIG = 5,      // User config - exact boundaries, immutable
-  IMPORT = 6,      // Import thunk - external function, immutable
+  GAP_FILL = 0,
+  DISCOVERED = 1,
+  VTABLE = 2,
+  HELPER = 3,
+  PDATA = 4,
+  CONFIG = 5,
+  IMPORT = 6,
 };
 
-//=============================================================================
-// Target Classification (for code generation)
-//=============================================================================
 enum class TargetKind {
-  InternalLabel,  // Target inside caller's function (PIC pattern)
-  Function,       // Target is a function entry point
-  Import,         // Target is an import
-  Unknown,        // Target not recognized
+  InternalLabel,
+  Function,
+  Import,
+  Unknown,
 };
 
 const char* AuthorityName(FunctionAuthority auth);
 
-//=============================================================================
-// Function State (3-state machine)
-//=============================================================================
 enum class FunctionState : uint8_t {
-  kRegistered,  // Entry point known, blocks/instructions not yet assigned
-  kDiscovered,  // Blocks and instructions assigned, may have unresolved branches
-  kSealed,      // All branches resolved, ready for code generation
+  kRegistered,
+  kDiscovered,
+  kSealed,
 };
 
-// Legacy aliases for compatibility during migration
-constexpr FunctionState PENDING = FunctionState::kRegistered;  // Will be removed
-constexpr FunctionState SEALED = FunctionState::kSealed;       // Will be removed
-
-//=============================================================================
-// Exception Handling - SEH (Structured Exception Handling)
-//=============================================================================
+constexpr FunctionState PENDING = FunctionState::kRegistered;
+constexpr FunctionState SEALED = FunctionState::kSealed;
 
 struct SehScope {
-  uint32_t tryStart;  // [+0] Start of __try block
-  uint32_t tryEnd;    // [+4] End of __try block
-  uint32_t handler;   // [+8] Handler function (__finally or __except body)
-  uint32_t filter;    // [+C] Filter expression (0 for __finally, address for __except)
+  uint32_t tryStart;
+  uint32_t tryEnd;
+  uint32_t handler;
+  uint32_t filter;
 };
 
 struct SehExceptionInfo {
-  uint32_t handlerThunk;    // e.g. __C_specific_handler thunk address
-  uint32_t scopeTableAddr;  // Pointer to scope table in .rdata
+  uint32_t handlerThunk;
+  uint32_t scopeTableAddr;
   std::vector<SehScope> scopes;
-  uint32_t frameSize = 0;      // Stack frame size for r12 setup during unwind
-  uint32_t restoreHelper = 0;  // __restgprlr_N address to call on unwind
+  uint32_t frameSize = 0;
+  uint32_t restoreHelper = 0;
 };
-
-//=============================================================================
-// Exception Handling - C++ EH (FuncInfo with magic 0x19930522)
-//=============================================================================
 
 constexpr uint32_t CXX_EH_MAGIC = 0x19930522;
 
 struct CxxUnwindEntry {
-  int32_t toState;  // Previous state (-1 = terminal)
-  uint32_t action;  // Cleanup/destructor function address
+  int32_t toState;
+  uint32_t action;
 };
 
 struct CxxIPStateEntry {
-  uint32_t ip;    // Code address where state changes
-  int32_t state;  // State number at this IP
+  uint32_t ip;
+  int32_t state;
 };
 
 struct CxxCatchHandler {
-  uint32_t adjectives;           // Catch type flags
-  uint32_t typeDescriptor;       // Pointer to type descriptor (RTTI)
-  int32_t catchObjDisplacement;  // Displacement of catch object
-  uint32_t handlerAddress;       // Catch handler function address
+  uint32_t adjectives;
+  uint32_t typeDescriptor;
+  int32_t catchObjDisplacement;
+  uint32_t handlerAddress;
 };
 
 struct CxxTryBlock {
-  int32_t tryLow;     // Lowest state in try
-  int32_t tryHigh;    // Highest state in try
-  int32_t catchHigh;  // Highest state in catch
+  int32_t tryLow;
+  int32_t tryHigh;
+  int32_t catchHigh;
   std::vector<CxxCatchHandler> handlers;
 };
 
 struct CxxExceptionInfo {
-  uint32_t handlerThunk;  // Frame handler function
-  uint32_t funcInfoAddr;  // Address of FuncInfo in .rdata
-  uint32_t maxState;      // Number of unwind states
+  uint32_t handlerThunk;
+  uint32_t funcInfoAddr;
+  uint32_t maxState;
   std::vector<CxxUnwindEntry> unwindMap;
   std::vector<CxxTryBlock> tryBlocks;
   std::vector<CxxIPStateEntry> ipToStateMap;
 };
-
-//=============================================================================
-// Combined Exception Info (variant of SEH or C++ EH)
-//=============================================================================
 
 struct ExceptionInfo {
   std::variant<std::monostate, SehExceptionInfo, CxxExceptionInfo> data;
@@ -208,9 +174,6 @@ struct ExceptionInfo {
   }
 };
 
-//=============================================================================
-// Call Target - Resolved destination of a call/jump
-//=============================================================================
 struct CallTarget {
   struct ToFunction {
     FunctionNode* node;
@@ -242,18 +205,10 @@ struct CallTarget {
   static CallTarget unresolved(uint32_t addr) { return {Unresolved{addr}}; }
 };
 
-//=============================================================================
-// Call Edge - A call site within a function
-//=============================================================================
-
 struct CallEdge {
-  uint32_t site;      // Address of the bl/b instruction
-  CallTarget target;  // Resolved or unresolved target
+  uint32_t site;
+  CallTarget target;
 };
-
-//=============================================================================
-// Basic Block
-//=============================================================================
 
 struct Block {
   uint32_t base;
@@ -263,51 +218,30 @@ struct Block {
   bool contains(uint32_t addr) const { return addr >= base && addr < end(); }
 };
 
-//=============================================================================
-// Jump Table
-//=============================================================================
-
 struct JumpTable {
-  uint32_t bctrAddress;           // Address of bctr instruction
-  uint32_t tableAddress;          // Address of jump table data
-  uint8_t indexRegister;          // Register holding switch index
-  std::vector<uint32_t> targets;  // Resolved case targets (internal labels)
+  uint32_t bctrAddress;
+  uint32_t tableAddress;
+  uint8_t indexRegister;
+  std::vector<uint32_t> targets;
 };
 
-//=============================================================================
-// Function Analysis (computed at seal time)
-//=============================================================================
-
 struct FunctionAnalysis {
-  // CSR requirements (denormal handling)
   enum class CsrRequirement : uint8_t { None, Fpu, Vmx };
 
-  // Special register usage
   bool usesCtr = false;
   bool usesXer = false;
   bool usesCr = false;
   bool usesFpscr = false;
 
-  // CSR state needed
   CsrRequirement csrRequirement = CsrRequirement::None;
 };
 
-//=============================================================================
-// Unresolved Jump - Internal jump awaiting resolution
-//=============================================================================
-
 struct UnresolvedJump {
-  uint32_t site;       // Address of the branch instruction
-  uint32_t target;     // Target address
-  bool isCall;         // true = bl (call), false = b (tail call)
-  bool isConditional;  // true = bc/beq/bne/etc, false = b
+  uint32_t site;
+  uint32_t target;
+  bool isCall;
+  bool isConditional;
 };
-
-//=============================================================================
-// Code Buffer - Holds executable code for a section
-//=============================================================================
-// The graph owns code buffers so recompilation doesn't need module access.
-// Each buffer corresponds to one executable section.
 
 struct CodeBuffer {
   std::vector<uint8_t> data;
@@ -325,4 +259,4 @@ struct CodeBuffer {
   }
 };
 
-}  // namespace rex::codegen
+}

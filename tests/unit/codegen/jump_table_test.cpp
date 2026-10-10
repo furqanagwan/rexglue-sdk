@@ -24,8 +24,6 @@ class JumpTableModule final : public rex::runtime::Module {
  public:
   JumpTableModule(bool table_in_rb, bool has_gap = false, bool distinct_base = false)
       : Module(nullptr) {
-    // lis r9/r11,0; slwi r10,r3,2; addi r9,r9/r11,0x2000; lwzx r8,rA,rB;
-    // mtctr r8; bctr; blr; blr.
     const uint32_t ra = table_in_rb ? 10 : 9;
     const uint32_t rb = table_in_rb ? 9 : 10;
     const std::array<uint32_t, 8> instructions = {
@@ -59,7 +57,7 @@ class JumpTableModule final : public rex::runtime::Module {
   std::array<uint8_t, 16> table_{};
 };
 
-}  // namespace
+}
 
 TEST_CASE("Absolute PPC jump table selects the scaled index in either load operand",
           "[codegen][jump_table]") {

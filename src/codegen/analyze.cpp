@@ -27,7 +27,6 @@ namespace rex::codegen {
 Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
   REXCODEGEN_TRACE("Analyze: starting analysis...");
 
-  // Guest code patches go in before anything reads the instructions.
   auto patched = ApplyCodePatches(ctx.binary(), ctx.Config().patches);
   if (!patched) {
     return Err(patched.error());
@@ -44,7 +43,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
   REXCODEGEN_TRACE("Analyze: decoded {} instructions across {} code regions",
                    ctx.decoded().instructionCount(), ctx.decoded().codeRegions().size());
 
-  // 1. Register entry points (imports, helpers, config, pdata)
   if (reporter)
     reporter->phaseChanged("Register");
   auto regResult = phases::Register(ctx, reporter);
@@ -52,7 +50,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return regResult;
   }
 
-  // 2. Scan binary into code/data regions
   if (reporter)
     reporter->phaseChanged("Scan");
   auto scanResult = phases::Scan(ctx, reporter);
@@ -60,7 +57,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return scanResult;
   }
 
-  // 3. Discover function blocks iteratively (includes vtable scan)
   if (reporter)
     reporter->phaseChanged("Discover");
   auto discoverResult = phases::Discover(ctx, reporter);
@@ -68,9 +64,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return discoverResult;
   }
 
-  // 3.5. Function pointer scan: find lis/addi pairs loading code addresses
-
-  // 4. Gap fill uncovered regions + discover blocks for gap-filled functions + cleanup
   if (reporter)
     reporter->phaseChanged("GapFill");
   auto gapFillResult = phases::GapFill(ctx, reporter);
@@ -78,7 +71,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return gapFillResult;
   }
 
-  // 5. Merge: resolve jumps and seal functions
   if (reporter)
     reporter->phaseChanged("Merge");
   auto mergeResult = phases::Merge(ctx, reporter);
@@ -86,7 +78,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
     return mergeResult;
   }
 
-  // 6. Validate
   if (reporter)
     reporter->phaseChanged("Validate");
   auto validateResult = phases::Validate(ctx, reporter);
@@ -99,10 +90,6 @@ Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter) {
 
   return Ok();
 }
-
-//=============================================================================
-// AnalysisErrors implementation
-//=============================================================================
 
 const char* AnalysisErrors::CategoryName(Category cat) {
   switch (cat) {
@@ -141,7 +128,6 @@ void AnalysisErrors::PrintReport() const {
 
   REXCODEGEN_ERROR("=== ANALYSIS ERRORS ===");
 
-  // Group by category
   std::map<Category, std::vector<const Entry*>> byCategory;
   for (const auto& entry : entries_) {
     byCategory[entry.category].push_back(&entry);
@@ -163,4 +149,4 @@ void AnalysisErrors::PrintReport() const {
   REXCODEGEN_ERROR("Total: {} errors", entries_.size());
 }
 
-}  // namespace rex::codegen
+}

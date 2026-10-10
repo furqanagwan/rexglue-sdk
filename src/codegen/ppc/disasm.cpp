@@ -13,14 +13,7 @@
 
 namespace rex::codegen::ppc {
 
-// Binutils PPC_OPCODE_* dialect bits (see thirdparty/disasm/ppc-dis.c)
-constexpr uintptr_t kXenonDialect = 0x1          // PPC
-                                    | 0x4        // 64
-                                    | 0x4000     // POWER4
-                                    | 0x8000000  // CELL
-                                    | 0x200      // ALTIVEC
-                                    | 0x1000000  // VMX_128
-                                    | 0x10000;   // CLASSIC
+constexpr uintptr_t kXenonDialect = 0x1 | 0x4 | 0x4000 | 0x8000000 | 0x200 | 0x1000000 | 0x10000;
 
 thread_local DisassemblerEngine gBigEndianDisassembler{BFD_ENDIAN_BIG, nullptr};
 
@@ -50,4 +43,4 @@ int Disassemble(const void* code, uint64_t base, ppc_insn* out, size_t nOut) {
   return static_cast<int>(nOut) * 4;
 }
 
-}  // namespace rex::codegen::ppc
+}

@@ -29,15 +29,10 @@ struct FunctionSize {
   size_t bytes;
 };
 
-/// Pins each guest function to a recomp file across runs.
 class OutputPartition {
  public:
   static OutputPartition Load(const std::filesystem::path& path);
 
-  /// One bucket per output file, holding indices into `entries`. The file count
-  /// is derived from `maxFileBytes` and persisted, so growth alone does not
-  /// reshuffle the emitted set; a new `maxFileBytes` repartitions from scratch.
-  /// Call Serialize() after.
   std::vector<std::vector<size_t>> Assign(std::span<const FunctionSize> entries,
                                           size_t maxFileBytes);
 
@@ -49,4 +44,4 @@ class OutputPartition {
   size_t maxFileBytes_ = 0;
 };
 
-}  // namespace rex::codegen
+}

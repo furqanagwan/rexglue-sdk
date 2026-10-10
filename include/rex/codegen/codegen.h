@@ -23,31 +23,15 @@ class Runtime;
 
 namespace rex::codegen {
 
-/**
- * Pipeline orchestrator for code generation.
- *
- * Usage:
- *   auto pipeline = CodegenPipeline::Create(configPath);
- *   if (!pipeline) { handle error }
- *   auto result = pipeline->Run();
- */
 class CodegenPipeline {
  public:
   ~CodegenPipeline();
 
-  // Non-copyable, movable
   CodegenPipeline(const CodegenPipeline&) = delete;
   CodegenPipeline& operator=(const CodegenPipeline&) = delete;
   CodegenPipeline(CodegenPipeline&&) noexcept;
   CodegenPipeline& operator=(CodegenPipeline&&) noexcept;
 
-  /**
-   * Create pipeline from config file path.
-   * Loads XEX, creates Runtime and CodegenContext.
-   *
-   * @param configPath Path to TOML config file
-   * @return Pipeline on success, error on failure
-   */
   static Result<CodegenPipeline> Create(const std::filesystem::path& configPath);
 
   Result<void> Run(bool force = false);
@@ -64,4 +48,4 @@ class CodegenPipeline {
   std::unique_ptr<CodegenContext> ctx_;
 };
 
-}  // namespace rex::codegen
+}

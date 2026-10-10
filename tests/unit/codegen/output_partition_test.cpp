@@ -23,7 +23,6 @@ using namespace rex::codegen;
 
 namespace {
 
-/// Index of the bucket holding `address`, or SIZE_MAX when absent.
 size_t BucketOf(const std::vector<std::vector<size_t>>& buckets,
                 std::span<const FunctionSize> entries, uint32_t address) {
   for (size_t b = 0; b < buckets.size(); ++b) {
@@ -41,7 +40,7 @@ fs::path ScratchPath(std::string_view name) {
   return dir / fs::path(name);
 }
 
-}  // namespace
+}
 
 TEST_CASE("File count is derived from the total size and the byte budget", "[output_partition]") {
   std::vector<FunctionSize> entries{{0x8200'0000, 40}, {0x8200'0100, 40}, {0x8200'0200, 40}};

@@ -22,13 +22,7 @@
 
 namespace rex::codegen {
 
-/// eieio instruction encoding (big-endian). Used for MMIO detection:
-/// if the next instruction after a load/store is eieio, the access is MMIO.
 static constexpr uint32_t kEieioEncoding = 0xAC06007C;
-
-//=============================================================================
-// Convenience Accessors
-//=============================================================================
 
 const RecompilerConfig& BuilderContext::config() const {
   return emitCtx.config;
@@ -38,12 +32,6 @@ const FunctionGraph& BuilderContext::graph() const {
   return emitCtx.graph;
 }
 
-//=============================================================================
-// Register Accessors
-//=============================================================================
-
-// Localizing a non-volatile assumes the function owns it across its whole body.
-// An SEH funclet does not: it inherits its owner's live registers through ctx.
 bool BuilderContext::localizeNonVolatiles() const {
   return config().nonVolatileRegistersAsLocalVariables && !fn.sharesRegisters();
 }
@@ -139,17 +127,6 @@ const char* BuilderContext::ea() {
   return "ea";
 }
 
-//=============================================================================
-// Output Helpers
-//=============================================================================
-
-// Template implementations in header, but we need explicit instantiations
-// for common format strings to avoid link errors in some cases
-
-//=============================================================================
-// Code Generation Helpers
-//=============================================================================
-
 bool BuilderContext::mmio_check_d_form() {
   if (base + 4 < fn.end() && *(data + 1) == kEieioEncoding)
     return true;
@@ -163,14 +140,12 @@ bool BuilderContext::mmio_check_x_form() {
 }
 
 const CallTarget* BuilderContext::findCallTarget(uint32_t site) const {
-  // Search in calls (bl instructions)
   for (const auto& edge : fn.calls()) {
     if (edge.site == site) {
       return &edge.target;
     }
   }
 
-  // Search in tail calls (b instructions to other functions)
   for (const auto& edge : fn.tailCalls()) {
     if (edge.site == site) {
       return &edge.target;
@@ -197,33 +172,22 @@ void BuilderContext::emit_function_call(uint32_t address) {
       println("\tif (REX_LOAD_U32(0x{:08X}) != 0)", cfg.setJmpHookAddress);
       println("\t\tthrow std::runtime_error(\"Guest setjmp hook is not supported\");");
     }
-    // setjmp must execute in this caller's frame. Restore ctx after native
-    // unwinding; no modified automatic local is read on return.
+
     println("\tif (setjmp({}.Save({}.u32, ctx)) == 0) {}.s64 = 0;", env(), r(3), r(3));
     println("\telse {}.Restore(ctx);", env());
     return;
   }
 
-  // Try to use pre-resolved call target from FunctionGraph
   if (const auto* target = findCallTarget(base)) {
     if (target->isFunction()) {
       auto* targetFn = target->asFunction();
       const auto& name = targetFn->name();
 
-      // Handle save/restore helpers. Gated on the global setting, not this
-      // function's: the helper bodies are emitted under it too, so once they
-      // spill to locals they are no-ops that scribble zeros on the caller's
-      // frame. A share_registers function still has to elide them.
       if (cfg.nonVolatileRegistersAsLocalVariables &&
           (name.find("__rest") == 0 || name.find("__save") == 0)) {
-        // print nothing - these are handled by local variable tracking
         return;
       }
 
-      // An SEH funclet runs on its owner's frame and reads whatever non-volatiles
-      // the owner left live, so hand it the localized copies through ctx and take
-      // them back afterwards. Only registers already localized here can be live at
-      // this point, so that set is the whole live-in the funclet can see.
       if (targetFn->sharesRegisters() && localizeNonVolatiles()) {
         for (size_t i = 14; i < 32; ++i) {
           if (locals.r[i])
@@ -247,7 +211,6 @@ void BuilderContext::emit_function_call(uint32_t address) {
       const auto& importTarget = std::get<CallTarget::ToImport>(target->value);
       std::string func_name;
 
-      // Try to resolve ordinal to actual function name
       auto at_pos = importTarget.name.find('@');
       if (at_pos != std::string::npos && emitCtx.resolver) {
         auto lib_name = importTarget.name.substr(0, at_pos);
@@ -274,14 +237,12 @@ void BuilderContext::emit_function_call(uint32_t address) {
       return;
     }
 
-    // Unresolved target from graph
     REXCODEGEN_ERROR("Unresolved function 0x{:08X} from 0x{:08X}", address, base);
     println("\t// FATAL: unresolved function 0x{:08X}", address);
     println("\tREX_FATAL(\"Unresolved call from 0x{:08X} to 0x{:08X}\");", base, address);
     return;
   }
 
-  // No pre-resolved target found - this is an error
   REXCODEGEN_ERROR("Unresolved function 0x{:08X} from 0x{:08X} (no CallTarget in FunctionNode)",
                    address, base);
   println("\t// FATAL: unresolved function 0x{:08X} (no CallTarget in FunctionNode)", address);
@@ -291,20 +252,18 @@ void BuilderContext::emit_function_call(uint32_t address) {
 void BuilderContext::emit_conditional_branch(bool not_, std::string_view cond) {
   uint32_t target = insn.operands[1];
 
-  // Use classifyTarget for consistent branch classification
-  // false = branch instruction (not a call), so own-base means loop back
   auto kind = graph().classifyTarget(target, base, false, &fn);
 
   switch (kind) {
     case TargetKind::InternalLabel:
-      // Target is within this function - local goto
+
       println("\tif ({}{}.{}) goto loc_{:08X};", not_ ? "!" : "", cr(insn.operands[0]), cond,
               target);
       break;
 
     case TargetKind::Function:
     case TargetKind::Import:
-      // Conditional tail call to another function - check pre-resolved call target
+
       if (const auto* callTarget = findCallTarget(base)) {
         if (callTarget->isFunction()) {
           auto* targetFn = callTarget->asFunction();
@@ -375,7 +334,6 @@ void BuilderContext::emit_mid_asm_hook() {
   if (returnsBool)
     print("if (");
 
-  // Build call -- no ctx/base prefix, just register arguments resolved through accessors
   print("{}(", midAsmHook->second.name);
   for (auto& reg : midAsmHook->second.registers) {
     if (out.back() != '(')
@@ -437,10 +395,6 @@ void BuilderContext::emit_mid_asm_hook() {
   }
 }
 
-//=============================================================================
-// Vector (SIMD) Code Generation Helpers
-//=============================================================================
-
 void BuilderContext::emit_vec_fp_binary(const char* simd_op) {
   println(
       "\tsimde_mm_store_ps({}.f32, simde_mm_{}_ps(simde_mm_load_ps({}.f32), "
@@ -452,7 +406,6 @@ void BuilderContext::emit_vec_fp_unary_expr(std::string_view simd_expr) {
   auto vD = v(insn.operands[0]);
   auto vA = v(insn.operands[1]);
 
-  // Replace {vA} placeholder in expression with actual register
   std::string expr(simd_expr);
   size_t pos;
   while ((pos = expr.find("{vA}")) != std::string::npos) {
@@ -472,8 +425,6 @@ void BuilderContext::emit_vec_int_binary(const char* simd_op, const char* elemen
 }
 
 void BuilderContext::emit_vec_int_binary_swapped(const char* simd_op, const char* element_type) {
-  // Swapped: op(vB, vA) instead of op(vA, vB) - useful for andnot which has reversed operand
-  // semantics
   println(
       "\tsimde_mm_store_si128((simde__m128i*){}.{}, "
       "simde_mm_{}(simde_mm_load_si128((simde__m128i*){}.{}), "
@@ -500,18 +451,11 @@ void BuilderContext::emit_vec_var_shift(const char* shift_dir, const char* eleme
   println("\t}}");
 }
 
-//=============================================================================
-// Memory (Load/Store) Code Generation Helpers
-//=============================================================================
-
 void BuilderContext::emit_load_d_form(const char* load_macro, const char* dest_type,
                                       bool check_mmio) {
-  // D-form: rD = LOAD(rA + D) where operands[0]=rD, operands[1]=D, operands[2]=rA
-  // load_macro should be like "REX_LOAD_U8" - we replace REX_LOAD with REX_MM_LOAD for MMIO
   const char* macro = load_macro;
   static char mm_macro[64];
   if (check_mmio && mmio_check_d_form()) {
-    // Replace "REX_LOAD_" with "REX_MM_LOAD_"
     if (strncmp(load_macro, "REX_LOAD_", 9) == 0) {
       snprintf(mm_macro, sizeof(mm_macro), "REX_MM_LOAD_%s", load_macro + 9);
       macro = mm_macro;
@@ -526,12 +470,9 @@ void BuilderContext::emit_load_d_form(const char* load_macro, const char* dest_t
 
 void BuilderContext::emit_load_x_form(const char* load_macro, const char* dest_type,
                                       bool check_mmio) {
-  // X-form: rD = LOAD(rA + rB) where operands[0]=rD, operands[1]=rA, operands[2]=rB
-  // load_macro should be like "REX_LOAD_U8" - we replace REX_LOAD with REX_MM_LOAD for MMIO
   const char* macro = load_macro;
   static char mm_macro[64];
   if (check_mmio && mmio_check_x_form()) {
-    // Replace "REX_LOAD_" with "REX_MM_LOAD_"
     if (strncmp(load_macro, "REX_LOAD_", 9) == 0) {
       snprintf(mm_macro, sizeof(mm_macro), "REX_MM_LOAD_%s", load_macro + 9);
       macro = mm_macro;
@@ -546,12 +487,9 @@ void BuilderContext::emit_load_x_form(const char* load_macro, const char* dest_t
 
 void BuilderContext::emit_store_d_form(const char* store_macro, const char* src_type,
                                        bool check_mmio) {
-  // D-form: STORE(rA + D, rS) where operands[0]=rS, operands[1]=D, operands[2]=rA
-  // store_macro should be like "REX_STORE_U8" - we replace REX_STORE with REX_MM_STORE for MMIO
   const char* macro = store_macro;
   static char mm_macro[64];
   if (check_mmio && mmio_check_d_form()) {
-    // Replace "REX_STORE_" with "REX_MM_STORE_"
     if (strncmp(store_macro, "REX_STORE_", 10) == 0) {
       snprintf(mm_macro, sizeof(mm_macro), "REX_MM_STORE_%s", store_macro + 10);
       macro = mm_macro;
@@ -566,12 +504,9 @@ void BuilderContext::emit_store_d_form(const char* store_macro, const char* src_
 
 void BuilderContext::emit_store_x_form(const char* store_macro, const char* src_type,
                                        bool check_mmio) {
-  // X-form: STORE(rA + rB, rS) where operands[0]=rS, operands[1]=rA, operands[2]=rB
-  // store_macro should be like "REX_STORE_U8" - we replace REX_STORE with REX_MM_STORE for MMIO
   const char* macro = store_macro;
   static char mm_macro[64];
-  if (check_mmio && mmio_check_x_form()) {  // Use X-form specific check (operands[1] is base)
-    // Replace "REX_STORE_" with "REX_MM_STORE_"
+  if (check_mmio && mmio_check_x_form()) {
     if (strncmp(store_macro, "REX_STORE_", 10) == 0) {
       snprintf(mm_macro, sizeof(mm_macro), "REX_MM_STORE_%s", store_macro + 10);
       macro = mm_macro;
@@ -584,4 +519,4 @@ void BuilderContext::emit_store_x_form(const char* store_macro, const char* src_
   println("{}.u32, {}.{});", r(insn.operands[2]), r(insn.operands[0]), src_type);
 }
 
-}  // namespace rex::codegen
+}

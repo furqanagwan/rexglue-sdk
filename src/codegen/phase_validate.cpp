@@ -29,9 +29,6 @@ namespace rex::codegen {
 
 namespace {
 
-//=============================================================================
-// Validate all calls resolve
-//=============================================================================
 const CallEdge* findCallEdgeAt(const FunctionNode* node, uint32_t site) {
   for (const auto& edge : node->calls()) {
     if (edge.site == site)
@@ -44,12 +41,6 @@ const CallEdge* findCallEdgeAt(const FunctionNode* node, uint32_t site) {
   return nullptr;
 }
 
-// A config boundary is an assertion the binary cannot make for itself, so one
-// the graph contradicts has to say so: otherwise the author sees a full rebuild
-// change nothing and has no way to tell why. Reported, never fatal. A PDATA
-// entry inside a config extent is the normal MSVC layout for a function with an
-// SEH funclet, so only discovery carving an entry point out of a declared range
-// is worth a warning.
 void validateConfigBoundaries(CodegenContext& ctx) {
   auto& graph = ctx.graph;
 
@@ -68,8 +59,6 @@ void validateConfigBoundaries(CodegenContext& ctx) {
       continue;
     }
 
-    // The declared size, not node->size(): discover() grows a node to cover its
-    // blocks, and only what the author wrote is a boundary claim.
     uint32_t declared = fc.getSize(addr);
     if (declared == 0)
       continue;
@@ -124,42 +113,32 @@ VoidResult validateGraph(CodegenContext& ctx) {
           bool targetExists = false;
           bool isInternalJump = false;
 
-          // Check if target is within this function's blocks
           if (node->containsAddress(target)) {
             isInternalJump = true;
             targetExists = true;
           }
 
-          // Check if target is within this function's overall bounds
-          // (handles cases where blocks don't cover all owned addresses)
           if (!targetExists && node->isWithinBounds(target)) {
             isInternalJump = true;
             targetExists = true;
           }
 
-          // Check if target is another function's entry point
           if (!targetExists && graph.isEntryPoint(target)) {
             targetExists = true;
           }
 
-          // Check if target is an import
           if (!targetExists && graph.isImport(target)) {
             targetExists = true;
           }
 
-          // Check if target is inside any other function's blocks
-          // (handles cross-function internal branches due to gap-fill merging)
           if (!targetExists) {
             const FunctionNode* containingFunc = graph.getFunctionContaining(target);
             if (containingFunc) {
-              // Target is inside another function - treat as internal to that function
-              // This can happen when gap-fill created overlapping regions
               targetExists = true;
             }
           }
 
           if (!targetExists) {
-            // Target is not in any function - this is an error that must stop the build
             errors.Add(AnalysisErrors::Category::UnresolvedCall, target, site,
                        fmt::format("{} 0x{:08X} from 0x{:08X} - target not in any function",
                                    isCall ? "bl" : "b", target, site));
@@ -169,17 +148,13 @@ VoidResult validateGraph(CodegenContext& ctx) {
           if (!isInternalJump) {
             const CallEdge* edge = findCallEdgeAt(node.get(), site);
             if (!edge) {
-              // Check if target is inside another function - this is a special case
-              // where code branches to another function's internal address
               const FunctionNode* containingFunc = graph.getFunctionContaining(target);
               if (!containingFunc) {
-                // Target is not in any function - this is an error (call the cops)
                 errors.Add(AnalysisErrors::Category::UnresolvedCall, target, site,
                            fmt::format("{} 0x{:08X} from 0x{:08X} in {} - no CallEdge recorded",
                                        isCall ? "bl" : "b", target, site, node->name()));
               }
-              // If target is inside another function, it will be handled as a tail call
-              // to that function's internal label during code generation
+
             } else {
               edgesVerified++;
             }
@@ -204,7 +179,7 @@ VoidResult validateGraph(CodegenContext& ctx) {
   return Ok();
 }
 
-}  // anonymous namespace
+}
 
 namespace phases {
 
@@ -213,6 +188,6 @@ VoidResult Validate(CodegenContext& ctx, ProgressReporter* reporter) {
   return validateGraph(ctx);
 }
 
-}  // namespace phases
+}
 
-}  // namespace rex::codegen
+}

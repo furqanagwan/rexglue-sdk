@@ -18,22 +18,20 @@ struct Word {
   uint32_t mask = 0xFFFFFFFFu;
 };
 
-// Match the complete register save/restore layout, including the alternate
-// longjmp path. Only address relocations are variable. No title IDs/addresses.
 constexpr auto SetjmpPattern() {
   std::array<Word, 179> words{};
   size_t n = 0;
-  words[n++] = {0x3C800000, 0xFFFF0000};  // lis r4, hook@h
-  words[n++] = {0x80040000, 0xFFFF0000};  // lwz r0, hook@l(r4)
+  words[n++] = {0x3C800000, 0xFFFF0000};
+  words[n++] = {0x80040000, 0xFFFF0000};
   for (uint32_t op : {0x2C000000u, 0x7C0903A6u, 0x4C820420u, 0x7C0802A6u, 0x7C800026u})
     words[n++] = {op};
   for (uint32_t i = 0; i < 18; ++i)
-    words[n++] = {0xD9C30000 + i * 0x200008};  // stfd f14..31
+    words[n++] = {0xD9C30000 + i * 0x200008};
   for (uint32_t i = 0; i < 19; ++i)
-    words[n++] = {0xF9A30098 + i * 0x200008};  // std r13..31
+    words[n++] = {0xF9A30098 + i * 0x200008};
   for (uint32_t i = 0; i < 64; ++i) {
     words[n++] = {0x38A00140 + 16 * i};
-    words[n++] = {0x10051D0B | ((i & 31) << 21) | ((i >> 5) << 2)};  // stvlx128 v64..127
+    words[n++] = {0x10051D0B | ((i & 31) << 21) | ((i >> 5) << 2)};
   }
   for (uint32_t op :
        {0x90030134u, 0x90830130u, 0xF8230090u, 0x38000000u, 0x90030138u, 0x38600000u, 0x4E800020u})
@@ -48,14 +46,14 @@ constexpr auto LongjmpPattern() {
        {0x7C0802A6u, 0x9421FFB0u, 0x90010008u, 0x7C862378u, 0x2C040000u, 0x80030138u, 0x2C800000u,
         0x7C671B78u, 0x38A00000u, 0x40820008u, 0x38C00001u, 0x408602C0u, 0x80670134u, 0x80870090u})
     words[n++] = {op};
-  words[n++] = {0x48000001, 0xFC000003};  // relative bl (AA=0, LK=1)
+  words[n++] = {0x48000001, 0xFC000003};
   for (uint32_t i = 0; i < 18; ++i)
-    words[n++] = {0xC9C70000 + i * 0x200008};  // lfd f14..31
+    words[n++] = {0xC9C70000 + i * 0x200008};
   for (uint32_t i = 0; i < 19; ++i)
-    words[n++] = {0xE9A70098 + i * 0x200008};  // ld r13..31
+    words[n++] = {0xE9A70098 + i * 0x200008};
   for (uint32_t i = 0; i < 64; ++i) {
     words[n++] = {0x38600140 + 16 * i};
-    words[n++] = {0x100338CB | ((i & 31) << 21) | ((i >> 5) << 2)};  // lvx128 v64..127
+    words[n++] = {0x100338CB | ((i & 31) << 21) | ((i >> 5) << 2)};
   }
   for (uint32_t op : {0x80A70134u, 0x80870130u, 0x7CA803A6u, 0xE8270090u, 0x7C8FF120u, 0x7CC33378u,
                       0x4E800020u, 0x80670004u, 0x80870000u})
@@ -83,7 +81,7 @@ uint32_t BranchTarget(const uint8_t* data, uint32_t address, uint32_t index) {
     disp |= 0xFC000000;
   return address + index * 4 + disp;
 }
-}  // namespace
+}
 
 CrtJumpCandidates ScanCrtJumps(const BinaryView& binary) {
   static constexpr auto save = SetjmpPattern();
@@ -92,7 +90,7 @@ CrtJumpCandidates ScanCrtJumps(const BinaryView& binary) {
   for (const auto& section : binary.sections()) {
     if (!section.executable || !section.data)
       continue;
-    // Widen arithmetic before checking sizes; never read across a section.
+
     for (uint64_t offset = (4 - (section.baseAddress & 3)) & 3;
          offset + save.size() * 4 <= section.size; offset += 4) {
       uint64_t address64 = uint64_t(section.baseAddress) + offset;
@@ -115,10 +113,9 @@ CrtJumpCandidates ScanCrtJumps(const BinaryView& binary) {
         continue;
       uint32_t normal = BranchTarget(data, address, 14);
       uint32_t alternate = BranchTarget(data, address, 192);
-      // The alternate (unwind-style) buffer path calls the kernel, not an
-      // ordinary function. Require that exact import rather than any branch.
+
       bool unwindImport = std::ranges::any_of(binary.importSymbols(), [&](const auto& symbol) {
-        return symbol.address == alternate && symbol.name == "xboxkrnl@327";  // RtlUnwind
+        return symbol.address == alternate && symbol.name == "xboxkrnl@327";
       });
       if (normal == BranchTarget(data, address, 189) && binary.isExecutable(normal) &&
           binary.isExecutable(alternate) && !binary.isInImportExportRange(normal) && unwindImport)
@@ -137,4 +134,4 @@ bool ApplyCrtJumpCandidates(const CrtJumpCandidates& candidates, RecompilerConfi
   config.longJmpAddress = candidates.longjmp.front();
   return true;
 }
-}  // namespace rex::codegen
+}

@@ -23,7 +23,6 @@
 
 namespace rex::codegen {
 
-/// Bump when the stamp layout changes.
 constexpr int kStampVersion = 1;
 
 std::optional<OutputStamp> OutputStamp::Load(const std::filesystem::path& path) {
@@ -79,14 +78,11 @@ std::string ComputeInputFingerprint(std::span<const std::filesystem::path> input
   }
 
   for (const auto& path : inputFiles) {
-    // Content, not mtime: survives a checkout, a copy, or a bare touch.
     std::error_code ec;
     std::string digest = "<missing>";
     if (std::filesystem::exists(path, ec)) {
       digest = rex::hash_file(path);
       if (digest.empty()) {
-        // Weaker than content, but a constant here would report a locked input
-        // as unchanged and skip the module forever.
         REXCODEGEN_WARN("Could not read {} for fingerprinting", path.string());
         digest = fmt::format("<unreadable:{}:{}>", std::filesystem::file_size(path, ec),
                              std::filesystem::last_write_time(path, ec).time_since_epoch().count());
@@ -114,7 +110,7 @@ std::string EscapeDepfilePath(const std::filesystem::path& path) {
   return escaped;
 }
 
-}  // namespace
+}
 
 bool WriteDepfile(const std::filesystem::path& path, const std::filesystem::path& target,
                   std::span<const std::filesystem::path> inputs) {
@@ -144,4 +140,4 @@ bool OutputsAreUpToDate(const OutputStamp& stamp, std::string_view fingerprint,
   return true;
 }
 
-}  // namespace rex::codegen
+}

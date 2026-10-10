@@ -21,16 +21,13 @@
 namespace rex::codegen {
 
 struct ProjectRecompilerOptions {
-  std::vector<std::string> targets;  // empty = all
+  std::vector<std::string> targets;
   bool force = false;
   bool enableExceptionHandlers = false;
   ProgressReporter* reporter = nullptr;
 
-  /// Bypass the stamp gate and regenerate every targeted module.
   bool ignoreStamp = false;
 
-  /// Folded into the input fingerprint. Must be stable across commits
-  /// ("0.10.0-dev") or every SDK rebuild forces a full re-analysis.
   std::string sdkVersion;
 };
 
@@ -39,31 +36,19 @@ class ProjectRecompiler {
   explicit ProjectRecompiler(ManifestConfig manifest);
   Result<void> Run(const ProjectRecompilerOptions& opts);
 
-  /**
-   * Aggregated basenames of files removed across all modules during the most
-   * recent Run() call. Empty until Run() completes successfully.
-   */
   const std::vector<std::string>& deletedFiles() const { return deletedFiles_; }
 
-  /**
-   * Aggregated basenames of files written across all modules during the most
-   * recent Run() call. Empty until Run() completes successfully.
-   */
   const std::vector<std::string>& writtenFiles() const { return writtenFiles_; }
 
-  /// Basenames already up to date across all modules in the last Run().
   const std::vector<std::string>& unchangedFiles() const { return unchangedFiles_; }
 
-  /// Targets skipped in the last Run() because their stamp still matched.
   const std::vector<std::string>& skippedModules() const { return skippedModules_; }
 
  private:
-  /// One executable's codegen: the original (with any DLL modules), or one
-  /// title update ([[title_update]]) with its package mounted as update:.
   struct Pass {
     BinaryConfig entrypoint;
     std::vector<BinaryConfig> modules;
-    std::filesystem::path updatePackage;  ///< empty for the original
+    std::filesystem::path updatePackage;
     uint32_t titleUpdateVersion = 0;
   };
   Result<void> RunPass(const ProjectRecompilerOptions& opts, Pass pass,
@@ -77,4 +62,4 @@ class ProjectRecompiler {
   std::vector<std::string> skippedModules_;
 };
 
-}  // namespace rex::codegen
+}

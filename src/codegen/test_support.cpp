@@ -29,37 +29,26 @@ using rex::memory::load_and_swap;
 
 namespace rex::codegen {
 
-// --- TestModule ---
-
 TestModule::TestModule() : Module(nullptr) {}
 
 void TestModule::Load(uint32_t base_address, const uint8_t* data, size_t size) {
   base_address_ = base_address;
   size_ = static_cast<uint32_t>(size);
 
-  // Populate binary section for FunctionScanner to read instructions
   binary_sections_.clear();
   binary_sections_.push_back(runtime::BinarySection{
-      ".text", base_address, static_cast<uint32_t>(size), data,
-      true,  // executable
-      false  // writable
-  });
+      ".text", base_address, static_cast<uint32_t>(size), data, true, false});
 }
 
 bool TestModule::ContainsAddress(uint32_t address) {
   return address >= base_address_ && address < base_address_ + size_;
 }
 
-// --- AnalyzeTestBinary ---
-
 void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
                        const std::map<size_t, std::string>& symbols, uint32_t baseAddress,
                        const uint8_t* data, size_t dataSize) {
-  // Extract only test_ prefixed symbols as function entry points
   std::vector<std::pair<size_t, std::string>> testFunctions;
   for (const auto& [addr, name] : symbols) {
-    // Synthetic non-local-jump fixtures exercise the production call emitter
-    // without embedding a proprietary CRT in the instruction test corpus.
     if (name == "__rex_test_setjmp")
       ctx.Config().setJmpAddress = static_cast<uint32_t>(addr);
     if (name == "__rex_test_longjmp")
@@ -69,14 +58,11 @@ void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
     }
   }
 
-  // Sort by address
   std::sort(testFunctions.begin(), testFunctions.end());
 
-  // First pass: add all functions and transition through state machine
   for (size_t i = 0; i < testFunctions.size(); i++) {
     uint32_t fnAddr = static_cast<uint32_t>(testFunctions[i].first);
 
-    // Size extends to next test_ function or end of binary
     uint32_t nextAddr = static_cast<uint32_t>(baseAddress + dataSize);
     if (i + 1 < testFunctions.size()) {
       nextAddr = static_cast<uint32_t>(testFunctions[i + 1].first);
@@ -86,14 +72,12 @@ void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
     auto* node = ctx.graph.addFunction(fnAddr, fnSize, FunctionAuthority::DISCOVERED, true);
 
     if (node) {
-      // kRegistered -> kDiscovered -> kSealed
       node->discover({{fnAddr, fnSize}}, {}, {});
       ctx.graph.setFunctionName(fnAddr, fmt::format("{}_{:X}", testName, fnAddr));
       node->seal();
     }
   }
 
-  // Second pass: scan for bl instructions and register resolved call edges
   for (size_t i = 0; i < testFunctions.size(); i++) {
     uint32_t fnAddr = static_cast<uint32_t>(testFunctions[i].first);
     uint32_t nextAddr = static_cast<uint32_t>(baseAddress + dataSize);
@@ -102,13 +86,11 @@ void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
     }
     uint32_t fnSize = nextAddr - fnAddr;
 
-    // Scan each instruction in this function
     for (uint32_t offset = 0; offset < fnSize; offset += 4) {
       uint32_t pc = fnAddr + offset;
       uint32_t raw = load_and_swap<uint32_t>(data + (fnAddr - baseAddress) + offset);
       auto decoded = decode_instruction(pc, raw);
 
-      // Check for bl (branch with link = function call)
       if (decoded.is_call() && decoded.branch_target.has_value()) {
         uint32_t target = decoded.branch_target.value();
         auto* targetNode = ctx.graph.getFunction(target);
@@ -120,4 +102,4 @@ void AnalyzeTestBinary(CodegenContext& ctx, std::string_view testName,
   }
 }
 
-}  // namespace rex::codegen
+}

@@ -10,8 +10,6 @@
  * @remarks     Based on XenonRecomp/UnleashedRecomp toml config
  */
 
-// TOML config file loading
-
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -30,10 +28,8 @@ namespace rex::codegen {
 
 namespace {
 
-/// Maximum nesting depth for include chains.
 constexpr uint32_t kMaxIncludeDepth = 32;
 
-/// Parse a hex address string (with or without "0x"/"0X" prefix).
 std::optional<uint32_t> ParseHexAddress(const std::string& keyStr) {
   try {
     if (keyStr.starts_with("0x") || keyStr.starts_with("0X")) {
@@ -45,10 +41,6 @@ std::optional<uint32_t> ParseHexAddress(const std::string& keyStr) {
     return std::nullopt;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Scalar merge helpers -- log overrides at debug level
-// ---------------------------------------------------------------------------
 
 template <typename T>
 void MergeScalar(T& dst, const T& src, const char* name) {
@@ -66,8 +58,6 @@ void MergeScalar(T& dst, const T& src, const char* name) {
   }
 }
 
-/// Overload for booleans where the "zero" state (false) is meaningful.
-/// Only skip the merge when the overlay explicitly did not set the key.
 void MergeBool(bool& dst, bool src, bool present, const char* name) {
   if (!present)
     return;
@@ -78,14 +68,7 @@ void MergeBool(bool& dst, bool src, bool present, const char* name) {
   dst = src;
 }
 
-// ---------------------------------------------------------------------------
-// Apply a single parsed TOML table onto the config (merge semantics)
-// ---------------------------------------------------------------------------
-
 void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string& filePath) {
-  // --- Scalars: last wins ---
-
-  // String scalars (only override if present in this file)
   if (auto v = toml["project_name"].value<std::string>()) {
     MergeScalar(cfg.projectName, *v, "project_name");
   }
@@ -99,7 +82,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     MergeScalar(cfg.templateDir, *v, "template_dir");
   }
 
-  // Bool scalars
   auto hasBool = [&](const char* key) -> bool { return toml[key].is_boolean(); };
   MergeBool(cfg.skipLr, toml["skip_lr"].value_or(false), hasBool("skip_lr"), "skip_lr");
   MergeBool(cfg.skipMsr, toml["skip_msr"].value_or(false), hasBool("skip_msr"), "skip_msr");
@@ -121,7 +103,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     cfg.isDll = toml["is_dll"].value_or(false);
   }
 
-  // Integer scalars (only override if present)
   if (auto v = toml["longjmp_address"].value<int64_t>()) {
     uint32_t addr = static_cast<uint32_t>(*v);
     MergeScalar(cfg.longJmpAddress, addr, "longjmp_address");
@@ -131,7 +112,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     MergeScalar(cfg.setJmpAddress, addr, "setjmp_address");
   }
 
-  // --- [analysis] section scalars ---
   if (auto* analysisTable = toml["analysis"].as_table()) {
     if (auto v = (*analysisTable)["max_jump_extension"].value<uint32_t>()) {
       MergeScalar(cfg.maxJumpExtension, *v, "analysis.max_jump_extension");
@@ -143,7 +123,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
       MergeScalar(cfg.largeFunctionThreshold, *v, "analysis.large_function_threshold");
     }
 
-    // exceptionHandlerFuncHints -- push_back then deduplicate at end
     if (auto handlers = (*analysisTable)["exception_handler_funcs"].as_array()) {
       for (const auto& elem : *handlers) {
         if (auto val = elem.value<int64_t>()) {
@@ -153,9 +132,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // --- Keyed tables: additive, same key = last wins ---
-
-  // [rexcrt]
   if (auto* rexcrt = toml["rexcrt"].as_table()) {
     size_t added = 0;
     for (const auto& [name, val] : *rexcrt) {
@@ -175,7 +151,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [functions]
   if (auto functionsTable = toml["functions"].as_table()) {
     size_t added = 0;
     for (auto& [key, value] : *functionsTable) {
@@ -222,8 +197,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[patch]] -- keyed by "name"; a later entry replaces the writes it lists
-  // and the enabled flag it sets, so an override file can switch one on.
   if (auto patchArray = toml["patch"].as_array()) {
     for (auto& entry : *patchArray) {
       auto* table = entry.as_table();
@@ -299,7 +272,7 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
       }
       auto switchable = (*table)["switchable"].value<bool>();
       auto category = (*table)["category"].value<std::string>();
-      // Canary spells the switch is_enabled; accept both, enabled wins.
+
       auto enabled = (*table)["enabled"].value<bool>();
       if (!enabled) {
         enabled = (*table)["is_enabled"].value<bool>();
@@ -347,7 +320,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[cheat]] -- keyed by "name": the title's own cheat codes, for the guide.
   if (auto cheatArray = toml["cheat"].as_array()) {
     for (auto& entry : *cheatArray) {
       auto* table = entry.as_table();
@@ -369,7 +341,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[dlc]] -- keyed by "id": the title's add-ons, for the guide.
   if (auto dlcArray = toml["dlc"].as_array()) {
     for (auto& entry : *dlcArray) {
       auto* table = entry.as_table();
@@ -393,7 +364,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[title_update]] -- keyed by "version": the title's updates, for the guide.
   if (auto updateArray = toml["title_update"].as_array()) {
     for (auto& entry : *updateArray) {
       auto* table = entry.as_table();
@@ -429,9 +399,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // --- Arrays of tables: deduplicated by primary key (address), last wins ---
-
-  // [[invalid_instructions]] -- keyed by "data" address
   if (auto invalidArray = toml["invalid_instructions"].as_array()) {
     for (auto& entry : *invalidArray) {
       auto* table = entry.as_table();
@@ -461,7 +428,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[switch_tables]] -- keyed by "address"
   if (auto switchTableArray = toml["switch_tables"].as_array()) {
     for (auto& entry : *switchTableArray) {
       auto* table = entry.as_table();
@@ -515,7 +481,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // [[midasm_hook]] -- keyed by "address"
   if (auto midAsmHookArray = toml["midasm_hook"].as_array()) {
     for (auto& entry : *midAsmHookArray) {
       auto* table = entry.as_table();
@@ -578,9 +543,6 @@ void ApplyToml(const toml::table& toml, RecompilerConfig& cfg, const std::string
     }
   }
 
-  // --- Sets: additive ---
-
-  // indirect_calls -> knownIndirectCallHints (set)
   if (auto indirectCallArray = toml["indirect_calls"].as_array()) {
     for (auto& entry : *indirectCallArray) {
       if (auto addr = entry.value<int64_t>()) {
@@ -632,7 +594,6 @@ bool LoadRecursive(const std::filesystem::path& filePath, RecompilerConfig& cfg,
 bool ApplyTableWithIncludes(const toml::table& tbl, const std::filesystem::path& base_dir,
                             RecompilerConfig& cfg, std::set<std::string>& visited, uint32_t depth,
                             const std::string& description) {
-  // Process includes first (depth-first), so this table's own values win.
   if (auto* includesArray = tbl["includes"].as_array()) {
     for (const auto& elem : *includesArray) {
       if (auto includePath = elem.value<std::string>()) {
@@ -652,11 +613,7 @@ bool ApplyTableWithIncludes(const toml::table& tbl, const std::filesystem::path&
   return true;
 }
 
-}  // namespace
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+}
 
 namespace {
 
@@ -696,7 +653,7 @@ bool FinalizeConfig(RecompilerConfig& cfg) {
   return ok;
 }
 
-}  // namespace
+}
 
 bool RecompilerConfig::Load(const std::string_view& configFilePath) {
   std::set<std::string> visited;
@@ -719,7 +676,6 @@ bool RecompilerConfig::LoadFromTable(const toml::table& tbl,
 RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
   ValidationResult result;
 
-  // Helper to check 4-byte alignment (PPC instructions are 4-byte aligned)
   auto checkAlignment = [&](uint32_t addr, const char* name) {
     if (addr != 0 && (addr & 0x3) != 0) {
       result.errors.push_back(fmt::format("{} address 0x{:08X} is not 4-byte aligned", name, addr));
@@ -727,7 +683,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     }
   };
 
-  // Check special address alignment
   checkAlignment(longJmpAddress, "longjmp");
   checkAlignment(setJmpAddress, "setjmp");
 
@@ -739,7 +694,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     }
   }
 
-  // Check function address alignment
   for (const auto& [addr, size] : functions) {
     if (addr & 0x3) {
       result.errors.push_back(fmt::format("Function address 0x{:08X} is not 4-byte aligned", addr));
@@ -747,7 +701,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     }
   }
 
-  // Check for duplicate function boundaries
   {
     std::map<uint32_t, uint32_t> seen;
     for (const auto& [addr, cfg] : functions) {
@@ -767,7 +720,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     }
   }
 
-  // Check for overlapping function boundaries (standalone functions only)
   {
     std::vector<std::pair<uint32_t, uint32_t>> sorted;
     for (const auto& [addr, cfg] : functions) {
@@ -787,8 +739,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     }
   }
 
-  // Validate rexcrt all-or-nothing groups -- originals are stripped so partial
-  // sets would leave the game with missing CRT functions at runtime.
   if (!rexcrtFunctions.empty()) {
     auto checkGroup = [&](const char* groupName, std::initializer_list<const char*> required) {
       size_t found = 0;
@@ -815,7 +765,6 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
     checkGroup("heap", {"RtlAllocateHeap", "RtlFreeHeap", "RtlSizeHeap", "RtlReAllocateHeap"});
   }
 
-  // Check required fields
   if (filePath.empty()) {
     result.warnings.push_back("file_path is empty");
   }
@@ -826,4 +775,4 @@ RecompilerConfig::ValidationResult RecompilerConfig::Validate() const {
   return result;
 }
 
-}  // namespace rex::codegen
+}

@@ -20,32 +20,26 @@
 
 namespace rex::codegen {
 
-//=============================================================================
-// Unconditional Branch
-//=============================================================================
-
 bool BuildB(BuilderContext& ctx) {
   uint32_t target = ctx.insn.operands[0];
 
-  // Use graph to classify the target - handles thunks that branch to nearby functions
-  // false = branch instruction (not a call), so own-base means loop back
   auto kind = ctx.graph().classifyTarget(target, ctx.base, false, &ctx.fn);
 
   switch (kind) {
     case TargetKind::InternalLabel:
-      // Target is within this function and not another function's entry point
+
       ctx.println("\tgoto loc_{:X};", target);
       break;
 
     case TargetKind::Function:
     case TargetKind::Import:
-      // Tail call to another function or import
+
       ctx.emit_function_call(target);
       ctx.println("\treturn;");
       break;
 
     case TargetKind::Unknown:
-      // Unknown target - fall back to range check
+
       if (target >= ctx.fn.base() && target < ctx.fn.end()) {
         ctx.println("\tgoto loc_{:X};", target);
       } else {
@@ -61,25 +55,21 @@ bool BuildB(BuilderContext& ctx) {
 bool BuildBl(BuilderContext& ctx) {
   uint32_t target = ctx.insn.operands[0];
 
-  // Always set LR (unless skipLr)
   if (!ctx.config().skipLr)
     ctx.println("\tctx.lr = 0x{:X};", ctx.base + 4);
 
-  // Use graph to classify the target
-  // true = call instruction, so own-base means recursive call (not loop back)
   auto kind = ctx.graph().classifyTarget(target, ctx.base, true, &ctx.fn);
 
   switch (kind) {
     case TargetKind::InternalLabel:
-      // PIC code pattern - bl to get PC into LR, treat as local jump
-      // LR is already set above, now jump to the target
+
       ctx.println("\tgoto loc_{:X};", target);
       break;
 
     case TargetKind::Function:
     case TargetKind::Import:
       ctx.emit_function_call(target);
-      ctx.csrState = CSRState::Unknown;  // Call could change CSR state
+      ctx.csrState = CSRState::Unknown;
       break;
 
     case TargetKind::Unknown:
@@ -97,7 +87,6 @@ bool BuildBlr(BuilderContext& ctx) {
 }
 
 bool BuildBlrl(BuilderContext& ctx) {
-  // BLRL: save return address, then branch-and-link to current LR
   ctx.println("\t{{ auto old_lr = ctx.lr;");
   if (!ctx.config().skipLr)
     ctx.println("\tctx.lr = 0x{:X};", ctx.base + 4);
@@ -106,16 +95,10 @@ bool BuildBlrl(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Count Register Branch
-//=============================================================================
-
 bool BuildBctr(BuilderContext& ctx) {
-  // Check active jump table (set by emitCpp before dispatch), then auto-detected
   const JumpTable* jt = ctx.activeJumpTable;
 
   if (!jt) {
-    // Check auto-detected jump tables from function analysis
     for (const auto& autoJt : ctx.fn.jumpTables()) {
       if (autoJt.bctrAddress == ctx.base) {
         jt = &autoJt;
@@ -171,10 +154,6 @@ bool BuildBctr(BuilderContext& ctx) {
 
     ctx.reset_switch_table();
   } else {
-    // No switch table - assume tail call via CTR
-    // NOTE(tomc): If this is actually an unresolved switch table, the code after
-    // will be unreachable. This is caught during analysis by discover_blocks.
-    // The validation phase will report missing switch tables.
     ctx.println("\tREX_CALL_INDIRECT_FUNC({}.u32);", ctx.ctr());
     ctx.println("\treturn;");
   }
@@ -185,7 +164,7 @@ bool BuildBctrl(BuilderContext& ctx) {
   if (!ctx.config().skipLr)
     ctx.println("\tctx.lr = 0x{:X};", ctx.base + 4);
   ctx.println("\tREX_CALL_INDIRECT_FUNC({}.u32);", ctx.ctr());
-  ctx.csrState = CSRState::Unknown;  // the call could change it
+  ctx.csrState = CSRState::Unknown;
   return true;
 }
 
@@ -196,10 +175,6 @@ bool BuildBnectr(BuilderContext& ctx) {
   ctx.println("\t}}");
   return true;
 }
-
-//=============================================================================
-// Decrement Counter and Branch
-//=============================================================================
 
 bool BuildBdz(BuilderContext& ctx) {
   ctx.println("\t--{}.u64;", ctx.ctr());
@@ -257,10 +232,6 @@ bool BuildBdzf(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Conditional Branch (eq)
-//=============================================================================
-
 bool BuildBeq(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "eq");
   return true;
@@ -280,10 +251,6 @@ bool BuildBnelr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.eq) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
-
-//=============================================================================
-// Conditional Branch (lt)
-//=============================================================================
 
 bool BuildBlt(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "lt");
@@ -305,10 +272,6 @@ bool BuildBgelr(BuilderContext& ctx) {
   return true;
 }
 
-//=============================================================================
-// Conditional Branch (gt)
-//=============================================================================
-
 bool BuildBgt(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "gt");
   return true;
@@ -328,10 +291,6 @@ bool BuildBlelr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.gt) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
-
-//=============================================================================
-// Conditional Branch (so - summary overflow / unordered)
-//=============================================================================
 
 bool BuildBso(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "so");
@@ -353,4 +312,4 @@ bool BuildBnslr(BuilderContext& ctx) {
   return true;
 }
 
-}  // namespace rex::codegen
+}

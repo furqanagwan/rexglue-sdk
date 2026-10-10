@@ -20,8 +20,7 @@ namespace rex::codegen {
 
 Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
                                                   const std::vector<CodePatch>& patches) {
-  // Check everything before writing anything.
-  std::map<uint32_t, std::pair<uint32_t, const CodePatch*>> claimed;  // start -> end, owner
+  std::map<uint32_t, std::pair<uint32_t, const CodePatch*>> claimed;
   for (const auto& patch : patches) {
     if (!patch.enabled || patch.switchable) {
       continue;
@@ -58,7 +57,7 @@ Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
   std::vector<std::string> applied;
   for (const auto& patch : patches) {
     if (patch.switchable) {
-      continue;  // PrepareSwitchablePatches
+      continue;
     }
     if (!patch.enabled) {
       REXCODEGEN_INFO("Patch \"{}\" is disabled", patch.name);
@@ -75,17 +74,15 @@ Result<std::vector<std::string>> ApplyCodePatches(BinaryView& binary,
 
 namespace {
 
-// Branches, calls, returns, traps and system calls: switching one would change
-// control flow that analysis discovered from the original code.
 bool ChangesControlFlow(uint32_t word) {
   const uint32_t primary = word >> 26;
   if (primary == 3 || primary == 16 || primary == 17 || primary == 18 || primary == 19) {
-    return true;  // twi, bc, sc, b/bl, bclr/bcctr and friends
+    return true;
   }
-  return primary == 31 && ((word >> 1) & 0x3FF) == 4;  // tw
+  return primary == 31 && ((word >> 1) & 0x3FF) == 4;
 }
 
-}  // namespace
+}
 
 Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
                                                    const std::vector<CodePatch>& patches,
@@ -159,7 +156,7 @@ Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
       out.sets.emplace(set.address, SwitchedSet{set.reg, set.value, set.lr, index, patch.name});
     }
   }
-  // A write of the bytes already there (QoS's be8 0x01) switches nothing.
+
   std::erase_if(out.words,
                 [](const auto& entry) { return entry.second.original == entry.second.patched; });
   for (const auto& [address, word] : out.words) {
@@ -178,4 +175,4 @@ Result<SwitchablePatches> PrepareSwitchablePatches(const BinaryView& binary,
   return out;
 }
 
-}  // namespace rex::codegen
+}

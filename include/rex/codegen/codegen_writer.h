@@ -25,29 +25,18 @@ class Runtime;
 
 namespace rex::codegen {
 
-/// True for output files this writer owns and may delete.
 bool IsGeneratedOutputName(std::string_view filename, std::string_view projectName);
 
 class CodegenWriter {
  public:
   CodegenWriter(CodegenContext& ctx, Runtime* runtime = nullptr);
 
-  /// Run the full output pipeline: validate, generate, flush, sweep.
   bool write(bool force);
 
-  /**
-   * Basenames of stale outputs removed by the sweep that follows the flush.
-   * Populated only after write() completes. Empty otherwise.
-   */
   const std::vector<std::string>& deletedFiles() const { return deletedFiles_; }
 
-  /**
-   * Basenames of files written to disk during write() (via FlushPendingWrites).
-   * Populated only after write() completes. Empty otherwise.
-   */
   const std::vector<std::string>& writtenFiles() const { return writtenFiles_; }
 
-  /// Basenames whose on-disk content already matched, so nothing was written.
   const std::vector<std::string>& unchangedFiles() const { return unchangedFiles_; }
 
  private:
@@ -74,7 +63,6 @@ class CodegenWriter {
   void SaveCurrentOutData(std::string_view name);
   bool FlushPendingWrites();
 
-  // Convenience accessors
   FunctionGraph& graph();
   const FunctionGraph& graph() const;
   const BinaryView& binary() const;
@@ -84,4 +72,4 @@ class CodegenWriter {
   const AnalysisState& analysisState() const;
 };
 
-}  // namespace rex::codegen
+}

@@ -35,11 +35,6 @@ namespace rex::codegen {
 
 namespace {
 
-//=============================================================================
-// GapFill to register uncovered code regions
-//=============================================================================
-
-// Split a code region into function segments based on terminators (blr, tail calls).
 std::vector<CodeRegion> splitRegionOnTerminators(
     const CodeRegion& region, const BinaryView& binary,
     const std::unordered_set<uint32_t>& knownCallables) {
@@ -56,13 +51,12 @@ std::vector<CodeRegion> splitRegionOnTerminators(
     bool shouldSplit = false;
     const char* reason = nullptr;
 
-    // Check for terminators
     if (decoded.is_return()) {
       shouldSplit = true;
       reason = "blr";
     } else if (decoded.opcode == Opcode::b && decoded.branch_target.has_value()) {
       uint32_t target = decoded.branch_target.value();
-      // Don't split on tail recursion (branch to own segment start)
+
       if (target != segmentStart && knownCallables.contains(target)) {
         shouldSplit = true;
         reason = "tail call";
@@ -80,7 +74,6 @@ std::vector<CodeRegion> splitRegionOnTerminators(
     }
   }
 
-  // Handle remaining code after last terminator
   if (segmentStart < region.end) {
     segments.push_back({segmentStart, region.end});
   }
@@ -88,7 +81,6 @@ std::vector<CodeRegion> splitRegionOnTerminators(
   return segments;
 }
 
-// Check if address looks like exception handler data (handler ptr + rdata ptr)
 bool looksLikeExceptionData(const BinaryView& binary, const FunctionGraph& graph, uint32_t addr) {
   const auto* section = binary.findSection(addr);
   if (!section || section->end() - addr < 8)
@@ -97,18 +89,13 @@ bool looksLikeExceptionData(const BinaryView& binary, const FunctionGraph& graph
   if (!data)
     return false;
 
-  // Exception handler data pattern:
-  // [addr+0]: pointer to __C_specific_handler (entry point)
-  // [addr+4]: pointer to scope table in .rdata
   uint32_t firstDword = load_and_swap<uint32_t>(data);
   uint32_t secondDword = load_and_swap<uint32_t>(data + 4);
 
-  // Check if first dword is a known entry point (like __C_specific_handler)
   if (!graph.isEntryPoint(firstDword)) {
     return false;
   }
 
-  // Check if second dword points to .rdata section
   auto* rdataSection = binary.findSectionByName(".rdata");
   if (!rdataSection)
     return false;
@@ -126,9 +113,6 @@ bool looksLikeExceptionData(const BinaryView& binary, const FunctionGraph& graph
   return false;
 }
 
-// Registers a segment as a GAP_FILL function unless it starts at a known
-// entry, inside another function, or on exception data. Returns whether it
-// registered one.
 bool registerGapSegment(CodegenContext& ctx, const CodeRegion& segment) {
   auto& graph = ctx.graph;
   if (graph.isEntryPoint(segment.start))
@@ -151,7 +135,6 @@ std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
   auto& binary = ctx.binary();
   auto& scan = ctx.scan;
 
-  // Build set of known callables for tail call detection
   std::unordered_set<uint32_t> knownCallables;
   for (const auto& [addr, node] : graph.functions()) {
     knownCallables.insert(addr);
@@ -162,7 +145,6 @@ std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
   std::vector<CodeRegion> entrySegments;
 
   for (const auto& region : scan.codeRegions) {
-    // Split region on terminators (blr, tail calls), then check each segment
     auto segments = splitRegionOnTerminators(region, binary, knownCallables);
 
     for (const auto& segment : segments) {
@@ -185,30 +167,6 @@ std::vector<CodeRegion> gapFillCodeRegions(CodegenContext& ctx) {
   return entrySegments;
 }
 
-//=============================================================================
-// Leftovers of gap segments (RG-FIX-002)
-//=============================================================================
-
-// A gap segment ends at a blr or at a tail call to a function known when the
-// segment was cut. An indirect bctr or a tail call to a function found later
-// doesn't split it, so discovery can end the segment's function well before
-// the segment does: a thunk `addi r3,r3,-4; b sub_X` followed by the next
-// function. Those bytes were then claimed by no one and never looked at again
-// (RG-FIX-002).
-//
-// The same happens when a segment starts at a function a call found earlier:
-// gap fill skips the whole segment, so the code after that function's body
-// (and after any functions following it back to back) was never looked at.
-// Blood Stone's thunk sub_8222D580 hid sub_8222D588, and 007 Legends'
-// sub_826D3EE0 and sub_826D3F08 hid sub_826D3F38, each reached only by a tail
-// branch from another function. A segment that starts inside a function
-// hides code the same way: 007 Legends' one-instruction thunk sub_82225D90,
-// called only through a pointer, follows a .pdata function ending there.
-
-// Follows the discovered bodies of the functions at or around the start of
-// `segment` back to back, adding them to `owners`. A .pdata or config
-// function owns its declared extent. Returns the first address none of them
-// covers.
 uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
                           std::vector<const FunctionNode*>& owners) {
   uint32_t cursor = segment.start;
@@ -220,8 +178,7 @@ uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
     if (!node || !node->isDiscovered() || node->blocks().empty()) {
       break;
     }
-    // Blocks past the segment don't count: a tail branch to a function not
-    // yet known is followed as if it were the function's own code.
+
     uint32_t bodyEnd = cursor;
     for (const auto& block : node->blocks()) {
       if (block.base < segment.end) {
@@ -241,8 +198,6 @@ uint32_t claimedPrefixEnd(const FunctionGraph& graph, const CodeRegion& segment,
   return cursor;
 }
 
-// Addresses in executable sections that a non-executable section holds as an
-// aligned big-endian word: method tables and other function pointers.
 std::unordered_set<uint32_t> dataCodePointers(const BinaryView& binary) {
   std::unordered_set<uint32_t> pointers;
   for (const auto& section : binary.sections()) {
@@ -259,10 +214,6 @@ std::unordered_set<uint32_t> dataCodePointers(const BinaryView& binary) {
   return pointers;
 }
 
-// Returns the gap functions registered in the leftovers of gap functions and
-// of `entrySegments`. A leftover is skipped when a function before it
-// branches into it (the code is that function's own, found later by Merge)
-// or when it starts with zero padding.
 size_t gapFillLeftovers(CodegenContext& ctx, const std::vector<CodeRegion>& entrySegments) {
   auto& graph = ctx.graph;
   auto& binary = ctx.binary();
@@ -306,10 +257,6 @@ size_t gapFillLeftovers(CodegenContext& ctx, const std::vector<CodeRegion>& entr
   std::optional<std::unordered_set<uint32_t>> pointers;
   for (const auto& leftover : leftovers) {
     for (const auto& segment : splitRegionOnTerminators(leftover, binary, knownCallables)) {
-      // Compilers may leave an unreachable blr after a tail dispatch. Without
-      // independent entry evidence, a return-only suffix is not a new function.
-      // A pointer to it in data is such evidence: an empty method in a method
-      // table (Blood Stone's sub_8218F208, after sub_8218F1F8's bctr).
       if (segment.size() == 4) {
         const auto* data = binary.translate(segment.start);
         if (data && decode_instruction(segment.start, load_and_swap<uint32_t>(data)).is_return()) {
@@ -330,10 +277,6 @@ size_t gapFillLeftovers(CodegenContext& ctx, const std::vector<CodeRegion>& entr
   return registered;
 }
 
-//=============================================================================
-// Cleanup absorbed GAP_FILL functions
-//=============================================================================
-
 void cleanupAbsorbedGapFills(CodegenContext& ctx) {
   auto& graph = ctx.graph;
   std::vector<uint32_t> toRemove;
@@ -348,13 +291,10 @@ void cleanupAbsorbedGapFills(CodegenContext& ctx) {
       if (!otherNode->containsAddress(addr))
         continue;
 
-      // This GAP_FILL is inside another function's blocks
       if (otherNode->authority() != FunctionAuthority::GAP_FILL) {
-        // Absorbed by higher authority - remove
         toRemove.push_back(addr);
         break;
       } else if (otherAddr < addr) {
-        // Both GAP_FILL, other has lower address - it survives
         toRemove.push_back(addr);
         break;
       }
@@ -370,7 +310,7 @@ void cleanupAbsorbedGapFills(CodegenContext& ctx) {
   }
 }
 
-}  // anonymous namespace
+}
 
 namespace phases {
 
@@ -378,13 +318,10 @@ VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
   (void)reporter;
   const std::vector<CodeRegion> entrySegments = gapFillCodeRegions(ctx);
 
-  // Discover blocks for gap-filled functions
-  auto known = buildKnownFunctions(ctx.graph, /*excludeGapFill=*/true);
+  auto known = buildKnownFunctions(ctx.graph, true);
   size_t discovered = discoverPendingFunctions(ctx, known);
   REXCODEGEN_TRACE("Analyze: discovered blocks for {} gap-filled functions", discovered);
 
-  // Leftovers can hold more leftovers (a run of thunks), so repeat until
-  // nothing new is found.
   size_t leftoverFunctions = 0;
   for (uint32_t pass = 0; pass < REXCVAR_GET(max_discovery_iterations); ++pass) {
     size_t registered = gapFillLeftovers(ctx, entrySegments);
@@ -392,7 +329,7 @@ VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
       break;
     }
     leftoverFunctions += registered;
-    known = buildKnownFunctions(ctx.graph, /*excludeGapFill=*/true);
+    known = buildKnownFunctions(ctx.graph, true);
     discoverPendingFunctions(ctx, known);
   }
   REXCODEGEN_DEBUG("GapFill: {} functions registered in gap segment leftovers", leftoverFunctions);
@@ -402,6 +339,6 @@ VoidResult GapFill(CodegenContext& ctx, ProgressReporter* reporter) {
   return Ok();
 }
 
-}  // namespace phases
+}
 
-}  // namespace rex::codegen
+}

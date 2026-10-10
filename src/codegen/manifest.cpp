@@ -53,11 +53,6 @@ bool IsValidProjectName(std::string_view name) {
                      [](unsigned char c) { return std::isalnum(c) || c == '_'; });
 }
 
-/**
- * Pull file_path / out_directory_path / project_name onto the recompiler
- * config so downstream consumers can rely on them. Other fields (codegen
- * flags, sub-tables, includes) come from RecompilerConfig::LoadFromTable.
- */
 bool LoadBinaryConfig(const toml::table& tbl, const std::filesystem::path& base_dir,
                       std::string_view project_name, BinaryConfig& out) {
   out.recompiler = RecompilerConfig{};
@@ -68,7 +63,7 @@ bool LoadBinaryConfig(const toml::table& tbl, const std::filesystem::path& base_
   return true;
 }
 
-}  // namespace
+}
 
 std::optional<ManifestConfig> ManifestConfig::Load(const std::filesystem::path& path) {
   toml::table tbl;
@@ -147,9 +142,6 @@ std::optional<ManifestConfig> ManifestConfig::Load(const std::filesystem::path& 
     }
   }
 
-  // [[title_update]]: the entrypoint again, patched by that update's XEX
-  // patches, with its own output directory and includes (its own function
-  // entries, patches and mods: addresses differ between versions).
   if (auto updates = tbl["title_update"].as_array()) {
     size_t index = 0;
     for (const auto& update : *updates) {
@@ -177,7 +169,7 @@ std::optional<ManifestConfig> ManifestConfig::Load(const std::filesystem::path& 
           return std::nullopt;
         }
       }
-      // The entrypoint's settings, with this version's output and includes.
+
       toml::table binaryTbl = *entrypoint;
       binaryTbl.insert_or_assign("out_directory_path", outDir);
       binaryTbl.insert_or_assign("includes", *(*updateTbl)["includes"].as_array());
@@ -228,7 +220,7 @@ bool LineSetsKey(std::string_view line, std::string_view key) {
   return after < line.size() && line[after] == '=';
 }
 
-}  // namespace
+}
 
 bool ManifestConfig::WriteSdkVersionStamp(const std::filesystem::path& path,
                                           std::string_view version) {
@@ -309,4 +301,4 @@ bool ManifestConfig::WriteSdkVersionStamp(const std::filesystem::path& path,
   return true;
 }
 
-}  // namespace rex::codegen
+}
