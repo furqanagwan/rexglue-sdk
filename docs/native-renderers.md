@@ -1,6 +1,9 @@
 # Native renderers: foundations (research)
 
-Status: research, 2026-09-29. No decision yet; the first step below is an ADR.
+Status: research, 2026-09-29. No decision yet; the first step below is an ADR
+([#304](https://github.com/furqanagwan/rexglue-sdk/issues/304)). The DirectX 12
+Ultimate capability layer native renderers build on is decided in
+[ADR-017](adr/ADR-017-directx-12-ultimate-tier.md).
 
 ## The goal
 
