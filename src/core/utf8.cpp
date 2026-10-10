@@ -67,6 +67,10 @@ size_t byte_length(utf8_citer begin, utf8_citer end) {
   return size_t(std::distance(begin.base(), end.base()));
 }
 
+bool utf8_is_valid(const std::string_view view) {
+  return utfcpp::is_valid(view.cbegin(), view.cend());
+}
+
 size_t utf8_count(const std::string_view view) {
   return size_t(utfcpp::distance(view.cbegin(), view.cend()));
 }

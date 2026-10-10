@@ -243,7 +243,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(tomc): implement properly
 ```
 
-## Note 19: src/system/xsocket.cpp:79
+## Note 19: src/system/kernel_socket.cpp:79
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsocket.cpp#L79)
 
@@ -253,7 +253,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO: WSAGetLastError()
 ```
 
-## Note 20: src/system/xsocket.cpp:94
+## Note 20: src/system/kernel_socket.cpp:94
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsocket.cpp#L94)
 
@@ -263,7 +263,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO: Get last error
 ```
 
-## Note 21: src/system/xsocket.cpp:165
+## Note 21: src/system/kernel_socket.cpp:165
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsocket.cpp#L165)
 
@@ -293,7 +293,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
   */
 ```
 
-## Note 22: src/system/xsocket.cpp:213
+## Note 22: src/system/kernel_socket.cpp:213
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsocket.cpp#L213)
 
@@ -310,7 +310,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
   */
 ```
 
-## Note 23: src/system/xsocket.cpp:244
+## Note 23: src/system/kernel_socket.cpp:244
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsocket.cpp#L244)
 

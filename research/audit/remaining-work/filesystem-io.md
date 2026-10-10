@@ -91,7 +91,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
   // flipped to a generic FileAttributeFlags?
 ```
 
-## Note 8: src/system/xfile.cpp:39
+## Note 8: src/system/kernel_file.cpp:39
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xfile.cpp#L39)
 
@@ -101,7 +101,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): signal that the file is closing?
 ```
 
-## Note 9: src/system/xfile.cpp:219
+## Note 9: src/system/kernel_file.cpp:219
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xfile.cpp#L219)
 
@@ -143,7 +143,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO: Parameters
 ```
 
-## Note 13: include/rex/system/xfile.h:140
+## Note 13: include/rex/system/kernel_file.h:140
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/include/rex/system/xfile.h#L140)
 

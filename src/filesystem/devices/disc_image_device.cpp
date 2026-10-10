@@ -20,6 +20,7 @@
 #include <rex/math.h>
 #include <rex/memory.h>
 #include <rex/hash.h>
+#include <rex/string/utf8.h>
 
 namespace rex::filesystem {
 namespace {
@@ -207,7 +208,7 @@ bool DiscImageDevice::ReadDirectory(size_t offset, size_t size, DiscImageEntry* 
     if (!name_size || name_size > size - pos - 14)
       return false;
     std::string name(reinterpret_cast<const char*>(node + 14), name_size);
-    if (name == "." || name == ".." ||
+    if (name == "." || name == ".." || !string::utf8_is_valid(name) ||
         std::any_of(name.begin(), name.end(),
                     [](unsigned char c) { return c < 32 || c == '/' || c == '\\' || c == ':'; }) ||
         parent->GetChild(name))

@@ -3,7 +3,10 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <string_view>
+
+#include <windows.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,7 +23,8 @@ class ScopedTempFile {
  public:
   ScopedTempFile() {
     path_ = std::filesystem::temp_directory_path() /
-            ("rexglue_filesystem_test_" + std::to_string(counter_++) + ".bin");
+            ("rexglue_filesystem_test_" + std::to_string(GetCurrentProcessId()) + "_" +
+             std::to_string(counter_++) + ".bin");
     FILE* file = rex::filesystem::OpenFile(path_, "wb");
     REQUIRE(file != nullptr);
     fwrite(kPayload.data(), 1, kPayload.size(), file);

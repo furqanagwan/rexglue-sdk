@@ -270,7 +270,7 @@ Source pin: `bf367e7`.
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/kernel_state.h#L141)
 
 ```text
-// forward decl, defined in xevent.h
+// forward decl, defined in kernel_event.h
 ```
 
 ## Source note 34, line 160

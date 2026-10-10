@@ -28,6 +28,8 @@ constexpr char32_t kUtf8GuestPathSeparator = U'\\';
 std::string to_utf8(const std::u16string_view source);
 std::u16string to_utf16(const std::string_view source);
 
+bool utf8_is_valid(const std::string_view view);
+
 size_t utf8_count(const std::string_view view);
 
 std::string utf8_lower_ascii(const std::string_view view);

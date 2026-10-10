@@ -203,6 +203,14 @@ TEST_CASE("An STFS entry naming a file as its parent is refused", "[filesystem][
   CHECK_FALSE(Mount(file.path));
 }
 
+TEST_CASE("An STFS entry whose name is not UTF-8 is refused", "[filesystem][stfs]") {
+  auto p = MakeStfs("save.dat", "abc");
+  p.entry(0).name[0] = char(0xC3);
+  p.entry(0).name[1] = '(';
+  TempFile file(p.bytes);
+  CHECK_FALSE(Mount(file.path));
+}
+
 TEST_CASE("An STFS name length past the name field is clamped", "[filesystem][stfs]") {
   auto p = MakeStfs("abcdefghijklmnopqrstuvwxyz0123456789ABCD", "abc");
   p.entry(0).flags.name_length = 63;

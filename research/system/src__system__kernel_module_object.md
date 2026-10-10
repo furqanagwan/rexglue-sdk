@@ -1,6 +1,6 @@
 # Xmodule: system source notes
 
-This record preserves technical and API notes moved from `src/system/xmodule.cpp`.
+This record preserves technical and API notes moved from `src/system/kernel_module_object.cpp`.
 Names and executable tokens are unchanged; licence and attribution headers
 remain in the source. Historical explanations are retained as source evidence,
 not newly validated hardware claims. Unanswered task notes are tracked by

@@ -16,3 +16,12 @@ TEST_CASE("ASCII case conversion changes only ASCII letters", "[core][utf8]") {
         "\xC3\x86"
         "ble");
 }
+
+TEST_CASE("UTF-8 validity rejects malformed sequences", "[core][utf8]") {
+  CHECK(rex::string::utf8_is_valid("default.xex"));
+  CHECK(rex::string::utf8_is_valid("\xC3\xA6"));
+  CHECK(rex::string::utf8_is_valid(""));
+  CHECK_FALSE(rex::string::utf8_is_valid("\xC3("));
+  CHECK_FALSE(rex::string::utf8_is_valid("\xFF"));
+  CHECK_FALSE(rex::string::utf8_is_valid("a\xE2\x82"));
+}
