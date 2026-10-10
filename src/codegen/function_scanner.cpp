@@ -1790,8 +1790,6 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
     // Validate target is within code region - jump table targets help DEFINE function extent
     // Don't constrain by funcEnd since that's just PDATA which may not include out-of-line code
     if (target == 0 || !containingRegion.contains(target)) {
-      // TODO(tomc): Figure out what this voodoo does on real hardware. Its a jump target that
-      // points to a null value..?
       if (target != 0) {
         auto outsideInsn = decoded.read<uint32_t>(target);
         if (outsideInsn && (*outsideInsn == 0x00000000 || *outsideInsn == 0xFFFFFFFF)) {
@@ -1823,8 +1821,7 @@ std::optional<JumpTable> detectJumpTable(DecodedBinary& decoded, uint32_t bctrAd
     }
 
     // Validate target points to valid code, not null padding
-    // TODO(tomc): look into this more. what is the expected behavior when the processor executes
-    // a null instruction.
+
     auto targetInsn = decoded.read<uint32_t>(target);
     if (targetInsn && (*targetInsn == 0x00000000 || *targetInsn == 0xFFFFFFFF)) {
       REXCODEGEN_TRACE(

@@ -2091,9 +2091,7 @@ class Assembler {
     code_.push_back(OpcodeToken(Opcode::kEmitThenCutStream, operands_length));
     stream.Write(code_);
     ++stat_.instruction_count;
-    // TODO(Triang3l): Verify if the instruction counts should be incremented
-    // this way (haven't been able to obtain this from FXC because it generates
-    // separate emit_stream and cut_stream, at least for Shader Model 5.1).
+
     ++stat_.emit_instruction_count;
     ++stat_.cut_instruction_count;
   }

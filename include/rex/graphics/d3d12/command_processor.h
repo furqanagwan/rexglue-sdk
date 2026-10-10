@@ -629,7 +629,7 @@ class D3D12CommandProcessor : public CommandProcessor {
   // that caused the sampler with index 2047 not to work if a heap with 8 or
   // less samplers also exists - in case of Xenia, it's the immediate drawer's
   // sampler heap.
-  // FIXME(Triang3l): Investigate the issue with the sampler 2047 on Nvidia.
+
   static constexpr uint32_t kSamplerHeapSize = 2000;
   static_assert(kSamplerHeapSize <= D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE);
   std::unique_ptr<ui::d3d12::D3D12DescriptorHeapPool> sampler_bindful_heap_pool_;

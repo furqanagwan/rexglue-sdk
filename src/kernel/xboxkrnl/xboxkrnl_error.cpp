@@ -34,7 +34,6 @@ struct error_lookup_table {
   const uint32_t* entries;
 };
 
-// TODO(gibbed): replace these with named error codes
 const uint32_t error_table_0x00000103[] = {
     0x000003E5,  // 0x00000103
     0,           //

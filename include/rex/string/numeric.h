@@ -98,7 +98,7 @@ inline T ifs(const std::string_view value, bool force_hex) {
   if (is_hex) {
     base = 16;
   }
-  // TODO(gibbed): do something more with errors?
+
   auto [p, error] = std::from_chars(range.data(), range.data() + range.size(), result, base);
   if (error != std::errc()) {
     assert_always();
@@ -139,7 +139,7 @@ inline T fpfs(const std::string_view value, bool force_hex) {
   } else {
     auto [p, error] = std::from_chars(range.data(), range.data() + range.size(), result,
                                       std::chars_format::general);
-    // TODO(gibbed): do something more with errors?
+
     if (error != std::errc()) {
       assert_always();
       return T();

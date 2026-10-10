@@ -45,7 +45,7 @@ class EntryTable {
 
  private:
   rex::thread::global_critical_region global_critical_region_;
-  // TODO(benvanik): replace with a better data structure.
+
   std::unordered_map<uint32_t, Entry*> map_;
 };
 

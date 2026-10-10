@@ -55,7 +55,7 @@ void KeDebugMonitorCallback(PPCContext* ppc_context, rex::system::KernelState* k
       break;
     }
     case DebugMonitorCommand::SetPIXCallback:
-      // TODO: Implement PIX callback if needed
+
       ppc_context->r[3] = 0;
       break;
     case DebugMonitorCommand::Unknown66: {

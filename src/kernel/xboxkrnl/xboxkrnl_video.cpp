@@ -382,9 +382,6 @@ void AppendParam(string::StringBuffer* string_buffer, ppc_ptr_t<BufferScaling> p
 u32 VdCallGraphicsNotificationRoutines_entry(u32 unk0, ppc_ptr_t<BufferScaling> args_ptr) {
   assert_true(unk0 == 1);
 
-  // TODO(benvanik): what does this mean, I forget:
-  // callbacks get 0, r3, r4
-
   return 0;
 }
 

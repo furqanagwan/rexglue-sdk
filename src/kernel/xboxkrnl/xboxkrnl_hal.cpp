@@ -28,8 +28,6 @@ void HalReturnToFirmware_entry(u32 routine) {
   // Routine must be 1 'HalRebootRoutine'
   assert_true(routine == 1);
 
-  // TODO(benvank): diediedie much more gracefully
-  // Not sure how to blast back up the stack in LLVM without exceptions, though.
   REXKRNL_ERROR("Game requested shutdown via HalReturnToFirmware");
   exit(0);
 }

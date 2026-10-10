@@ -23,8 +23,6 @@
 
 REXCVAR_DEFINE_UINT32(user_country, 103, "Kernel", "User's country ID");
 
-// TODO(gibbed): put these forward decls in a header somewhere.
-
 namespace rex {
 namespace kernel {
 namespace xam {
@@ -186,7 +184,6 @@ uint8_t xeXamGetLocaleFromCountry(uint8_t id) {
 // Helpers.
 
 uint8_t xeXamGetLocaleEx(uint8_t max_country_id, uint8_t max_locale_id) {
-  // TODO(gibbed): rework when XConfig is cleanly implemented.
   uint8_t country_id = static_cast<uint8_t>(REXCVAR_GET(user_country));
   /*if (XSUCCEEDED(xboxkrnl::xeExGetXConfigSetting(
           3, 14, &country_id, sizeof(country_id), nullptr))) {*/

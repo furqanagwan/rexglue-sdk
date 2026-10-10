@@ -22,9 +22,7 @@
 
 namespace rex::kernel::xboxkrnl {
 
-void KeEnableFpuExceptions_entry(u32 enabled) {
-  // TODO(benvanik): can we do anything about exceptions?
-}
+void KeEnableFpuExceptions_entry(u32 enabled) {}
 
 }  // namespace rex::kernel::xboxkrnl
 

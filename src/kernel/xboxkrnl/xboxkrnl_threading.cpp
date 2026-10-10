@@ -590,9 +590,6 @@ uint32_t xeKeReleaseSemaphore(X_KSEMAPHORE* semaphore_ptr, uint32_t increment, u
     return 0;
   }
 
-  // TODO(benvanik): increment thread priority?
-  // TODO(benvanik): wait?
-
   int32_t previous_count = 0;
   [[maybe_unused]] bool success =
       sem->ReleaseSemaphore(static_cast<int32_t>(adjustment), &previous_count);

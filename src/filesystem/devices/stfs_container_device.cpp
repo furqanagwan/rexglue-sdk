@@ -641,7 +641,7 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
       // Fill in all block records.
       // It's easier to do this now and just look them up later, at the cost
       // of some memory. Nasty chain walk.
-      // TODO(benvanik): optimize if flags.contiguous is set.
+
       if (entry->attributes() & system::X_FILE_ATTRIBUTE_NORMAL) {
         uint32_t block_index = dir_entry.start_block_number();
         size_t remaining_size = dir_entry.length;

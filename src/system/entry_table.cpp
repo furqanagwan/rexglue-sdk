@@ -30,7 +30,6 @@ Entry* EntryTable::Get(uint32_t address) {
   const auto& it = map_.find(address);
   Entry* entry = it != map_.end() ? it->second : nullptr;
   if (entry) {
-    // TODO(benvanik): wait if needed?
     if (entry->status != Entry::STATUS_READY) {
       entry = nullptr;
     }
@@ -39,9 +38,6 @@ Entry* EntryTable::Get(uint32_t address) {
 }
 
 Entry::Status EntryTable::GetOrCreate(uint32_t address, Entry** out_entry) {
-  // TODO(benvanik): replace with a map with wait-free for find.
-  // https://github.com/facebook/folly/blob/master/folly/AtomicHashMap.h
-
   auto global_lock = global_critical_region_.Acquire();
   const auto& it = map_.find(address);
   Entry* entry = it != map_.end() ? it->second : nullptr;
@@ -52,7 +48,7 @@ Entry::Status EntryTable::GetOrCreate(uint32_t address, Entry** out_entry) {
       // Still compiling, so spin.
       do {
         global_lock.unlock();
-        // TODO(benvanik): sleep for less time?
+
         rex::thread::Sleep(std::chrono::microseconds(10));
         global_lock.lock();
       } while (entry->status == Entry::STATUS_COMPILING);

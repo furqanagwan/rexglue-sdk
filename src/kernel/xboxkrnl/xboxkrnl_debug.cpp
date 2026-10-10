@@ -42,8 +42,6 @@ void HandleSetThreadName(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
   // SetThreadName. FFS.
   // https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
 
-  // TODO(benvanik): check record->number_parameters to make sure it's a
-  // correct size.
   auto thread_info = reinterpret_cast<X_THREADNAME_INFO*>(&record->exception_information[0]);
 
   assert_true(thread_info->type == 0x1000);
@@ -56,8 +54,6 @@ void HandleSetThreadName(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
   // 4D5307D6 (and its demo) has a bug where it ends up passing freed memory for
   // the name, so at the point of SetThreadName it's filled with junk.
 
-  // TODO(gibbed): cvar for thread name encoding for conversion, some games use
-  // SJIS and there's no way to automatically know this.
   auto name =
       std::string(REX_KERNEL_MEMORY()->TranslateVirtual<const char*>(thread_info->name_ptr));
   std::replace_if(name.begin(), name.end(), [](auto c) { return c < 32 || c > 127; }, '?');
@@ -75,8 +71,6 @@ void HandleSetThreadName(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
     REXKRNL_DEBUG("SetThreadName({}, {})", thread->thread_id(), name);
     thread->set_name(name);
   }
-
-  // TODO(benvanik): unwinding required here?
 }
 
 typedef struct {
@@ -138,8 +132,6 @@ void RtlRaiseException_entry(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
     }
   }
 
-  // TODO(benvanik): unwinding.
-  // This is going to suck.
   rex::debug::Break();
 }
 

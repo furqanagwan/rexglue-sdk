@@ -17,7 +17,7 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/string_utils.h>  // For TranslateAnsiStringAddress
 #include <rex/system/xobject.h>
-// #include <rex/kernel/xboxkrnl/private.h>  // TODO: JIT only
+
 #include <rex/system/xenumerator.h>
 #include <rex/system/xevent.h>
 #include <rex/system/xfile.h>
@@ -47,17 +47,12 @@ XObject::XObject(KernelState* kernel_state, Type type)
       allocated_guest_object_(false) {
   handles_.reserve(10);
 
-  // TODO: Assert kernel_state != nullptr in this constructor.
   if (kernel_state) {
     kernel_state->object_table()->AddHandle(this, nullptr);
   }
 }
 
 XObject::~XObject() {
-  // TODO: these are being asserted true... find out why
-  // assert_true(handles_.empty());
-  // assert_zero(pointer_ref_count_);
-
   if (allocated_guest_object_) {
     uint32_t ptr = guest_object_ptr_ - sizeof(X_OBJECT_HEADER);
     auto header = memory()->TranslateVirtual<X_OBJECT_HEADER*>(ptr);
@@ -90,7 +85,6 @@ void XObject::RetainHandle() {
 }
 
 bool XObject::ReleaseHandle() {
-  // FIXME: Return true when handle is actually released.
   return kernel_state_->object_table()->ReleaseHandle(handles_[0]) == X_STATUS_SUCCESS;
 }
 
@@ -397,7 +391,7 @@ void XObject::SetNativePointer(uint32_t native_ptr, bool uninitialized) {
   }
 
   // Stash pointer in struct.
-  // FIXME: This assumes the object has a dispatch header (some don't!)
+
   StashHandle(header, handle());
 
   guest_object_ptr_ = native_ptr;
@@ -427,7 +421,7 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
   const uint32_t guest_address = kernel_state->memory()->HostToGuestVirtual(native_ptr);
   if (header->wait_list_flink == kXObjSignature) {
     // Already initialized.
-    // TODO: assert if the type of the object != as_type
+
     uint32_t handle = header->wait_list_blink;
     auto object = kernel_state->object_table()->LookupObject<XObject>(handle);
     // An object that died leaves its signature behind, and the table hands
@@ -487,7 +481,7 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
 
     // Record where the object lives and stash its handle there, so lookups
     // can check it and header synchronization can reach the guest state.
-    // FIXME: This assumes the object contains a dispatch header (some don't!)
+
     object->SetNativePointer(guest_address, true);
 
     return object_ref<XObject>(object);

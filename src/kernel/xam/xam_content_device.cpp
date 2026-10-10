@@ -25,15 +25,6 @@ namespace xam {
 using namespace rex::system;
 using namespace rex::system::xam;
 
-// TODO(gibbed): real information.
-//
-// Until we expose real information about a HDD device, we
-// claim there is 3GB free on a 4GB dummy HDD.
-//
-// There is a possibility that certain games are bugged in that
-// they incorrectly only look at the lower 32-bits of free_bytes,
-// when it is a 64-bit value. Which means any size above ~4GB
-// will not be recognized properly.
 #define ONE_GB (1024ull * 1024ull * 1024ull)
 
 static const DummyDeviceInfo dummy_hdd_device_info_ = {

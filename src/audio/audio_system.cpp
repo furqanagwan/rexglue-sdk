@@ -156,8 +156,6 @@ void AudioSystem::WorkerThreadMain() {
     }
   }
   worker_running_ = false;
-
-  // TODO(benvanik): call module API to kill?
 }
 
 bool AudioSystem::DispatchClientCallback(size_t index) {

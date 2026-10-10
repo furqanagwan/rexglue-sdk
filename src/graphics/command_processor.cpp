@@ -309,9 +309,6 @@ void CommandProcessor::WorkerThreadMain() {
       memory::store_and_swap<uint32_t>(memory_->TranslatePhysical(read_ptr_writeback_ptr_),
                                        read_ptr_index_);
     }
-
-    // FIXME: We're supposed to process the WAIT_UNTIL register at this point,
-    // but no games seem to actually use it.
   }
 
   ShutdownContext();
@@ -509,10 +506,7 @@ void CommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
         if (++gamma_ramp_rw_component_ >= 3) {
           gamma_ramp_rw_component_ = 0;
           reg::DC_LUT_RW_INDEX new_gamma_ramp_rw_index = gamma_ramp_rw_index;
-          // TODO(Triang3l): Should this increase beyond 7 bits for PWL?
-          // Direct3D 9 explicitly sets rw_index to 0x80 after writing the last
-          // PWL entry. However, the DC_LUT_RW_INDEX documentation says that for
-          // PWL, the bit 7 is ignored.
+
           new_gamma_ramp_rw_index.rw_index = (gamma_ramp_rw_index.rw_index & ~UINT32_C(0x7F)) |
                                              ((gamma_ramp_rw_index_pwl + 1) & 0x7F);
           WriteRegister(XE_GPU_REG_DC_LUT_RW_INDEX,
@@ -542,10 +536,7 @@ void CommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
             gamma_ramp_entry.color_10_red = gamma_ramp_value.color_10_red;
           }
         }
-        // TODO(Triang3l): Should this reset the component write index? If this
-        // increase is assumed to behave like a full DC_LUT_RW_INDEX write, it
-        // probably should. Currently this also calls WriteRegister for
-        // DC_LUT_RW_INDEX, which resets gamma_ramp_rw_component_ as well.
+
         gamma_ramp_rw_component_ = 0;
         reg::DC_LUT_RW_INDEX new_gamma_ramp_rw_index = gamma_ramp_rw_index;
         ++new_gamma_ramp_rw_index.rw_index;
@@ -668,7 +659,6 @@ void CommandProcessor::MakeCoherent() {
     action = "VC";
   }
 
-  // TODO(benvanik): notify resource cache of base->size and type.
   REXGPU_TRACE("Make {:08X} -> {:08X} ({}b) coherent, action = {}", base_host,
                base_host + size_host, size_host, action);
 
@@ -1089,7 +1079,6 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
   uint32_t magic = reader->ReadAndSwap<memory::fourcc_t>();
   assert_true(magic == kSwapSignature);
 
-  // TODO(benvanik): only swap frontbuffer ptr.
   uint32_t frontbuffer_ptr = reader->ReadAndSwap<uint32_t>();
   uint32_t frontbuffer_width = reader->ReadAndSwap<uint32_t>();
   uint32_t frontbuffer_height = reader->ReadAndSwap<uint32_t>();
@@ -1436,8 +1425,7 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
   WriteRegister(XE_GPU_REG_VGT_DRAW_INITIATOR, vgt_draw_initiator.value);
 
   bool draw_succeeded = true;
-  // TODO(Triang3l): Remove IndexBufferInfo and replace handling of all this
-  // with PrimitiveProcessor when the old Vulkan renderer is removed.
+
   bool is_indexed = false;
   IndexBufferInfo index_buffer_info;
   switch (vgt_draw_initiator.source_select) {
@@ -1478,7 +1466,6 @@ bool CommandProcessor::ExecutePacketType3Draw(memory::RingBuffer* reader, uint32
       index_buffer_info.count = vgt_draw_initiator.num_indices;
     } break;
     case xenos::SourceSelect::kImmediate: {
-      // TODO(Triang3l): VGT_IMMED_DATA.
       REXGPU_ERROR(
           "{}: Using immediate vertex indices, which are not supported yet. "
           "Report the game to Xenia developers!",

@@ -52,7 +52,7 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
   X_STATUS result = X_STATUS_UNSUCCESSFUL;
 
   // Resolve the file to open.
-  // TODO(benvanik): make this code shared?
+
   auto fs_entry = kernel_state_->file_system()->ResolvePath(path);
   if (!fs_entry) {
     REXSYS_ERROR("File not found: {}", path);
@@ -377,7 +377,7 @@ object_ref<UserModule> UserModule::Restore(KernelState* kernel_state, stream::By
   auto module = new UserModule(kernel_state);
 
   // XModule::Save took care of this earlier...
-  // TODO: Find a nicer way to represent that here.
+
   if (!module->RestoreObject(stream)) {
     return nullptr;
   }
@@ -396,8 +396,6 @@ object_ref<UserModule> UserModule::Restore(KernelState* kernel_state, stream::By
   return object_ref<UserModule>(module);
 }
 
-void UserModule::Dump() {
-  // TODO(tomc): do we need this?
-}
+void UserModule::Dump() {}
 
 }  // namespace rex::system

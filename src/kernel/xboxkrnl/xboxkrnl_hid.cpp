@@ -22,16 +22,6 @@
 namespace rex::kernel::xboxkrnl {
 
 u32 HidReadKeys_entry(u32 unk1, u32 unk2, u32 unk3) {
-  /* TODO(gibbed):
-   * Games check for the following errors:
-   *   0xC000009D - translated to 0x48F  - ERROR_DEVICE_NOT_CONNECTED
-   *   0x103      - translated to 0x10D2 - ERROR_EMPTY
-   * Other errors appear to be ignored?
-   *
-   * unk1 is 0
-   * unk2 is a pointer to &unk3[2], possibly a 6-byte buffer
-   * unk3 is a pointer to a 20-byte buffer
-   */
   return 0xC000009D;
 }
 

@@ -152,15 +152,6 @@ void Window::AddInputListener(WindowInputListener* listener, size_t z_order) {
       iteration_context = iteration_context->outer_context;
     }
     input_listeners_.erase(std::prev(it_existing.base()));
-    // FIXME(Triang3l): Changing the Z order of an existing listener while
-    // already executing the listeners may cause listeners to be called twice if
-    // the Z order is lowered from one that has already been processed to one
-    // below the current one. Because nested listener calls are supported, a
-    // single last call index can't be associated with a listener to skip it if
-    // calling twice for the same event (a "not equal to" comparison of the call
-    // indices will result in the skipping being cancelled in the outer loop if
-    // an inner one is done, a "greater than" comparison will cause the inner
-    // loop to effectively terminate all outer ones).
   }
   auto it_new = std::prev(std::make_reverse_iterator(input_listeners_.emplace(z_order, listener)));
   // If adding to layers in between the currently being processed ones (from

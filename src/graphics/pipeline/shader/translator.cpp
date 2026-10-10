@@ -706,7 +706,6 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
 
   const uint32_t* ucode_dwords = shader.ucode_data().data();
 
-  // TODO(Triang3l): Remove when the old SPIR-V shader translator is deleted.
   uint32_t cf_pair_index_bound = shader.cf_pair_index_bound();
   std::vector<ControlFlowInstruction> cf_instructions;
   for (uint32_t i = 0; i < cf_pair_index_bound; ++i) {
@@ -760,7 +759,7 @@ void ShaderTranslator::EmitTranslationError(const char* message, bool is_fatal) 
   Shader::Error error;
   error.is_fatal = is_fatal;
   error.message = message;
-  // TODO(benvanik): location information.
+
   errors_.push_back(std::move(error));
   REXGPU_ERROR("Shader translation {}error: {}", is_fatal ? "fatal " : "", message);
 }
@@ -831,7 +830,6 @@ void ShaderTranslator::TranslateControlFlowInstruction(const ControlFlowInstruct
       assert_unhandled_case(cf.opcode);
       break;
   }
-  // TODO(benvanik): return if (DoesControlFlowOpcodeEndShader(cf.opcode()))?
 }
 
 void ParseControlFlowExec(const ControlFlowExecInstruction& cf, uint32_t cf_index,
@@ -1040,7 +1038,7 @@ static void ParseFetchInstructionResult(uint32_t dest, uint32_t swizzle, bool is
         break;
       default:
         // ucode::FetchDestinationSwizzle::k0 or the invalid swizzle 6.
-        // TODO(Triang3l): Find the correct handling of the invalid swizzle 6.
+
         assert_true(component_swizzle == ucode::FetchDestinationSwizzle::k0);
         component_source = SwizzleSource::k0;
         break;
@@ -1216,16 +1214,14 @@ uint32_t ParsedTextureFetchInstruction::GetNonZeroResultComponents() const {
       components = 0b0001;
       break;
     case FetchOpcode::kGetTextureWeights:
-      // FIXME(Triang3l): Not caring about mag/min filters currently for
-      // simplicity. It's very unlikely that this instruction is ever seriously
-      // used to retrieve weights of zero though.
+
       switch (dimension) {
         case xenos::FetchOpDimension::k1D:
           components = 0b1001;
           break;
         case xenos::FetchOpDimension::k2D:
         case xenos::FetchOpDimension::kCube:
-          // TODO(Triang3l): Is the depth lerp factor always 0 for cube maps?
+
           components = 0b1011;
           break;
         case xenos::FetchOpDimension::k3DOrStacked:

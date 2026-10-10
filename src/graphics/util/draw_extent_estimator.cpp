@@ -89,7 +89,6 @@ uint32_t DrawExtentEstimator::EstimateVertexMaxY(const Shader& vertex_shader) {
   }
   if (vgt_draw_initiator.source_select != xenos::SourceSelect::kDMA &&
       vgt_draw_initiator.source_select != xenos::SourceSelect::kAutoIndex) {
-    // TODO(Triang3l): Support immediate indices.
     return xenos::kTexture2DCubeMaxWidthHeight;
   }
 

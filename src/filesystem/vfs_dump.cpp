@@ -39,7 +39,6 @@ int vfs_dump_main(const std::vector<std::string>& args) {
   std::filesystem::path base_path = rex::to_path(REXCVAR_GET(dump_path));
   std::unique_ptr<vfs::Device> device;
 
-  // TODO: Flags specifying the type of device.
   device = std::make_unique<vfs::StfsContainerDevice>("", source);
   if (!device->Initialize()) {
     REXFS_ERROR("Failed to initialize device");
@@ -114,6 +113,3 @@ int vfs_dump_main(const std::vector<std::string>& args) {
 }
 
 }  // namespace rex::filesystem
-
-// TODO: CONSOLE APP - XE_DEFINE_CONSOLE_APP("xenia-vfs-dump", rex::filesystem::vfs_dump_main,
-//                       "[source] [dump_path]", "source", "dump_path");

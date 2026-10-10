@@ -65,7 +65,7 @@ bool D3D12SharedMemory::Initialize() {
         kBufferSize >> 20);
     if (provider.GetGraphicsAnalysis()) {
       // As of October 8th, 2018, PIX doesn't support tiled buffers.
-      // FIXME(Triang3l): Re-enable tiled resources with PIX once fixed.
+
       REXGPU_INFO(
           "This is caused by PIX being attached, which doesn't support tiled "
           "resources yet.");

@@ -65,7 +65,6 @@ struct CreateOptions {
 };
 
 static bool IsValidPath(const std::string_view s, bool is_pattern) {
-  // TODO(gibbed): validate path components individually
   bool got_asterisk = false;
   for (const auto& c : s) {
     if (c <= 31 || c >= 127) {
@@ -279,8 +278,6 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
       // we have written the info out.
       signal_event = true;
     } else {
-      // TODO(benvanik): async.
-
       // X_STATUS_PENDING if not returning immediately.
       // XFile is waitable and signalled after each async req completes.
       // reset the input event (->Reset())
@@ -371,11 +368,6 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
       // we have written the info out.
       signal_event = true;
     } else {
-      // TODO(benvanik): async.
-
-      // TODO: On Windows it might be worth trying to use Win32 ReadFileScatter
-      // here instead of handling it ourselves
-
       // X_STATUS_PENDING if not returning immediately.
       // XFile is waitable and signalled after each async req completes.
       // reset the input event (->Reset())
@@ -425,7 +417,6 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
 
   // Execute write.
   if (XSUCCEEDED(result)) {
-    // TODO(benvanik): async path.
     if (true || file->is_synchronous()) {
       // Synchronous request.
       uint32_t bytes_written = 0;

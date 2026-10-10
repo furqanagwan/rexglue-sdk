@@ -161,7 +161,6 @@ uint64_t FunctionDispatcher::Execute(ThreadState* thread_state, uint32_t address
   if (arg_count > 7)
     ctx->r10.u64 = args[7];
 
-  // FIXME: stack-arg path assumes 32-bit values; 64-bit and float args are wrong.
   if (arg_count > 8) {
     auto stack_arg_base =
         memory_->TranslateVirtual(static_cast<uint32_t>(ctx->r1.u64) + 0x54 - (64 + 112));

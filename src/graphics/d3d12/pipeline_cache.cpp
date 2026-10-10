@@ -428,11 +428,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
           pipeline_stored_descriptions.resize(i);
           break;
         }
-        // TODO(Triang3l): On Vulkan, skip pipelines requiring unsupported
-        // device features (to keep the cache files mostly shareable across
-        // devices).
-        // Mark the shader modifications as needed for translation; DXIL
-        // pipelines are translated to SPIR-V when they're created below.
+
         if (pipeline_stored_description.description.dxil) {
           continue;
         }
@@ -683,9 +679,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
     for (const PipelineStoredDescription& pipeline_stored_description :
          pipeline_stored_descriptions) {
       const PipelineDescription& pipeline_description = pipeline_stored_description.description;
-      // TODO(Triang3l): On Vulkan, skip pipelines requiring unsupported device
-      // features (to keep the cache files mostly shareable across devices).
-      // Skip already known pipelines - those have already been enqueued.
+
       auto found_range = pipelines_.equal_range(pipeline_stored_description.description_hash);
       bool pipeline_found = false;
       for (auto it = found_range.first; it != found_range.second; ++it) {
@@ -1781,8 +1775,7 @@ bool PipelineCache::GetCurrentStateDescription(
     // we set NumRenderTargets to 0 and also disable depth / stencil, the sample
     // count must be set to 1 - while the command list may still have
     // multisampled render targets bound (happens in 4D5307E6 main menu).
-    // TODO(Triang3l): Investigate interaction of OMSetRenderTargets with
-    // non-null depth and DSVFormat DXGI_FORMAT_UNKNOWN in the same case.
+
     for (uint32_t i = 0; i < 4; ++i) {
       if (!(bound_depth_and_color_render_target_bits & (uint32_t(1) << (1 + i)))) {
         continue;
@@ -1823,13 +1816,9 @@ bool PipelineCache::GetCurrentStateDescription(
         !depth_stencil_bound_and_used) {
       // Direct3D 12 requires the sample count to be 1 when no color or depth /
       // stencil render targets are bound.
-      // FIXME(Triang3l): Use ForcedSampleCount or some other fallback for
-      // sample counting when needed, though with 2x it will be as incorrect as
-      // with 1x / 4x anyway; or bind a dummy depth / stencil buffer if really
-      // needed.
+
       host_msaa_samples = xenos::MsaaSamples::k1X;
     }
-    // TODO(Triang3l): 4x MSAA fallback when 2x isn't supported.
   }
   description_out.host_msaa_samples = host_msaa_samples;
 
@@ -2833,8 +2822,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     case PipelineGeometryShader::kQuadList: {
       // Build the triangle strip from the original quad vertices in the
       // 0, 1, 3, 2 order (like specified for GL_QUAD_STRIP).
-      // TODO(Triang3l): Find the correct decomposition of quads into triangles
-      // on the real hardware.
+
       for (uint32_t i = 0; i < 4; ++i) {
         uint32_t input_vertex_index = i ^ (i >> 1);
         for (uint32_t j = 0; j < key.interpolator_count; ++j) {
@@ -3306,7 +3294,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
 
   // Sample mask and description.
   state_desc.SampleMask = UINT_MAX;
-  // TODO(Triang3l): 4x MSAA fallback when 2x isn't supported without ROV.
+
   if (edram_rov_used) {
     state_desc.SampleDesc.Count = 1;
   } else {
@@ -3415,12 +3403,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   // difference when rasterization is disabled have already been handled in
   // GetCurrentStateDescription) the way it's disabled in Direct3D by design
   // (disabling a pixel shader and depth / stencil).
-  // TODO(Triang3l): When it happens to be that a combination of parameters
-  // (no host pixel shader and depth / stencil without ROV) would disable
-  // rasterization when it's still needed (for occlusion query sample counting),
-  // ensure rasterization happens (by binding an empty pixel shader, or maybe
-  // via ForcedSampleCount when not using 2x MSAA - its requirements for
-  // OMSetRenderTargets need some investigation though).
+
   if (description.cull_mode == PipelineCullMode::kDisableRasterization) {
     state_desc.PS.pShaderBytecode = nullptr;
     state_desc.PS.BytecodeLength = 0;

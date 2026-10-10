@@ -106,7 +106,6 @@ XThread::~XThread() {
   FreeStack();
 
   if (thread_) {
-    // TODO(benvanik): platform kill
     REXSYS_ERROR("Thread disposed without exiting");
   }
 }
@@ -191,11 +190,6 @@ static uint8_t GetFakeCpuNumber(uint8_t proc_mask) {
   if (!proc_mask) {
     next_cpu = (next_cpu + 1) % 6;
     return next_cpu;  // is this reasonable?
-    // TODO(Triang3l): Does the following apply here?
-    // https://docs.microsoft.com/en-us/windows/win32/dxtecharts/coding-for-multiple-cores
-    // "On Xbox 360, you must explicitly assign software threads to a particular
-    //  hardware thread by using XSetThreadProcessor. Otherwise, all child
-    //  threads will stay on the same hardware thread as the parent."
   }
   assert_false(proc_mask & 0xC0);
 
@@ -462,7 +456,6 @@ X_STATUS XThread::Create() {
   });
 
   if (!thread_) {
-    // TODO(benvanik): translate error?
     REXSYS_ERROR("CreateThread failed");
     return X_STATUS_NO_MEMORY;
   }
@@ -479,8 +472,6 @@ X_STATUS XThread::Create() {
   // Assign the newly created thread to the logical processor, and also set up
   // the current CPU in KPCR and KTHREAD.
   SetActiveCpu(cpu_index);
-
-  // TODO(tomc): do we need thread notifications (related to processor thread management)?
 
   if ((creation_params_.creation_flags & X_CREATE_SUSPENDED) == 0) {
     // Start the thread now that we're all setup.
@@ -502,7 +493,6 @@ X_STATUS XThread::Exit(int exit_code) {
   auto kthread = guest_object<X_KTHREAD>();
   kthread->terminated = 1;
 
-  // TODO(benvanik): dispatch events? waiters? etc?
   RundownAPCs();
 
   // Set exit code.
@@ -523,8 +513,6 @@ X_STATUS XThread::Exit(int exit_code) {
 
   kernel_state_->OnThreadExit(this);
 
-  // TODO(tomc): do we need thread notifications (related to processor thread management)?
-
   // The guest stack belongs to the thread's execution lifetime, not the handle
   // lifetime. Games can keep thread handles after exit; holding the stack until
   // object destruction leaks the reserved stack range and eventually makes
@@ -544,14 +532,10 @@ X_STATUS XThread::Exit(int exit_code) {
 }
 
 X_STATUS XThread::Terminate(int exit_code) {
-  // TODO(benvanik): inform the profiler that this thread is exiting.
-
   // Set exit code.
   X_KTHREAD* thread = guest_object<X_KTHREAD>();
   thread->header.signal_state = 1;
   thread->exit_status = exit_code;
-
-  // TODO(tomc): do we need thread notifications (related to processor thread management)?
 
   running_ = false;
   if (XThread::IsInThread(this)) {
@@ -1268,9 +1252,6 @@ bool XThread::Save(stream::ByteStream* stream) {
 
   uint32_t pc = 0;
   if (running_) {
-    // TODO(tomc): do we need rexglue-compatible thread serialization?
-    //             ideally any previous use for this (multi-dvds) are reworked in recomp to be
-    //             single xex
     REXSYS_WARN("XThread {:08X} serialization not implemented", handle());
     return false;
   }
@@ -1380,8 +1361,6 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
       // Execute user code.
       thread->running_ = true;
 
-      // TODO(tomc): do we need this? threads would need different restoration approach
-      //             see XThread::Save
       REXSYS_ERROR("Thread restore not implemented");
       (void)state;
 

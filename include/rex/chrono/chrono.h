@@ -24,8 +24,6 @@ namespace chrono {
 
 using hundrednanoseconds = std::chrono::duration<int64_t, hundrednano>;
 
-// TODO(JoelLinn) define xstead_clock xsystem_clock etc.
-
 namespace detail {
 // Implementation detail: NtSystemClock template for Host/Guest time domains.
 // Trick to reduce code duplication and keep all the chrono template magic

@@ -49,11 +49,6 @@ namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
 
 bool XboxkrnlModule::SendPIXCommand(const char* cmd) {
-  // TODO: JIT - PIX commands require JIT processor->Execute
-  // if (!REXCVAR_GET(kernel_pix)) {
-  //   return false;
-  // }
-  // ...
   (void)cmd;
   return false;
 }
@@ -81,9 +76,6 @@ XboxkrnlModule::XboxkrnlModule(Runtime* emulator, KernelState* kernel_state)
     auto lpKeDebugMonitorData =
         memory_->TranslateVirtual<X_KEDEBUGMONITORDATA*>(pKeDebugMonitorData + 4);
     std::memset(lpKeDebugMonitorData, 0, sizeof(X_KEDEBUGMONITORDATA));
-    // TODO: JIT - GenerateTrampoline requires JIT
-    // lpKeDebugMonitorData->callback_fn =
-    //     GenerateTrampoline("KeDebugMonitorCallback", KeDebugMonitorCallback);
   }
   export_resolver_->SetVariableMapping("xboxkrnl.exe", 0x0059, pKeDebugMonitorData);
 
@@ -101,9 +93,6 @@ XboxkrnlModule::XboxkrnlModule(Runtime* emulator, KernelState* kernel_state)
     auto lpKeCertMonitorData =
         memory_->TranslateVirtual<X_KECERTMONITORDATA*>(pKeCertMonitorData + 4);
     std::memset(lpKeCertMonitorData, 0, sizeof(X_KECERTMONITORDATA));
-    // TODO: JIT - GenerateTrampoline requires JIT
-    // lpKeCertMonitorData->callback_fn =
-    //     GenerateTrampoline("KeCertMonitorCallback", KeCertMonitorCallback);
   }
   export_resolver_->SetVariableMapping("xboxkrnl.exe", 0x0266, pKeCertMonitorData);
 
@@ -156,7 +145,7 @@ XboxkrnlModule::XboxkrnlModule(Runtime* emulator, KernelState* kernel_state)
   // The name of the xex. Not sure this is ever really used on real devices.
   // Perhaps it's how swap disc/etc data is sent?
   // Always set to "default.xex" (with quotes) for now.
-  // TODO(gibbed): set this to the actual module name.
+
   std::string command_line("\"default.xex\"");
   if (!REXCVAR_GET(cl).empty()) {
     command_line += " " + REXCVAR_GET(cl);

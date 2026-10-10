@@ -576,22 +576,7 @@ enum class FetchOpcode : uint32_t {
   // register gradients are in cube space (not in SC/TC space, unlike the
   // coordinates themselves). This isn't true for the GCN, however.
   //
-  // TODO(Triang3l): Find if gradients are unnormalized for cube maps if
-  // coordinates are unnormalized. Since texldd doesn't perform any
-  // transformation for gradients (unlike for the coordinates themselves),
-  // gradients are probably in cube space, which is -MA...MA, and LOD
-  // calculation involves gradients in this space, so probably gradients
-  // shouldn't be unnormalized.
-  //
-  // Adreno has only been supporting seamless cube map sampling since 3xx, so
-  // the Xenos likely doesn't support seamless sampling:
-  // https://developer.qualcomm.com/qfile/28557/80-nu141-1_b_adreno_opengl_es_developer_guide.pdf
-  //
-  // Offsets are likely applied at the LOD at which the texture is sampled (not
-  // sure if to the higher-quality or to both - though "right before sampling"
-  // probably means to both - in Direct3D 10, it's recommended to only use
-  // offsets at integer mip levels, otherwise "you may get results that do not
-  // translate well to hardware".
+
   kTextureFetch = 1,
 
   // Gets the fraction of border color that would be blended into the texture
@@ -632,12 +617,7 @@ enum class FetchOpcode : uint32_t {
   kGetTextureComputedLod = 17,
 
   // Source is 2-component. XZ = ddx(source.xy), YW = ddy(source.xy).
-  // TODO(Triang3l): Verify whether it's coarse or fine (on Adreno 200, for
-  // instance). This is using the texture unit, where the LOD is computed for
-  // the whole quad (according to the Direct3D 11.3 specification), so likely
-  // coarse; ddx / ddy from the Shader Model 4 era is also compiled by FXC to
-  // deriv_rtx/rty_coarse when targeting Shader Model 5, and on TeraScale,
-  // coarse / fine selection only appeared on Direct3D 11 GPUs.
+
   kGetTextureGradients = 18,
 
   // Gets the weights used in a bilinear fetch.

@@ -61,11 +61,6 @@ void DxbcShaderTranslator::ProcessVertexFetchInstruction(
                     instr.operands[1].storage_index >> 1,
                     (instr.operands[1].storage_index & 1) ? 0b10101110 : 0b00000100));
 
-  // TODO(Triang3l): Verify the fetch constant type (that it's a vertex fetch,
-  // not a texture fetch), here instead of dropping draws with invalid vertex
-  // fetch constants on the CPU when proper bound checks are added - vfetch may
-  // be conditional, so fetch constants may also be used conditionally.
-
   // - Load the part of the byte address in the physical memory that is the same
   //   in vfetch_full and vfetch_mini to system_temp_grad_v_vfetch_address_.w
   //   (the index operand GPR must not be reloaded in vfetch_mini because it
@@ -142,11 +137,6 @@ void DxbcShaderTranslator::ProcessVertexFetchInstruction(
 
   // - Load needed words to system_temp_result_, words 0, 1, 2, 3 to X, Y, Z, W
   //   respectively.
-
-  // FIXME(Triang3l): Bound checking is not done here, but haven't encountered
-  // any games relying on out-of-bounds access. On Adreno 200 on Android (LG
-  // P705), however, words (not full elements) out of glBufferData bounds
-  // contain 0.
 
   // Loading the FXC way, Load4.xyw becomes Load2 and Load - would be a
   // compromise between AMD, where there are load_dwordx2/3/4, and Nvidia, where
@@ -384,9 +374,7 @@ void DxbcShaderTranslator::ProcessVertexFetchInstruction(
     switch (instr.attributes.data_format) {
       case xenos::VertexFormat::k_16_16_FLOAT:
       case xenos::VertexFormat::k_16_16_16_16_FLOAT:
-        // FIXME(Triang3l): This converts from D3D10+ float16 with NaNs instead
-        // of Xbox 360 float16 with extended range. However, haven't encountered
-        // games relying on that yet.
+
         a_.OpUBFE(result_unpacked_dest, dxbc::Src::LU(16), dxbc::Src::LU(0, 16, 0, 16),
                   dxbc::Src::R(system_temp_result_, 0b01010000));
         a_.OpF16ToF32(result_unpacked_dest, result_src);
@@ -664,17 +652,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
   // Handle instructions that store something.
   uint32_t used_result_components = instr.result.GetUsedResultComponents();
   uint32_t used_result_nonzero_components = instr.GetNonZeroResultComponents();
-  // FIXME(Triang3l): Currently disregarding the LOD completely in getWeights
-  // because the needed code would be very complicated, while getWeights is
-  // mostly used for things like PCF of shadow maps, that don't have mips. The
-  // LOD would be needed for the mip lerp factor in W of the return value and to
-  // choose the LOD where interpolation would take place for XYZ. That would
-  // require either implementing the LOD calculation algorithm using the ALU
-  // (since the `lod` instruction is limited to pixel shaders and can't be used
-  // when there's control flow divergence, unlike explicit gradients), or
-  // sampling a texture filled with LOD numbers (easier and more consistent -
-  // unclamped LOD doesn't make sense for getWeights anyway). The same applies
-  // to offsets.
+
   if (instr.opcode == FetchOpcode::kGetTextureWeights) {
     used_result_nonzero_components &= ~uint32_t(0b1000);
   }
@@ -752,12 +730,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
 
   // Get offsets applied to the coordinates before sampling.
   // `offsets` is used for float4 literal construction,
-  // FIXME(Triang3l): Offsets need to be applied at the LOD being fetched, not
-  // at LOD 0. However, since offsets have granularity of 0.5, not 1, on the
-  // Xbox 360, they can't be passed directly as AOffImmI to the `sample`
-  // instruction (plus-minus 0.5 offsets are very common in games). But
-  // offsetting at mip levels is a rare usage case, mostly offsets are used for
-  // things like shadow maps and blur, where there are no mips.
+
   float offsets[3] = {};
   // MSDN doesn't list offsets as getCompTexLOD parameters.
   if (instr.opcode != FetchOpcode::kGetTextureComputedLod) {
@@ -814,9 +787,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           offsets[0] -= 0.5f;
           offsets[1] -= 0.5f;
           // The logic for ST weights is the same for all faces.
-          // FIXME(Triang3l): If LOD calculation is added to getWeights, face
-          // offset probably will need to be handled too (if the hardware
-          // supports it at all, though MSDN lists OffsetZ in tfetchCube).
+
         } else {
           offsets[2] = instr.attributes.offset_z;
         }
@@ -839,11 +810,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
   uint32_t size_needed_components = 0b0000;
   if (instr.opcode == FetchOpcode::kGetTextureWeights) {
     // Size needed for denormalization for coordinate lerp factor.
-    // FIXME(Triang3l): Currently disregarding the LOD completely in getWeights.
-    // However, if the LOD lerp factor and the LOD where filtering would happen
-    // are ever calculated, all components of the size may be needed for ALU LOD
-    // calculation with normalized coordinates (or, if a texture filled with LOD
-    // indices is used, coordinates will need to be normalized as normally).
+
     if (!instr.attributes.unnormalized_coordinates) {
       switch (instr.dimension) {
         case xenos::FetchOpDimension::k1D:
@@ -974,18 +941,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           : 0;
 
   if (instr.opcode == FetchOpcode::kGetTextureWeights) {
-    // FIXME(Triang3l): Mip lerp factor needs to be calculated, and the
-    // coordinate lerp factors should be calculated at the mip level texels
-    // would be sampled from. That would require some way of calculating the LOD
-    // that would be applicable to explicit gradients and vertex shaders. Also,
-    // with point sampling, possibly lerp factors need to be 0. W  (mip lerp
-    // factor) should have been masked out previously because it's not supported
-    // currently.
     assert_zero(used_result_nonzero_components & 0b1000);
-
-    // FIXME(Triang3l): Filtering modes should possibly be taken into account,
-    // but for simplicity, not doing that - from a high level point of view,
-    // would be useless to get weights that will always be zero.
 
     // Need unnormalized coordinates.
     bool coord_operand_temp_pushed = false;
@@ -1123,7 +1079,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
       if (normalized_components_with_offsets) {
         // Apply the offsets to components to normalize where needed, or just
         // copy the components to coord_and_sampler_temp where not.
-        // FIXME(Triang3l): Offsets need to be applied at the LOD being fetched.
+
         if (normalized_components_with_scaled_offsets) {
           // Using coord_and_sampler_temp.w as a temporary for the needed
           // resolution scale inverse - sampler not loaded yet.
@@ -1202,7 +1158,6 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
       // Normalized coordinates - apply offsets to XY or copy them to
       // coord_and_sampler_temp, and if stacked, denormalize Z.
       if (normalized_components_with_offsets) {
-        // FIXME(Triang3l): Offsets need to be applied at the LOD being fetched.
         assert_true((size_needed_components & normalized_components_with_offsets) ==
                     normalized_components_with_offsets);
         a_.OpDiv(dxbc::Dest::R(coord_and_sampler_temp, normalized_components_with_offsets),
@@ -1458,11 +1413,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           // The `lod` instruction returns the unclamped LOD (probably need
           // unclamped so it can be biased back into the range later) in the Y
           // component, and the resource swizzle is the return value swizzle.
-          // FIXME(Triang3l): Gradient exponent adjustment from the fetch
-          // constant needs to be applied here, would require math involving
-          // SV_Position parity, replacing coordinates for one pixel with 0
-          // and for another with the adjusted gradient, but possibly not used
-          // by any games.
+
           assert_true(used_result_nonzero_components == 0b0001);
           uint32_t* bindless_srv_index = nullptr;
           switch (srv_dimension) {
@@ -1586,8 +1537,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
           uint32_t grad_mask = (1 << grad_component_count) - 1;
           // Convert the bias to a gradient scale.
           a_.OpExp(lod_dest, lod_src);
-          // FIXME(Triang3l): Gradient exponent adjustment is currently not done
-          // in getCompTexLOD, so don't do it here too.
+
 #if 0
           // Extract gradient exponent biases from the fetch constant and merge
           // them with the LOD bias.
@@ -1607,8 +1557,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
             // Register gradients are already in the cube space for cube maps.
             a_.OpMul(dxbc::Dest::R(grad_h_lod_temp, grad_mask),
                      dxbc::Src::R(system_temp_grad_h_lod_), lod_src);
-            // FIXME(Triang3l): Gradient exponent adjustment is currently not
-            // done in getCompTexLOD, so don't do it here too.
+
 #if 0
             a_.OpMul(dxbc::Dest::R(grad_v_temp, grad_mask),
                      dxbc::Src::R(system_temp_grad_v_vfetch_address_),
@@ -1617,8 +1566,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
             a_.OpMul(dxbc::Dest::R(grad_v_temp, grad_mask),
                      dxbc::Src::R(system_temp_grad_v_vfetch_address_), lod_src);
 #endif
-            // TODO(Triang3l): Are cube map register gradients unnormalized if
-            // the coordinates themselves are unnormalized?
+
             if (instr.attributes.unnormalized_coordinates &&
                 instr.dimension != xenos::FetchOpDimension::kCube) {
               uint32_t grad_norm_mask = grad_mask;
@@ -1649,8 +1597,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
                      lod_src);
             a_.OpDerivRTYCoarse(dxbc::Dest::R(grad_v_temp, grad_mask),
                                 dxbc::Src::R(coord_and_sampler_temp));
-            // FIXME(Triang3l): Gradient exponent adjustment is currently not
-            // done in getCompTexLOD, so don't do it here too.
+
 #if 0
             a_.OpMul(dxbc::Dest::R(grad_v_temp, grad_mask),
                      dxbc::Src::R(grad_v_temp),
@@ -2255,7 +2202,7 @@ void DxbcShaderTranslator::ProcessTextureFetchInstruction(
       // Clamp normalized unsigned-biased components to -1. Post-filtering
       // clamping can put mixtures with a stored value of 0 up to one component
       // code below the result of clamping each texel before.
-      // TODO(boma): Guest clamping needs to be verified on real hardware.
+
       a_.OpIEq(integer_scale_flags_dest, integer_scale_flags_src,
                dxbc::Src::LU(uint32_t(xenos::TextureSign::kUnsignedBiased)));
       a_.OpMax(integer_scale_dest, dxbc::Src::R(system_temp_result_), dxbc::Src::LF(-1.0f));

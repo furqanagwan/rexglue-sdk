@@ -427,7 +427,6 @@ X_RESULT ContentManager::DeleteContent(uint64_t xuid, const XCONTENT_AGGREGATE_D
   auto global_lock = global_critical_region_.Acquire();
 
   if (IsContentOpen(data)) {
-    // TODO(Gliniak): Get real error code for this case.
     return X_ERROR_ACCESS_DENIED;
   }
 
@@ -561,8 +560,6 @@ std::filesystem::path ContentManager::GetOpenPackagePath(const std::string_view 
 }
 
 void ContentManager::CloseOpenedFilesFromContent(const std::string_view root_name) {
-  // TODO(Gliniak): Cleanup this code to care only about handles
-  // related to provided content
   const std::vector<object_ref<XFile>> all_files_handles =
       kernel_state_->object_table()->GetObjectsByType<XFile>(XObject::Type::File);
 

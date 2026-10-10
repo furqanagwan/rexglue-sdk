@@ -34,7 +34,6 @@ namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
 
 static bool IsValidPath(const std::string_view s, bool is_pattern) {
-  // TODO(gibbed): validate path components individually.
   bool got_asterisk = false;
   for (const auto& c : s) {
     if (c <= 31 || c >= 127) {
@@ -88,7 +87,7 @@ uint32_t GetQueryFileInfoMinimumLength(uint32_t info_class) {
       return sizeof(X_FILE_XCTD_COMPRESSION_INFORMATION);
     case XFileNetworkOpenInformation:
       return sizeof(X_FILE_NETWORK_OPEN_INFORMATION);
-    // TODO(gibbed): structures to get the size of.
+
     case XFileModeInformation:
     case XFileAlignmentInformation:
     case XFileSectorInformation:
@@ -128,7 +127,7 @@ u32 NtQueryInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> i
   switch (info_class) {
     case XFileInternalInformation: {
       // Internal unique file pointer. Not sure why anyone would want this.
-      // TODO(benvanik): use pointer to fs::entry?
+
       auto info = info_ptr.as<X_FILE_INTERNAL_INFORMATION*>();
       info->index_number = rex::memory::hash_combine(0, file->path());
       out_length = sizeof(*info);
@@ -214,7 +213,7 @@ uint32_t GetSetFileInfoMinimumLength(uint32_t info_class) {
       return sizeof(X_FILE_ALLOCATION_INFORMATION);
     case XFileEndOfFileInformation:
       return sizeof(X_FILE_END_OF_FILE_INFORMATION);
-    // TODO(gibbed): structures to get the size of.
+
     case XFileModeInformation:
     case XFileIoPriorityInformation:
       return 4;
@@ -408,7 +407,7 @@ u32 NtQueryVolumeInformationFile_entry(u32 file_handle,
       info->available_allocation_units = device->available_allocation_units();
       info->sectors_per_allocation_unit = device->sectors_per_allocation_unit();
       info->bytes_per_sector = device->bytes_per_sector();
-      // TODO(gibbed): sanity check, XCTD userland code seems to require this.
+
       assert_true(info->bytes_per_sector == 0x200);
       out_length = sizeof(*info);
       break;

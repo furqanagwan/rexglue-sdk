@@ -851,9 +851,6 @@ Presenter::GuestOutputPaintFlow Presenter::GetGuestOutputPaintFlow(
     uint32_t max_rt_width, uint32_t max_rt_height, const GuestOutputPaintConfig& config) const {
   GuestOutputPaintFlow flow = {};
 
-  // FIXME(Triang3l): Configuration variables racing with per-game config
-  // loading.
-
   assert_not_zero(max_rt_width);
   assert_not_zero(max_rt_height);
 

@@ -103,9 +103,7 @@ u32 XamContentCreateEnumerator_entry(u32 user_index, u32 device_id, u32 content_
     }
   }
 
-  if (!device_info || device_info->device_id == DummyDeviceId::ODD) {
-    // TODO(gibbed): disc drive content
-  }
+  if (!device_info || device_info->device_id == DummyDeviceId::ODD) {}
 
   REXKRNL_DEBUG("XamContentCreateEnumerator: added {} items to enumerator", e->item_count());
 
@@ -259,7 +257,6 @@ u32 XamContentCreateInternal_entry(mapped_string root_name, mapped_void content_
 u32 XamContentOpenFile_entry(u32 user_index, mapped_string root_name, mapped_string path, u32 flags,
                              mapped_u32 disposition_ptr, mapped_u32 license_mask_ptr,
                              mapped_void overlapped_ptr) {
-  // TODO(gibbed): arguments assumed based on XamContentCreate.
   return X_ERROR_FILE_NOT_FOUND;
 }
 

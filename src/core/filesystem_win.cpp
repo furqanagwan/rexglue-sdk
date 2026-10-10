@@ -238,7 +238,6 @@ std::unique_ptr<FileHandle> FileHandle::OpenExisting(const std::filesystem::path
   HANDLE handle = CreateFileW(path.c_str(), open_access, share_mode, nullptr, creation_disposition,
                               FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
   if (handle == INVALID_HANDLE_VALUE) {
-    // TODO(benvanik): pick correct response.
     return nullptr;
   }
   return std::make_unique<Win32FileHandle>(path, handle);

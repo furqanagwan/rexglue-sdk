@@ -2241,9 +2241,7 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
         // This is according to D3D::InitializePresentationParameters from a
         // game executable, which initializes the 256-entry table gamma ramp for
         // 8_8_8_8 output and the PWL gamma ramp for 2_10_10_10.
-        // TODO(Triang3l): Choose between the table and PWL based on
-        // DC_LUTA_CONTROL, support both for all formats (and also different
-        // increments for PWL).
+
         bool use_pwl_gamma_ramp =
             frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
             frontbuffer_format == xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
@@ -2820,7 +2818,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
 #endif
   {
     // Update system constants before uploading them.
-    // TODO(Triang3l): With ROV, pass the disabled render target mask for safety.
+
     UpdateSystemConstantValues(memexport_used, primitive_polygonal,
                                primitive_processing_result.line_loop_closing_index,
                                primitive_processing_result.host_shader_index_endian, viewport_info,
@@ -2924,7 +2922,6 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   D3D_PRIMITIVE_TOPOLOGY primitive_topology;
   if (primitive_processing_result.IsTessellated()) {
     switch (primitive_processing_result.host_primitive_type) {
-      // TODO(Triang3l): Support all primitive types.
       case xenos::PrimitiveType::kTriangleList:
         primitive_topology = D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
         break;
@@ -3091,8 +3088,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   if (memexport_used) {
     // Make sure this memexporting draw is ordered with other work using shared
     // memory as a UAV.
-    // TODO(Triang3l): Find some PM4 command that can be used for indication of
-    // when memexports should be awaited?
+
     shared_memory_->MarkUAVWritesCommitNeeded();
     // Invalidate textures in memexported memory and watch for changes.
     if (!memexport_ranges_.empty()) {
@@ -3743,9 +3739,7 @@ bool D3D12CommandProcessor::BeginSubmission(bool is_guest_command) {
   // await the availability of the current frame.
   CheckSubmissionFence(is_opening_frame ? closed_frame_submissions_[frame_current_ % kQueueFrames]
                                         : 0);
-  // TODO(Triang3l): If failed to await (completed submission < awaited frame
-  // submission), do something like dropping the draw command that wanted to
-  // open the frame.
+
   if (is_opening_frame) {
     // Update the completed frame index, also obtaining the actual completed
     // frame number (since the CPU may be actually less than 3 frames behind)

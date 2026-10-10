@@ -25,7 +25,7 @@ std::vector<uint32_t> SigScanner::scan(const Signature& sig) {
   std::vector<uint32_t> matches;
 
   // Scan all executable sections
-  // TODO(tomc): maybe i wanna scan other sections...
+
   for (const auto& section : module_.binary_sections()) {
     if (!section.host_data)
       continue;
@@ -160,7 +160,6 @@ std::vector<Signature> SigScanner::helperSignatures() {
 }
 
 std::vector<Signature> SigScanner::hleSignatures() {
-  // TODO(tomc): mayhaps have signatures memset, memmove, memcpy, strcmp patterns
   return {};
 }
 

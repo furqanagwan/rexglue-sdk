@@ -196,9 +196,6 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
                                      FileDisposition creation_disposition, uint32_t desired_access,
                                      bool is_directory, bool is_non_directory, File** out_file,
                                      FileAction* out_action) {
-  // TODO(gibbed): should 'is_directory' remain as a bool or should it be
-  // flipped to a generic FileAttributeFlags?
-
   // Cleanup access.
   if (desired_access & FileAccess::kGenericRead) {
     desired_access |= FileAccess::kFileReadData;

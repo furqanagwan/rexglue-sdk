@@ -131,8 +131,6 @@ bool BuildBctr(BuilderContext& ctx) {
       ctx.println("\tcase {}:", i);
       auto label = jt->targets[i];
 
-      // TODO(tomc): Figure out if this actually is triggered on real hardware and what would
-      // happen?
       if (label == 0) {
         ctx.println("\t\t__builtin_trap(); // ERROR - detected jump to null value");
         continue;

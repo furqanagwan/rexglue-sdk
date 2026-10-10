@@ -76,7 +76,6 @@ X_STATUS XSocket::SetOption(uint32_t level, uint32_t optname, void* optval_ptr, 
 
   int ret = setsockopt(native_handle_, level, optname, (char*)optval_ptr, optlen);
   if (ret < 0) {
-    // TODO: WSAGetLastError()
     return X_STATUS_UNSUCCESSFUL;
   }
 
@@ -91,7 +90,6 @@ X_STATUS XSocket::SetOption(uint32_t level, uint32_t optname, void* optval_ptr, 
 X_STATUS XSocket::IOControl(uint32_t cmd, uint8_t* arg_ptr) {
   int ret = rex::net::socket_ioctl(native_handle_, cmd, arg_ptr);
   if (ret < 0) {
-    // TODO: Get last error
     return X_STATUS_UNSUCCESSFUL;
   }
 
@@ -162,27 +160,6 @@ int XSocket::Recv(uint8_t* buf, uint32_t buf_len, uint32_t flags) {
 int XSocket::RecvFrom(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_IN* from,
                       uint32_t* from_len) {
   // Pop from secure packets first
-  // TODO(DrChat): Enable when I commit XNet
-  /*
-  {
-    std::lock_guard<std::mutex> lock(incoming_packet_mutex_);
-    if (incoming_packets_.size()) {
-      packet* pkt = (packet*)incoming_packets_.front();
-      int data_len = pkt->data_len;
-      std::memcpy(buf, pkt->data, std::min((uint32_t)pkt->data_len, buf_len));
-
-      from->sin_family = 2;
-      from->sin_addr = pkt->src_ip;
-      from->sin_port = pkt->src_port;
-
-      incoming_packets_.pop();
-      uint8_t* pkt_ui8 = (uint8_t*)pkt;
-      delete[] pkt_ui8;
-
-      return data_len;
-    }
-  }
-  */
 
   sockaddr_in nfrom;
   socklen_t nfromlen = sizeof(sockaddr_in);
@@ -210,14 +187,6 @@ int XSocket::SendTo(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_
                     uint32_t to_len) {
   // Send 2 copies of the packet: One to XNet (for network security) and an
   // unencrypted copy for other Xenia hosts.
-  // TODO(DrChat): Enable when I commit XNet.
-  /*
-  auto xam = kernel_state()->GetKernelModule<xam::XamModule>("xam.xex");
-  auto xnet = xam->xnet();
-  if (xnet) {
-    xnet->SendPacket(this, to, buf, buf_len);
-  }
-  */
 
   sockaddr_in nto;
   if (to) {
@@ -241,7 +210,6 @@ bool XSocket::QueuePacket(uint32_t src_ip, uint16_t src_port, const uint8_t* buf
   std::lock_guard<std::mutex> lock(incoming_packet_mutex_);
   incoming_packets_.push((uint8_t*)pkt);
 
-  // TODO: Limit on number of incoming packets?
   return true;
 }
 

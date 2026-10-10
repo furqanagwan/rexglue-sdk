@@ -186,9 +186,7 @@ bool D3D12RenderTargetCache::Initialize() {
     // there.
 #if 1
     // The ROV path is currently much slower generally.
-    // TODO(Triang3l): Make ROV the default when it's optimized better (for
-    // instance, using static shader modifications to pass render target
-    // parameters).
+
     path_ = provider.GetAdapterVendorID() == ui::GraphicsProvider::GpuVendorID::kIntel
                 ? Path::kPixelShaderInterlock
                 : Path::kHostRenderTargets;
@@ -1085,8 +1083,7 @@ bool D3D12RenderTargetCache::Update(bool is_rasterization_done,
       // Commit preceding UAV (but not ROV) writes like clears as they aren't
       // synchronized with ROV accesses.
       CommitEdramBufferUAVWrites(EdramBufferModificationStatus::kAsUAV);
-      // TODO(Triang3l): Check if this draw call modifies color or depth /
-      // stencil, at least coarsely, to prevent useless barriers.
+
       MarkEdramBufferModified(EdramBufferModificationStatus::kAsROV);
     } break;
     default:
@@ -1478,8 +1475,7 @@ DXGI_FORMAT D3D12RenderTargetCache::GetColorResourceDXGIFormat(
       return DXGI_FORMAT_R16G16_TYPELESS;
     case xenos::ColorRenderTargetFormat::k_16_16_16_16_FLOAT:
       return DXGI_FORMAT_R16G16B16A16_TYPELESS;
-    // TODO(Triang3l): Check if NaN propagation defined in the D3D11.3
-    // specification can be relied on for 32-bit float render targets.
+
     case xenos::ColorRenderTargetFormat::k_32_FLOAT:
       return DXGI_FORMAT_R32_TYPELESS;
     case xenos::ColorRenderTargetFormat::k_32_32_FLOAT:
@@ -3638,9 +3634,6 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
         transfer_pipelines_.emplace(key, pipeline).first->second;
     pipelines = inserted_pipeline ? &inserted_pipeline : nullptr;
   }
-  // TODO(Triang3l): Pipeline state name debug names (lots of variables - but
-  // not very important since everything can be derived from the bindings and
-  // outputs in a debugger).
 
   if (!pipelines) {
     // Stencil bit copying uses only the stencil SRV for depth / stencil source,
@@ -4133,8 +4126,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
         transfer_viewport.MinDepth = 0.0f;
         transfer_viewport.MaxDepth = 1.0f;
         command_processor_.SetViewport(transfer_viewport);
-        // TODO(Triang3l): Reduce scissor to the smallest transfer region for
-        // more tiling friendliness.
+
         D3D12_RECT transfer_scissor;
         transfer_scissor.left = 0;
         transfer_scissor.top = 0;

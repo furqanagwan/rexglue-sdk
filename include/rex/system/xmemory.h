@@ -472,8 +472,6 @@ class Memory {
   //
   // - Data providers:
   //
-  // TODO(Triang3l): Implement data providers - more complicated because they
-  // will need to be able to release the global lock.
 
   // Returns start and length of the smallest physical memory region surrounding
   // the watched region that can be safely unwatched, if it doesn't matter,
@@ -497,8 +495,7 @@ class Memory {
   // Forces triggering of watch callbacks for a virtual address range if pages
   // are watched there and unwatching them. Returns whether any page was
   // watched. Must be called with global critical region locking depth of 1.
-  // TODO(Triang3l): Implement data providers - this is why locking depth of 1
-  // will be required in the future.
+
   bool TriggerPhysicalMemoryCallbacks(
       std::unique_lock<std::recursive_mutex> global_lock_locked_once, uint32_t virtual_address,
       uint32_t length, bool is_write, bool unwatch_exact_range, bool unprotect = true);

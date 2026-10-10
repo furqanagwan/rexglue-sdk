@@ -79,10 +79,7 @@ constexpr bool IsPrimitivePolygonal(bool vgt_output_path_is_tessellation_enable,
     default:
       break;
   }
-  // TODO(Triang3l): Investigate how kRectangleList should be treated - possibly
-  // actually drawn as two polygons on the console, however, the current
-  // geometry shader doesn't care about the winding order - allowing backface
-  // culling for rectangles currently breaks 4D53082D.
+
   return false;
 }
 
@@ -555,7 +552,7 @@ struct ResolveInfo {
     // Not doing -32...32 to -1...1 clamping here as a hack for k_16_16 and
     // k_16_16_16_16 blending emulation when using host render targets as it
     // would be inconsistent with the usual way of clearing with a depth quad.
-    // TODO(Triang3l): Check which 32-bit portion is in which register.
+
     constants_out.rt_specific.clear_value[0] = rb_color_clear;
     constants_out.rt_specific.clear_value[1] = rb_color_clear_lo;
     constants_out.rt_specific.edram_info = color_edram_info;

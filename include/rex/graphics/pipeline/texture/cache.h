@@ -50,9 +50,7 @@ namespace rex::graphics {
 //   the mip address, a mipmapped texture is created, but min/max LOD is clamped
 //   to the lower bound of 1 - the game is expected to do that anyway until the
 //   largest LOD is loaded.
-// TODO(Triang3l): Attach the largest LOD to existing textures with a valid
-// mip_address but no base ever used yet (no base_address) to save memory
-// because textures are streamed this way anyway.
+
 class TextureCache {
  public:
   // Hard limit, originating from the half-pixel offset filling hack in the
@@ -517,7 +515,7 @@ class TextureCache {
   // http://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/talks/unc-xenos-doggett.pdf
   // 4D5307E6 also expects replicated components in k_8 sprites.
   // DXN is read as RG in 4D5307E6, but as RA in 415607E6.
-  // TODO(Triang3l): Find out the correct contents of unused texture components.
+
   virtual uint32_t GetHostFormatSwizzle(TextureKey key) const = 0;
 
   virtual uint32_t GetMaxHostTextureWidthHeight(xenos::DataDimension dimension) const = 0;

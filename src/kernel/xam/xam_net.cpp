@@ -196,9 +196,6 @@ u32 NetDll_XNetCleanup_entry(u32 caller, mapped_void params) {
   // auto xnet = xam->xnet();
   // xam->set_xnet(nullptr);
 
-  // TODO: Shut down and delete.
-  // delete xnet;
-
   return 0;
 }
 
@@ -228,7 +225,6 @@ u32 NetDll_XNetRandom_entry(u32 caller, mapped_void buffer_ptr, u32 length) {
 }
 
 u32 NetDll_WSAStartup_entry(u32 caller, u16 version, ppc_ptr_t<X_WSADATA> data_ptr) {
-  // TODO(benvanik): abstraction layer needed.
   WSADATA wsaData;
   ZeroMemory(&wsaData, sizeof(WSADATA));
   int ret = WSAStartup(version, &wsaData);
@@ -325,8 +321,6 @@ u32 NetDll_WSASendTo_entry(u32 caller, u32 socket_handle, ppc_ptr_t<XWSABUF> buf
   N_XSOCKADDR_IN native_to(to_ptr);
   socket->SendTo(combined_buffer_mem.data(), combined_buffer_size, flags, &native_to, to_len);
 
-  // TODO: Instantly complete overlapped
-
   return 0;
 }
 
@@ -418,17 +412,6 @@ u32 NetDll_XNetGetTitleXnAddr_entry(u32 caller, ppc_ptr_t<XNADDR> addr_ptr) {
   addr_ptr->inaOnline.s_addr = 0;
   addr_ptr->wPortOnline = 0;
 
-  // TODO(gibbed): A proper mac address.
-  // RakNet's 360 version appears to depend on abEnet to create "random" 64-bit
-  // numbers. A zero value will cause RakPeer::Startup to fail. This causes
-  // 58411436 to crash on startup.
-  // The 360-specific code is scrubbed from the RakNet repo, but there's still
-  // traces of what it's doing which match the game code.
-  // https://github.com/facebookarchive/RakNet/blob/master/Source/RakPeer.cpp#L382
-  // https://github.com/facebookarchive/RakNet/blob/master/Source/RakPeer.cpp#L4527
-  // https://github.com/facebookarchive/RakNet/blob/master/Source/RakPeer.cpp#L4467
-  // "Mac address is a poor solution because you can't have multiple connections
-  // from the same system"
   std::memset(addr_ptr->abEnet, 0xCC, 6);
 
   std::memset(addr_ptr->abOnline, 0, 20);
@@ -461,7 +444,7 @@ u32 NetDll_XNetXnAddrToInAddr_entry(u32 caller, ppc_ptr_t<XNADDR> xn_addr, mappe
 }
 
 // Does the reverse of the above.
-// FIXME: Arguments may not be correct.
+
 u32 NetDll_XNetInAddrToXnAddr_entry(u32 caller, mapped_void in_addr, ppc_ptr_t<XNADDR> xn_addr,
                                     mapped_void xid) {
   return 1;
@@ -487,7 +470,6 @@ u32 NetDll_XNetGetEthernetLinkStatus_entry(u32 caller) {
 }
 
 u32 NetDll_XNetDnsLookup_entry(u32 caller, mapped_string host, u32 event_handle, mapped_u32 pdns) {
-  // TODO(gibbed): actually implement this
   if (pdns) {
     auto dns_guest = REX_KERNEL_MEMORY()->SystemHeapAlloc(sizeof(XNDNS));
     auto dns = REX_KERNEL_MEMORY()->TranslateVirtual<XNDNS*>(dns_guest);
@@ -580,8 +562,6 @@ u32 NetDll_closesocket_entry(u32 caller, u32 socket_handle) {
     return -1;
   }
 
-  // TODO: Absolutely delete this object. It is no longer valid after calling
-  // closesocket.
   socket->Close();
   socket->ReleaseHandle();
   return 0;
@@ -630,7 +610,6 @@ u32 NetDll_ioctlsocket_entry(u32 caller, u32 socket_handle, u32 cmd, mapped_void
     return -1;
   }
 
-  // TODO
   return 0;
 }
 
@@ -816,7 +795,6 @@ i32 NetDll_select_entry(i32 caller, i32 nfds, ppc_ptr_t<x_fd_set> readfds,
     host_exceptfds.Store(exceptfds);
   }
 
-  // TODO(gibbed): modify ret to be what's actually copied to the guest fd_sets?
   return ret;
 }
 
@@ -859,7 +837,6 @@ u32 NetDll_recvfrom_entry(u32 caller, u32 socket_handle, mapped_void buf_ptr, u3
   }
 
   if (ret == -1) {
-    // TODO: Better way of getting the error code
     uint32_t error_code = WSAGetLastError();
     XThread::SetLastError(error_code);
   }

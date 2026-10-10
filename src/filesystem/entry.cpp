@@ -104,7 +104,7 @@ Entry* Entry::CreateEntry(const std::string_view name, uint32_t attributes) {
     return nullptr;
   }
   children_.push_back(std::move(entry));
-  // TODO(benvanik): resort? would break iteration?
+
   Touch();
   return children_.back().get();
 }
@@ -156,8 +156,6 @@ X_STATUS Entry::Rename(const std::filesystem::path& file_path) {
   return X_STATUS_SUCCESS;
 }
 
-void Entry::Touch() {
-  // TODO(benvanik): update timestamps.
-}
+void Entry::Touch() {}
 
 }  // namespace rex::filesystem
