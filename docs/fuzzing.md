@@ -6,7 +6,9 @@ with AddressSanitizer (ASan). Both need LLVM Clang's compiler-rt, which the
 Windows LLVM installer includes.
 
 ASan on Windows only works with the release C runtime, so build the `Release`
-(or `RelWithDebInfo`) configuration of these presets.
+(or `RelWithDebInfo`) configuration of these presets. Visual Studio ships its
+own `clang_rt.asan_dynamic-x86_64.dll`, which does not match LLVM Clang's, so
+configuring copies the compiler's copy next to the built programs.
 
 ## Fuzz targets
 
