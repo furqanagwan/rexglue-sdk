@@ -290,7 +290,9 @@ message(STATUS "===========================================")
 # SDK install/export rules (skipped when consumed as a subdirectory)
 if(PROJECT_IS_TOP_LEVEL)
     include(cmake/rexglue_devenv.cmake)
-    include(cmake/rexglue_install.cmake)
+    if(NOT REXGLUE_BUILD_FUZZERS)
+        include(cmake/rexglue_install.cmake)
+    endif()
 else()
     # When consumed via add_subdirectory(), provide the same interface as find_package().
     # This sets REXGLUE_SHARE_DIR and makes rexglue_configure_target() available.
