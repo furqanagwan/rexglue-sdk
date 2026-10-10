@@ -30,8 +30,6 @@ namespace {
 
 constexpr uint32_t kXinputSlotCount = 4;
 
-// XInput has four fixed native slots, so the slot index rides inside the handle
-// and the per-slot bookkeeping below stays keyed by it.
 constexpr rex::input::DeviceId DeviceForSlot(uint32_t slot) {
   return static_cast<rex::input::DeviceId>(0x58490000ull | slot);
 }
@@ -45,7 +43,6 @@ bool SlotForDevice(rex::input::DeviceId id, uint32_t* out_slot) {
   return true;
 }
 
-// Querying an empty slot costs milliseconds, so back off after a miss.
 constexpr uint64_t SKIP_INVALID_CONTROLLER_TIME = 1100;
 uint64_t last_invalid_time[kXinputSlotCount];
 
@@ -66,7 +63,6 @@ void set_skip(uint32_t user_index) {
   last_invalid_time[user_index] = rex::chrono::Clock::QueryHostUptimeMillis();
 }
 
-// xinput1_4.dll ordinal 108: the capabilities with the pad's USB IDs.
 struct XInputCapabilitiesEx {
   XINPUT_CAPABILITIES capabilities;
   WORD vendor_id;
@@ -77,8 +73,6 @@ struct XInputCapabilitiesEx {
 };
 using XInputGetCapabilitiesExFn = DWORD(WINAPI*)(DWORD, DWORD, DWORD, XInputCapabilitiesEx*);
 
-// XInput's four battery levels as percentages, matching the guide's four
-// icons (rex::ui::XboxGuide maps them back).
 int PercentForLevel(BYTE level) {
   switch (level) {
     case BATTERY_LEVEL_EMPTY:
@@ -92,7 +86,7 @@ int PercentForLevel(BYTE level) {
   }
 }
 
-}  // namespace
+}
 
 namespace rex::input::xinput {
 
@@ -131,23 +125,18 @@ X_STATUS XinputInputDriver::Setup() {
     return X_STATUS_DLL_NOT_FOUND;
   }
 
-  // Support guide button with XInput using XInputGetStateEx
-  // https://source.winehq.org/git/wine.git/?a=commit;h=de3591ca9803add117fbacb8abe9b335e2e44977
   auto const XInputGetStateEx = (LPCSTR)100;
 
-  // Required.
   auto xigc = GetProcAddress(module, "XInputGetCapabilities");
   auto xigs = GetProcAddress(module, "XInputGetState");
   auto xigsEx = GetProcAddress(module, XInputGetStateEx);
   auto xigk = GetProcAddress(module, "XInputGetKeystroke");
   auto xiss = GetProcAddress(module, "XInputSetState");
 
-  // Not required.
   auto xie = GetProcAddress(module, "XInputEnable");
   auto xigb = GetProcAddress(module, "XInputGetBatteryInformation");
   auto xigcEx = GetProcAddress(module, (LPCSTR)108);
 
-  // Only fail when we don't have the bare essentials;
   if (!xigc || !xigs || !xigk || !xiss) {
     FreeLibrary(module);
     return X_STATUS_PROCEDURE_NOT_FOUND;
@@ -186,7 +175,7 @@ void XinputInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
   if (!xigc) {
     return;
   }
-  // In supplement mode, per USB ID, the slots the other driver already serves.
+
   std::map<uint32_t, size_t> skipped;
   for (uint32_t slot = 0; slot < kXinputSlotCount; slot++) {
     if (should_skip(slot)) {
@@ -271,14 +260,11 @@ X_RESULT XinputInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_state
     return skipper;
   }
 
-  // Added padding in case we are using XInputGetStateEx
   struct {
     XINPUT_STATE state;
     unsigned int dwPaddingReserved;
   } native_state;
 
-  // If the guide button is enabled use XInputGetStateEx, otherwise use the
-  // default XInputGetState.
   auto xigs = REXCVAR_GET(guide_button) ? (decltype(&XInputGetState))XInputGetStateEx_
                                         : (decltype(&XInputGetState))XInputGetState_;
 
@@ -324,19 +310,11 @@ X_RESULT XinputInputDriver::SetDeviceVibration(DeviceId id, X_INPUT_VIBRATION* v
 
 X_RESULT XinputInputDriver::GetDeviceKeystroke(DeviceId id, uint32_t flags,
                                                X_INPUT_KEYSTROKE* out_keystroke) {
-  // We may want to filter flags before sending to native.
-  // flags is reserved on desktop.
   uint32_t user_index = 0;
   if (!SlotForDevice(id, &user_index)) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
-  // XInputGetKeystroke on Windows has a bug where it will return
-  // ERROR_SUCCESS (0) even if the device is not connected:
-  // https://stackoverflow.com/questions/23669238/xinputgetkeystroke-returning-error-success-while-controller-is-unplugged
-  //
-  // So we first check if the device is connected via XInputGetCapabilities, so
-  // we are not passing back an uninitialized X_INPUT_KEYSTROKE structure.
   XINPUT_CAPABILITIES caps;
   auto xigc = (decltype(&XInputGetCapabilities))XInputGetCapabilities_;
   DWORD result = xigc(user_index, 0, &caps);
@@ -356,9 +334,7 @@ X_RESULT XinputInputDriver::GetDeviceKeystroke(DeviceId id, uint32_t flags,
   out_keystroke->flags = native_keystroke.Flags;
   out_keystroke->user_index = native_keystroke.UserIndex;
   out_keystroke->hid_code = native_keystroke.HidCode;
-  // X_ERROR_EMPTY if no new keys
-  // X_ERROR_DEVICE_NOT_CONNECTED if no device
-  // X_ERROR_SUCCESS if key
+
   return result;
 }
 bool XinputInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
@@ -387,7 +363,6 @@ bool XinputInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
       out->percent = PercentForLevel(battery.BatteryLevel);
       break;
     default: {
-      // xinputhid (Bluetooth) reports no battery; the pad's GATT service does.
       uint16_t vendor_id = 0;
       uint16_t product_id = 0;
       if (out->wireless && SlotIds(user_index, &vendor_id, &product_id)) {
@@ -399,4 +374,4 @@ bool XinputInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
   return true;
 }
 
-}  // namespace rex::input::xinput
+}

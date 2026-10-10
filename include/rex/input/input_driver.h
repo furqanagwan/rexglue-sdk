@@ -33,8 +33,6 @@ class InputDriver {
 
   virtual X_STATUS Setup() = 0;
 
-  /// Devices this driver has open, in its own arrival order. InputSystem
-  /// assigns the cross-driver ordinal, so leave DeviceInfo::ordinal at zero.
   virtual void EnumerateDevices(std::vector<DeviceInfo>& out) = 0;
 
   virtual X_RESULT GetDeviceState(DeviceId id, X_INPUT_STATE* out_state) = 0;
@@ -44,10 +42,9 @@ class InputDriver {
   virtual X_RESULT GetDeviceKeystroke(DeviceId id, uint32_t flags,
                                       X_INPUT_KEYSTROKE* out_keystroke) = 0;
 
-  /// The device's power source and charge. False when the driver cannot tell.
-  virtual bool GetDeviceBattery(DeviceId /*id*/, PadBattery* /*out*/) { return false; }
+  virtual bool GetDeviceBattery(DeviceId, PadBattery*) { return false; }
 
-  virtual void OnWindowAvailable(rex::ui::Window* /*window*/) {}
+  virtual void OnWindowAvailable(rex::ui::Window*) {}
 
   void set_is_active_callback(std::function<bool()> is_active_callback) {
     is_active_callback_ = is_active_callback;
@@ -68,4 +65,4 @@ class InputDriver {
   std::function<bool()> is_active_callback_ = nullptr;
 };
 
-}  // namespace rex::input
+}

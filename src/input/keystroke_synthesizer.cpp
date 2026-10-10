@@ -20,10 +20,8 @@ namespace rex::input {
 
 namespace {
 
-// The order of this list is also the order in which events are sent if
-// multiple buttons change at once.
 constexpr std::array<rex::ui::VirtualKey, 34> kVkLookup = {
-    // 00 - True buttons from xinput button field
+
     rex::ui::VirtualKey::kXInputPadDpadUp,
     rex::ui::VirtualKey::kXInputPadDpadDown,
     rex::ui::VirtualKey::kXInputPadDpadLeft,
@@ -34,16 +32,16 @@ constexpr std::array<rex::ui::VirtualKey, 34> kVkLookup = {
     rex::ui::VirtualKey::kXInputPadRThumbPress,
     rex::ui::VirtualKey::kXInputPadLShoulder,
     rex::ui::VirtualKey::kXInputPadRShoulder,
-    rex::ui::VirtualKey::kNone, /* Guide has no VK */
-    rex::ui::VirtualKey::kNone, /* Unknown */
+    rex::ui::VirtualKey::kNone,
+    rex::ui::VirtualKey::kNone,
     rex::ui::VirtualKey::kXInputPadA,
     rex::ui::VirtualKey::kXInputPadB,
     rex::ui::VirtualKey::kXInputPadX,
     rex::ui::VirtualKey::kXInputPadY,
-    // 16 - Fake buttons generated from analog inputs
+
     rex::ui::VirtualKey::kXInputPadLTrigger,
     rex::ui::VirtualKey::kXInputPadRTrigger,
-    // 18
+
     rex::ui::VirtualKey::kXInputPadLThumbUp,
     rex::ui::VirtualKey::kXInputPadLThumbDown,
     rex::ui::VirtualKey::kXInputPadLThumbRight,
@@ -52,7 +50,7 @@ constexpr std::array<rex::ui::VirtualKey, 34> kVkLookup = {
     rex::ui::VirtualKey::kXInputPadLThumbUpRight,
     rex::ui::VirtualKey::kXInputPadLThumbDownRight,
     rex::ui::VirtualKey::kXInputPadLThumbDownLeft,
-    // 26
+
     rex::ui::VirtualKey::kXInputPadRThumbUp,
     rex::ui::VirtualKey::kXInputPadRThumbDown,
     rex::ui::VirtualKey::kXInputPadRThumbRight,
@@ -71,7 +69,7 @@ void FillKeystroke(rex::ui::VirtualKey vk, uint16_t flags, X_INPUT_KEYSTROKE* ou
   out_keystroke->flags = flags;
 }
 
-}  // namespace
+}
 
 X_RESULT KeystrokeSynthesizer::Next(const X_INPUT_GAMEPAD& gamepad, bool active, uint64_t now_ms,
                                     X_INPUT_KEYSTROKE* out_keystroke) {
@@ -96,8 +94,6 @@ X_RESULT KeystrokeSynthesizer::Next(const X_INPUT_GAMEPAD& gamepad, bool active,
     return X_ERROR_EMPTY;
   }
 
-  // First clear buttons with up events, to match XInput when a stick moves
-  // between directions: THUMB_UPLEFT goes up before THUMB_LEFT goes down.
   for (int pass = 0; pass < 2; pass++) {
     const bool clear_pass = pass == 0;
     for (uint8_t i = 0; i < uint8_t(std::size(kVkLookup)); i++) {
@@ -169,4 +165,4 @@ uint64_t KeystrokeSynthesizer::AnalogToKeyfield(const X_INPUT_GAMEPAD& gamepad) 
   return f;
 }
 
-}  // namespace rex::input
+}

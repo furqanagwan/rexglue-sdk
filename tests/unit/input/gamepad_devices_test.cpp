@@ -29,8 +29,6 @@ using rex::input::gameinput::Rumble;
 
 namespace {
 
-// The GameInput driver with GameInput replaced by test calls: host devices
-// are addresses of HostPad objects, and rumble sent to them is recorded.
 struct HostPad {
   X_INPUT_GAMEPAD gamepad = {};
   std::vector<Rumble> rumble;
@@ -104,7 +102,6 @@ struct Harness {
     system->SetActiveCallback([this] { return active; });
   }
 
-  // Buttons user `user` sees, or nullopt when nothing is connected there.
   std::optional<uint16_t> Buttons(uint32_t user) {
     X_INPUT_STATE state = {};
     if (system->GetState(user, &state) != X_ERROR_SUCCESS) {
@@ -123,7 +120,7 @@ struct Harness {
   bool active = true;
 };
 
-}  // namespace
+}
 
 TEST_CASE("Four GameInput pads map to four guest users in connection order", "[input][gameinput]") {
   Harness h;
@@ -154,7 +151,7 @@ TEST_CASE("Unplugging a GameInput pad keeps the others on their users", "[input]
 
   h.driver->Unplug(&pads[1]);
   CHECK(h.Buttons(0) == X_INPUT_GAMEPAD_A);
-  CHECK(h.Buttons(1) == std::nullopt);  // no phantom input from the removed pad
+  CHECK(h.Buttons(1) == std::nullopt);
   CHECK(h.Buttons(2) == X_INPUT_GAMEPAD_X);
   CHECK(h.Buttons(3) == X_INPUT_GAMEPAD_Y);
 
@@ -179,14 +176,14 @@ TEST_CASE("GameInput packet numbers advance once per change the guest can see",
   HostPad pad;
   h.driver->Plug(&pad);
   CHECK(h.Packet(0) == 1);
-  CHECK(h.Packet(0) == 1);  // unchanged reading
+  CHECK(h.Packet(0) == 1);
   pad.gamepad.thumb_lx = 1000;
-  pad.gamepad.thumb_lx = 2000;  // two host updates between polls count once
+  pad.gamepad.thumb_lx = 2000;
   CHECK(h.Packet(0) == 2);
   h.active = false;
-  CHECK(h.Packet(0) == 3);  // focus loss is a change
+  CHECK(h.Packet(0) == 3);
   pad.gamepad.buttons = X_INPUT_GAMEPAD_A;
-  CHECK(h.Packet(0) == 3);  // input while unfocused is not seen
+  CHECK(h.Packet(0) == 3);
   h.active = true;
   CHECK(h.Packet(0) == 4);
 }
@@ -225,7 +222,6 @@ TEST_CASE("GameInput rumble holds, stops on focus loss and resumes on focus",
   REQUIRE(pad.rumble.size() == 2);
   CHECK(pad.rumble.back() == Rumble{});
 
-  // A request while unfocused is remembered, not played.
   vibration.left_motor_speed = 0x4000;
   REQUIRE(h.system->SetState(0, &vibration) == X_ERROR_SUCCESS);
   CHECK(pad.rumble.size() == 2);
@@ -248,7 +244,7 @@ TEST_CASE("GameInput rumble does not survive a disconnect", "[input][gameinput]"
 
   h.driver->Plug(&pad);
   pad.rumble.clear();
-  // A focus cycle replays only what the guest asked of the new connection.
+
   h.active = false;
   REQUIRE(h.Buttons(0).has_value());
   h.active = true;
@@ -302,7 +298,7 @@ TEST_CASE("GameInput pads report the kind and motors the host found", "[input][g
   CHECK(uint16_t(caps.vibration.left_motor_speed) == 0xFFFF);
   REQUIRE(devices.GetCapabilities(stick, false, &caps) == X_ERROR_SUCCESS);
   CHECK(caps.sub_type == XINPUT_DEVSUBTYPE_ARCADE_STICK);
-  // No motors: XInput reports zero speeds.
+
   CHECK(uint16_t(caps.vibration.left_motor_speed) == 0);
   CHECK(uint16_t(caps.vibration.right_motor_speed) == 0);
 

@@ -29,9 +29,6 @@
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
-// GameInput in GDK builds, XInput otherwise. "sdl" is still accepted so an
-// old config starts: SDL was removed (RG-GDK-033), and it now means the
-// default, with a warning.
 #if REX_HAS_GAMEINPUT
 #define REX_DEFAULT_INPUT_BACKEND "gameinput"
 #else
@@ -56,15 +53,11 @@ namespace rex::input {
 
 namespace {
 
-// Synthetic devices are parked past every physical ordinal so they cannot push
-// a real pad off guest user 0. SlotAssignment routes them by their synthetic
-// flag and never reads this value.
 constexpr uint32_t kSyntheticOrdinal = UINT32_MAX;
 
-// XN_SYS_INPUTDEVICESCHANGED
 constexpr uint32_t kXNotificationSystemInputDevicesChanged = 0x00000012;
 
-}  // namespace
+}
 
 InputSystem::InputSystem(rex::ui::Window* window) : window_(window) {}
 
@@ -76,7 +69,7 @@ X_STATUS InputSystem::Setup() {
 
 void InputSystem::Shutdown() {
   std::lock_guard lock(mutex_);
-  // device_owners_ holds raw driver pointers.
+
   devices_.clear();
   device_owners_.clear();
   drivers_.clear();
@@ -123,8 +116,6 @@ void InputSystem::RefreshDevices() {
     }
   }
 
-  // Carry forward ordinals already handed out, so a device keeps its guest user
-  // when another pad is unplugged.
   bool changed = seen.size() != devices_.size();
   std::vector<bool> fresh(seen.size(), false);
   for (size_t i = 0; i < seen.size(); i++) {
@@ -138,16 +129,11 @@ void InputSystem::RefreshDevices() {
     changed = true;
   }
 
-  // Runs after the carry-forward pass so a new device cannot take an ordinal a
-  // live one is still holding. Lowest free rather than a growing counter,
-  // because a reconnected pad arrives as a new device and would otherwise walk
-  // off the end of the guest users.
   for (size_t i = 0; i < seen.size(); i++) {
     if (!fresh[i]) {
       continue;
     }
-    // Only physical devices consume an ordinal, so the first pad to connect is
-    // guest user 0 however many synthetic devices enumerated ahead of it.
+
     if (seen[i].synthetic) {
       seen[i].ordinal = kSyntheticOrdinal;
       fresh[i] = false;
@@ -181,8 +167,7 @@ void InputSystem::RefreshDevices() {
   for (size_t i = 0; i < order.size(); i++) {
     order[i] = i;
   }
-  // Stable: synthetic devices share one ordinal, and their relative order
-  // decides which answers GetCapabilities when no pad is attached.
+
   std::stable_sort(order.begin(), order.end(),
                    [&](size_t a, size_t b) { return seen[a].ordinal < seen[b].ordinal; });
 
@@ -225,8 +210,7 @@ DeviceId InputSystem::ChooseDeviceForUser(uint32_t user_index) const {
   if (ids.empty()) {
     return DeviceId::kInvalid;
   }
-  // Prefer the pad in hand, so button glyphs follow it rather than whichever
-  // device enumerated first.
+
   DeviceId chosen = active_devices_.Active(user_index);
   if (std::find(ids.begin(), ids.end(), chosen) == ids.end()) {
     chosen = ids.front();
@@ -284,7 +268,6 @@ bool InputSystem::UpdateConnectedUserLocked(uint32_t user_index, bool connected)
     return true;
   }
 
-  // Deadzone percentages scale against the device's own range.
   DeviceId chosen = ChooseDeviceForUser(user_index);
   auto* driver = DriverForDevice(chosen);
   if (!driver) {
@@ -300,9 +283,6 @@ bool InputSystem::UpdateConnectedUserLocked(uint32_t user_index, bool connected)
 }
 
 void InputSystem::NotifyDevicesChanged() {
-  // Titles poll capabilities off this rather than every frame, so without it
-  // a pad plugged in mid-game is never noticed. Sent outside mutex_: listeners
-  // are guest objects with their own locks.
   if (auto* kernel_state = REX_KERNEL_STATE()) {
     kernel_state->BroadcastNotification(kXNotificationSystemInputDevicesChanged, 0);
   }
@@ -314,7 +294,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   X_RESULT result;
   {
     std::lock_guard lock(mutex_);
-    // A dialog owns the controller.
+
     if (ui_input_blockers_ > 0) {
       if (out_state) {
         std::memset(out_state, 0, sizeof(*out_state));
@@ -327,7 +307,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
     if (result == X_ERROR_SUCCESS && user_index < kMaxGuestUsers &&
         consumed_buttons_[user_index] != 0) {
       const uint16_t buttons = state.gamepad.buttons;
-      // Each button leaves the mask once the player lets go of it.
+
       consumed_buttons_[user_index] &= buttons;
       state.gamepad.buttons = static_cast<uint16_t>(buttons & ~consumed_buttons_[user_index]);
     }
@@ -421,8 +401,7 @@ void InputSystem::RemoveUIInputBlocker() {
     if (ui_input_blockers_ == 0) {
       return;
     }
-    // Whatever is held right now stays masked until released, so the press
-    // that dismissed the dialog is not also read as a press in the game.
+
     for (uint32_t user_index = 0; user_index < kMaxGuestUsers; user_index++) {
       X_INPUT_STATE state = {};
       bool changed = false;
@@ -430,8 +409,7 @@ void InputSystem::RemoveUIInputBlocker() {
         consumed_buttons_[user_index] |= static_cast<uint16_t>(state.gamepad.buttons);
       }
       devices_changed |= changed;
-      // Keystroke synthesizers see the held buttons now, so their key-downs
-      // are spent here rather than reaching the game.
+
       DrainKeystrokesLocked(user_index, 0);
     }
     ui_input_blockers_--;
@@ -447,7 +425,7 @@ bool InputSystem::GetVibrationEnabled() const {
 
 void InputSystem::ToggleVibration() {
   REXCVAR_SET(vibration, !REXCVAR_GET(vibration));
-  // The guest's next SetState may never come while a motor is running.
+
   X_INPUT_VIBRATION silence = {};
   for (uint32_t user_index = 0; user_index < kMaxGuestUsers; user_index++) {
     SetState(user_index, &silence);
@@ -476,9 +454,6 @@ X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration
 
   const X_INPUT_VIBRATION modified = ModifyVibrationLevel(vibration);
 
-  // Every pad on this user belongs to the same player, so all of them buzz.
-  // Only pads decide the result: synthetic devices accept any vibration and
-  // would otherwise report success for a pad that never rumbled.
   bool any_pad = false;
   bool any_synthetic = false;
   bool pad_rumbled = false;
@@ -513,7 +488,6 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
   SCOPE_profile_cpu_f("hid");
   std::lock_guard lock(mutex_);
   if (ui_input_blockers_ > 0) {
-    // Keystrokes made while a dialog is up belong to the dialog.
     X_RESULT result = DrainKeystrokesLocked(user_index, flags);
     return result == X_ERROR_DEVICE_NOT_CONNECTED ? result : X_ERROR_EMPTY;
   }
@@ -549,7 +523,6 @@ X_RESULT InputSystem::GetKeystrokeLocked(uint32_t user_index, uint32_t flags,
 }
 
 X_RESULT InputSystem::DrainKeystrokesLocked(uint32_t user_index, uint32_t flags) {
-  // Bounded: a driver synthesizing repeats never runs dry while a key is held.
   constexpr int kMaxDrained = 64;
   X_INPUT_KEYSTROKE discarded = {};
   X_RESULT result = X_ERROR_EMPTY;
@@ -575,8 +548,6 @@ static std::unique_ptr<InputSystem> CreateInputSystem(bool tool_mode, bool physi
 #if REX_HAS_GAMEINPUT
       auto gameinput_driver = std::make_unique<gameinput::GameInputDriver>(nullptr, 0);
       if (gameinput_driver->Setup() == X_STATUS_SUCCESS) {
-        // GameInput does not list Bluetooth LE pads (xinputhid), so XInput
-        // adds the pads it does not serve. Both drivers live as long as input.
         auto* gameinput = gameinput_driver.get();
         input->AddDriver(std::move(gameinput_driver));
         auto supplement = std::make_unique<xinput::XinputInputDriver>(
@@ -601,7 +572,6 @@ static std::unique_ptr<InputSystem> CreateInputSystem(bool tool_mode, bool physi
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(xinput_driver));
       } else {
-        // Keyboard and mouse still work through MnK.
         REXLOG_ERROR("input_backend=xinput: xinput1_4.dll unavailable; no gamepads");
         backend = "none";
       }
@@ -609,7 +579,6 @@ static std::unique_ptr<InputSystem> CreateInputSystem(bool tool_mode, bool physi
 
     REXLOG_INFO("Input: {} driver", backend);
 
-    // MnK driver (keyboard/mouse -> controller emulation)
     if (!physical_only) {
       auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);
       if (mnk_driver->Setup() == X_STATUS_SUCCESS) {
@@ -618,7 +587,6 @@ static std::unique_ptr<InputSystem> CreateInputSystem(bool tool_mode, bool physi
     }
   }
 
-  // NOP driver (primary in tool mode, fallback otherwise)
   if (!physical_only) {
     uint8_t nop_index = tool_mode ? 0 : 1;
     input->AddDriver(std::make_unique<nop::NopInputDriver>(nullptr, nop_index));
@@ -635,4 +603,4 @@ std::unique_ptr<InputSystem> CreatePhysicalInputSystem() {
   return CreateInputSystem(false, true);
 }
 
-}  // namespace rex::input
+}

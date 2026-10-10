@@ -18,8 +18,6 @@ void SlotAssignment::OnDevicesChanged(const std::vector<DeviceInfo>& devices) {
     user.clear();
   }
 
-  // Key off the ordinal rather than list position, so unplugging pad one does
-  // not promote pad two to player one.
   for (const auto& device : devices) {
     if (device.synthetic) {
       users_[0].push_back(device.id);
@@ -53,4 +51,4 @@ void SharedAssignment::DevicesForUser(uint32_t user_index, std::vector<DeviceId>
   out = user0_;
 }
 
-}  // namespace rex::input
+}

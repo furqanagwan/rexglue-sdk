@@ -14,19 +14,14 @@
 #include <rex/input/gameinput/gamepad_devices.h>
 #include <rex/input/input.h>
 
-// The GDK headers need the Windows headers first.
 #include <windows.h>
 
 #include <GameInput.h>
 
 namespace rex::input::gameinput {
 
-// GameInput sticks are -1..1 with up positive, as in XInput. The negative
-// half spans 32768 and the positive 32767, so both extremes of the XInput
-// range are reachable. GameInput applies no dead zone to gamepad readings
-// and neither does this; titles apply their own, as they do with XInput.
 inline int16_t StickToXInput(float value) {
-  if (!(value == value)) {  // NaN
+  if (!(value == value)) {
     return 0;
   }
   value = std::fmax(-1.0f, std::fmin(1.0f, value));
@@ -82,8 +77,6 @@ inline X_INPUT_GAMEPAD GamepadToXInput(const GameInputGamepadState& state, bool 
   return gamepad;
 }
 
-// GameInput names a device's kind rather than an XInput subtype. A wheel or
-// stick usually also offers GameInputKindGamepad, so the specific kind wins.
 inline uint8_t SubtypeFromGameInput(GameInputKind supported) {
   if (supported & GameInputKindRacingWheel) {
     return XINPUT_DEVSUBTYPE_WHEEL;
@@ -97,13 +90,10 @@ inline uint8_t SubtypeFromGameInput(GameInputKind supported) {
   return XINPUT_DEVSUBTYPE_GAMEPAD;
 }
 
-// XInput vibration needs both body motors; trigger motors alone do not count.
 inline bool HasXInputRumble(GameInputRumbleMotors motors) {
   return (motors & GameInputRumbleLowFrequency) && (motors & GameInputRumbleHighFrequency);
 }
 
-// XInput's left motor is the low-frequency (heavy) one, the right the
-// high-frequency one. Trigger motors have no XInput equivalent and stay off.
 inline GameInputRumbleParams RumbleToGameInput(const Rumble& rumble) {
   GameInputRumbleParams params = {};
   params.lowFrequency = rumble.left / 65535.0f;
@@ -111,4 +101,4 @@ inline GameInputRumbleParams RumbleToGameInput(const Rumble& rumble) {
   return params;
 }
 
-}  // namespace rex::input::gameinput
+}

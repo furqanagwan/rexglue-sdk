@@ -68,18 +68,10 @@ using rex::ui::VirtualKey;
 
 namespace {
 
-// A single device, so its handle is a constant.
 constexpr rex::input::DeviceId kMnkDevice = static_cast<rex::input::DeviceId>(0x4D4E4B00);
 
-// Bounds the queue for titles that never call XamInputGetKeystroke.
 constexpr size_t kMaxQueuedKeystrokes = 256;
 
-// Bind values are a comma-separated list of alternatives, each optionally
-// carrying modifier prefixes: "Q,I" or "Shift+W". Modifier matching is exact,
-// so "Up" stays silent while Shift is held and "Shift+Up" stays silent without
-// it. That is what lets the D-pad share the arrow keys. A consequence is
-// that binding a bare modifier name ("Shift") can never fire, since holding it
-// makes the live mask non-zero while the bind wants zero.
 constexpr uint8_t kModShift = 1u << 0;
 constexpr uint8_t kModCtrl = 1u << 1;
 constexpr uint8_t kModAlt = 1u << 2;
@@ -95,8 +87,6 @@ uint8_t LiveModifiers(const bool (&key_down)[256]) {
   return mods;
 }
 
-// Strips leading modifier prefixes off 'token', advancing it to the bare key
-// name and returning the mask they require.
 uint8_t TakeModifiers(std::string_view& token) {
   uint8_t mods = 0;
   for (;;) {
@@ -146,16 +136,13 @@ bool TokenPressed(const bool (&key_down)[256], std::string_view token, uint8_t l
 
 std::atomic<bool> mouse_look_active{true};
 
-// ui::VirtualKey follows Windows VK_ numbering; the guest wants USB HID usage
-// page 0x07.
 uint8_t VirtualKeyToHIDUsage(rex::ui::VirtualKey vk_enum) {
   const uint32_t vk = static_cast<uint32_t>(vk_enum);
 
-  // The runs below are contiguous in both numbering schemes.
   if (vk >= 'A' && vk <= 'Z') {
     return static_cast<uint8_t>(vk - 'A' + 0x04);
   }
-  // 0 is irregular in both digit runs; handled in the switch.
+
   if (vk >= '1' && vk <= '9') {
     return static_cast<uint8_t>(vk - '1' + 0x1E);
   }
@@ -260,14 +247,11 @@ uint8_t VirtualKeyToHIDUsage(rex::ui::VirtualKey vk_enum) {
   }
 }
 
-// Sticks and triggers are included: XInput reports those as directional pad
-// keys, which is what menu navigation reads.
 struct PadBind {
   const std::string& keys;
   VirtualKey pad_key;
 };
 
-// Rebuilt per call because the cvars are live-editable.
 std::array<PadBind, 24> PadBinds() {
   return {{
       {REXCVAR_GET(keybind_a), VirtualKey::kXInputPadA},
@@ -297,7 +281,7 @@ std::array<PadBind, 24> PadBinds() {
   }};
 }
 
-}  // namespace
+}
 
 void SetMouseLookActive(bool active) {
   mouse_look_active.store(active, std::memory_order_relaxed);
@@ -311,7 +295,6 @@ MnkInputDriver::MnkInputDriver(rex::ui::Window* window, size_t window_z_order)
     : InputDriver(window, window_z_order) {}
 
 MnkInputDriver::~MnkInputDriver() {
-  // Detach handled by OnClosing; if window outlives the driver, clean up here.
   DetachFromWindow();
 }
 
@@ -340,7 +323,6 @@ void MnkInputDriver::DetachFromWindow() {
     return;
   }
   window->app_context().CallInUIThreadSynchronous([this, window] {
-    // Detach first so nothing new is queued, then run out what already was.
     {
       std::lock_guard lock(state_mutex_);
       attached_window_ = nullptr;
@@ -355,7 +337,6 @@ void MnkInputDriver::DetachFromWindow() {
 }
 
 bool MnkInputDriver::IsEnabled() const {
-  // Passthrough enables the device on its own.
   return REXCVAR_GET(mnk_mode) || REXCVAR_GET(mnk_passthrough);
 }
 
@@ -383,7 +364,6 @@ static bool IsBindPressed(const bool (&key_down)[256], const std::string& cvar_v
 }
 
 void MnkInputDriver::EnumerateDevices(std::vector<DeviceInfo>& out) {
-  // Disabled means no device at all, so it never occupies a guest user slot.
   if (!IsEnabled()) {
     return;
   }
@@ -429,14 +409,10 @@ X_RESULT MnkInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_state) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
-  // Keys reach the guest through GetDeviceKeystroke only, leaving the guest
-  // user free for a real controller.
   if (IsPassthroughEnabled()) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
-  // Mouse look is opt in. Without this gate, keyboard input alone would hide
-  // and lock the cursor, breaking the ImGui overlays.
   QueueMouseCaptureUpdate(IsEnabled() && REXCVAR_GET(mnk_mouse) && IsMouseLookActive() &&
                           has_focus_ && is_active());
 
@@ -513,9 +489,7 @@ X_RESULT MnkInputDriver::GetDeviceState(DeviceId id, X_INPUT_STATE* out_state) {
     rx += static_cast<int32_t>(double(mouse_dx_) * sensitivity * kBaseScale);
     ry += static_cast<int32_t>(double(-mouse_dy_) * sensitivity * kBaseScale);
   }
-  // Drained unconditionally: deltas keep accumulating in OnMouseMove while the
-  // mouse is off, and toggling it on would otherwise dump the whole backlog
-  // into one frame as a camera snap.
+
   mouse_dx_ = 0.0f;
   mouse_dy_ = 0.0f;
 
@@ -566,7 +540,7 @@ void MnkInputDriver::EnqueueKeystroke(uint16_t vk_pad, bool down) {
   ks.virtual_key = vk_pad;
   ks.unicode = 0;
   ks.flags = down ? X_INPUT_KEYSTROKE_KEYDOWN : X_INPUT_KEYSTROKE_KEYUP;
-  // InputSystem stamps the guest user this device is assigned to.
+
   ks.user_index = 0;
   ks.hid_code = 0;
   PushKeystroke(ks);
@@ -587,7 +561,7 @@ void MnkInputDriver::EnqueueRawKeystroke(const rex::ui::KeyEvent& e, bool down) 
   ks.hid_code = VirtualKeyToHIDUsage(e.virtual_key());
 
   uint16_t flags = down ? X_INPUT_KEYSTROKE_KEYDOWN : X_INPUT_KEYSTROKE_KEYUP;
-  // Already down, so this is the OS auto-repeat.
+
   if (down && e.prev_state()) {
     flags |= X_INPUT_KEYSTROKE_REPEAT;
   }
@@ -613,8 +587,6 @@ void MnkInputDriver::RefreshBoundKeystrokesLocked() {
     }
   }
 
-  // The whole table is diffed rather than the key that moved: binds carry
-  // modifiers, so Shift alone can flip several of them at once.
   const uint32_t changed = pressed ^ bound_pressed_;
   bound_pressed_ = pressed;
   if (!changed) {
@@ -639,7 +611,7 @@ void MnkInputDriver::QueueMouseCaptureUpdate(bool should_capture) {
     mouse_capture_update_queued_.store(false, std::memory_order_relaxed);
     return;
   }
-  // Deferred, not CallInUIThread: running inline would re-enter state_mutex_.
+
   attached_window_->app_context().CallInUIThreadDeferred([this] {
     mouse_capture_update_queued_.store(false, std::memory_order_relaxed);
     ApplyMouseCaptureFromUIThread();
@@ -667,7 +639,7 @@ void MnkInputDriver::ApplyMouseCaptureFromUIThread() {
   if (!relative_mouse_mode_) {
     REXLOG_WARN("Pointer lock unavailable, mouse look falls back to recentering the cursor");
   }
-  // Reset deltas to avoid a spike on capture start
+
   std::lock_guard lock(state_mutex_);
   mouse_dx_ = 0.0f;
   mouse_dy_ = 0.0f;
@@ -694,7 +666,7 @@ void MnkInputDriver::RecenterCursorFromUIThread(int32_t x, int32_t y) {
   if (width <= 0 || height <= 0) {
     return;
   }
-  // Only once the pointer has drifted well off the middle, to keep warps rare.
+
   if (std::abs(x - width / 2) < width / 4 && std::abs(y - height / 2) < height / 4) {
     return;
   }
@@ -741,8 +713,7 @@ void MnkInputDriver::OnKeyUp(rex::ui::KeyEvent& e) {
 void MnkInputDriver::OnKeyChar(rex::ui::KeyEvent& e) {
   if (!IsEnabled() || !IsPassthroughEnabled())
     return;
-  // WM_CHAR convention: the codepoint arrives after its key-down, so it is
-  // attached to the keystroke already queued for that key.
+
   std::lock_guard lock(state_mutex_);
   if (keystroke_queue_.empty()) {
     return;
@@ -804,7 +775,6 @@ void MnkInputDriver::OnMouseMove(rex::ui::MouseEvent& e) {
   {
     std::lock_guard lock(state_mutex_);
     if (relative_mouse_mode_) {
-      // The pointer is locked, so the absolute position no longer moves.
       mouse_dx_ += e.dx();
       mouse_dy_ += e.dy();
     } else {
@@ -814,7 +784,7 @@ void MnkInputDriver::OnMouseMove(rex::ui::MouseEvent& e) {
   }
   prev_mouse_x_ = x;
   prev_mouse_y_ = y;
-  // Without a pointer lock the cursor still has to be kept off the edges.
+
   if (mouse_captured_ && !relative_mouse_mode_) {
     RecenterCursorFromUIThread(x, y);
   }
@@ -822,13 +792,12 @@ void MnkInputDriver::OnMouseMove(rex::ui::MouseEvent& e) {
 
 void MnkInputDriver::OnLostFocus(rex::ui::UISetupEvent&) {
   has_focus_ = false;
-  // Withdraw the request too, or an update queued before the focus loss grabs
-  // the cursor straight back.
+
   mouse_capture_requested_.store(false, std::memory_order_relaxed);
   {
     std::lock_guard lock(state_mutex_);
     std::memset(key_down_, 0, sizeof(key_down_));
-    // Releases landing on another window never arrive here as key-ups.
+
     RefreshBoundKeystrokesLocked();
     mouse_dx_ = 0.0f;
     mouse_dy_ = 0.0f;
@@ -842,4 +811,4 @@ void MnkInputDriver::OnGotFocus(rex::ui::UISetupEvent&) {
   has_focus_ = true;
 }
 
-}  // namespace rex::input::mnk
+}

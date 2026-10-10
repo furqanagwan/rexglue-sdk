@@ -82,7 +82,6 @@ X_RESULT GamepadDevices::GetState(DeviceId id, bool active, X_INPUT_STATE* out_s
   }
   *out_state = pad->state;
   if (!active) {
-    // Held buttons are kept and show again once active.
     std::memset(&out_state->gamepad, 0, sizeof(out_state->gamepad));
   }
   return X_ERROR_SUCCESS;
@@ -94,9 +93,7 @@ X_RESULT GamepadDevices::GetCapabilities(DeviceId id, bool guide_button,
   if (!pad) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
-  // Every input, as the SDL driver reports. The subtype is what the host
-  // identified: GameInput knows wheels and arcade and flight sticks, but not
-  // Xbox 360 instruments, which report as gamepads.
+
   X_INPUT_CAPABILITIES caps = {};
   caps.type = XINPUT_DEVTYPE_GAMEPAD;
   caps.sub_type = pad->traits.subtype;
@@ -171,4 +168,4 @@ const GamepadDevices::Pad* GamepadDevices::Find(DeviceId id) const {
   return nullptr;
 }
 
-}  // namespace rex::input::gameinput
+}

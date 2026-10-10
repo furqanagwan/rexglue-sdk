@@ -17,26 +17,21 @@ namespace rex::input {
 
 constexpr uint32_t kMaxGuestUsers = 4;
 
-/// Driver-scoped device handle. Never reused within a process run, so a handle
-/// that outlives its device resolves to nothing rather than aliasing whichever
-/// device took the freed slot.
 enum class DeviceId : uint64_t { kInvalid = 0 };
 
 struct DeviceInfo {
   DeviceId id = DeviceId::kInvalid;
-  uint32_t ordinal = 0;  // connection order, assigned by InputSystem
+  uint32_t ordinal = 0;
   std::string name;
   std::string guid;
-  uint8_t subtype = 0x01;  // XINPUT_DEVSUBTYPE_*
-  bool synthetic = false;  // keyboard/mouse emulation or the NOP stand-in
+  uint8_t subtype = 0x01;
+  bool synthetic = false;
 };
 
-/// How a host pad is powered, as far as the host APIs say. The guide shows a
-/// battery only for wireless pads with a known level, as the console does.
 struct PadBattery {
   bool wireless = false;
-  int percent = -1;  // 0 to 100, or -1 when the level is not reported
+  int percent = -1;
   bool charging = false;
 };
 
-}  // namespace rex::input
+}
