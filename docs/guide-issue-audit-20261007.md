@@ -6,13 +6,13 @@ closed; limitations in its body and comments still apply.
 
 | Current issue | Original SDK issue | State | Implemented scope |
 | --- | --- | --- | --- |
-| [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1) | #127 | Open | Main console-scene Guide epic; owner title/pad acceptance remains outstanding. |
-| [Guide #2](https://github.com/furqanagwan/xbox-guide/issues/2) | #132 | Closed | Console styling corrections, Mods and developer cheat-code pages. |
-| [Guide #3](https://github.com/furqanagwan/xbox-guide/issues/3) | #143 | Closed | Home/exit navigation, removed Media blade and gamerscore glyph. |
-| [Guide #4](https://github.com/furqanagwan/xbox-guide/issues/4) | #145 | Closed | Build-time marketplace add-on catalogue and Manage Game presentation. |
-| [Guide #5](https://github.com/furqanagwan/xbox-guide/issues/5) | #153 | Closed | Optional title-update downloads, version-specific executables and Active Downloads. |
-| [Guide #6](https://github.com/furqanagwan/xbox-guide/issues/6) | #161 | Closed | Console keyboard scene/state and guest keyboard UI integration. |
-| [Guide #7](https://github.com/furqanagwan/xbox-guide/issues/7) | #166 | Closed | BC emulator scenes, fonts, storage page and wider glyph coverage. |
+| [Guide #1](https://github.com/furqanagwan/xbox/issues/1) | #127 | Open | Main console-scene Guide epic; owner title/pad acceptance remains outstanding. |
+| [Guide #2](https://github.com/furqanagwan/xbox/issues/2) | #132 | Closed | Console styling corrections, Mods and developer cheat-code pages. |
+| [Guide #3](https://github.com/furqanagwan/xbox/issues/3) | #143 | Closed | Home/exit navigation, removed Media blade and gamerscore glyph. |
+| [Guide #4](https://github.com/furqanagwan/xbox/issues/4) | #145 | Closed | Build-time marketplace add-on catalogue and Manage Game presentation. |
+| [Guide #5](https://github.com/furqanagwan/xbox/issues/5) | #153 | Closed | Optional title-update downloads, version-specific executables and Active Downloads. |
+| [Guide #6](https://github.com/furqanagwan/xbox/issues/6) | #161 | Closed | Console keyboard scene/state and guest keyboard UI integration. |
+| [Guide #7](https://github.com/furqanagwan/xbox/issues/7) | #166 | Closed | BC emulator scenes, fonts, storage page and wider glyph coverage. |
 
 SDK-owned UI dependencies also remain in their original repository:
 [resolution/battery rendering #137](https://github.com/furqanagwan/rexglue-sdk/issues/137),
@@ -40,7 +40,7 @@ Guide #7's [font PR #167](https://github.com/furqanagwan/rexglue-sdk/pull/167),
 were independently confirmed merged.
 
 The new reusable message-box/download models are in
-[Guide draft PR #8](https://github.com/furqanagwan/xbox-guide/pull/8).
+[Guide draft PR #8](https://github.com/furqanagwan/xbox/pull/8).
 Their SDK integration is in
 [SDK draft PR #214](https://github.com/furqanagwan/rexglue-sdk/pull/214).
 Both were open and unmerged when checked; local builds include these changes.

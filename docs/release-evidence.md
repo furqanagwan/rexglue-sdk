@@ -165,7 +165,7 @@ physical optical drives and media removal remain #154 gates.
 ## Console source scenes (2026-10-07)
 
 Revision: topic `pc-guide-source-scenes`, based on `98f006b`; Guide
-`db55a4d` ([component PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)).
+`db55a4d` ([component PR #8](https://github.com/furqanagwan/xbox/pull/8)).
 The SDK supplies file picking/I/O, resources and immutable copy-history
 snapshots. Guide-owned message-box and activity models remain usable through
 the standalone scene target without SDK runtime dependencies.
@@ -406,7 +406,7 @@ attempts cannot acquire the owned foreground window and therefore refuse
 input/screenshots. No painted pass is claimed for those three titles. Capture
 records are `title-window-checks.json` and `title-window-checks-final.json` in the
 same private evidence folder. All owned processes are closed. The current
-[Guide draft PR](https://github.com/furqanagwan/xbox-guide/pull/9) Windows CI checks
+[Guide draft PR](https://github.com/furqanagwan/xbox/pull/9) Windows CI checks
 pass, as do the [SDK draft PR](https://github.com/furqanagwan/rexglue-sdk/pull/215)
 format checks; these do not replace the missing owner/hardware/service gates.
 

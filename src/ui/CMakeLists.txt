@@ -67,7 +67,7 @@ endif()
 
 add_library(rexui OBJECT ${REXUI_SOURCES})
 add_library(rex::ui ALIAS rexui)
-xbox_guide_attach_rexglue(rexui)
+xbox_attach_rexglue(rexui)
 
 rex_target_pch(rexui <rex/math.h>)
 

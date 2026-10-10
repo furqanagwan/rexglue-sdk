@@ -29,7 +29,7 @@ requires a shader architecture decision and does not imply a Vulkan backend.
 * `src/kernel`: XboxKrnl/XAM typed exports; preserve guest signatures and status.
 * `src/graphics`, `include/rex/graphics`: Xenos/PM4, shaders, textures, EDRAM,
   D3D12 plugin. `src/ui/d3d12` owns host device/presentation.
-* `thirdparty/xbox-guide`: pinned [Xbox Guide repository](https://github.com/furqanagwan/xbox-guide),
+* `thirdparty/xbox`: pinned [Xbox repository](https://github.com/furqanagwan/xbox),
   owning Guide/XUI sources, headers, tests and Guide issues. SDK guest services
   and CLI/title integration remain here; see `docs/xbox-guide-extraction.md`.
 * `src/audio`, `src/input`, `src/filesystem`, `src/core`: guest services/host adapters.

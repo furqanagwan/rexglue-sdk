@@ -11,7 +11,7 @@ sources. ADR-011's scene-driven behavior and private-asset policy still apply.
 
 ## Decision
 
-[xbox-guide](https://github.com/furqanagwan/xbox-guide) owns Guide/XUI sources,
+[xbox-guide](https://github.com/furqanagwan/xbox) owns Guide/XUI sources,
 headers and tests. ReXGlue consumes an immutable submodule revision and compiles
 its adapter into the existing runtime. Installed headers and title embedding
 retain their existing interfaces. The standalone scene target supplies parsing,

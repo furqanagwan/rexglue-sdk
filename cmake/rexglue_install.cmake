@@ -63,9 +63,11 @@ install(DIRECTORY include/rex
 )
 
 # Preserve the installed SDK's public Guide/XUI include paths.
-install(DIRECTORY "${XBOX_GUIDE_SOURCE_DIR}/include/rex/"
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rex
-)
+foreach(xbox_include_dir IN LISTS XBOX_INCLUDE_DIRS)
+    install(DIRECTORY "${xbox_include_dir}/rex/"
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rex
+    )
+endforeach()
 
 # Install generated version header
 install(FILES

@@ -72,7 +72,7 @@ add_executable(unit_tests
     rexglue/app_name_test.cpp
 )
 
-xbox_guide_attach_tests(unit_tests)
+xbox_attach_tests(unit_tests)
 
 if(WIN32)
     target_sources(unit_tests PRIVATE audio/xaudio2_driver_test.cpp)
