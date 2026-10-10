@@ -42,3 +42,38 @@ jobs:
             ctest --preset "win-amd64-gdk-$configuration" --output-on-failure --no-tests=error -L '^(unit|ppc)$' -LE '^installed_runtime$'
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+
+  sanitizers:
+    name: AddressSanitizer and parser fuzzing
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install build tools
+        run: choco install llvm cmake ninja -y
+      - name: Select the pinned PC GDK
+        shell: pwsh
+        run: |
+          $gdkRoot = & ./scripts/setup_gdk.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'gdk260404')
+          "GameDKCoreLatest=$gdkRoot" >> $env:GITHUB_ENV
+      - name: Unit tests under AddressSanitizer, then 30 seconds per fuzz target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vsWhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vsInstall = & $vsWhere -latest -property installationPath
+          & "$vsInstall/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          cmake --preset win-amd64-gdk-asan
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build --preset win-amd64-gdk-asan-release --target unit_tests --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --preset win-amd64-gdk-asan-release --output-on-failure --no-tests=error -L '^unit$' -LE '^installed_runtime$'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --preset win-amd64-gdk-fuzz -DREXGLUE_FUZZ_SECONDS=30
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build --preset win-amd64-gdk-fuzz-release --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --preset win-amd64-gdk-fuzz-release --output-on-failure --no-tests=error -L '^fuzz$'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

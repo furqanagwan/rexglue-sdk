@@ -140,7 +140,8 @@
     {
       "name": "win-amd64-gdk-fuzz-release",
       "configurePreset": "win-amd64-gdk-fuzz",
-      "configuration": "Release"
+      "configuration": "Release",
+      "targets": ["fuzzers"]
     },
     {
       "name": "win-arm64-debug",

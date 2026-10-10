@@ -2,19 +2,33 @@
 
 set(REXGLUE_FUZZ_SECONDS 60 CACHE STRING "Seconds each fuzz.<parser> CTest test runs")
 
+add_custom_target(fuzzers)
+
 add_executable(fuzz_seeds fuzz_seeds.cpp)
 target_link_libraries(fuzz_seeds PRIVATE rexruntime)
 set_target_properties(fuzz_seeds PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>)
 
+add_executable(xui_fuzz_seeds ${XBOX_FUZZ_DIR}/xui_fuzz_seeds.cpp)
+target_include_directories(xui_fuzz_seeds PRIVATE ${XBOX_FUZZ_TEST_DATA_DIR})
+set_target_properties(xui_fuzz_seeds PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>)
+add_dependencies(fuzzers fuzz_seeds xui_fuzz_seeds)
+
 set(_fuzz_seeds_dir ${CMAKE_CURRENT_BINARY_DIR}/seeds)
 add_test(NAME fuzz.seeds COMMAND fuzz_seeds ${_fuzz_seeds_dir})
 set_tests_properties(fuzz.seeds PROPERTIES FIXTURES_SETUP fuzz_seeds LABELS "fuzz")
+add_test(NAME fuzz.xui_seeds COMMAND xui_fuzz_seeds ${_fuzz_seeds_dir}/xui)
+set_tests_properties(fuzz.xui_seeds PROPERTIES FIXTURES_SETUP fuzz_seeds LABELS "fuzz")
 
-foreach(_parser xex xdbf xdvdfs stfs)
-    add_executable(${_parser}_fuzzer ${_parser}_fuzzer.cpp)
+foreach(_parser xex xdbf xdvdfs stfs xui)
+    if(_parser STREQUAL "xui")
+        add_executable(xui_fuzzer ${XBOX_FUZZ_DIR}/xui_fuzzer.cpp)
+    else()
+        add_executable(${_parser}_fuzzer ${_parser}_fuzzer.cpp)
+    endif()
     target_include_directories(${_parser}_fuzzer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${_parser}_fuzzer PRIVATE rexruntime)
     target_link_options(${_parser}_fuzzer PRIVATE -fsanitize=fuzzer)
+    add_dependencies(fuzzers ${_parser}_fuzzer)
     set_target_properties(${_parser}_fuzzer PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:rexruntime>)
 
