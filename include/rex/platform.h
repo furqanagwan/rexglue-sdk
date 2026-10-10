@@ -44,12 +44,8 @@
 #include <bit>
 #include <cstdint>
 
-//=============================================================================
-// Compiler Polyfills
-//=============================================================================
-
 #if defined(__clang__)
-// Clang has builtin rotate functions and debugtrap
+
 #elif defined(__GNUC__)
 #ifndef __builtin_rotateleft32
 #define __builtin_rotateleft32(x, n) std::rotl(static_cast<uint32_t>(x), static_cast<int>(n))
@@ -72,13 +68,12 @@
 #define _REXPACKEDSCOPE(body)    \
   _Pragma("pack(push, 1)") body; \
   _Pragma("pack(pop)");
-#endif  // REX_COMPILER_MSVC
+#endif
 
 #define REXPACKEDSTRUCT(name, value) _REXPACKEDSCOPE(struct name value)
 #define REXPACKEDSTRUCTANONYMOUS(value) _REXPACKEDSCOPE(struct value)
 #define REXPACKEDUNION(name, value) _REXPACKEDSCOPE(union name value)
 
-// Compiler capability macros
 #if REX_COMPILER_CLANG || REX_COMPILER_GNUC
 #define REX_HAS_BUILTIN_STRLEN 1
 #else
@@ -89,4 +84,4 @@ namespace rex::platform {
 
 inline constexpr char kPathSeparator = '\\';
 
-}  // namespace rex::platform
+}

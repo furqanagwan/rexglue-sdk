@@ -35,4 +35,4 @@ constexpr size_t operator""_PiB(unsigned long long int x) {
   return 1024_TiB * x;
 }
 
-}  // namespace rex::literals
+}

@@ -22,15 +22,6 @@
 
 namespace rex::cvar {
 
-/**
- * Adds a "--<name>" option for every registered flag to `app`. Boolean flags
- * also gain a "--no-<name>" form. Values go through the same validation as
- * SetFlagByName and are recorded as Source::kCommandLine.
- *
- * Call after all cvars have registered and before parsing. Set
- * `app.fallthrough()` beforehand if the tool uses subcommands and should accept
- * overrides spelled after the subcommand name.
- */
 inline void RegisterCliOptions(CLI::App& app, std::string_view group = "Configuration Variables") {
   const std::string group_name(group);
 
@@ -57,4 +48,4 @@ inline void RegisterCliOptions(CLI::App& app, std::string_view group = "Configur
   }
 }
 
-}  // namespace rex::cvar
+}

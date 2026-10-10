@@ -47,7 +47,6 @@ void Fiber::SwitchTo(Fiber* target) {
 }
 
 void Fiber::Destroy() {
-  // Thread fibers are destroyed from the owning thread itself.
   if (is_thread_fiber_) {
     ::ConvertFiberToThread();
     tls_current_ = nullptr;
@@ -58,4 +57,4 @@ void Fiber::Destroy() {
   delete this;
 }
 
-}  // namespace rex::thread
+}

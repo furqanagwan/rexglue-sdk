@@ -44,8 +44,6 @@ std::filesystem::path to_path(const std::u16string_view source) {
 namespace filesystem {
 
 std::filesystem::path GetExecutablePath() {
-  // _wpgmptr is only set for wmain entry points; a plain main (Catch2)
-  // leaves it null and the debug CRT asserts. Ask the loader instead.
   std::wstring path(MAX_PATH, L'\0');
   while (true) {
     DWORD length = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
@@ -74,7 +72,7 @@ std::filesystem::path KnownFolder(REFKNOWNFOLDERID id) {
   CoTaskMemFree(path);
   return result;
 }
-}  // namespace
+}
 
 std::filesystem::path GetSavedGamesFolder() {
   return KnownFolder(FOLDERID_SavedGames);
@@ -106,7 +104,6 @@ bool CreateEmptyFile(const std::filesystem::path& path) {
 }
 
 FILE* OpenFile(const std::filesystem::path& path, const std::string_view mode) {
-  // Dumb, but OK.
   const auto wmode = rex::string::to_utf16(mode);
   FILE* file = nullptr;
   if (_wfopen_s(&file, path.c_str(), reinterpret_cast<const wchar_t*>(wmode.c_str())) != 0) {
@@ -124,7 +121,6 @@ int64_t Tell(FILE* file) {
 }
 
 bool TruncateStdioFile(FILE* file, uint64_t length) {
-  // Flush is necessary - if not flushing, stream position may be out of sync.
   if (fflush(file)) {
     return false;
   }
@@ -233,7 +229,7 @@ std::unique_ptr<FileHandle> FileHandle::OpenExisting(const std::filesystem::path
   if (allow_share_delete) {
     share_mode |= FILE_SHARE_DELETE;
   }
-  // We assume we've already created the file in the caller.
+
   DWORD creation_disposition = OPEN_EXISTING;
   HANDLE handle = CreateFileW(path.c_str(), open_access, share_mode, nullptr, creation_disposition,
                               FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
@@ -298,5 +294,5 @@ std::vector<FileInfo> ListFiles(const std::filesystem::path& path) {
   return result;
 }
 
-}  // namespace filesystem
-}  // namespace rex
+}
+}

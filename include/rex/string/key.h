@@ -37,7 +37,7 @@ struct string_key_base {
   }
 };
 
-}  // namespace detail
+}
 
 struct string_key : detail::string_key_base {
  public:
@@ -79,7 +79,7 @@ struct string_key_case : detail::string_key_base {
   };
 };
 
-}  // namespace rex::string
+}
 
 namespace std {
 template <>
@@ -91,4 +91,4 @@ template <>
 struct hash<rex::string::string_key_case> {
   std::size_t operator()(const rex::string::string_key_case& t) const { return t.hash(); }
 };
-}  // namespace std
+}

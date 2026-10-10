@@ -51,7 +51,6 @@ void* Arena::Alloc(size_t size, size_t align) {
   assert_true(align > 0 && rex::is_pow2(align) && align <= 16,
               "align needs to be a power of 2 and not greater than Chunk alignment");
 
-  // for alignment
   const auto get_padding = [this, align]() -> size_t {
     const size_t mask = align - 1;
     size_t deviation = active_chunk_->offset & mask;
@@ -138,4 +137,4 @@ Arena::Chunk::~Chunk() {
   }
 }
 
-}  // namespace rex::memory
+}

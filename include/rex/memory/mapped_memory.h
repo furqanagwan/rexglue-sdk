@@ -37,8 +37,6 @@ class MappedMemory {
   MappedMemory& operator=(MappedMemory&& mapped_memory) = delete;
   virtual ~MappedMemory() = default;
 
-  // The mapping is still backed by the object the slice was created from, a
-  // slice is not owning.
   std::unique_ptr<MappedMemory> Slice(size_t offset, size_t length) {
     return std::unique_ptr<MappedMemory>(new MappedMemory(data() + offset, length));
   }
@@ -46,11 +44,9 @@ class MappedMemory {
   uint8_t* data() const { return reinterpret_cast<uint8_t*>(data_); }
   size_t size() const { return size_; }
 
-  // Close, and optionally truncate file to size
   virtual void Close(uint64_t truncate_size = 0) { (void)truncate_size; }
   virtual void Flush() {}
 
-  // Changes the offset inside the file. This will update data() and size()!
   virtual bool Remap(size_t offset, size_t length) {
     (void)offset;
     (void)length;
@@ -84,4 +80,4 @@ class ChunkedMappedMemoryWriter {
   bool low_address_space_;
 };
 
-}  // namespace rex::memory
+}

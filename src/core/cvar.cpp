@@ -33,18 +33,13 @@ bool g_finalized = false;
 bool g_lifecycle_override = false;
 std::mutex g_mutex;
 
-// Set once cvar::Init has parsed the command line; later registrations are
-// from runtime-loaded modules and drain pending values.
 std::atomic<bool> g_init_done = false;
 
-// Recursive: FlagRegistrar chain methods re-enter; change callbacks invoked
-// from SetFlagByName must not mutate the registry.
 std::recursive_mutex& GetRegistryMutex() {
   static std::recursive_mutex m;
   return m;
 }
 
-// Flag registry - use functions to avoid static init order issues
 std::vector<FlagEntry>& GetRegistryStorage() {
   static std::vector<FlagEntry> registry;
   return registry;
@@ -55,12 +50,10 @@ std::unordered_map<std::string, size_t>& GetRegistryIndex() {
   return index;
 }
 
-// Values that arrived before their cvar was registered; runtime-loaded
-// modules register cvars long after Init/LoadConfig.
 struct PendingValues {
   std::optional<std::string> cmdline;
   std::optional<std::string> config;
-  std::optional<std::string> title_default;  // SetTitleDefault
+  std::optional<std::string> title_default;
 };
 
 std::unordered_map<std::string, PendingValues>& GetPendingValuesStorage() {
@@ -68,7 +61,6 @@ std::unordered_map<std::string, PendingValues>& GetPendingValuesStorage() {
   return pending;
 }
 
-// Convert flag name to environment variable: gpu_vsync -> REX_GPU_VSYNC
 std::string FlagNameToEnvVar(std::string_view name) {
   std::string result = "REX_";
   for (char c : name) {
@@ -81,7 +73,6 @@ enum class ApplyResult { kApplied, kSkipped, kRejected };
 
 ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Source source);
 
-// Records the value SaveConfig writes for a registered flag.
 void SetPersistedValue(std::string_view name, std::string_view value) {
   std::lock_guard lock(GetRegistryMutex());
   auto it = GetRegistryIndex().find(std::string(name));
@@ -94,7 +85,6 @@ bool Outranks(Source source, const FlagEntry& entry) {
   return source >= entry.source;
 }
 
-// Unvalidated apply, for the command line and environment paths.
 bool ApplyFromSource(FlagEntry& entry, std::string_view value, Source source) {
   if (!Outranks(source, entry) || !entry.setter(value)) {
     return false;
@@ -103,7 +93,6 @@ bool ApplyFromSource(FlagEntry& entry, std::string_view value, Source source) {
   return true;
 }
 
-// Recursively apply TOML values
 void ApplyTomlTable(const toml::table& table, const std::string& prefix) {
   for (const auto& [key, value] : table) {
     std::string full_key = prefix.empty() ? std::string(key) : prefix + "_" + std::string(key);
@@ -137,7 +126,7 @@ void ApplyTomlTable(const toml::table& table, const std::string& prefix) {
           REXLOG_DEBUG("Config: {} = {}", full_key, value_str);
           break;
         case ApplyResult::kSkipped:
-          // Still the file's value: saving must keep it.
+
           SetPersistedValue(full_key, value_str);
           REXLOG_DEBUG("Config: {} ignored, already set by a higher-priority source", full_key);
           break;
@@ -149,13 +138,11 @@ void ApplyTomlTable(const toml::table& table, const std::string& prefix) {
   }
 }
 
-// todo(tomc): move restart manager to Runtime
 std::vector<std::string>& GetPendingRestartStorage() {
   static std::vector<std::string> pending;
   return pending;
 }
 
-// Callback storage for change notifications
 std::unordered_map<std::string, std::vector<ChangeCallback>>& GetCallbackStorage() {
   static std::unordered_map<std::string, std::vector<ChangeCallback>> callbacks;
   return callbacks;
@@ -172,16 +159,13 @@ void MarkPendingRestart(std::string_view name) {
 bool ValidateConstraints(const FlagEntry& entry, std::string_view value) {
   const auto& c = entry.constraints;
 
-  // Range validation for numeric types
   if (c.HasRangeConstraint()) {
     double numeric_val = 0;
     if (entry.type == FlagType::String || entry.type == FlagType::Boolean) {
-      // These types don't have numeric range constraints
     } else if (entry.type == FlagType::Double) {
       if (!ParseDouble(value, numeric_val))
         return false;
     } else {
-      // Integer types
       int64_t int_val = 0;
       auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), int_val);
       if (ec != std::errc())
@@ -199,7 +183,6 @@ bool ValidateConstraints(const FlagEntry& entry, std::string_view value) {
     }
   }
 
-  // Allowed values validation
   if (c.HasAllowedValues()) {
     bool found = false;
     for (const auto& allowed : c.allowed_values) {
@@ -214,7 +197,6 @@ bool ValidateConstraints(const FlagEntry& entry, std::string_view value) {
     }
   }
 
-  // Custom validator
   if (c.custom_validator && !c.custom_validator(value)) {
     REXLOG_WARN("Flag '{}': custom validation failed for '{}'", entry.name, value);
     return false;
@@ -223,11 +205,7 @@ bool ValidateConstraints(const FlagEntry& entry, std::string_view value) {
   return true;
 }
 
-}  // namespace
-
-//=============================================================================
-// Registry
-//=============================================================================
+}
 
 std::vector<FlagEntry>& GetRegistry() {
   return GetRegistryStorage();
@@ -248,7 +226,6 @@ std::optional<size_t> RegisterFlag(FlagEntry entry) {
   index[entry.name] = pos;
   storage.push_back(std::move(entry));
 
-  // Late registration: replay pending values in ascending priority.
   if (g_init_done) {
     FlagEntry& stored = storage[pos];
     auto& pending = GetPendingValuesStorage();
@@ -358,7 +335,7 @@ ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Sou
   return ApplyResult::kApplied;
 }
 
-}  // namespace
+}
 
 bool SetFlagByName(std::string_view name, std::string_view value) {
   return SetFlagFromSource(name, value, Source::kRuntime) == ApplyResult::kApplied;
@@ -369,14 +346,12 @@ bool SetTitleDefault(std::string_view name, std::string_view value) {
     std::lock_guard lock(GetRegistryMutex());
     auto it = GetRegistryIndex().find(std::string(name));
     if (it == GetRegistryIndex().end()) {
-      // A runtime-loaded module's flag (the GPU plugin's): applied when it
-      // registers, under its config and command-line values.
       GetPendingValuesStorage()[std::string(name)].title_default = std::string(value);
       return true;
     }
     auto& entry = GetRegistryStorage()[it->second];
     if (entry.source != Source::kDefault) {
-      return true;  // a higher source already chose
+      return true;
     }
     if (!ValidateConstraints(entry, value) || !entry.setter(value)) {
       return false;
@@ -402,8 +377,7 @@ bool InvokeCommand(std::string_view name, std::string_view args) {
     if (entry.type != FlagType::Command) {
       return false;
     }
-    // Copy the callback out from under the lock; GetFlagInfo pointers are
-    // invalidated by registry mutation and a command may touch the registry.
+
     cb = entry.command_callback;
   }
   if (!cb) {
@@ -468,7 +442,6 @@ std::vector<std::string> ListFlagsByLifecycle(Lifecycle lc) {
 }
 
 const FlagEntry* GetFlagInfo(std::string_view name) {
-  // Pointer is invalidated by any subsequent registry call.
   std::lock_guard lock(GetRegistryMutex());
   auto it = GetRegistryIndex().find(std::string(name));
   if (it == GetRegistryIndex().end()) {
@@ -585,9 +558,6 @@ std::string TomlLine(const std::string& name, const std::string& value, bool is_
   return is_string ? name + " = \"" + value + "\"\n" : name + " = " + value + "\n";
 }
 
-// Config-file and runtime values only. A value from the defaults, the
-// environment or the command line (or a title profile, ADR-009) belongs to
-// this run, and saving it would make it permanent (Canary #844).
 std::string SerializePersisted(std::optional<std::string_view> category) {
   std::lock_guard lock(GetRegistryMutex());
   std::string result;
@@ -598,9 +568,6 @@ std::string SerializePersisted(std::optional<std::string_view> category) {
     }
   }
   if (!category) {
-    // Config keys for cvars that never registered this run (a plugin that
-    // wasn't loaded) stay in the file. Their type is unknown: booleans and
-    // numbers are written bare, anything else quoted.
     std::vector<std::pair<std::string, std::string>> unregistered;
     for (const auto& [name, values] : GetPendingValuesStorage()) {
       if (values.config) {
@@ -618,7 +585,7 @@ std::string SerializePersisted(std::optional<std::string_view> category) {
   return result;
 }
 
-}  // namespace
+}
 
 std::string SerializeToTOML() {
   return SerializePersisted(std::nullopt);
@@ -637,10 +604,6 @@ void UnregisterChangeCallbacks(std::string_view name) {
   std::lock_guard lock(GetRegistryMutex());
   GetCallbackStorage().erase(std::string(name));
 }
-
-//=============================================================================
-// Initialization
-//=============================================================================
 
 std::vector<std::string> Init(int argc, char** argv) {
   CLI::App app{"", ""};
@@ -668,9 +631,6 @@ std::vector<std::string> Init(int argc, char** argv) {
     fprintf(stderr, "cvar: CLI11  parse error: %s\n", e.what());
   }
 
-  // Stash unrecognized --options for cvars that register later. Supported
-  // forms: --name=value, --name (true), --no-name (false); a separated
-  // "--name value" pair is ambiguous with a positional, so never consumed.
   std::vector<std::string> positional;
   for (const auto& arg : app.remaining()) {
     std::string_view view(arg);
@@ -758,7 +718,6 @@ void SaveConfig(const std::filesystem::path& config_path) {
 bool TrySaveConfig(const std::filesystem::path& config_path) {
   std::string content = SerializeToTOML();
   try {
-    // The per-user settings folder may not exist yet.
     std::error_code ec;
     if (config_path.has_parent_path()) {
       std::filesystem::create_directories(config_path.parent_path(), ec);
@@ -800,6 +759,6 @@ void ResetAllForTesting() {
   g_finalized = false;
 }
 
-}  // namespace testing
+}
 
-}  // namespace rex::cvar
+}

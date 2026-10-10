@@ -35,16 +35,16 @@ struct TempDir {
   fs::path path;
 };
 
-}  // namespace
+}
 
 TEST_CASE("The log budget removes whole runs, oldest first", "[logging]") {
   TempDir dir;
   for (int run = 1; run <= 5; run++) {
     WriteFile(dir.path / ("game_00" + std::to_string(run) + ".log"), 1000);
   }
-  // A rotated part of run 2 goes with it.
+
   WriteFile(dir.path / "game_002.1.log", 1000);
-  // Not this app's runs: never touched.
+
   WriteFile(dir.path / "other_001.log", 5000);
   WriteFile(dir.path / "game_notes.txt", 5000);
 

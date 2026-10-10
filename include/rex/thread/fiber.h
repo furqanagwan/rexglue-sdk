@@ -16,27 +16,15 @@
 
 namespace rex::thread {
 
-/// Host OS fiber primitive.
-/// Each guest fiber gets one Fiber. Switching preserves the entire C++ call
-/// stack, so mid-function resume works without any LR lookup.
 struct Fiber {
-  /// Convert the calling thread into a fiber.
-  /// Must be called once on a thread before any SwitchTo.
-  /// Returns a handle for the thread's current execution context.
   static Fiber* ConvertCurrentThread();
 
-  /// Create a new fiber with its own host stack.
-  /// entry(arg) is called when the fiber is first switched to.
   static Fiber* Create(size_t stack_size, void (*entry)(void*), void* arg);
 
-  /// Suspend the current fiber and resume target.
-  /// Returns when another fiber calls SwitchTo back to this one.
   static void SwitchTo(Fiber* target);
 
-  /// Destroy this fiber. Must not be called while it is executing.
   void Destroy();
 
-  /// Returns the fiber currently executing on this thread, or nullptr.
   static Fiber* Current() { return tls_current_; }
 
  private:
@@ -46,4 +34,4 @@ struct Fiber {
   bool is_thread_fiber_ = false;
 };
 
-}  // namespace rex::thread
+}

@@ -20,67 +20,51 @@
 namespace rex::perf {
 
 enum class CounterId : uint16_t {
-  // Frame
+
   kFrameTimeUs,
   kFps,
 
-  // GPU
   kDrawCalls,
   kCommandBufferStalls,
   kVerticesProcessed,
 
-  // Audio
   kXmaFramesDecoded,
   kAudioFrameLatencyUs,
   kBufferQueueDepth,
 
-  // Dispatch
   kFunctionsDispatched,
   kInterruptDispatches,
 
-  // Threading
   kActiveThreads,
   kApcQueueDepth,
   kCriticalRegionContentions,
 
-  // Caches
   kTextureCacheHits,
   kTextureCacheMisses,
   kPipelineCacheHits,
   kPipelineCacheMisses,
 
-  kCount  // sentinel -- must be last
+  kCount
 };
 
-// Returns human-readable name for a counter (e.g. "frame_time_us")
 const char* CounterName(CounterId id);
 
-// Set a counter to an absolute value
 void SetCounter(CounterId id, int64_t value);
 
-// Atomically add to a counter
 void IncrementCounter(CounterId id, int64_t delta = 1);
 
-// Read a counter's current live value
 int64_t GetCounter(CounterId id);
 
-// Snapshot current values into the read buffer and zero the live counters.
-// Called once per frame by Profiler::Flip().
 void ResetFrameCounters();
 
-// Read a counter from the last-frame snapshot (stable between frames).
 int64_t GetSnapshotCounter(CounterId id);
 
-// Initialize the counter system (zeroes everything). Safe to call multiple times.
 void Init();
 
-// CSV logging
 void SetCsvLogPath(const std::string& path);
 void WriteCsvFrame();
 void FlushCsv();
 
-// Profiler -- coordinates Tracy frame marks and counter snapshots.
-// Moved here from rex::debug to consolidate all perf code under rex::perf.
 class Profiler {
  public:
   static void Startup() {
@@ -130,17 +114,14 @@ class Profiler {
   }
 };
 
-}  // namespace rex::perf
+}
 
-// Perf counter macros -- compile to no-ops when counters are disabled.
 #ifdef REXGLUE_ENABLE_PERF_COUNTERS
 
-// Generic helpers for easily adding new counters
 #define PERF_counter_set(id, value) rex::perf::SetCounter(rex::perf::CounterId::id, value)
 #define PERF_counter_inc(id) rex::perf::IncrementCounter(rex::perf::CounterId::id)
 #define PERF_counter_add(id, delta) rex::perf::IncrementCounter(rex::perf::CounterId::id, delta)
 
-// Purpose-specific macros so callsites stay clean
 #define PROFILE_FRAME_TIME_US(value) PERF_counter_set(kFrameTimeUs, value)
 #define PROFILE_FPS(value) PERF_counter_set(kFps, value)
 #define PROFILE_FUNCTION_DISPATCHED() PERF_counter_inc(kFunctionsDispatched)

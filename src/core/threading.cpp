@@ -15,10 +15,6 @@
 
 namespace rex::thread {
 
-// =============================================================================
-// Common code
-// =============================================================================
-
 uint32_t logical_processor_count() {
   static uint32_t value = 0;
   if (!value) {
@@ -37,4 +33,4 @@ void set_current_thread_id(uint32_t id) {
   current_thread_id_ = id;
 }
 
-}  // namespace rex::thread
+}

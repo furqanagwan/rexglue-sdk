@@ -34,14 +34,6 @@
 
 namespace rex::arch {
 
-//=============================================================================
-// ARM64 Register Definitions
-//=============================================================================
-
-// NOTE: The order of the registers in the enumerations must match the order in
-// the string table in host_thread_context.cc, as well as remapping tables in
-// exception handler implementations.
-
 enum class Arm64Register {
   kX0,
   kX1,
@@ -72,16 +64,16 @@ enum class Arm64Register {
   kX26,
   kX27,
   kX28,
-  // FP (frame pointer).
+
   kX29,
-  // LR (link register).
+
   kX30,
   kSp,
   kPc,
   kPstate,
   kFpsr,
   kFpcr,
-  // The whole 128 bits of a Vn register are also known as Qn (quadword).
+
   kV0,
   kV1,
   kV2,
@@ -116,8 +108,6 @@ enum class Arm64Register {
   kV31,
 };
 
-// ARM64 thread context structure members
-// Used within HostThreadContext class via #if REX_ARCH_ARM64
 struct Arm64ThreadContextMembers {
   uint64_t x[31];
   uint64_t sp;
@@ -128,23 +118,14 @@ struct Arm64ThreadContextMembers {
   vec128_t v[32];
 };
 
-//=============================================================================
-// AMD64 Register Definitions
-//=============================================================================
-
 #if REX_ARCH_AMD64
-
-// NOTE: The order of the registers in the enumerations must match the order in
-// the string table in host_thread_context.cc, as well as remapping tables in
-// exception handler implementations.
 
 enum class X64Register {
   kRip,
   kEflags,
 
   kIntRegisterFirst,
-  // The order matches the indices in the instruction encoding, as well as the
-  // Windows CONTEXT structure.
+
   kRax = kIntRegisterFirst,
   kRcx,
   kRdx,
@@ -181,8 +162,6 @@ enum class X64Register {
   kXmm15,
 };
 
-// x86-64 thread context structure members
-// Used within HostThreadContext class via #if REX_ARCH_AMD64
 struct X64ThreadContextMembers {
   uint64_t rip;
   uint32_t eflags;
@@ -230,11 +209,7 @@ struct X64ThreadContextMembers {
   };
 };
 
-#endif  // REX_ARCH_AMD64
-
-//=============================================================================
-// Host Register Typedef
-//=============================================================================
+#endif
 
 #if REX_ARCH_AMD64
 using HostRegister = X64Register;
@@ -242,11 +217,7 @@ using HostRegister = X64Register;
 using HostRegister = Arm64Register;
 #else
 enum class HostRegister {};
-#endif  // REX_ARCH
-
-//=============================================================================
-// Host Thread Context
-//=============================================================================
+#endif
 
 class HostThreadContext {
  public:
@@ -303,47 +274,22 @@ class HostThreadContext {
   uint32_t fpsr;
   uint32_t fpcr;
   vec128_t v[32];
-#endif  // REX_ARCH
+#endif
 
   static const char* GetRegisterName(HostRegister reg);
   std::string GetStringFromValue(HostRegister reg, bool hex) const;
 };
 
-//=============================================================================
-// ARM64 Load/Store Decoding (VIXL-derived)
-//=============================================================================
-
-// AArch64 load and store decoding based on VIXL.
-// https://github.com/Linaro/vixl/blob/ae5957cd66517b3f31dbf37e9bf39db6594abfe3/src/aarch64/constants-aarch64.h
-//
 // Copyright 2015, VIXL authors
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-//   * Redistributions of source code must retain the above copyright notice,
-//     this list of conditions and the following disclaimer.
-//   * Redistributions in binary form must reproduce the above copyright notice,
-//     this list of conditions and the following disclaimer in the documentation
-//     and/or other materials provided with the distribution.
-//   * Neither the name of ARM Limited nor the names of its contributors may be
-//     used to endorse or promote products derived from this software without
-//     specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS CONTRIBUTORS "AS IS" AND
-// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
-// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// `Instruction address + literal offset` loads.
-// This includes PRFM_lit.
+//   * Redistributions of source code must retain the above copyright notice,
+
+//   * Redistributions in binary form must reproduce the above copyright notice,
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS CONTRIBUTORS "AS IS" AND
+
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+
 constexpr uint32_t kArm64LoadLiteralFMask = UINT32_C(0x3B000000);
 constexpr uint32_t kArm64LoadLiteralFixed = UINT32_C(0x18000000);
 
@@ -393,14 +339,7 @@ enum class Arm64LoadStoreOffsetFixed : uint32_t {
 constexpr uint32_t kArm64LoadStoreUnsignedOffsetFMask = UINT32_C(0x3B000000);
 constexpr uint32_t kArm64LoadStoreUnsignedOffsetFixed = UINT32_C(0x39000000);
 
-// Determines if an ARM64 instruction is a load, prefetch, or store operation.
-// Returns true if the instruction is one of these, with is_store_out set to
-// indicate whether it's a store operation.
 bool IsArm64LoadPrefetchStore(uint32_t instruction, bool& is_store_out);
-
-//=============================================================================
-// Exception Class
-//=============================================================================
 
 class Exception {
  public:
@@ -430,18 +369,8 @@ class Exception {
 
   Code code() const { return code_; }
 
-  // Returns the platform-specific thread context info.
-  // Note that certain registers must be modified through Modify* proxy
-  // functions rather than directly:
-  // x86-64:
-  // - General-purpose registers (r##, r8-r15).
-  // - XMM registers.
-  // AArch64:
-  // - General-purpose registers (Xn), including FP and LR.
-  // - SIMD and floating-point registers (Vn).
   HostThreadContext* thread_context() const { return thread_context_; }
 
-  // Returns the program counter where the exception occurred.
   uint64_t pc() const {
 #if REX_ARCH_AMD64
     return thread_context_->rip;
@@ -450,10 +379,9 @@ class Exception {
 #else
     assert_always();
     return 0;
-#endif  // REX_ARCH
+#endif
   }
 
-  // Sets the program counter where execution will resume.
   void set_resume_pc(uint64_t pc) {
 #if REX_ARCH_AMD64
     thread_context_->rip = pc;
@@ -461,11 +389,11 @@ class Exception {
     thread_context_->pc = pc;
 #else
     assert_always();
-#endif  // REX_ARCH
+#endif
   }
 
 #if REX_ARCH_AMD64
-  // The index is relative to X64Register::kIntRegisterFirst.
+
   uint64_t& ModifyIntRegister(uint32_t index) {
     assert_true(index <= 15);
     modified_int_registers_ |= UINT16_C(1) << index;
@@ -491,12 +419,10 @@ class Exception {
     return thread_context_->v[index];
   }
   uint32_t modified_v_registers() const { return modified_v_registers_; }
-#endif  // REX_ARCH
+#endif
 
-  // In case of AV, address that was read from/written to.
   uint64_t fault_address() const { return fault_address_; }
 
-  // In case of AV, what kind of operation caused it.
   AccessViolationOperation access_violation_operation() const {
     return access_violation_operation_;
   }
@@ -510,25 +436,18 @@ class Exception {
 #elif REX_ARCH_ARM64
   uint32_t modified_x_registers_ = 0;
   uint32_t modified_v_registers_ = 0;
-#endif  // REX_ARCH
+#endif
   uint64_t fault_address_ = 0;
   AccessViolationOperation access_violation_operation_ = AccessViolationOperation::kUnknown;
 };
-
-//=============================================================================
-// Exception Handler
-//=============================================================================
 
 class ExceptionHandler {
  public:
   typedef bool (*Handler)(Exception* ex, void* data);
 
-  // Installs an exception handler.
-  // Handlers are called in the order they are installed.
   static void Install(Handler fn, void* data);
 
-  // Uninstalls a previously-installed exception handler.
   static void Uninstall(Handler fn, void* data);
 };
 
-}  // namespace rex::arch
+}

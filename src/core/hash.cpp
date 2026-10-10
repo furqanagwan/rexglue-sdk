@@ -36,7 +36,7 @@ std::string HexDigest(XXH128_hash_t digest) {
   return fmt::format("{:016x}{:016x}", digest.high64, digest.low64);
 }
 
-}  // namespace
+}
 
 std::string hash_bytes(std::string_view data) {
   return HexDigest(XXH3_128bits(data.data(), data.size()));
@@ -57,11 +57,10 @@ std::string hash_file(const std::filesystem::path& path) {
       return {};
   }
 
-  // A short read ends the loop the same way EOF does.
   if (ferror(file.get()))
     return {};
 
   return HexDigest(XXH3_128bits_digest(state.get()));
 }
 
-}  // namespace rex
+}

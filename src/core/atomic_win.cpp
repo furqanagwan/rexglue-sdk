@@ -39,4 +39,4 @@ void atomic_store_release(int32_t new_value, volatile int32_t* value) {
   _InterlockedExchange(reinterpret_cast<volatile long*>(value), new_value);
 }
 
-}  // namespace rex::thread
+}

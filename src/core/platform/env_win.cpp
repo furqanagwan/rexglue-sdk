@@ -20,8 +20,7 @@ namespace rex::platform::env {
 
 std::optional<std::string> get(std::string_view name) {
   std::u16string wname = rex::string::to_utf16(name);
-  // First call sizes the buffer (return value is char count INCLUDING NUL on
-  // success, or 0 on error / not-set).
+
   DWORD required = GetEnvironmentVariableW(reinterpret_cast<LPCWSTR>(wname.c_str()), nullptr, 0);
   if (required == 0) {
     return std::nullopt;
@@ -48,4 +47,4 @@ bool unset(std::string_view name) {
   return SetEnvironmentVariableW(reinterpret_cast<LPCWSTR>(wname.c_str()), nullptr) != 0;
 }
 
-}  // namespace rex::platform::env
+}

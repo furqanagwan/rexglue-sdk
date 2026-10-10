@@ -58,4 +58,4 @@ class StringBuffer {
   size_t buffer_capacity_ = 0;
 };
 
-}  // namespace rex::string
+}

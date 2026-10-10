@@ -22,7 +22,6 @@
 
 namespace rex::string {
 
-// UTF-8 path separator constants
 constexpr char32_t kUtf8PathSeparator = static_cast<char32_t>(rex::platform::kPathSeparator);
 constexpr char32_t kUtf8GuestPathSeparator = U'\\';
 
@@ -37,7 +36,6 @@ std::string utf8_upper_ascii(const std::string_view view);
 size_t utf8_hash_fnv1a(const std::string_view view);
 size_t utf8_hash_fnv1a_case(const std::string_view view);
 
-// Splits the given haystack on any delimiters (needles) and returns all parts.
 std::vector<std::string_view> utf8_split(const std::string_view haystack,
                                          const std::string_view needles, bool remove_empty = false);
 
@@ -56,7 +54,6 @@ std::string_view::size_type utf8_find_any_of_case(const std::string_view haystac
 std::string_view::size_type utf8_find_first_of(const std::string_view haystack,
                                                const std::string_view needle);
 
-// find_first_of string, case insensitive.
 std::string_view::size_type utf8_find_first_of_case(const std::string_view haystack,
                                                     const std::string_view needle);
 
@@ -68,10 +65,8 @@ bool utf8_ends_with(const std::string_view haystack, const std::string_view need
 
 bool utf8_ends_with_case(const std::string_view haystack, const std::string_view needle);
 
-// Splits the given path on any valid path separator and returns all parts.
 std::vector<std::string_view> utf8_split_path(const std::string_view path);
 
-// Joins two path segments with the given separator.
 std::string utf8_join_paths(const std::string_view left_path, const std::string_view right_path,
                             char32_t separator = kUtf8PathSeparator);
 
@@ -107,8 +102,6 @@ inline std::string utf8_join_guest_paths(std::initializer_list<const std::string
   return utf8_join_paths(paths, kUtf8GuestPathSeparator);
 }
 
-// Replaces all path separators with the given value and removes redundant
-// separators.
 std::string utf8_fix_path_separators(const std::string_view path,
                                      char32_t new_separator = kUtf8PathSeparator);
 
@@ -116,7 +109,6 @@ inline std::string utf8_fix_guest_path_separators(const std::string_view path) {
   return utf8_fix_path_separators(path, kUtf8GuestPathSeparator);
 }
 
-// Find the top directory name or filename from a path.
 std::string utf8_find_name_from_path(const std::string_view path,
                                      char32_t separator = kUtf8PathSeparator);
 
@@ -131,7 +123,6 @@ inline std::string utf8_find_base_name_from_guest_path(const std::string_view pa
   return utf8_find_base_name_from_path(path, kUtf8GuestPathSeparator);
 }
 
-// Get parent path of the given directory or filename.
 std::string utf8_find_base_path(const std::string_view path,
                                 char32_t separator = kUtf8PathSeparator);
 
@@ -139,7 +130,6 @@ inline std::string utf8_find_base_guest_path(const std::string_view path) {
   return utf8_find_base_path(path, kUtf8GuestPathSeparator);
 }
 
-// Canonicalizes a path, removing ..'s.
 std::string utf8_canonicalize_path(const std::string_view path,
                                    char32_t separator = kUtf8PathSeparator);
 
@@ -147,4 +137,4 @@ inline std::string utf8_canonicalize_guest_path(const std::string_view path) {
   return utf8_canonicalize_path(path, kUtf8GuestPathSeparator);
 }
 
-}  // namespace rex::string
+}

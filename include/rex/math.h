@@ -38,13 +38,11 @@ constexpr bool is_pow2(T value) {
   return (value & (value - 1)) == 0;
 }
 
-// Rounds up the given value to the given alignment.
 template <typename T>
 constexpr T align(T value, T alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
-// Rounds the given number up to the next highest multiple.
 template <typename T, typename V>
 constexpr T round_up(T value, V multiple, bool force_non_zero = true) {
   if (force_non_zero && !value) {
@@ -53,26 +51,17 @@ constexpr T round_up(T value, V multiple, bool force_non_zero = true) {
   return (value + multiple - 1) / multiple * multiple;
 }
 
-// For NaN, returns min_value (or, if it's NaN too, max_value).
-// If either of the boundaries is zero, and if the value is at that boundary or
-// exceeds it, the result will have the sign of that boundary. If both
-// boundaries are zero, which sign is selected among the argument signs is not
-// explicitly defined.
 template <typename T>
 T clamp_float(T value, T min_value, T max_value) {
   float clamped_to_min = std::isgreater(value, min_value) ? value : min_value;
   return std::isless(clamped_to_min, max_value) ? clamped_to_min : max_value;
 }
 
-// Using the same conventions as in shading languages, returning 0 for NaN.
-// 0 is always returned as positive.
 template <typename T>
 T saturate(T value) {
   return clamp_float(value, static_cast<T>(0.0f), static_cast<T>(1.0f));
 }
 
-// Gets the next power of two value that is greater than or equal to the given
-// value.
 template <typename T>
 T next_pow2(T value) {
   value--;
@@ -93,7 +82,6 @@ constexpr T greatest_common_divisor(T a, T b) {
 #else
 template <typename T>
 constexpr T greatest_common_divisor(T a, T b) {
-  // Use the Euclid algorithm to calculate the greatest common divisor
   while (b) {
     a = std::exchange(b, a % b);
   }
@@ -126,14 +114,11 @@ constexpr uint32_t bit_count(T v) {
   return static_cast<uint32_t>(std::popcount(v));
 }
 
-// lzcnt - count leading zeros.
-// Returns the size of the input operand if value is zero.
 uint8_t lzcnt(uint8_t v);
 uint8_t lzcnt(uint16_t v);
 uint8_t lzcnt(uint32_t v);
 uint8_t lzcnt(uint64_t v);
 
-// tzcnt - count trailing zeros.
 uint8_t tzcnt(uint8_t v);
 uint8_t tzcnt(uint16_t v);
 uint8_t tzcnt(uint32_t v);
@@ -163,10 +148,6 @@ inline uint8_t tzcnt(int64_t v) {
   return tzcnt(static_cast<uint64_t>(v));
 }
 
-// BitScanForward (bsf).
-// Search the value from least significant bit (LSB) to the most significant bit
-// (MSB) for a set bit (1).
-// Returns false if no bits are set and the output index is invalid.
 bool bit_scan_forward(uint32_t v, uint32_t* out_first_set_index);
 bool bit_scan_forward(uint64_t v, uint32_t* out_first_set_index);
 inline bool bit_scan_forward(int32_t v, uint32_t* out_first_set_index) {
@@ -191,7 +172,7 @@ inline T rotate_left(T v, uint8_t sh) {
 }
 
 #if REX_ARCH_AMD64
-// Utilities for SSE values.
+
 template <int N>
 float m128_f32(const __m128& v) {
   float ret;
@@ -226,24 +207,15 @@ int64_t m128_i64(const __m128& v) {
 }
 #endif
 
-// Similar to the C++ implementation of XMConvertFloatToHalf and
-// XMConvertHalfToFloat from DirectXMath 3.00 (pre-3.04, which switched from the
-// Xenos encoding to IEEE 754), with the extended range instead of infinity and
-// NaN, and optionally with denormalized numbers - as used in vpkd3d128 (no
-// denormals, rounding towards zero) and on the Xenos (GL_OES_texture_float
-// alternative encoding).
-
 inline uint16_t float_to_xenos_half(float value, bool preserve_denormal = false,
                                     bool round_to_nearest_even = false) {
   uint32_t integer_value = std::bit_cast<uint32_t>(value);
   uint32_t abs_value = integer_value & 0x7FFFFFFFu;
   uint32_t result;
   if (abs_value >= 0x47FFE000u) {
-    // Saturate.
     result = 0x7FFFu;
   } else {
     if (abs_value < 0x38800000u) {
-      // The number is too small to be represented as a normalized half.
       if (preserve_denormal) {
         uint32_t shift = std::min(uint32_t(113u - (abs_value >> 23u)), uint32_t(24u));
         result = (0x800000u | (abs_value & 0x7FFFFFu)) >> shift;
@@ -251,7 +223,6 @@ inline uint16_t float_to_xenos_half(float value, bool preserve_denormal = false,
         result = 0u;
       }
     } else {
-      // Rebias the exponent to represent the value as a normalized half.
       result = abs_value + 0xC8000000u;
     }
     if (round_to_nearest_even) {
@@ -269,8 +240,6 @@ inline float xenos_half_to_float(uint16_t value, bool preserve_denormal = false)
     if (!preserve_denormal) {
       mantissa = 0;
     } else if (mantissa) {
-      // Normalize the value in the resulting float.
-      // do { Exponent--; Mantissa <<= 1; } while ((Mantissa & 0x0400) == 0)
       uint32_t mantissa_lzcnt = rex::lzcnt(mantissa) - (32u - 11u);
       exponent = uint32_t(1 - int32_t(mantissa_lzcnt));
       mantissa = (mantissa << mantissa_lzcnt) & 0x3FFu;
@@ -284,7 +253,6 @@ inline float xenos_half_to_float(uint16_t value, bool preserve_denormal = false)
   return std::bit_cast<float>(result);
 }
 
-// https://locklessinc.com/articles/sat_arithmetic/
 template <typename T>
 inline T sat_add(T a, T b) {
   using TU = typename std::make_unsigned<T>::type;
@@ -314,4 +282,4 @@ inline T sat_sub(T a, T b) {
   return T(result);
 }
 
-}  // namespace rex
+}

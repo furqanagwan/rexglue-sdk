@@ -1,7 +1,5 @@
-/**
- * @file        platform/dynlib.h
- * @brief       Platform-agnostic dynamic library loading
- */
+
+
 #pragma once
 
 #include <cstdint>
@@ -12,11 +10,9 @@
 namespace rex::platform {
 
 enum class SymbolResolution {
-  // Resolve symbols on first use. Maps to RTLD_LAZY on POSIX; the only mode on
-  // Windows.
+
   kLazy,
-  // Resolve all symbols at load time. Load fails if any unresolved symbol
-  // exists. Maps to RTLD_NOW on POSIX; the only mode on Windows.
+
   kImmediate,
 };
 
@@ -49,6 +45,6 @@ namespace lib_names {
 
 inline constexpr const char* kRenderDoc = "renderdoc.dll";
 
-}  // namespace lib_names
+}
 
-}  // namespace rex::platform
+}

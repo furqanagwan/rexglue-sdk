@@ -19,58 +19,6 @@
 
 namespace rex {
 
-// The first rule of vector programming is to only rely on exact positions
-// when absolutely required - prefer dumb loops to exact offsets.
-// Vectors in memory are laid out as in AVX registers on little endian
-// machines. Note that little endian is dumb, so the byte at index 0 in
-// the vector is is really byte 15 (or the high byte of short 7 or int 3).
-// Because of this, all byte access should be via the accessors instead of
-// the direct array.
-
-// Altivec big endian layout:         AVX little endian layout:
-// +---------+---------+---------+    +---------+---------+---------+
-// | int32 0 | int16 0 | int8  0 |    | int32 3 | int16 7 | int8 15 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8  1 |    |         |         | int8 14 |
-// |         +---------+---------+    |         +---------+---------+
-// |         | int16 1 | int8  2 |    |         | int16 6 | int8 13 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8  3 |    |         |         | int8 12 |
-// +---------+---------+---------+    +---------+---------+---------+
-// | int32 1 | int16 2 | int8  4 |    | int32 2 | int16 5 | int8 11 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8  5 |    |         |         | int8 10 |
-// |         +---------+---------+    |         +---------+---------+
-// |         | int16 3 | int8  6 |    |         | int16 4 | int8  9 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8  7 |    |         |         | int8  8 |
-// +---------+---------+---------+    +---------+---------+---------+
-// | int32 2 | int16 4 | int8  8 |    | int32 1 | int16 3 | int8  7 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8  9 |    |         |         | int8  6 |
-// |         +---------+---------+    |         +---------+---------+
-// |         | int16 5 | int8 10 |    |         | int16 2 | int8  5 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8 11 |    |         |         | int8  4 |
-// +---------+---------+---------+    +---------+---------+---------+
-// | int32 3 | int16 6 | int8 12 |    | int32 0 | int16 1 | int8  3 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8 13 |    |         |         | int8  2 |
-// |         +---------+---------+    |         +---------+---------+
-// |         | int16 7 | int8 14 |    |         | int16 0 | int8  1 |
-// |         |         +---------+    |         |         +---------+
-// |         |         | int8 15 |    |         |         | int8  0 |
-// +---------+---------+---------+    +---------+---------+---------+
-//
-// Logical order:
-// +-----+-----+-----+-----+          +-----+-----+-----+-----+
-// |  X  |  Y  |  Z  |  W  |          |  W  |  Z  |  Y  |  X  |
-// +-----+-----+-----+-----+          +-----+-----+-----+-----+
-//
-// Mapping indices is easy:
-// int32[i ^ 0x3]
-// int16[i ^ 0x7]
-//  int8[i ^ 0xF]
 typedef struct alignas(16) vec128_s {
   union {
     struct {
@@ -252,4 +200,4 @@ std::string to_string(const vec128_t& value);
 
 std::ostream& operator<<(std::ostream& os, const vec128_t& value);
 
-}  // namespace rex
+}

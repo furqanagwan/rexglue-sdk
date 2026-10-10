@@ -25,33 +25,20 @@
 
 namespace rex::bit {
 
-//=============================================================================
-// BitMap - Efficient lookup of free/used entries
-//=============================================================================
-
 class BitMap {
  public:
   BitMap();
 
-  // Size is the number of entries, must be a multiple of 64.
   BitMap(size_t size_bits);
 
-  // Data does not have to be aligned to a 4-byte boundary, but it is
-  // preferable.
-  // Size is the number of entries, must be a multiple of 64.
   BitMap(uint64_t* data, size_t size_bits);
 
-  // (threadsafe) Acquires an entry and returns its index. Returns -1 if there
-  // are no more free entries.
   size_t Acquire();
 
-  // (threadsafe) Releases an entry by an index.
   void Release(size_t index);
 
-  // Resize the bitmap. Size is the number of entries, must be a multiple of 64.
   void Resize(size_t new_size_bits);
 
-  // Sets all entries to free.
   void Reset();
 
   const std::vector<uint64_t> data() const { return data_; }
@@ -63,12 +50,6 @@ class BitMap {
   std::vector<uint64_t> data_;
 };
 
-//=============================================================================
-// Bit Range Utilities
-//=============================================================================
-
-// Provided length is in bits since the first. Returns <first, length> of the
-// range in bits, with length == 0 if not found.
 template <typename Block>
 std::pair<size_t, size_t> GetNextRangeUnset(const Block* bits, size_t first, size_t length) {
   if (!length) {
@@ -81,8 +62,7 @@ std::pair<size_t, size_t> GetNextRangeUnset(const Block* bits, size_t first, siz
   size_t range_start = SIZE_MAX;
   for (size_t i = block_first; i <= block_last; ++i) {
     Block block = bits[i];
-    // Ignore bits in the block outside the specified range by considering them
-    // set.
+
     if (i == block_first) {
       block |= (Block(1) << (first & (block_bits - 1))) - 1;
     }
@@ -92,14 +72,11 @@ std::pair<size_t, size_t> GetNextRangeUnset(const Block* bits, size_t first, siz
     while (true) {
       uint32_t block_bit;
       if (range_start == SIZE_MAX) {
-        // Check if need to open a new range.
         if (!rex::bit_scan_forward(~block, &block_bit)) {
           break;
         }
         range_start = i * block_bits + block_bit;
       } else {
-        // Check if need to close the range.
-        // Ignore the set bits before the beginning of the range.
         Block block_bits_set_from_start = block;
         if (i == range_start / block_bits) {
           block_bits_set_from_start &= ~((Block(1) << (range_start & (block_bits - 1))) - 1);
@@ -142,4 +119,4 @@ void SetRange(Block* bits, size_t first, size_t length) {
   bits[block_last] |= set_last;
 }
 
-}  // namespace rex::bit
+}

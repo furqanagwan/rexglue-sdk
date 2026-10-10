@@ -47,4 +47,4 @@ void set_utf8_output_codepage() {
   SetConsoleOutputCP(CP_UTF8);
 }
 
-}  // namespace rex::platform::console
+}

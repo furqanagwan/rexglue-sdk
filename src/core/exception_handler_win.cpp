@@ -19,22 +19,15 @@
 
 namespace rex::arch {
 
-// Handle of the added VectoredExceptionHandler.
 void* veh_handle_ = nullptr;
-// Handle of the added VectoredContinueHandler.
+
 void* vch_handle_ = nullptr;
 
-// This can be as large as needed, but isn't often needed.
-// As we will be sometimes firing many exceptions we want to avoid having to
-// scan the table too much or invoke many custom handlers.
 constexpr size_t kMaxHandlerCount = 8;
 
-// All custom handlers, left-aligned and null terminated.
-// Executed in order.
 std::pair<ExceptionHandler::Handler, void*> handlers_[kMaxHandlerCount];
 
 LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
-  // Visual Studio SetThreadName.
   if (ex_info->ExceptionRecord->ExceptionCode == 0x406D1388) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
@@ -47,8 +40,6 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
   std::memcpy(thread_context.xmm_registers, &ex_info->ContextRecord->Xmm0,
               sizeof(thread_context.xmm_registers));
 
-  // https://msdn.microsoft.com/en-us/library/ms679331(v=vs.85).aspx
-  // https://msdn.microsoft.com/en-us/library/aa363082(v=vs.85).aspx
   Exception ex;
   switch (ex_info->ExceptionRecord->ExceptionCode) {
     case STATUS_ILLEGAL_INSTRUCTION:
@@ -72,13 +63,10 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
                                    access_violation_operation);
     } break;
     default:
-      // Unknown/unhandled type.
+
       return EXCEPTION_CONTINUE_SEARCH;
   }
 
-  // The handlers (MMIO, the GPU's register writes) are host code, but the
-  // faulting thread may be in the guest's rounding and flush mode. Continuing
-  // restores the context record's own control register.
   using FpPlatform = rex::platform::FPSCRPlatform;
   constexpr uint32_t kGuestFpBits = uint32_t(FpPlatform::RoundMaskVal | FpPlatform::FlushMask);
   const uint32_t fp_mode = FpPlatform::getcsr();
@@ -94,7 +82,6 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
 
   for (size_t i = 0; i < rex::countof(handlers_) && handlers_[i].first; ++i) {
     if (handlers_[i].first(&ex, handlers_[i].second)) {
-      // Exception handled.
       ex_info->ContextRecord->Rip = thread_context.rip;
       ex_info->ContextRecord->EFlags = thread_context.eflags;
       uint32_t modified_register_index;
@@ -164,4 +151,4 @@ void ExceptionHandler::Uninstall(Handler fn, void* data) {
   }
 }
 
-}  // namespace rex::arch
+}

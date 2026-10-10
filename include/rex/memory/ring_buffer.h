@@ -21,8 +21,6 @@
 
 namespace rex::memory {
 
-// Use uint32_t instead of size_t to eliminate REX prefix on x86-64
-// instructions in this hot class.
 using ring_size_t = uint32_t;
 
 class RingBuffer {
@@ -124,10 +122,6 @@ class RingBuffer {
   ring_size_t write_offset_ = 0;
 };
 
-// Fast path for GPU command processor - the hottest path.
-// Direct load bypasses generic Read() + memcpy.
-// Uses == (not >=) for wrap check: capacity must be a multiple of 4,
-// so next_read_offset can only land exactly at capacity, never past it.
 template <>
 inline uint32_t RingBuffer::ReadAndSwap<uint32_t>() {
   assert_true(capacity_ >= 4);
@@ -141,4 +135,4 @@ inline uint32_t RingBuffer::ReadAndSwap<uint32_t>() {
   return rex::byte_swap(ring_value);
 }
 
-}  // namespace rex::memory
+}

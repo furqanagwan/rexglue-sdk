@@ -63,7 +63,7 @@ class ScopedStore {
 
 int ScopedStore::counter_ = 0;
 
-}  // namespace
+}
 
 TEST_CASE("VFS overwrite truncates in place instead of deleting", "[filesystem][vfs]") {
   ScopedStore store;
