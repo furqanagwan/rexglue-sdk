@@ -39,10 +39,8 @@ using Clock = std::chrono::steady_clock;
 
 namespace {
 
-// Room for more releases than AudioSystem's 64 so over-release would show.
 constexpr int kSemaphoreMax = 256;
 
-// Heap-allocated: a driver's frame slots are too large for the test stack.
 struct Rig {
   explicit Rig(XAudio2AudioDriver::Options options = {})
       : semaphore(rex::thread::Semaphore::Create(0, kSemaphoreMax)),
@@ -57,7 +55,6 @@ struct Rig {
     }
   }
 
-  // Waits until the driver has released `count` frames in total.
   bool WaitReleased(uint64_t count, std::chrono::milliseconds timeout = 5s) {
     const auto deadline = Clock::now() + timeout;
     while (driver.frames_released() < count) {
@@ -69,7 +66,6 @@ struct Rig {
     return true;
   }
 
-  // Takes every pending release off the semaphore.
   int DrainSemaphore() {
     int count = 0;
     while (rex::thread::Wait(semaphore.get(), false, 0ms) == rex::thread::WaitResult::kSuccess) {
@@ -97,7 +93,7 @@ struct Rig {
 
 constexpr auto kFramePeriod = XAudio2AudioDriver::kFramePeriod;
 
-}  // namespace
+}
 
 TEST_CASE("XAudio2 plays frames and releases the client once per frame", "[audio][xaudio2]") {
   Rig rig;
@@ -109,8 +105,7 @@ TEST_CASE("XAudio2 plays frames and releases the client once per frame", "[audio
 
   const auto start = Clock::now();
   rig.Submit(48);
-  // Playback paces the releases: they arrive over the frames' duration, not
-  // at submission.
+
   CHECK(rig.driver.frames_released() < 48);
   REQUIRE(rig.WaitReleased(48));
   const auto elapsed = Clock::now() - start;
@@ -131,7 +126,7 @@ TEST_CASE("XAudio2 without a device releases frames on the clock", "[audio][xaud
   rig.Submit(64);
   REQUIRE(rig.WaitReleased(64));
   const auto elapsed = Clock::now() - start;
-  // 64 frames of 5.33 ms: paced, not released at once, and not stalled.
+
   CHECK(elapsed >= 64 * kFramePeriod * 8 / 10);
   CHECK(elapsed < 64 * kFramePeriod * 4);
   std::this_thread::sleep_for(50ms);
@@ -146,10 +141,10 @@ TEST_CASE("XAudio2 device loss releases queued frames and reopens the device", "
   rig.Submit(40);
   std::this_thread::sleep_for(20ms);
   rig.driver.SimulateDeviceLoss();
-  // Frames the dead voice held are released on the clock instead.
+
   REQUIRE(rig.WaitReleased(40));
   CHECK(rig.driver.device_losses() == 1);
-  // The engine is recreated straight away on the default device.
+
   REQUIRE(rig.WaitForDevice(true));
   rig.Submit(10);
   REQUIRE(rig.WaitReleased(50));
@@ -260,7 +255,6 @@ TEST_CASE("XAudio2 picks up a device that appears later", "[audio][xaudio2]") {
   rig.Submit(8);
   rig.driver.SetSimulateNoDevice(false);
   if (!rig.WaitForDevice(true, 3s)) {
-    // Either no endpoint exists, or the retry did not happen.
     Rig probe;
     REQUIRE_FALSE(probe.driver.has_device());
     SKIP("No audio endpoint on this machine");
@@ -289,9 +283,9 @@ TEST_CASE("XAudio2 drivers survive repeated create, submit and teardown", "[audi
       rig.driver.SimulateDeviceLoss();
     }
     rig.driver.Shutdown();
-    rig.driver.Shutdown();  // idempotent
+    rig.driver.Shutdown();
   }
-  // Two clients at once, as two guest render clients would have.
+
   Rig a;
   Rig b;
   a.Submit(10);
@@ -306,13 +300,12 @@ TEST_CASE("audio_backend selects the XAudio2 system and it serves a guest client
   rex::runtime::ExportResolver resolver;
   rex::runtime::FunctionDispatcher dispatcher(&memory, &resolver);
 
-  // XAudio2 is the default (owner decision, 2026-09-28).
   CHECK(REXCVAR_GET(audio_backend) == "xaudio2");
   const std::string saved = REXCVAR_GET(audio_backend);
   REXCVAR_SET(audio_backend, std::string("nop"));
   CHECK(dynamic_cast<rex::audio::nop::NopAudioSystem*>(
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
-  // A config written before SDL was removed still gets audio.
+
   REXCVAR_SET(audio_backend, std::string("sdl"));
   CHECK(dynamic_cast<rex::audio::xaudio2::XAudio2AudioSystem*>(
       rex::audio::CreateDefaultAudioSystem(&dispatcher).get()));
@@ -322,8 +315,6 @@ TEST_CASE("audio_backend selects the XAudio2 system and it serves a guest client
   auto* xaudio2_system = dynamic_cast<rex::audio::xaudio2::XAudio2AudioSystem*>(audio.get());
   REQUIRE(xaudio2_system);
 
-  // Register a client, submit a frame from guest memory, unregister: the
-  // driver is created, takes the frame and is torn down with it in flight.
   size_t index = SIZE_MAX;
   REQUIRE(xaudio2_system->RegisterClient(0x82000000, 0, &index) == X_STATUS_SUCCESS);
   const uint32_t frame = memory.SystemHeapAlloc(XAudio2AudioDriver::kFrameSamples * 4);

@@ -38,15 +38,13 @@ float BigEndian(float value) {
   return out;
 }
 
-// A guest frame: six channels one after another, big endian, with `value` at
-// `sample` of `channel` and silence elsewhere.
 std::vector<float> Impulse(int channel, size_t sample, float value) {
   std::vector<float> frame(kChannels * kSamples, 0.0f);
   frame[channel * kSamples + sample] = BigEndian(value);
   return frame;
 }
 
-}  // namespace
+}
 
 TEST_CASE("5.1 passthrough puts each guest channel in its interleaved slot",
           "[audio][conversion]") {
@@ -83,7 +81,7 @@ TEST_CASE("5.1 passthrough applies the mix weights and gain per channel", "[audi
 }
 
 TEST_CASE("Stereo fold sends each guest channel to the right side", "[audio][conversion]") {
-  const StereoFold fold;  // ITU-R BS.775 defaults
+  const StereoFold fold;
   struct Case {
     int channel;
     float left;

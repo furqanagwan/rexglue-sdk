@@ -39,4 +39,4 @@ class XmaRegisterFile {
   uint32_t& operator[](uint32_t reg) { return values[reg]; }
 };
 
-}  // namespace rex::audio
+}

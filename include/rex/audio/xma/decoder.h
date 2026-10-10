@@ -23,7 +23,7 @@
 
 namespace rex::runtime {
 class FunctionDispatcher;
-}  // namespace rex::runtime
+}
 
 namespace rex::audio {
 
@@ -76,8 +76,8 @@ class XmaDecoder {
   std::unique_ptr<rex::thread::Event> work_event_ = nullptr;
 
   std::atomic<bool> paused_ = false;
-  rex::thread::Fence pause_fence_;   // Signaled when worker paused.
-  rex::thread::Fence resume_fence_;  // Signaled when resume requested.
+  rex::thread::Fence pause_fence_;
+  rex::thread::Fence resume_fence_;
 
   XmaRegisterFile register_file_;
 
@@ -89,4 +89,4 @@ class XmaDecoder {
   uint32_t context_data_last_ptr_ = 0;
 };
 
-}  // namespace rex::audio
+}

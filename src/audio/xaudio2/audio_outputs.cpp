@@ -162,7 +162,7 @@ std::string FriendlyName(IMMDevice* device) {
   return name;
 }
 
-}  // namespace
+}
 
 std::vector<AudioOutput> ListAudioOutputs() {
   const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -243,4 +243,4 @@ std::string SpeakerLayoutName(uint32_t channels, uint32_t channel_mask) {
   }
 }
 
-}  // namespace rex::audio
+}

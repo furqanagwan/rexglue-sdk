@@ -26,7 +26,7 @@
 
 namespace rex::stream {
 class ByteStream;
-}  // namespace rex::stream
+}
 
 namespace rex::audio {
 
@@ -64,11 +64,8 @@ class AudioSystem : public system::IAudioSystem {
 
   void WorkerThreadMain();
 
-  // Runs a client's guest callback once, as the worker does when the client's
-  // semaphore fires. Returns false when the slot has no live callback.
-  // UnregisterClient does not return while this is running for its slot.
   bool DispatchClientCallback(size_t index);
-  // Executes one guest callback on the worker thread; overridden by tests.
+
   virtual void ExecuteClientCallback(uint32_t callback, uint32_t callback_arg);
 
   virtual X_STATUS CreateDriver(size_t index, rex::thread::Semaphore* semaphore,
@@ -95,19 +92,14 @@ class AudioSystem : public system::IAudioSystem {
     bool in_use;
   } clients_[kMaximumClientCount];
 
-  // Held by DispatchClientCallback while a slot's callback runs; UnregisterClient
-  // waits on it after releasing the global lock, because the callback re-enters
-  // through SubmitFrame (xenia-canary#1214). Kept outside clients_, which the
-  // constructor memsets (xenia-edge b0a1ea5f8).
   std::mutex client_callback_mutexes_[kMaximumClientCount];
-  // Thread running each slot's callback, so an unregister from inside the
-  // callback itself does not wait on its own mutex.
+
   std::atomic<std::thread::id> client_callback_threads_[kMaximumClientCount];
 
   int FindFreeClient();
 
   std::unique_ptr<rex::thread::Semaphore> client_semaphores_[kMaximumClientCount];
-  // Event is always there in case we have no clients.
+
   std::unique_ptr<rex::thread::Event> shutdown_event_;
   rex::thread::WaitHandle* wait_handles_[kMaximumClientCount + 1];
 
@@ -116,4 +108,4 @@ class AudioSystem : public system::IAudioSystem {
   std::unique_ptr<rex::thread::Event> resume_event_;
 };
 
-}  // namespace rex::audio
+}

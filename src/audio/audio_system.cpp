@@ -28,23 +28,11 @@ REXCVAR_DEFINE_INT32(
     audio_maxqframes, 8, "Audio",
     "Max buffered audio frames (range 4-64). Lower reduces latency but may cause stuttering.");
 
-// As with normal Microsoft, there are like twelve different ways to access
-// the audio APIs. Early games use XMA*() methods almost exclusively to touch
-// decoders. Later games use XAudio*() and direct memory writes to the XMA
-// structures (as opposed to the XMA* calls), meaning that we have to support
-// both.
-//
-// For ease of implementation, most audio related processing is handled in
-// AudioSystem, and the functions here call off to it.
-// The XMA*() functions just manipulate the audio system in the guest context
-// and let the normal AudioSystem handling take it, to prevent duplicate
-// implementations. They can be found in xboxkrnl_audio_xma.cc
-
 namespace rex::audio {
 
 namespace {
 constexpr std::chrono::milliseconds kWorkerShutdownTimeout{500};
-}  // namespace
+}
 
 AudioSystem::AudioSystem(runtime::FunctionDispatcher* function_dispatcher)
     : memory_(function_dispatcher->memory()),
@@ -97,15 +85,10 @@ X_STATUS AudioSystem::Setup(system::KernelState* kernel_state) {
 }
 
 void AudioSystem::WorkerThreadMain() {
-  // Initialize driver and ringbuffer.
   Initialize();
 
-  // Main run loop.
   uint32_t diag_pump_count = 0;
   while (worker_running_) {
-    // These handles signify the number of submitted samples. Once we reach
-    // 64 samples, we wait until our audio backend releases a semaphore
-    // (signaling a sample has finished playing)
     auto result = rex::thread::WaitAny(wait_handles_, rex::countof(wait_handles_), true,
                                        std::chrono::milliseconds(500));
     if (result.first == rex::thread::WaitResult::kFailed) {
@@ -120,7 +103,6 @@ void AudioSystem::WorkerThreadMain() {
     }
 
     if (result.first == thread::WaitResult::kSuccess && result.second == kMaximumClientCount) {
-      // Shutdown event signaled.
       if (paused_) {
         pause_fence_.Signal();
         thread::Wait(resume_event_.get(), false);
@@ -129,7 +111,6 @@ void AudioSystem::WorkerThreadMain() {
       continue;
     }
 
-    // Number of clients pumped
     bool pumped = false;
     if (result.first == rex::thread::WaitResult::kSuccess) {
       auto index = result.second;
@@ -159,9 +140,6 @@ void AudioSystem::WorkerThreadMain() {
 }
 
 bool AudioSystem::DispatchClientCallback(size_t index) {
-  // Adapted from xenia-edge 8aa50e0e0 (per-client callback mutex): the slot is
-  // read under the callback mutex, so once UnregisterClient has cleared it and
-  // waited here, no callback can still be using its driver or argument.
   std::lock_guard<std::mutex> callback_lock(client_callback_mutexes_[index]);
 
   uint32_t client_callback = 0;
@@ -207,7 +185,6 @@ void AudioSystem::Shutdown() {
     return;
   }
 
-  // Shut down XMA decoder first - its worker can stall in FFmpeg
   if (xma_decoder_) {
     xma_decoder_->Shutdown();
   }
@@ -215,10 +192,6 @@ void AudioSystem::Shutdown() {
   worker_running_ = false;
   shutdown_event_->Set();
   if (worker_thread_) {
-    // The worker may be stuck inside a guest callback that is itself blocked on
-    // guest objects (e.g. KeWaitForMultipleObjects), so terminating is the last
-    // resort. Give it a chance to unwind first: TerminateThread abandons any
-    // lock the thread holds, including the CRT heap lock.
     rex::thread::Thread* host_thread = worker_thread_->thread();
     bool exited = host_thread && rex::thread::Wait(host_thread, false, kWorkerShutdownTimeout) ==
                                      rex::thread::WaitResult::kSuccess;
@@ -230,8 +203,6 @@ void AudioSystem::Shutdown() {
     worker_thread_.reset();
   }
 
-  // Destroy all active client drivers (closes their output voices, stopping
-  // callback threads) before the semaphores they reference are destroyed.
   for (size_t i = 0; i < kMaximumClientCount; i++) {
     if (clients_[i].in_use) {
       DestroyDriver(clients_[i].driver);
@@ -288,8 +259,6 @@ void AudioSystem::SubmitFrame(size_t index, uint32_t samples_ptr) {
 
   auto global_lock = global_critical_region_.Acquire();
   if (index >= kMaximumClientCount || !clients_[index].in_use || !clients_[index].driver) {
-    // A callback finishing after its client was unregistered still submits;
-    // there is no driver left to take the frame.
     REXAPU_DEBUG("AudioSystem::SubmitFrame: client {} is not registered, frame dropped", index);
     return;
   }
@@ -304,11 +273,6 @@ void AudioSystem::UnregisterClient(size_t index) {
     return;
   }
 
-  // Clear the slot under the global lock, then wait for an in-flight callback
-  // without it: the callback takes the global lock in SubmitFrame, so waiting
-  // while holding it deadlocks (xenia-canary#1214, xenia-edge 8aa50e0e0).
-  // The slot stays in_use until teardown finishes, so RegisterClient cannot
-  // hand it out while the old driver can still release its semaphore.
   AudioDriver* driver;
   uint32_t wrapped_callback_arg;
   {
@@ -329,15 +293,12 @@ void AudioSystem::UnregisterClient(size_t index) {
 
   DestroyDriver(driver);
   if (from_own_callback) {
-    // The guest callback still running on this thread holds the argument
-    // pointer; leak the 4-byte cell rather than free it under it.
     REXAPU_DEBUG("AudioSystem::UnregisterClient: client {} unregistered from its own callback",
                  index);
   } else {
     memory()->SystemHeapFree(wrapped_callback_arg);
   }
 
-  // Drain the semaphore of its count.
   auto client_semaphore = client_semaphores_[index].get();
   rex::thread::WaitResult wait_result;
   do {
@@ -352,8 +313,6 @@ void AudioSystem::UnregisterClient(size_t index) {
 bool AudioSystem::Save(stream::ByteStream* stream) {
   stream->Write(kAudioSaveSignature);
 
-  // Count the number of used clients first.
-  // Any gaps should be handled gracefully.
   uint32_t used_clients = 0;
   for (size_t i = 0; i < kMaximumClientCount; i++) {
     if (clients_[i].in_use) {
@@ -390,7 +349,6 @@ bool AudioSystem::Restore(stream::ByteStream* stream) {
 
     auto& client = clients_[id];
 
-    // Reset the semaphore and recreate the driver ourselves.
     if (client.driver) {
       UnregisterClient(id);
     }
@@ -428,7 +386,6 @@ void AudioSystem::Pause() {
   }
   paused_ = true;
 
-  // Kind of a hack, but it works.
   shutdown_event_->Set();
   pause_fence_.Wait();
 
@@ -446,4 +403,4 @@ void AudioSystem::Resume() {
   xma_decoder_->Resume();
 }
 
-}  // namespace rex::audio
+}

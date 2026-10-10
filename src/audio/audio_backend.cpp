@@ -13,14 +13,10 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 
-// "sdl" is still accepted so an old config starts: SDL was removed
-// (RG-GDK-033), and it now means XAudio2, with a warning.
 REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio", "Audio output: xaudio2 (default) or nop")
     .allowed({"xaudio2", "nop", "sdl"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-// Applied by every output driver; defined here since the SDL driver that
-// held it was removed.
 REXCVAR_DEFINE_BOOL(audio_mute, false, "Audio", "Mute audio output");
 REXCVAR_DEFINE_BOOL(audio_mute_minimized, true, "Audio",
                     "Silence the game while its window is minimised");
@@ -46,4 +42,4 @@ std::unique_ptr<AudioSystem> CreateDefaultAudioSystem(
   return xaudio2::XAudio2AudioSystem::Create(function_dispatcher);
 }
 
-}  // namespace rex::audio
+}

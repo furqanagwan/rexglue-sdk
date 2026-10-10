@@ -22,12 +22,10 @@ TEST_CASE("audio_volume scales the master output gain", "[audio][volume]") {
   REQUIRE(rex::cvar::SetFlagByName("audio_volume", "0"));
   CHECK(rex::audio::MasterOutputGain() == 0.0f);
 
-  // A title's own gain is kept and scaled.
   rex::audio::SetOutputGain(2.0f);
   REQUIRE(rex::cvar::SetFlagByName("audio_volume", "25"));
   CHECK(rex::audio::MasterOutputGain() == 0.5f);
 
-  // Out-of-range values are refused and leave the volume unchanged.
   CHECK_FALSE(rex::cvar::SetFlagByName("audio_volume", "150"));
   CHECK(rex::audio::MasterOutputGain() == 0.5f);
 
@@ -46,7 +44,6 @@ TEST_CASE("A minimised title is silent unless the player keeps it playing", "[au
   REQUIRE(rex::cvar::SetFlagByName("audio_mute_minimized", "false"));
   CHECK_FALSE(rex::audio::OutputSilenced());
 
-  // audio_mute silences regardless.
   REQUIRE(rex::cvar::SetFlagByName("audio_mute", "true"));
   rex::audio::SetAppConstrained(false);
   CHECK(rex::audio::OutputSilenced());

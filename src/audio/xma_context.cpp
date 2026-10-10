@@ -35,14 +35,11 @@ extern "C" {
 #if REX_COMPILER_MSVC
 #pragma warning(pop)
 #endif
-}  // extern "C"
+}
 
 REXCVAR_DEFINE_STRING(xma_dump_dir, "", "Audio",
                       "Directory to save the context and input buffers of each XMA stream "
                       "whose frames fail to decode (empty: off)");
-
-// Credits for most of this code goes to:
-// https://github.com/koolkdev/libertyv/blob/master/libav_wrapper/xma2dec.c
 
 namespace rex::audio {
 
@@ -68,12 +65,10 @@ int XmaContext::Setup(uint32_t id, memory::Memory* memory, uint32_t guest_ptr) {
   memory_ = memory;
   guest_ptr_ = guest_ptr;
 
-  // Allocate ffmpeg stuff:
   av_packet_ = av_packet_alloc();
   assert_not_null(av_packet_);
   av_packet_->buf = av_buffer_alloc(128 * 1024);
 
-  // find the XMA2 audio decoder
   av_codec_ = avcodec_find_decoder(AV_CODEC_ID_XMAFRAMES);
   if (!av_codec_) {
     REXAPU_ERROR("XmaContext {}: Codec not found", id);
@@ -86,7 +81,6 @@ int XmaContext::Setup(uint32_t id, memory::Memory* memory, uint32_t guest_ptr) {
     return 1;
   }
 
-  // Initialize these to 0. They'll actually be set later.
   av_context_->channels = 0;
   av_context_->sample_rate = 0;
 
@@ -96,7 +90,6 @@ int XmaContext::Setup(uint32_t id, memory::Memory* memory, uint32_t guest_ptr) {
     return 1;
   }
 
-  // FYI: We're purposely not opening the codec here. That is done later.
   return 0;
 }
 
@@ -135,14 +128,13 @@ bool XmaContext::Work() {
         start_packet ? xma::GetPacketSkipCount(start_packet) : 0);
   }
 
-  // Consume-only context: no input, just drain remaining subframes.
   if (data.IsConsumeOnlyContext()) {
     if (current_frame_remaining_subframes_ == 0) {
       return true;
     }
     Consume(&output_rb, &data);
     data.output_buffer_write_offset = output_rb.write_offset() / kOutputBytesPerBlock;
-    // xenia-canary 7e98ae6de (fixes a 565507E4 boot hardlock).
+
     if (output_rb.empty()) {
       data.output_buffer_valid = 0;
     }
@@ -150,8 +142,6 @@ bool XmaContext::Work() {
     return true;
   }
 
-  // Minimum free blocks needed before attempting a decode.
-  // Use subframe_decode_count (clamped to 1) instead of full frame size.
   const uint32_t effective_sdc = std::max(static_cast<uint32_t>(1), data.subframe_decode_count);
   const int32_t minimum_subframe_decode_count =
       static_cast<int32_t>(effective_sdc) + data.output_buffer_padding;
@@ -170,21 +160,11 @@ bool XmaContext::Work() {
     Decode(&data);
     Consume(&output_rb, &data);
 
-    // Don't abandon a partially consumed frame: Consume() hands over at most
-    // subframe_decode_count blocks per pass, so the pass that exhausts the
-    // input usually strands the rest. is_enabled_ is already clear and only
-    // XMAEnableContext sets it again, so a title polling for that remainder
-    // would never kick (xenia-edge 052365bc0).
     if ((!data.IsAnyInputBufferValid() || data.error_status == 4) &&
         current_frame_remaining_subframes_ == 0) {
       break;
     }
 
-    // A pass that neither moved the input nor produced a frame cannot make
-    // progress on a later pass either; stop rather than spin under the lock.
-    // Only checked when nothing was pending, since a drain-only pass leaves the
-    // offset unchanged by design (xenia-edge ade7e610b). Priming the carry is
-    // progress: a one-frame loop decodes at an unchanged offset.
     if (pre_remaining_subframes == 0 && current_frame_remaining_subframes_ == 0 &&
         carry_valid_ == pre_carry_valid && data.input_buffer_read_offset == pre_decode_offset &&
         data.current_buffer == pre_decode_current_buffer) {
@@ -196,15 +176,10 @@ bool XmaContext::Work() {
   if (initial_data.IsAnyInputBufferValid()) {
     data.output_buffer_write_offset = output_rb.write_offset() / kOutputBytesPerBlock;
   } else if (data.output_buffer_write_offset != data.output_buffer_read_offset) {
-    // Starved of input: NFS Carbon and Most Wanted use write == read as their
-    // stall detector (xenia-canary 09dbe2cd3).
     data.output_buffer_write_offset = data.output_buffer_read_offset;
     data.output_buffer_valid = 0;
   }
 
-  // Invalidate only a full buffer: read == write also means nothing was
-  // written, which is not a reason to hand it back (xenia-canary 09dbe2cd3,
-  // 505697f98).
   if (remaining_subframe_blocks_in_output_buffer_ == 0 && output_rb.empty()) {
     data.output_buffer_valid = 0;
   }
@@ -252,12 +227,6 @@ void XmaContext::ClearLocked(XMA_CONTEXT_DATA* data) {
 }
 
 void XmaContext::ResetDecoderState() {
-  // A freed or re-initialized context is a new logical stream, so the previous
-  // wave's MDCT overlap-add tail must not survive into frame 0 of the next one.
-  // avcodec_flush_buffers() cannot drop it: ff_xmaframes_decoder declares no
-  // flush callback, so the call never reaches the code clearing channel[].out.
-  // Invalidating the cached format makes PrepareDecoder reopen the codec on the
-  // next decode, which does discard the history.
   if (av_context_) {
     av_context_->sample_rate = 0;
     av_context_->channels = 0;
@@ -303,7 +272,7 @@ void XmaContext::SwapInputBuffer(XMA_CONTEXT_DATA* data, uint32_t start_packet) 
     data->input_buffer_1_valid = 0;
   }
   data->current_buffer ^= 1;
-  // Decode moves this on to the first frame that starts in the packet.
+
   data->input_buffer_read_offset = start_packet * kBitsPerPacket + kBitsPerPacketHeader;
 }
 
@@ -375,8 +344,6 @@ const uint8_t* XmaContext::GetNextPacket(XMA_CONTEXT_DATA* data, uint32_t next_p
     return nullptr;
   }
 
-  // The skip chain continues into the next buffer at the index by which it
-  // overruns this one (see FindStreamFrame).
   const uint32_t next_buffer_packet = next_packet_index - current_input_packet_count;
   const uint32_t next_buffer_packet_count = next_buffer_index == 0
                                                 ? uint32_t(data->input_buffer_0_packet_count)
@@ -411,10 +378,6 @@ uint32_t XmaContext::FindStreamFrame(const uint8_t* buffer, uint32_t next_packet
       return (next_packet_index * kBitsPerPacket) + packet_frame_offset;
     }
 
-    // No frame starts in this packet: it only continues a frame split across
-    // the boundary. In a buffer interleaving several sub-streams the next
-    // sequential packet belongs to another stream, so follow this packet's own
-    // skip count to stay on this one (xenia-edge 9d8210b32).
     const uint8_t next_skip = xma::GetPacketSkipCount(next_packet);
     if (next_skip == 0xFF) {
       return 0;
@@ -422,10 +385,6 @@ uint32_t XmaContext::FindStreamFrame(const uint8_t* buffer, uint32_t next_packet
     next_packet_index += next_skip + 1;
   }
 
-  // A multi-stream sound interleaves its sub-streams through every buffer, and
-  // a stream's first packet in the next buffer is where its skip chain overruns
-  // this one. In 007 Legends' 3-channel sounds the mono stream continues at
-  // packet 1 of the next buffer and the stereo stream at packet 0.
   *next_buffer_packet = next_packet_index - current_input_packet_count;
   return 0;
 }
@@ -458,12 +417,10 @@ kPacketInfo XmaContext::GetPacketInfo(const uint8_t* packet, uint32_t frame_offs
   packet_info.current_frame_offset_ = frame_offset;
 
   const uint32_t first_frame_offset = xma::GetPacketFrameOffset(packet);
-  // BitStream only reads; it takes a mutable pointer for its writers.
+
   BitStream stream(const_cast<uint8_t*>(packet), kBitsPerPacket);
   stream.SetOffset(first_frame_offset);
 
-  // Report the first frame starting at or after frame_offset, so a loop_start
-  // that is not on a frame boundary can be resolved (xenia-edge 5dd1cdbbf).
   bool resolved = false;
   auto consider_frame = [&](uint32_t offset, uint32_t size) {
     if (!resolved && offset >= frame_offset) {
@@ -485,10 +442,6 @@ kPacketInfo XmaContext::GetPacketInfo(const uint8_t* packet, uint32_t frame_offs
 
   while (true) {
     if (stream.BitsRemaining() < kBitsPerFrameHeader) {
-      // This frame's 15-bit header runs into the next packet, so its size is
-      // not readable yet. Count it anyway, or the caller takes the previous
-      // frame for the packet's last and skips straight past this one. Size 0
-      // sends it to the split-header path (xenia-edge adf56b76c).
       if (stream.BitsRemaining() > 0) {
         consider_frame(static_cast<uint32_t>(stream.offset_bits()), 0);
         packet_info.frame_count_++;
@@ -677,8 +630,7 @@ void XmaContext::ReportStreamFailure(const XMA_CONTEXT_DATA& data, const uint8_t
   if (dump_dir.empty()) {
     return;
   }
-  // "XMAD", the guest context as stored (big endian), then each input buffer
-  // as a little-endian byte count and its bytes.
+
   static std::atomic<uint32_t> dump_serial = 0;
   std::error_code ec;
   std::filesystem::create_directories(dump_dir, ec);
@@ -690,13 +642,12 @@ void XmaContext::ReportStreamFailure(const XMA_CONTEXT_DATA& data, const uint8_t
       std::filesystem::path(dump_dir) / fmt::format("xma_{:03}_ctx{:02}.bin", dump_serial++, id());
   std::ofstream out(path, std::ios::binary);
   out.write("XMAD", 4);
-  // Work has not committed its local context yet. Dump the actual failure
-  // position, rather than the stale guest copy from before this kick.
+
   std::array<uint8_t, sizeof(XMA_CONTEXT_DATA)> context_bytes;
   auto snapshot = data;
   snapshot.Store(context_bytes.data());
   out.write(reinterpret_cast<const char*>(context_bytes.data()), context_bytes.size());
-  // The third is the buffer the stream left last, if any.
+
   for (uint8_t i = 0; i < 3; ++i) {
     const bool valid = i < 2 && data.IsInputBufferValid(i) && data.GetInputBufferAddress(i);
     const uint32_t packets = i == 0 ? uint32_t(data.input_buffer_0_packet_count)
@@ -741,8 +692,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
 
   input_buffer_.fill(0);
 
-  // Loop-end frame: decode it here (output limited to loop_subframe_end),
-  // jump to loop_start afterwards in the next-offset step.
   bool is_loop_end_frame = false;
   if (data->loop_count > 0) {
     const uint32_t loop_end = std::max(kBitsPerPacketHeader, data->loop_end);
@@ -761,8 +710,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   const uint32_t current_input_size = GetCurrentInputBufferSize(data);
   const uint32_t current_input_packet_count = current_input_size / kBytesPerPacket;
 
-  // A skip chain may pass over an entire short refill. Keep its remainder
-  // instead of asserting on the carried packet index when that refill arrives.
   const uint32_t start_packet = data->input_buffer_read_offset / kBitsPerPacket;
   if (start_packet >= current_input_packet_count &&
       data->input_buffer_read_offset % kBitsPerPacket == kBitsPerPacketHeader) {
@@ -789,7 +736,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
 
   const uint8_t skip_count = xma::GetPacketSkipCount(packet);
 
-  // Full packet skip (0xFF) -- no new frames begin in this packet.
   if (skip_count == 0xFF) {
     uint32_t next_buffer_packet = 0;
     const uint32_t next_input_offset = FindStreamFrame(
@@ -804,9 +750,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
 
   kPacketInfo packet_info = GetPacketInfo(packet, relative_offset);
 
-  // Games can write loop_start one bit short of the frame boundary. Left
-  // unaligned, no frame matches, the split-header path reads a size out of
-  // frame payload and FFmpeg rejects the packet (xenia-edge 5dd1cdbbf).
   if (loop_start_skip_pending_ && packet_info.current_frame_offset_ != relative_offset) {
     REXAPU_DEBUG("XmaContext {}: loop_start {} is not a frame boundary in packet {}, using {}",
                  id(), relative_offset, packet_index, packet_info.current_frame_offset_);
@@ -818,7 +761,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   const uint32_t packet_to_skip = skip_count + 1;
   const uint32_t next_packet_index = packet_index + packet_to_skip;
 
-  // Frame header split across packet boundary.
   if (packet_info.current_frame_size_ == 0) {
     const uint8_t* next_packet = GetNextPacket(data, next_packet_index, current_input_packet_count);
     if (!next_packet) {
@@ -880,8 +822,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   decoded_frame_.fill(0);
 
   if (PrepareDecoder(data->sample_rate, bool(data->is_stereo)) == 1) {
-    // Reopening the codec restarts its output; the carried tail belongs to the
-    // old stream.
     carry_valid_ = false;
   }
   PreparePacket(packet_info.current_frame_size_, padding_start);
@@ -890,19 +830,13 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     ConvertFrame(reinterpret_cast<const uint8_t**>(&av_frame_->data), bool(data->is_stereo),
                  decoded_frame_.data());
 
-    // Realign the decoder's output onto the bitstream's sample numbering: the
-    // samples of the frame just decoded run from kDecoderStartPadding into this
-    // block and finish in the head of the next one.
     const size_t pad_bytes = kDecoderStartPadding * kBytesPerSample << data->is_stereo;
     const size_t carry_bytes = (kBytesPerFrameChannel << data->is_stereo) - pad_bytes;
 
-    // Loop end: limit output to subframes 0..loop_subframe_end.
     const uint8_t decoded_output_limit =
         is_loop_end_frame ? static_cast<uint8_t>((data->loop_subframe_end + 1) << data->is_stereo)
                           : 0;
-    // Loop start: skip leading subframes per loop_subframe_skip. skip == 4
-    // means the whole frame is a warm-up frame (frame-aligned loop start):
-    // decode seeds the codec state, output is fully discarded.
+
     const uint8_t decoded_start_skip =
         loop_start_skip_pending_ ? static_cast<uint8_t>(data->loop_subframe_skip << data->is_stereo)
                                  : 0;
@@ -923,9 +857,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     pending_output_limit_ = decoded_output_limit;
     pending_start_skip_ = decoded_start_skip;
   } else {
-    // A dropped frame breaks the carry's adjacency; re-prime rather than splice
-    // two blocks that are not neighbors. The frame is not replaced with
-    // silence: the failure stays visible in the output and in the count.
     carry_valid_ = false;
     if (!stream_failure_reported_) {
       stream_failure_reported_ = true;
@@ -938,7 +869,6 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
     }
   }
 
-  // Compute where to go next.
   if (is_loop_end_frame) {
     UpdateLoopStatus(data);
     return;
@@ -958,14 +888,12 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
   if (!next_input_offset) {
     SwapInputBuffer(data, next_buffer_packet);
     if (!data->IsCurrentInputBufferValid()) {
-      // Not filled yet; the read offset already names the packet to start at.
       return;
     }
     next_input_offset =
         FindStreamFrame(GetCurrentInputBuffer(data), next_buffer_packet,
                         data->GetCurrentInputBufferPacketCount(), &next_buffer_packet);
     if (!next_input_offset) {
-      // No frame of this stream starts in the new buffer either.
       SwapInputBuffer(data, next_buffer_packet);
       return;
     }
@@ -975,16 +903,9 @@ void XmaContext::Decode(XMA_CONTEXT_DATA* data) {
 
 void XmaContext::ConvertFrame(const uint8_t** samples, bool is_two_channel,
                               uint8_t* output_buffer) {
-  // Loop through every sample, convert and drop it into the output array.
-  // If more than one channel, we need to interleave the samples from each
-  // channel next to each other. Always saturate because FFmpeg output is
-  // not limited to [-1, 1] (for example 1.095 as seen in 5454082B).
   constexpr float scale = (1 << 15) - 1;
   auto out = reinterpret_cast<int16_t*>(output_buffer);
 
-  // For testing of vectorized versions, stereo audio is common in 4D5307E6,
-  // since the first menu frame; the intro cutscene also has more than 2
-  // channels.
 #if REX_ARCH_AMD64
   static_assert(kSamplesPerFrame % 8 == 0);
   const auto in_channel_0 = reinterpret_cast<const float*>(samples[0]);
@@ -993,40 +914,37 @@ void XmaContext::ConvertFrame(const uint8_t** samples, bool is_two_channel,
     const auto in_channel_1 = reinterpret_cast<const float*>(samples[1]);
     const __m128i shufmask = _mm_set_epi8(14, 15, 6, 7, 12, 13, 4, 5, 10, 11, 2, 3, 8, 9, 0, 1);
     for (uint32_t i = 0; i < kSamplesPerFrame; i += 4) {
-      // Load 8 samples, 4 for each channel.
       __m128 in_mm0 = _mm_loadu_ps(&in_channel_0[i]);
       __m128 in_mm1 = _mm_loadu_ps(&in_channel_1[i]);
-      // Rescale.
+
       in_mm0 = _mm_mul_ps(in_mm0, scale_mm);
       in_mm1 = _mm_mul_ps(in_mm1, scale_mm);
-      // Cast to int32.
+
       __m128i out_mm0 = _mm_cvtps_epi32(in_mm0);
       __m128i out_mm1 = _mm_cvtps_epi32(in_mm1);
-      // Saturated cast and pack to int16.
+
       __m128i out_mm = _mm_packs_epi32(out_mm0, out_mm1);
-      // Interleave channels and byte swap.
+
       out_mm = _mm_shuffle_epi8(out_mm, shufmask);
-      // Store, as [out + i * 4] movdqu.
+
       _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i * 2]), out_mm);
     }
   } else {
     const __m128i shufmask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
     for (uint32_t i = 0; i < kSamplesPerFrame; i += 8) {
-      // Load 8 samples, as [in_channel_0 + i * 4] and
-      // [in_channel_0 + i * 4 + 16] movups.
       __m128 in_mm0 = _mm_loadu_ps(&in_channel_0[i]);
       __m128 in_mm1 = _mm_loadu_ps(&in_channel_0[i + 4]);
-      // Rescale.
+
       in_mm0 = _mm_mul_ps(in_mm0, scale_mm);
       in_mm1 = _mm_mul_ps(in_mm1, scale_mm);
-      // Cast to int32.
+
       __m128i out_mm0 = _mm_cvtps_epi32(in_mm0);
       __m128i out_mm1 = _mm_cvtps_epi32(in_mm1);
-      // Saturated cast and pack to int16.
+
       __m128i out_mm = _mm_packs_epi32(out_mm0, out_mm1);
-      // Byte swap.
+
       out_mm = _mm_shuffle_epi8(out_mm, shufmask);
-      // Store, as [out + i * 2] movdqu.
+
       _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i]), out_mm);
     }
   }
@@ -1034,13 +952,10 @@ void XmaContext::ConvertFrame(const uint8_t** samples, bool is_two_channel,
   uint32_t o = 0;
   for (uint32_t i = 0; i < kSamplesPerFrame; i++) {
     for (uint32_t j = 0; j <= uint32_t(is_two_channel); j++) {
-      // Select the appropriate array based on the current channel.
       auto in = reinterpret_cast<const float*>(samples[j]);
 
-      // Raw samples sometimes aren't within [-1, 1]
       float scaled_sample = rex::clamp_float(in[i], -1.0f, 1.0f) * scale;
 
-      // Convert the sample and output it in big endian.
       auto sample = static_cast<int16_t>(scaled_sample);
       out[o++] = rex::byte_swap(sample);
     }
@@ -1048,4 +963,4 @@ void XmaContext::ConvertFrame(const uint8_t** samples, bool is_two_channel,
 #endif
 }
 
-}  // namespace rex::audio
+}

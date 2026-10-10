@@ -37,4 +37,4 @@ class XAudio2AudioSystem : public AudioSystem {
   std::string output_device_;
 };
 
-}  // namespace rex::audio::xaudio2
+}
