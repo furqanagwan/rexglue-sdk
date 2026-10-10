@@ -38,3 +38,47 @@ jobs:
           python scripts/validate_roadmap.py
           python scripts/check_docs.py
 
+  clang-tidy:
+    name: Clang-Tidy (changed lines)
+    if: github.event_name == 'pull_request'
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install toolchain
+        run: choco install llvm cmake ninja -y
+
+      - name: Select the pinned PC GDK
+        shell: pwsh
+        run: |
+          $gdkRoot = & ./scripts/setup_gdk.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'gdk260404')
+          "GameDKCoreLatest=$gdkRoot" >> $env:GITHUB_ENV
+
+      - name: Set up the x64 developer environment
+        shell: pwsh
+        run: |
+          $vsWhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vsInstall = & $vsWhere -latest -property installationPath
+          & "$vsInstall/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          foreach ($name in @('INCLUDE', 'LIB', 'LIBPATH', 'PATH')) {
+            "$name=$([Environment]::GetEnvironmentVariable($name))" >> $env:GITHUB_ENV
+          }
+
+      - name: Configure without precompiled headers
+        run: >
+          cmake --preset win-amd64-gdk -B out/build/tidy -DREXGLUE_BUILD_TESTS=ON
+          -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Check the changed lines
+        shell: pwsh
+        run: |
+          git diff -U0 --no-color "origin/${{ github.base_ref }}...HEAD" -- src include tests |
+            python scripts/clang_tidy_changed.py --build out/build/tidy `
+              --clang-tidy "$env:ProgramFiles/LLVM/bin/clang-tidy.exe" -j 4
+          exit $LASTEXITCODE
+
