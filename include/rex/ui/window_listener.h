@@ -15,22 +15,13 @@
 namespace rex {
 namespace ui {
 
-// Virtual interfaces for types that want to listen for Window events.
-// Use Window::Add[Input]Listener and Window::Remove[Input]Listener to manage
-// active listeners.
-
 class WindowListener {
  public:
   virtual ~WindowListener() = default;
 
-  // OnOpened will be followed by various initial setup listeners.
   virtual void OnOpened(UISetupEvent&) {}
   virtual void OnClosing(UIEvent&) {}
 
-  // Called when the user asks to close the window (close button, Alt+F4).
-  // Return false to veto: the window stays open and the vetoing party is
-  // expected to close it explicitly later (Window::RequestClose) once it is
-  // safe (renderers drained, guest threads stopped). Default accepts.
   virtual bool OnCloseRequested(UIEvent&) { return true; }
 
   virtual void OnMinimized(UIEvent&) {}
@@ -61,5 +52,5 @@ class WindowInputListener {
   virtual void OnTouchEvent(TouchEvent&) {}
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

@@ -20,7 +20,7 @@
 
 namespace rex {
 class Runtime;
-}  // namespace rex
+}
 
 namespace rex::ui {
 
@@ -32,7 +32,6 @@ class AchievementToastDialog : public AchievementNotificationDialog {
                          rex::Runtime* runtime);
   ~AchievementToastDialog() override;
 
-  // Thread-safe: safe to call from any thread, including guest threads.
   void Push(const rex::system::AchievementEvent& event) override;
 
  protected:
@@ -52,4 +51,4 @@ class AchievementToastDialog : public AchievementNotificationDialog {
   AchievementIconCache icon_cache_;
 };
 
-}  // namespace rex::ui
+}

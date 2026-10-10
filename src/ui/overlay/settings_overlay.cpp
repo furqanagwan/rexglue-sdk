@@ -156,20 +156,17 @@ static rex::ui::VirtualKey ImGuiKeyToVirtualKey(ImGuiKey key) {
   }
 }
 
-void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
+void SettingsDialog::OnDraw(ImGuiIO&) {
   auto& registry = rex::cvar::GetRegistry();
 
-  // Collect sorted unique category paths.
   std::set<std::string> category_set;
   for (auto& entry : registry) {
     category_set.insert(entry.category);
   }
 
-  // Build tree: for each category path like "Input/Keybinds/Controller",
-  // also register the parent paths "Input" and "Input/Keybinds" as nodes.
   struct CatNode {
     std::string full_path;
-    std::string label;  // leaf segment (e.g. "Controller")
+    std::string label;
     std::map<std::string, CatNode> children;
     bool has_direct_entries = false;
   };
@@ -206,7 +203,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
     return;
   }
 
-  // Search bar at the top (full width).
   ImGui::SetNextItemWidth(-1.0f);
   ImGui::InputText("##search", search_buf_, sizeof(search_buf_));
   ImGui::SameLine(0, 0);
@@ -217,12 +213,10 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
   const float panel_width = 160.0f;
   ImGui::BeginChild("##cats", ImVec2(panel_width, -30.0f), true);
 
-  // Recursive lambda to draw the category tree.
   std::function<void(const std::map<std::string, CatNode>&, int)> draw_tree;
   draw_tree = [&](const std::map<std::string, CatNode>& nodes, int depth) {
     for (auto& [key, node] : nodes) {
       if (node.children.empty()) {
-        // Leaf node - selectable
         bool selected = (selected_category_ == node.full_path);
         if (depth > 0)
           ImGui::Indent(8.0f);
@@ -232,10 +226,8 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
         if (depth > 0)
           ImGui::Unindent(8.0f);
       } else {
-        // Parent node with children - use tree node
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow;
         if (node.has_direct_entries) {
-          // Can be selected as well as expanded
           if (selected_category_ == node.full_path)
             flags |= ImGuiTreeNodeFlags_Selected;
         }
@@ -250,7 +242,7 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
       }
     }
   };
-  // Root node named after the config file
+
   std::string root_label = config_path_.stem().string();
   ImGuiTreeNodeFlags root_flags = ImGuiTreeNodeFlags_DefaultOpen;
   if (selected_category_.empty())
@@ -268,11 +260,9 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
 
   ImGui::SameLine();
 
-  // Helper: check if a CVAR's category matches the selected category.
-  // Exact match or prefix match (e.g. selecting "Input" shows all "Input/*").
   auto category_matches = [&](const std::string& cat) -> bool {
     if (selected_category_.empty())
-      return true;  // Root selected - show all
+      return true;
     if (cat == selected_category_)
       return true;
     if (cat.size() > selected_category_.size() &&
@@ -283,7 +273,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
     return false;
   };
 
-  // Helper: check if a category is a keybind category.
   auto is_keybind_category = [](const std::string& cat) -> bool {
     return cat == "Input/Keybinds" ||
            (cat.size() > 15 && cat.compare(0, 15, "Input/Keybinds/") == 0);
@@ -291,13 +280,11 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
 
   ImGui::BeginChild("##cvars", ImVec2(0, -30.0f), false);
   for (auto& entry : registry) {
-    // Filter by category (unless searching).
     if (!searching) {
       if (!category_matches(entry.category)) {
         continue;
       }
     } else {
-      // Search matches name or description (case-insensitive substring).
       std::string name_lower = entry.name;
       std::string search_lower = search;
       auto to_lower = [](std::string& s) {
@@ -321,18 +308,15 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
 
     std::string current_val = entry.getter();
 
-    // Use description as display label if available, otherwise CVAR name
     const char* display_label =
         (!entry.description.empty()) ? entry.description.c_str() : entry.name.c_str();
 
     if (is_keybind_category(entry.category)) {
-      // Grey out controller keybinds when MnK mode is disabled
       bool mnk_disabled =
           (entry.category == "Input/Keybinds/Controller" && !REXCVAR_QUERY(bool, mnk_mode));
       if (mnk_disabled)
         ImGui::BeginDisabled();
 
-      // Show description as label (e.g. "A button"), not the raw CVAR name
       ImGui::Text("%-20s", entry.description.c_str());
       ImGui::SameLine(240.0f);
 
@@ -380,7 +364,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
         }
       }
 
-      // Conflict detection
       if (!current_val.empty()) {
         int conflict_count = 0;
         for (auto& other : registry) {
@@ -399,7 +382,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
         }
       }
 
-      // Skip the generic name + lifecycle badge rendering for keybinds
       if (mnk_disabled)
         ImGui::EndDisabled();
       if (read_only)
@@ -407,7 +389,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
       ImGui::PopID();
       continue;
     } else {
-      // Non-keybind CVARs: colored label on left, value widget on right
       ImGui::TextColored(LifecycleColor(entry.lifecycle, imgui_drawer()->style().settings), "%-20s",
                          entry.name.c_str());
       if (ImGui::IsItemHovered()) {
@@ -500,7 +481,6 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
   }
   ImGui::EndChild();
 
-  // Bottom bar: Save button.
   ImGui::Separator();
   if (ImGui::Button("Save to config")) {
     rex::cvar::SaveConfig(config_path_);
@@ -511,4 +491,4 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
   ImGui::End();
 }
 
-}  // namespace rex::ui
+}

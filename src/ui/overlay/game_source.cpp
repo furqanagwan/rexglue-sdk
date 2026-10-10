@@ -19,16 +19,14 @@
 
 namespace rex::ui {
 namespace {
-// The title behind the in-game Guide is darkened to a quarter of its
-// brightness; before launch nothing is behind it, so the same black frames it.
+
 constexpr ImU32 kGuideDim = IM_COL32(0, 0, 0, 255);
 std::string Utf8(const std::filesystem::path& path) {
   return rex::string::to_utf8(path.u16string());
 }
 
-}  // namespace
+}
 
-// Own the parsed skin for every element pointer retained by the neutral model.
 class GameSourceConsoleBox {
  public:
   static std::unique_ptr<GameSourceConsoleBox> Create(const GameSourceVisualsProvider& provider,
@@ -111,9 +109,6 @@ class GameSourceConsoleBox {
   bool first_ = true;
 };
 
-// The first-run screens as an in-game Guide page: the HUD frame at full
-// height, centred on the Guide's 852x480 canvas, with a scrolling list and a
-// details pane. Owns the assets every retained element pointer refers to.
 class GameSourceGuidePage {
  public:
   static std::unique_ptr<GameSourceGuidePage> Create(GameSourceVisuals visuals) {
@@ -137,7 +132,7 @@ class GameSourceGuidePage {
   }
   guide::GuideListPage& page() { return *page_; }
   const GameSourceVisuals& visuals() const { return visuals_; }
-  // Draws over the whole viewport; returns a row the mouse chose.
+
   std::optional<size_t> Draw(ImGuiIO& io, bool enabled) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float scale = std::min(viewport->Size.x / guide::GuideListPage::kSceneWidth,
@@ -164,7 +159,7 @@ class GameSourceGuidePage {
       const bool pressed = ImGui::InvisibleButton(
           ("Button" + std::to_string(index)).c_str(),
           ImVec2(std::max(1.0f, row->width() * scale), std::max(1.0f, row->height() * scale)));
-      // A resting cursor must not take focus back from the controller.
+
       const bool pointed = ImGui::IsItemHovered() && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0);
       if (pointed || pressed)
         page_->Focus(index);
@@ -284,7 +279,6 @@ void GameSourceDialog::ShowConsolePage(ConsoleScreen screen, std::string title,
   }
   console_mode_ = bool(console_page_);
   if (!console_page_) {
-    // Kept for when the Guide finishes loading.
     console_title_ = std::move(title);
     console_rows_ = std::move(rows);
     console_initial_choice_ = initial;

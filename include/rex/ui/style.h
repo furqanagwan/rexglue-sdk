@@ -37,7 +37,6 @@ struct AchievementsStyle {
 };
 
 struct ToastStyle {
-  /// Alpha is the fade envelope, applied on top of these at draw time.
   ImVec4 text{1.00f, 1.00f, 1.00f, 1.00f};
   ImVec4 title{1.00f, 0.85f, 0.20f, 1.00f};
   float rounding = 6.0f;
@@ -46,16 +45,10 @@ struct ToastStyle {
 };
 
 struct ConsoleStyle {
-  /// Indexed by spdlog::level::level_enum: trace, debug, info, warn, err,
-  /// critical, off.
   ImVec4 level[7] = {
-      {0.5f, 0.5f, 0.5f, 1.0f},  // trace
-      {0.4f, 0.9f, 0.9f, 1.0f},  // debug
-      {1.0f, 1.0f, 1.0f, 1.0f},  // info
-      {1.0f, 1.0f, 0.0f, 1.0f},  // warn
-      {1.0f, 0.4f, 0.4f, 1.0f},  // err
-      {1.0f, 0.0f, 0.0f, 1.0f},  // critical
-      {1.0f, 1.0f, 1.0f, 1.0f},  // off
+      {0.5f, 0.5f, 0.5f, 1.0f}, {0.4f, 0.9f, 0.9f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f},
+      {1.0f, 1.0f, 0.0f, 1.0f}, {1.0f, 0.4f, 0.4f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f},
+      {1.0f, 1.0f, 1.0f, 1.0f},
   };
   ImVec4 completion_bg{0.10f, 0.10f, 0.10f, 0.95f};
   ImVec4 completion_highlight{0.235f, 0.353f, 0.549f, 0.784f};
@@ -67,7 +60,7 @@ struct DebugOverlayStyle {
 
 struct SettingsStyle {
   ImVec4 warning{1.00f, 0.80f, 0.20f, 1.00f};
-  /// Cvar lifecycle badges: [live], [restart], [init-only].
+
   ImVec4 lifecycle_live{0.40f, 1.00f, 0.40f, 1.00f};
   ImVec4 lifecycle_restart{1.00f, 1.00f, 0.40f, 1.00f};
   ImVec4 lifecycle_init_only{1.00f, 0.40f, 0.40f, 1.00f};
@@ -82,4 +75,4 @@ struct Style {
   SettingsStyle settings;
 };
 
-}  // namespace rex::ui
+}

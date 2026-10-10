@@ -30,8 +30,6 @@ std::unique_ptr<MenuItem> MenuItem::Create(Type type, const std::string& text,
 std::unique_ptr<MenuItem> MenuItem::Create(Type type, const std::string& text,
                                            const std::string& hotkey,
                                            std::function<void()> callback) {
-  // No native menu backend with SDL windowing; the plain item still carries
-  // text/hotkey/callback state for callers that walk the tree themselves.
   return std::unique_ptr<MenuItem>(new MenuItem(type, text, hotkey, std::move(callback)));
 }
 
@@ -76,10 +74,8 @@ MenuItem* MenuItem::child(size_t index) {
 void MenuItem::OnSelected() {
   if (callback_) {
     callback_();
-    // Note that this MenuItem might have been destroyed by the callback.
-    // Must not do anything with *this in this function from now on.
   }
 }
 
-}  // namespace ui
-}  // namespace rex
+}
+}

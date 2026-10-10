@@ -113,5 +113,5 @@ void CreateBufferTypedUAV(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE hand
   device->CreateUnorderedAccessView(buffer, nullptr, &desc, handle);
 }
 
-}  // namespace util
-}  // namespace rex::ui::d3d12
+}
+}

@@ -30,13 +30,8 @@ Win32WindowedAppContext::~Win32WindowedAppContext() {
 }
 
 bool Win32WindowedAppContext::Initialize() {
-  // Logging possibly not initialized in this function yet.
-
   user32_module_ = LoadLibraryW(L"user32.dll");
 
-  // Xenia expected per-monitor v2 from the application manifest. Titles built
-  // with the SDK carry no such manifest, so opt in before any window exists;
-  // this fails harmlessly if the process awareness is already set.
   if (user32_module_) {
     using SetProcessDpiAwarenessContextFn = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
     auto set_awareness = reinterpret_cast<SetProcessDpiAwarenessContextFn>(
@@ -46,7 +41,6 @@ bool Win32WindowedAppContext::Initialize() {
     }
   }
 
-  // Obtain function pointers that may be used for windows if available.
   shcore_module_ = LoadLibraryW(L"SHCore.dll");
   if (shcore_module_) {
     per_monitor_dpi_v1_api_available_ = true;
@@ -68,9 +62,6 @@ bool Win32WindowedAppContext::Initialize() {
     load(&per_monitor_dpi_v2_api_.get_dpi_for_window, "GetDpiForWindow");
   }
 
-  // Create the message-only window for executing pending functions - using a
-  // window instead of executing them between iterations so non-main message
-  // loops, such as Windows modals, can execute pending functions too.
   static constexpr WCHAR kPendingFunctionsWindowClassName[] = L"ReXGluePendingFunctionsWindowClass";
   if (!pending_functions_window_class_registered_) {
     WNDCLASSEXW pending_functions_window_class = {};
@@ -101,23 +92,16 @@ void Win32WindowedAppContext::NotifyUILoopOfPendingFunctions() {
 }
 
 void Win32WindowedAppContext::PlatformQuitFromUIThread() {
-  // Send WM_QUIT to whichever loop happens to process it - may be the loop of a
-  // built-in modal window, which is unaware of HasQuitFromUIThread, don't let
-  // it delay quitting indefinitely.
   PostQuitMessage(EXIT_SUCCESS);
 }
 
 int Win32WindowedAppContext::RunMainMessageLoop() {
   int result = EXIT_SUCCESS;
   MSG message;
-  // The HasQuitFromUIThread check is not absolutely required, but for
-  // additional safety in case WM_QUIT is not received for any reason.
+
   while (!HasQuitFromUIThread()) {
     BOOL message_result = GetMessageW(&message, nullptr, 0, 0);
     if (message_result == 0 || message_result == -1) {
-      // WM_QUIT (0, with the PostQuitMessage result in wParam) or an error
-      // (-1). WM_QUIT may come from elsewhere than PlatformQuitFromUIThread,
-      // so quit the context to finish everything including pending functions.
       QuitFromUIThread();
       result = message_result ? EXIT_FAILURE : int(message.wParam);
       break;
@@ -131,8 +115,6 @@ int Win32WindowedAppContext::RunMainMessageLoop() {
 LRESULT CALLBACK Win32WindowedAppContext::PendingFunctionsWndProc(HWND hwnd, UINT message,
                                                                   WPARAM wparam, LPARAM lparam) {
   if (message == WM_CLOSE) {
-    // Need the window for the entire context's lifetime, don't allow anything
-    // to close it.
     return 0;
   }
   if (message == WM_NCCREATE) {
@@ -145,9 +127,7 @@ LRESULT CALLBACK Win32WindowedAppContext::PendingFunctionsWndProc(HWND hwnd, UIN
     if (app_context) {
       switch (message) {
         case WM_DESTROY:
-          // The message-only window owned by the context is being destroyed,
-          // thus the context won't be able to execute pending functions
-          // anymore - can't continue functioning normally.
+
           app_context->QuitFromUIThread();
           break;
         case kPendingFunctionsWindowClassMessageExecute:
@@ -161,4 +141,4 @@ LRESULT CALLBACK Win32WindowedAppContext::PendingFunctionsWndProc(HWND hwnd, UIN
   return DefWindowProcW(hwnd, message, wparam, lparam);
 }
 
-}  // namespace rex::ui
+}

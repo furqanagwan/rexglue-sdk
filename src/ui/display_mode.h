@@ -22,12 +22,6 @@ struct DisplayMode {
   bool operator==(const DisplayMode&) const = default;
 };
 
-// The mode to switch to for a requested size, following SDL's
-// SDL_GetClosestFullscreenDisplayMode so both windows agree: the exact size
-// if the display has it, otherwise the smallest mode covering it, otherwise
-// the largest mode. Among modes of that size, the preferred refresh rate (the
-// desktop's), or the highest one. Only the deepest colour modes are
-// considered. Empty when there are no modes.
 inline std::optional<DisplayMode> ChooseFullscreenMode(const std::vector<DisplayMode>& modes,
                                                        uint32_t width, uint32_t height,
                                                        uint32_t preferred_refresh_hz) {
@@ -83,4 +77,4 @@ inline std::optional<DisplayMode> ChooseFullscreenMode(const std::vector<Display
   return *best;
 }
 
-}  // namespace rex::ui
+}

@@ -24,7 +24,7 @@ void ImmediateDrawer::SetPresenter(Presenter* new_presenter) {
   if (presenter_ == new_presenter) {
     return;
   }
-  // Changing the presenter while drawing would make the state inconsistent.
+
   assert_null(ui_draw_context_);
   if (presenter_) {
     OnLeavePresenter();
@@ -37,13 +37,9 @@ void ImmediateDrawer::SetPresenter(Presenter* new_presenter) {
 
 void ImmediateDrawer::Begin(UIDrawContext& ui_draw_context, float coordinate_space_width,
                             float coordinate_space_height) {
-  // App-driven contexts carry no presenter; presenter-driven backend contexts
-  // must match the drawer's presenter. presenter_or_null() is safe for both.
   assert_true(ui_draw_context.presenter_or_null() == presenter_);
   ui_draw_context_ = &ui_draw_context;
-  // In case of non-positive values (or NaNs) - use render target coordinates
-  // according to the contract of the function, and also for safety because
-  // there will be division by the coordinate space size in several places.
+
   if (!(coordinate_space_width > 0.0f) || !(coordinate_space_height > 0.0f)) {
     coordinate_space_width = float(ui_draw_context.render_target_width());
     coordinate_space_height = float(ui_draw_context.render_target_height());
@@ -70,23 +66,22 @@ bool ImmediateDrawer::ScissorToRenderTarget(const ImmediateDraw& immediate_draw,
   }
   float render_target_width_float = float(render_target_width);
   float render_target_height_float = float(render_target_height);
-  // Scale to render target coordinates, drop NaNs, and clamp to the render
-  // target size, below which the values are representable as 16p8 fixed-point.
+
   float scale_x = render_target_width / coordinate_space_width();
   float scale_y = render_target_height / coordinate_space_height();
   float x0_float =
       rex::clamp_float(immediate_draw.scissor_left * scale_x, 0.0f, render_target_width_float);
   float y0_float =
       rex::clamp_float(immediate_draw.scissor_top * scale_y, 0.0f, render_target_height_float);
-  // Also make sure the size is non-negative.
+
   float x1_float =
       rex::clamp_float(immediate_draw.scissor_right * scale_x, x0_float, render_target_width_float);
   float y1_float = rex::clamp_float(immediate_draw.scissor_bottom * scale_y, y0_float,
                                     render_target_height_float);
-  // Top-left - include .5 (0.128 treated as 0 covered, 0.129 as 0 not covered).
+
   int32_t x0 = (FloatToD3D11Fixed16p8(x0_float) + 127) >> 8;
   int32_t y0 = (FloatToD3D11Fixed16p8(y0_float) + 127) >> 8;
-  // Bottom-right - exclude .5.
+
   int32_t x1 = (FloatToD3D11Fixed16p8(x1_float) + 127) >> 8;
   int32_t y1 = (FloatToD3D11Fixed16p8(y1_float) + 127) >> 8;
   assert_true(x0 >= 0);
@@ -102,5 +97,5 @@ bool ImmediateDrawer::ScissorToRenderTarget(const ImmediateDraw& immediate_draw,
   return x1 > x0 && y1 > y0;
 }
 
-}  // namespace ui
-}  // namespace rex
+}
+}

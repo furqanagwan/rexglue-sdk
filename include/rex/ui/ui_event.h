@@ -102,7 +102,7 @@ class KeyEvent : public UIEvent {
   VirtualKey virtual_key_ = VirtualKey::kNone;
 
   int repeat_count_ = 0;
-  bool prev_state_ = false;  // Key previously down(true) or up(false)
+  bool prev_state_ = false;
 
   bool modifier_shift_pressed_ = false;
   bool modifier_ctrl_pressed_ = false;
@@ -122,7 +122,6 @@ class MouseEvent : public UIEvent {
   };
 
  public:
-  // Matching Windows WHEEL_DELTA.
   static constexpr uint32_t kScrollPerDetent = 120;
 
   explicit MouseEvent(Window* target, Button button, int32_t x, int32_t y, int32_t scroll_x = 0,
@@ -145,9 +144,7 @@ class MouseEvent : public UIEvent {
   int32_t y() const { return y_; }
   int32_t scroll_x() const { return scroll_x_; }
   int32_t scroll_y() const { return scroll_y_; }
-  // Platform-reported motion since the previous event, in physical pixels.
-  // Still moves under Window::SetRelativeMouseMode, where x/y do not.
-  // Fractional, so accumulate before rounding.
+
   float dx() const { return dx_; }
   float dy() const { return dy_; }
 
@@ -157,7 +154,7 @@ class MouseEvent : public UIEvent {
   int32_t x_ = 0;
   int32_t y_ = 0;
   int32_t scroll_x_ = 0;
-  // Positive is up (away from the user), negative is down (towards the user).
+
   int32_t scroll_y_ = 0;
   float dx_ = 0.0f;
   float dy_ = 0.0f;
@@ -168,14 +165,11 @@ class TouchEvent : public UIEvent {
   enum class Action {
     kDown,
     kUp,
-    // Should be treated as an up event, but without performing the usual action
-    // for releasing.
+
     kCancel,
     kMove,
   };
 
-  // Can be used by event listeners as the value for when there's no current
-  // pointer, for example.
   static constexpr uint32_t kPointerIDNone = UINT32_MAX;
 
   explicit TouchEvent(Window* target, uint32_t pointer_id, Action action, float x, float y)
@@ -186,7 +180,7 @@ class TouchEvent : public UIEvent {
 
   uint32_t pointer_id() { return pointer_id_; }
   Action action() const { return action_; }
-  // Can be outside the boundaries of the surface.
+
   float x() const { return x_; }
   float y() const { return y_; }
 
@@ -198,5 +192,5 @@ class TouchEvent : public UIEvent {
   float y_;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

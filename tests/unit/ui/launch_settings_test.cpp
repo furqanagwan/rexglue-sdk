@@ -18,8 +18,7 @@ struct Harness {
     REQUIRE(window->Open());
     drawer = std::make_unique<rex::ui::ImGuiDrawer>(window.get(), 64);
     auto& io = drawer->GetIO();
-    // The test executable links ImGui for other suites, while the installed
-    // UI implementation lives in the runtime DLL. Share the drawer's context.
+
     ImGui::SetCurrentContext(io.Ctx);
     io.DisplaySize = ImVec2(800, 600);
     io.DeltaTime = 1.0f / 60.0f;
@@ -50,7 +49,7 @@ struct Harness {
   void Press(const char* label) {
     auto* menu = ImGui::FindWindowByName("Game settings");
     REQUIRE(menu);
-    ImGui::ActivateItemByID(menu->GetID(label));  // Actual ImGui navigation activation.
+    ImGui::ActivateItemByID(menu->GetID(label));
     Frame();
   }
   rex::ui::Win32WindowedAppContext context;
@@ -60,7 +59,7 @@ struct Harness {
   int completed = 0;
   bool accepted = false;
 };
-}  // namespace
+}
 
 TEST_CASE("Launcher Play and Exit complete once with the correct action", "[ui][launch_settings]") {
   Harness h;
@@ -159,7 +158,7 @@ TEST_CASE("Launcher saves settings and allows recovery from a save failure",
     std::filesystem::remove(config);
   }
   SECTION("Failure keeps the menu open; session-only Play recovers") {
-    h.Show(std::filesystem::temp_directory_path());  // A directory cannot be a config file.
+    h.Show(std::filesystem::temp_directory_path());
     h.Frame();
     h.Frame();
     h.Press("Play");

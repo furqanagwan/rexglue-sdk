@@ -20,7 +20,6 @@
 #endif
 #include <windows.h>
 
-// For per-monitor DPI awareness v1.
 #include <ShellScalingApi.h>
 
 #include <rex/ui/windowed_app_context.h>
@@ -36,9 +35,9 @@ class Win32WindowedAppContext final : public WindowedAppContext {
   };
 
   struct PerMonitorDpiV2Api {
-    // Added in Windows 10 1607, before per-monitor awareness v2 (1703). Make
-    // sure EnableNonClientDpiScaling is called in WM_NCCREATE so
-    // AdjustWindowRectExForDpi matches the actual non-client area on 1607.
+
+
+
     BOOL (WINAPI* adjust_window_rect_ex_for_dpi)(
         LPRECT rect, DWORD style, BOOL menu, DWORD ex_style, UINT dpi);
     BOOL (WINAPI* enable_non_client_dpi_scaling)(HWND hwnd);
@@ -47,8 +46,6 @@ class Win32WindowedAppContext final : public WindowedAppContext {
   };
   // clang-format on
 
-  // Must call Initialize and check its result after creating to be able to
-  // perform pending function calls.
   explicit Win32WindowedAppContext(HINSTANCE hinstance, int show_cmd)
       : hinstance_(hinstance), show_cmd_(show_cmd) {}
   ~Win32WindowedAppContext() override;
@@ -63,12 +60,10 @@ class Win32WindowedAppContext final : public WindowedAppContext {
 
   int RunMainMessageLoop();
 
-  // Windows 8.1 per-monitor DPI awareness version 1.
   const PerMonitorDpiV1Api* per_monitor_dpi_v1_api() const {
     return per_monitor_dpi_v1_api_available_ ? &per_monitor_dpi_v1_api_ : nullptr;
   }
-  // Windows 10 1607 per-monitor DPI awareness API, also used for per-monitor
-  // DPI awareness version 2 functionality added in Windows 10 1703.
+
   const PerMonitorDpiV2Api* per_monitor_dpi_v2_api() const {
     return per_monitor_dpi_v2_api_available_ ? &per_monitor_dpi_v2_api_ : nullptr;
   }
@@ -95,4 +90,4 @@ class Win32WindowedAppContext final : public WindowedAppContext {
   HWND pending_functions_hwnd_ = nullptr;
 };
 
-}  // namespace rex::ui
+}

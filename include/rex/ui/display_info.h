@@ -44,4 +44,4 @@ std::vector<DisplayResolution> NotableResolutions(const std::vector<DisplayResol
                                                   uint32_t native_width, uint32_t native_height);
 std::string ResolutionName(uint32_t width, uint32_t height);
 
-}  // namespace rex::ui
+}

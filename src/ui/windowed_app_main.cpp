@@ -38,12 +38,10 @@
 
 namespace {
 
-// Runs the app on an initialized context.
 template <typename AppContext>
 int RunApp(AppContext& app_context, const std::vector<std::string>& remaining) {
   std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);
 
-  // Match remaining positional args to the app's expected options.
   const auto& option_names = app->GetPositionalOptions();
   std::map<std::string, std::string> parsed;
   size_t count = std::min(remaining.size(), option_names.size());
@@ -61,10 +59,9 @@ int RunWindowedApp(int argc, char** argv) {
   auto remaining = rex::cvar::Init(argc, argv);
   rex::cvar::ApplyEnvironment();
   rex::InitLoggingEarly();
-  // Guest vblanks, GPU waits and guest sleeps all rely on millisecond sleeps.
+
   rex::thread::RequestHighTimerResolution();
 
-  // Apartment-threaded COM for shell dialogs.
   if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
     return EXIT_FAILURE;
   }
@@ -82,7 +79,6 @@ int RunWindowedApp(int argc, char** argv) {
   return result;
 }
 
-// Convert wide argv from CommandLineToArgvW to UTF-8 for cvar::Init.
 std::vector<std::string> WideArgsToUtf8(int argc, wchar_t** wargv) {
   std::vector<std::string> args;
   args.reserve(static_cast<size_t>(argc));
@@ -102,7 +98,7 @@ std::vector<std::string> WideArgsToUtf8(int argc, wchar_t** wargv) {
   return args;
 }
 
-}  // namespace
+}
 
 int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE hinstance_prev, LPWSTR command_line,
                     int show_cmd) {

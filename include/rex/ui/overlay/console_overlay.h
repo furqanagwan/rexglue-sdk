@@ -41,36 +41,30 @@ class ConsoleDialog : public ImGuiDialog {
 
   bool focus_input_next_frame_ = true;
   bool scroll_to_bottom_ = true;
-  float console_height_ = 0.0f;  // 0 = initialize to default fraction on first draw
+  float console_height_ = 0.0f;
   uint64_t last_generation_ = 0;
 
-  // Console-only output (command feedback). Kept out of the log sink/files, but
-  // tagged with the sink generation at the moment it was produced so it can be
-  // interleaved chronologically with the captured log lines at draw time.
   struct LocalEntry {
     rex::LogEntry entry;
-    uint64_t seq;  // sink generation when produced
+    uint64_t seq;
   };
 
   std::shared_ptr<rex::LogCaptureSink> sink_;
-  std::vector<rex::LogEntry> entries_;  // sink snapshot, refreshed when generation changes
+  std::vector<rex::LogEntry> entries_;
   std::vector<LocalEntry> local_entries_;
 
-  // Filters
-  int min_level_ = 0;  // index into spdlog level enum; 0 = trace
+  int min_level_ = 0;
   std::set<std::string> known_categories_;
-  std::map<std::string, bool> category_filter_;  // category -> enabled
+  std::map<std::string, bool> category_filter_;
 
-  // Command input
   char input_buf_[512] = {};
   std::deque<std::string> history_;
   int history_pos_ = -1;
   static constexpr size_t kMaxHistory = 32;
 
-  // Autocomplete over cvar/command names.
   std::vector<std::string> completion_candidates_;
-  int completion_index_ = -1;  // selected popup item, -1 = none highlighted
+  int completion_index_ = -1;
   bool completion_open_ = false;
 };
 
-}  // namespace rex::ui
+}

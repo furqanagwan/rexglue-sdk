@@ -10,7 +10,6 @@
 
 namespace rex::ui {
 
-// Host-neutral navigation state. Axes are -1..1, with positive Y pointing up.
 struct LaunchPadState {
   float x = 0;
   float y = 0;
@@ -20,13 +19,11 @@ struct LaunchPadState {
   bool next_tab = false;
 };
 using LaunchPadSource = std::function<std::optional<LaunchPadState>()>;
-// Shared ImGui navigation for host menus. Release before disposing the reader.
+
 LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source,
                              bool forward_to_imgui = true);
 void ReleaseLaunchPad(ImGuiIO& io);
 
-// Self-owned dialog, like ShowMessageBox. Its completion callback runs only
-// after Play/Exit; destroying it during app shutdown does not launch a title.
 class LaunchSettingsDialog : public ImGuiDialog {
  public:
   LaunchSettingsDialog(ImGuiDrawer* drawer, std::string title, std::filesystem::path config_path,
@@ -57,4 +54,4 @@ class LaunchSettingsDialog : public ImGuiDialog {
   bool remember_ = true;
 };
 
-}  // namespace rex::ui
+}

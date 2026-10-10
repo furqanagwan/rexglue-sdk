@@ -28,7 +28,6 @@ class RenderDocAPI {
 
   ~RenderDocAPI();
 
-  // Always present if this object exists.
   const RENDERDOC_API_1_0_0* api_1_0_0() const { return api_1_0_0_; }
 
  private:
@@ -39,5 +38,5 @@ class RenderDocAPI {
   const RENDERDOC_API_1_0_0* api_1_0_0_ = nullptr;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

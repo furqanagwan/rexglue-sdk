@@ -16,7 +16,7 @@
 
 namespace rex {
 class Runtime;
-}  // namespace rex
+}
 
 namespace rex::ui {
 
@@ -33,11 +33,10 @@ class AchievementsOverlayDialog : public ImGuiDialog {
   void OnDraw(ImGuiIO& io) override;
 
  private:
-  // Lazily loads icon_path, or icons/<image_id>.png when icon_path is empty.
   ImmediateTexture* GetIcon(const rex::system::AchievementInfo& achievement);
 
   rex::system::AchievementManager* achievements_ = nullptr;
   AchievementIconCache icon_cache_;
 };
 
-}  // namespace rex::ui
+}

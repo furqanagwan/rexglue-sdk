@@ -15,44 +15,32 @@
 namespace rex {
 namespace ui {
 
-// Windows and Xbox 360 / XInput virtual key enumeration.
-// This is what platform-specific keys should be translated to, for both HID
-// keystroke emulation and Xenia-internal UI events. On Windows, the translation
-// is a simple cast.
-// This is uint16_t as it's WPARAM (which was 16-bit back in Win16 days, where
-// virtual key codes were added), and XINPUT_KEYSTROKE stores the virtual key as
-// a WORD. In some cases (see kPacket), bits above 16 may be used as well, but
-// VK_ on Windows are defined up to 0xFF (0xFE not counting the reserved 0xFF)
-// as of Windows SDK 10.0.19041.0, and XInput virtual key codes are 16-bit.
-// Base virtual key codes as of _WIN32_WINNT 0x0500 (Windows 2000, which the
-// Xbox 360's kernel is based on), virtual key codes added later are marked
-// explicitly as such.
 enum class VirtualKey : uint16_t {
-  // Not a valid key - MapVirtualKey returns zero when there is no translation.
+
   kNone,
 
   kLButton = 0x01,
   kRButton = 0x02,
-  kCancel = 0x03,   // Control-break.
-  kMButton = 0x04,  // Not contiguous with kLButton and kRButton.
+  kCancel = 0x03,
+  kMButton = 0x04,
 
-  kXButton1 = 0x05,  // Not contiguous with kLButton and kRButton.
-  kXButton2 = 0x06,  // Not contiguous with kLButton and kRButton.
+  kXButton1 = 0x05,
+  kXButton2 = 0x06,
 
-  kBack = 0x08,  // Backspace.
+  kBack = 0x08,
   kTab = 0x09,
 
   kClear = 0x0C,
-  kReturn = 0x0D,  // Enter.
+  kReturn = 0x0D,
 
   kShift = 0x10,
-  kControl = 0x11,  // Ctrl.
-  kMenu = 0x12,     // Alt.
+  kControl = 0x11,
+  kMenu = 0x12,
   kPause = 0x13,
-  kCapital = 0x14,  // Caps Lock.
+  kCapital = 0x14,
 
   kKana = 0x15,
-  kHangeul = 0x15,  // Old name.
+  kHangeul = 0x15,
   kHangul = 0x15,
   kImeOn = 0x16,
   kJunja = 0x17,
@@ -69,8 +57,8 @@ enum class VirtualKey : uint16_t {
   kModeChange = 0x1F,
 
   kSpace = 0x20,
-  kPrior = 0x21,  // Page Up.
-  kNext = 0x22,   // Page Down.
+  kPrior = 0x21,
+  kNext = 0x22,
   kEnd = 0x23,
   kHome = 0x24,
   kLeft = 0x25,
@@ -85,7 +73,6 @@ enum class VirtualKey : uint16_t {
   kDelete = 0x2E,
   kHelp = 0x2F,
 
-  // Same as ASCII '0' - '9'.
   k0 = 0x30,
   k1 = 0x31,
   k2 = 0x32,
@@ -97,7 +84,6 @@ enum class VirtualKey : uint16_t {
   k8 = 0x38,
   k9 = 0x39,
 
-  // Same as ASCII 'A' - 'Z'.
   kA = 0x41,
   kB = 0x42,
   kC = 0x43,
@@ -172,8 +158,6 @@ enum class VirtualKey : uint16_t {
   kF23 = 0x86,
   kF24 = 0x87,
 
-  // VK_NAVIGATION_* added in _WIN32_WINNT 0x0604, but marked as reserved in
-  // WinUser.h and not documented on MSDN.
   kNavigationView = 0x88,
   kNavigationMenu = 0x89,
   kNavigationUp = 0x8A,
@@ -186,20 +170,14 @@ enum class VirtualKey : uint16_t {
   kNumLock = 0x90,
   kScroll = 0x91,
 
-  // NEC PC-9800 keyboard.
-  kOemNecEqual = 0x92,  // '=' key on the numpad.
+  kOemNecEqual = 0x92,
 
-  // Fujitsu/OASYS keyboard.
-  kOemFjJisho = 0x92,    // 'Dictionary' key.
-  kOemFjMasshou = 0x93,  // 'Unregister word' key.
-  kOemFjTouroku = 0x94,  // 'Register word' key.
-  kOemFjLOya = 0x95,     // 'Left OYAYUBI' key.
-  kOemFjROya = 0x96,     // 'Right OYAYUBI' key.
+  kOemFjJisho = 0x92,
+  kOemFjMasshou = 0x93,
+  kOemFjTouroku = 0x94,
+  kOemFjLOya = 0x95,
+  kOemFjROya = 0x96,
 
-  // Left and right Alt, Ctrl and Shift virtual keys.
-  // On Windows (from WinUser.h):
-  // "Used only as parameters to GetAsyncKeyState() and GetKeyState().
-  //  No other API or message will distinguish left and right keys in this way."
   kLShift = 0xA0,
   kRShift = 0xA1,
   kLControl = 0xA2,
@@ -227,22 +205,14 @@ enum class VirtualKey : uint16_t {
   kLaunchApp1 = 0xB6,
   kLaunchApp2 = 0xB7,
 
-  kOem1 = 0xBA,       // ';:' for the US.
-  kOemPlus = 0xBB,    // '+' for any country.
-  kOemComma = 0xBC,   // ',' for any country.
-  kOemMinus = 0xBD,   // '-' for any country.
-  kOemPeriod = 0xBE,  // '.' for any country.
-  kOem2 = 0xBF,       // '/?' for the US.
-  kOem3 = 0xC0,       // '`~' for the US.
+  kOem1 = 0xBA,
+  kOemPlus = 0xBB,
+  kOemComma = 0xBC,
+  kOemMinus = 0xBD,
+  kOemPeriod = 0xBE,
+  kOem2 = 0xBF,
+  kOem3 = 0xC0,
 
-  // VK_GAMEPAD_* (since _WIN32_WINNT 0x0604) virtual key codes are marked as
-  // reserved in WinUser.h and are mostly not documented on MSDN (with the
-  // exception of the Xbox Device Portal Remote Input REST API in the "UWP on
-  // Xbox One" section).
-  // Xenia uses VK_PAD_* (kXInputPad*) for HID emulation internally instead
-  // because XInput is the API used for the Xbox 360 controller.
-  // To avoid confusion between VK_GAMEPAD_* and VK_PAD_*, here they are
-  // prefixed with kXboxOne and kXInput respectively.
   kXboxOneGamepadA = 0xC3,
   kXboxOneGamepadB = 0xC4,
   kXboxOneGamepadX = 0xC5,
@@ -268,28 +238,23 @@ enum class VirtualKey : uint16_t {
   kXboxOneGamepadRightThumbstickRight = 0xD9,
   kXboxOneGamepadRightThumbstickLeft = 0xDA,
 
-  kOem4 = 0xDB,  // '[{' for the US.
-  kOem5 = 0xDC,  // '\|' for the US.
-  kOem6 = 0xDD,  // ']}' for the US.
-  kOem7 = 0xDE,  // ''"' for the US.
+  kOem4 = 0xDB,
+  kOem5 = 0xDC,
+  kOem6 = 0xDD,
+  kOem7 = 0xDE,
   kOem8 = 0xDF,
 
-  kOemAx = 0xE1,    // 'AX' key on the Japanese AX keyboard.
-  kOem102 = 0xE2,   // "<>" or "\|" on the RT 102-key keyboard.
-  kIcoHelp = 0xE3,  // Help key on the Olivetti keyboard (ICO).
-  kIco00 = 0xE4,    // 00 key on the ICO.
+  kOemAx = 0xE1,
+  kOem102 = 0xE2,
+  kIcoHelp = 0xE3,
+  kIco00 = 0xE4,
 
   kProcessKey = 0xE5,
 
   kIcoClear = 0xE6,
 
-  // From MSDN:
-  // "Used to pass Unicode characters as if they were keystrokes. The VK_PACKET
-  //  key is the low word of a 32-bit Virtual Key value used for non-keyboard
-  //  input methods."
   kPacket = 0xE7,
 
-  // Nokia/Ericsson.
   kOemReset = 0xE9,
   kOemJump = 0xEA,
   kOemPa1 = 0xEB,
@@ -314,15 +279,11 @@ enum class VirtualKey : uint16_t {
   kPa1 = 0xFD,
   kOemClear = 0xFE,
 
-  // VK_PAD_* from XInput.h for XInputGetKeystroke. kXInput prefix added to
-  // distinguish from VK_GAMEPAD_*, added much later for the Xbox One
-  // controller.
-
   kXInputPadA = 0x5800,
   kXInputPadB = 0x5801,
   kXInputPadX = 0x5802,
   kXInputPadY = 0x5803,
-  // RShoulder before LShoulder, not a typo.
+
   kXInputPadRShoulder = 0x5804,
   kXInputPadLShoulder = 0x5805,
   kXInputPadLTrigger = 0x5806,
@@ -356,5 +317,5 @@ enum class VirtualKey : uint16_t {
   kXInputPadRThumbDownLeft = 0x5837,
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

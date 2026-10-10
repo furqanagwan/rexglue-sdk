@@ -20,7 +20,7 @@ namespace rex::ui {
 using rex::ui::VirtualKey;
 
 static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
-    // Function keys
+
     {"F1", VirtualKey::kF1},
     {"F2", VirtualKey::kF2},
     {"F3", VirtualKey::kF3},
@@ -45,7 +45,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"F22", VirtualKey::kF22},
     {"F23", VirtualKey::kF23},
     {"F24", VirtualKey::kF24},
-    // Letters
+
     {"A", VirtualKey::kA},
     {"B", VirtualKey::kB},
     {"C", VirtualKey::kC},
@@ -72,7 +72,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"X", VirtualKey::kX},
     {"Y", VirtualKey::kY},
     {"Z", VirtualKey::kZ},
-    // Digits
+
     {"0", VirtualKey::k0},
     {"1", VirtualKey::k1},
     {"2", VirtualKey::k2},
@@ -83,7 +83,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"7", VirtualKey::k7},
     {"8", VirtualKey::k8},
     {"9", VirtualKey::k9},
-    // OEM / special
+
     {"Backtick", VirtualKey::kOem3},
     {"Minus", VirtualKey::kOemMinus},
     {"Plus", VirtualKey::kOemPlus},
@@ -95,7 +95,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"LBracket", VirtualKey::kOem4},
     {"RBracket", VirtualKey::kOem6},
     {"Quote", VirtualKey::kOem7},
-    // Control
+
     {"Escape", VirtualKey::kEscape},
     {"Home", VirtualKey::kHome},
     {"Return", VirtualKey::kReturn},
@@ -108,16 +108,16 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"End", VirtualKey::kEnd},
     {"PageUp", VirtualKey::kPrior},
     {"PageDown", VirtualKey::kNext},
-    // Navigation
+
     {"Left", VirtualKey::kLeft},
     {"Right", VirtualKey::kRight},
     {"Up", VirtualKey::kUp},
     {"Down", VirtualKey::kDown},
-    // Modifier
+
     {"Shift", VirtualKey::kShift},
     {"Control", VirtualKey::kControl},
     {"Alt", VirtualKey::kMenu},
-    // Numpad
+
     {"Numpad0", VirtualKey::kNumpad0},
     {"Numpad1", VirtualKey::kNumpad1},
     {"Numpad2", VirtualKey::kNumpad2},
@@ -138,7 +138,7 @@ static const std::unordered_map<std::string, VirtualKey> kKeyNames = {
     {"CapsLock", VirtualKey::kCapital},
     {"NumLock", VirtualKey::kNumLock},
     {"ScrollLock", VirtualKey::kScroll},
-    // Mouse buttons
+
     {"LMB", VirtualKey::kLButton},
     {"RMB", VirtualKey::kRButton},
     {"MMB", VirtualKey::kMButton},
@@ -158,8 +158,6 @@ std::string VirtualKeyToString(VirtualKey vk) {
   return {};
 }
 
-/* ---- Bind registry ---- */
-
 struct BindEntry {
   std::string name;
   std::string current_key;
@@ -173,15 +171,11 @@ void RegisterBind(std::string_view name, std::string_view default_key, std::stri
                   std::function<void()> callback) {
   std::lock_guard lock(g_binds_mutex);
 
-  /* Store the bind entry (owns the key string that the CVAR references). */
   auto& entry = g_binds.emplace_back();
   entry.name = std::string(name);
   entry.current_key = std::string(default_key);
   entry.callback = std::move(callback);
 
-  /* Capture a pointer to the entry's key string for the CVAR getter/setter.
-     The entry is stable because g_binds is never compacted while binds are
-     alive (UnregisterBind sets the callback to null rather than erasing). */
   std::string* key_ptr = &entry.current_key;
 
   rex::cvar::RegisterFlag({
@@ -224,4 +218,4 @@ bool ProcessKeyEvent(KeyEvent& e) {
   return false;
 }
 
-}  // namespace rex::ui
+}

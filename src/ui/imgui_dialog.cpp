@@ -42,10 +42,8 @@ ImGuiIO& ImGuiDialog::GetIO() {
 }
 
 void ImGuiDialog::Draw() {
-  // Draw UI.
   OnDraw(GetIO());
 
-  // Check to see if the UI closed itself and needs to be deleted.
   if (has_close_pending_) {
     OnClose();
     delete this;
@@ -87,5 +85,5 @@ ImGuiDialog* ImGuiDialog::ShowMessageBox(ImGuiDrawer* imgui_drawer, std::string 
   return new MessageBoxDialog(imgui_drawer, std::move(title), std::move(body));
 }
 
-}  // namespace ui
-}  // namespace rex
+}
+}

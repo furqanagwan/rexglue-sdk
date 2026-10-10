@@ -27,10 +27,10 @@ class MenuItem {
   typedef std::unique_ptr<MenuItem, void (*)(MenuItem*)> MenuItemPtr;
 
   enum class Type {
-    kPopup,  // Popup menu (submenu)
+    kPopup,
     kSeparator,
-    kNormal,  // Root menu
-    kString,  // Menu is just a string
+    kNormal,
+    kString,
   };
 
   static std::unique_ptr<MenuItem> Create(Type type);
@@ -48,11 +48,6 @@ class MenuItem {
   const std::string& text() { return text_; }
   const std::string& hotkey() { return hotkey_; }
 
-  // If the menu is currently attached to a Window, changes to it (such as the
-  // elements and the enabled / disabled state) may be not reflected
-  // immediately - call Window::CompleteMainMenuItemsUpdate when the
-  // modifications are done.
-
   void AddChild(MenuItem* child_item);
   void AddChild(std::unique_ptr<MenuItem> child_item);
   void AddChild(MenuItemPtr child_item);
@@ -68,8 +63,6 @@ class MenuItem {
   virtual void OnChildAdded(MenuItem* child_item) { (void)child_item; }
   virtual void OnChildRemoved(MenuItem* child_item) { (void)child_item; }
 
-  // This MenuItem may be destroyed as a result of the callback, don't do
-  // anything with it after the call.
   void OnSelected();
 
   Type type_;
@@ -82,5 +75,5 @@ class MenuItem {
   std::function<void()> callback_;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

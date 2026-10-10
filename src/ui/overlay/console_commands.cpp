@@ -42,7 +42,7 @@ void ConsoleFind(std::string_view args) {
   REXLOG_INFO("find: {} match(es) for '{}'", matches, needle);
 }
 
-}  // namespace
+}
 
 REXCVAR_DEFINE_COMMAND_ARGS(echo, ConsoleEcho, "Console", "Echo arguments to the console");
 REXCVAR_DEFINE_COMMAND_ARGS(find, ConsoleFind, "Console",
