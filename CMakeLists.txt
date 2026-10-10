@@ -188,6 +188,7 @@ endif()
 if(REXGLUE_ENABLE_ASAN)
     message(STATUS "Enabling AddressSanitizer; build the Release or RelWithDebInfo configuration")
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_compile_definitions(_DISABLE_STRING_ANNOTATION _DISABLE_VECTOR_ANNOTATION)
     add_link_options(-fsanitize=address)
 endif()
 

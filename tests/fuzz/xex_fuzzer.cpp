@@ -13,6 +13,8 @@
 
 namespace {
 
+using rex::X_STATUS;
+
 rex::Runtime* ToolRuntime() {
   static rex::Runtime* runtime = [] {
     auto root = std::filesystem::temp_directory_path() /
