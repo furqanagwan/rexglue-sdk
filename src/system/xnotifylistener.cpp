@@ -38,11 +38,11 @@ void XNotifyListener::OnAllHandlesClosed() {
 
 void XNotifyListener::EnqueueNotification(XNotificationID id, uint32_t data) {
   auto key = XNotificationKey(id);
-  // Ignore if the notification doesn't match our mask.
+
   if ((mask_ & uint64_t(1ULL << key.mask_index)) == 0) {
     return;
   }
-  // Ignore if the notification is too new.
+
   if (key.version > max_version_) {
     return;
   }
@@ -124,4 +124,4 @@ object_ref<XNotifyListener> XNotifyListener::Restore(KernelState* kernel_state,
   return object_ref<XNotifyListener>(notify);
 }
 
-}  // namespace rex::system
+}

@@ -63,9 +63,6 @@ enum ArgumentSize {
   AS_LongLong,
 };
 
-//=============================================================================
-// Concepts
-//=============================================================================
 template <typename T>
 concept FormatDataSource = requires(T& t, int32_t n, uint16_t c) {
   { t.get() } -> std::same_as<uint16_t>;
@@ -80,9 +77,6 @@ concept ArgListSource = requires(T& t) {
   { t.get64() } -> std::same_as<uint64_t>;
 };
 
-//=============================================================================
-// format_double helper
-//=============================================================================
 inline std::string format_double(double value, int32_t precision, uint16_t c, uint32_t flags) {
   if (precision < 0) {
     precision = 6;
@@ -115,12 +109,6 @@ inline std::string format_double(double value, int32_t precision, uint16_t c, ui
   return temp.str();
 }
 
-//=============================================================================
-// StackArgList — reads variadic args from PPC registers/stack
-//=============================================================================
-// For sprintf, _snprintf, DbgPrint, etc. where varargs follow fixed params.
-// Xbox 360 PPC has 64-bit GPRs. Variadic args in r3-r10, then stack at
-// r1+0x54 in 8-byte slots.
 class StackArgList {
  public:
   StackArgList(PPCContext& ctx, uint8_t* base, int32_t start_index)
@@ -161,7 +149,6 @@ class StackArgList {
           break;
       }
     } else {
-      // Stack arguments: 8-byte big-endian values at r1 + 0x54 + ((index - 8) * 8)
       uint32_t stack_addr = ctx_.r1.u32 + 0x54 + ((index_ - 8) * 8);
       value = static_cast<u64>(*rex::memory::GuestPtr<rex::be<u64>*>(base_, stack_addr));
     }
@@ -175,11 +162,6 @@ class StackArgList {
   int32_t index_;
 };
 
-//=============================================================================
-// ArrayArgList — reads from guest va_list (8-byte-aligned array in memory)
-//=============================================================================
-// For vsprintf, _vsnprintf, etc. where a va_list pointer is passed.
-// On Xbox 360, va_list is a pointer to an array of 8-byte-aligned values.
 class ArrayArgList {
  public:
   ArrayArgList(uint8_t* base, uint32_t arg_ptr) : base_(base), arg_ptr_(arg_ptr), index_(0) {}
@@ -199,9 +181,6 @@ class ArrayArgList {
   int32_t index_;
 };
 
-//=============================================================================
-// StringFormatData — narrow char format string I/O
-//=============================================================================
 class StringFormatData {
  public:
   explicit StringFormatData(const uint8_t* input) : input_(input) {}
@@ -239,9 +218,6 @@ class StringFormatData {
   std::string output_;
 };
 
-//=============================================================================
-// WideStringFormatData — wide (char16_t) format string I/O
-//=============================================================================
 class WideStringFormatData {
  public:
   explicit WideStringFormatData(const uint16_t* input) : input_(input) {}
@@ -276,9 +252,6 @@ class WideStringFormatData {
   std::u16string output_;
 };
 
-//=============================================================================
-// WideCountFormatData — counts wide output without storing
-//=============================================================================
 class WideCountFormatData {
  public:
   explicit WideCountFormatData(const uint16_t* input) : input_(input), count_(0) {}
@@ -313,10 +286,6 @@ class WideCountFormatData {
   int32_t count_;
 };
 
-//=============================================================================
-// format_core — printf format string state machine
-//=============================================================================
-// Reference: https://msdn.microsoft.com/en-us/library/56e442dc.aspx
 template <FormatDataSource Data, ArgListSource Args>
 int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
   int32_t count = 0;
@@ -353,7 +322,7 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
 
   for (uint16_t c = data.get();; c = data.get()) {
     if (state == FS_Unknown) {
-      if (!c) {  // the end
+      if (!c) {
         return count;
       } else if (c != '%') {
       output:
@@ -366,10 +335,8 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
 
       state = FS_Start;
       c = data.get();
-      // fall through
     }
 
-    // in any state, if c is \0, it's bad
     if (!c) {
       return -1;
     }
@@ -391,7 +358,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
 
         state = FS_Flags;
 
-        // reset to defaults
         flags = 0;
         width = 0;
         precision = -1;
@@ -405,8 +371,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
         text.length = 0;
         prefix.buffer[0] = '\0';
         prefix.length = 0;
-
-        // fall through, don't need to goto restart
       }
 
       case FS_Flags: {
@@ -427,7 +391,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
           continue;
         }
         state = FS_Width;
-        // fall through
       }
 
       case FS_Width: {
@@ -445,7 +408,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
           continue;
         }
         state = FS_PrecisionStart;
-        // fall through
       }
 
       case FS_PrecisionStart: {
@@ -472,7 +434,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
           continue;
         }
         state = FS_Size;
-        // fall through
       }
 
       case FS_Size: {
@@ -511,7 +472,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
             continue;
           }
         }
-        // fall through
       }
 
       case FS_Type: {
@@ -674,7 +634,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
             break;
           }
 
-          // %n: write character count to guest memory
           case 'n': {
             auto pointer = (uint32_t)args.get32();
             if (flags & FF_IsShort) {
@@ -739,7 +698,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
             break;
           }
 
-          // ANSI_STRING / UNICODE_STRING (not implemented)
           case 'Z': {
             assert_always();
             break;
@@ -822,7 +780,6 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
     }
     count += text.length;
 
-    // right padding
     if ((flags & FF_LeftJustify) && padding > 0) {
       count += padding;
       while (padding-- > 0) {
@@ -838,4 +795,4 @@ int32_t format_core(uint8_t* base, Data& data, Args& args, const bool wide) {
   return count;
 }
 
-}  // namespace rex::system::format
+}

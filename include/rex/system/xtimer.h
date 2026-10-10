@@ -19,11 +19,11 @@ namespace rex::system {
 struct XDPC;
 
 struct X_KTIMER {
-  X_DISPATCH_HEADER header;         // 0x0
-  rex::be<uint64_t> due_time;       // 0x10
-  X_LIST_ENTRY table_bucket_entry;  // 0x18
-  TypedGuestPointer<XDPC> dpc;      // 0x20
-  rex::be<uint32_t> period;         // 0x24
+  X_DISPATCH_HEADER header;
+  rex::be<uint64_t> due_time;
+  X_LIST_ENTRY table_bucket_entry;
+  TypedGuestPointer<XDPC> dpc;
+  rex::be<uint32_t> period;
 };
 static_assert_size(X_KTIMER, 0x28);
 
@@ -53,4 +53,4 @@ class XTimer : public XObject {
   uint32_t callback_routine_arg_ = 0;
 };
 
-}  // namespace rex::system
+}

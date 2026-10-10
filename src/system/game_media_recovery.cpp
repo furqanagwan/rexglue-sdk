@@ -49,4 +49,4 @@ void GameMediaRecovery::Cancel() {
   }
   condition_.notify_all();
 }
-}  // namespace rex::system
+}

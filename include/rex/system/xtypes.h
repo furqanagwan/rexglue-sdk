@@ -14,16 +14,14 @@
 
 #include <cstdint>
 
-#include <rex/assert.h>  // static_assert_size
-#include <rex/types.h>   // be<T>
+#include <rex/assert.h>
+#include <rex/types.h>
 
 namespace rex {
 
 typedef uint32_t X_HANDLE;
 #define X_INVALID_HANDLE_VALUE ((X_HANDLE) - 1)
 
-// NT_STATUS (STATUS_*)
-// https://msdn.microsoft.com/en-us/library/cc704588.aspx
 typedef uint32_t X_STATUS;
 #define XSUCCEEDED(s) ((s & 0xC0000000) == 0)
 #define XFAILED(s) (!XSUCCEEDED(s))
@@ -74,8 +72,6 @@ typedef uint32_t X_STATUS;
 #define X_STATUS_DRIVER_ORDINAL_NOT_FOUND ((X_STATUS)0xC0000262L)
 #define X_STATUS_DRIVER_ENTRYPOINT_NOT_FOUND ((X_STATUS)0xC0000263L)
 
-// Win32 error codes (ERROR_*)
-// https://msdn.microsoft.com/en-us/library/windows/desktop/ms681381(v=vs.85).aspx
 typedef uint32_t X_RESULT;
 #define X_FACILITY_WIN32 0x0007
 #define X_RESULT_FROM_WIN32(x) ((X_RESULT)(x))
@@ -103,7 +99,6 @@ typedef uint32_t X_RESULT;
 #define X_ERROR_FUNCTION_FAILED X_RESULT_FROM_WIN32(0x0000065BL)
 #define X_ERROR_EMPTY X_RESULT_FROM_WIN32(0x000010D2L)
 
-// HRESULT codes
 typedef uint32_t X_HRESULT;
 #define X_HRESULT_FROM_WIN32(x)      \
   ((int32_t)(x) <= 0                 \
@@ -119,7 +114,6 @@ typedef uint32_t X_HRESULT;
 #define X_E_NOTFOUND X_HRESULT_FROM_WIN32(X_ERROR_NOT_FOUND)
 #define X_E_NO_SUCH_USER X_HRESULT_FROM_WIN32(X_ERROR_NO_SUCH_USER)
 
-// MEM_*, used by NtAllocateVirtualMemory
 enum X_MEM : uint32_t {
   X_MEM_COMMIT = 0x00001000,
   X_MEM_RESERVE = 0x00002000,
@@ -132,10 +126,9 @@ enum X_MEM : uint32_t {
   X_MEM_NOZERO = 0x00800000,
   X_MEM_LARGE_PAGES = 0x20000000,
   X_MEM_HEAP = 0x40000000,
-  X_MEM_16MB_PAGES = 0x80000000  // from Valve SDK
+  X_MEM_16MB_PAGES = 0x80000000
 };
 
-// PAGE_*, used by NtAllocateVirtualMemory
 enum X_PAGE : uint32_t {
   X_PAGE_NOACCESS = 0x00000001,
   X_PAGE_READONLY = 0x00000002,
@@ -150,27 +143,24 @@ enum X_PAGE : uint32_t {
   X_PAGE_WRITECOMBINE = 0x00000400
 };
 
-// Sockets/networking
 #define X_INVALID_SOCKET (uint32_t)(~0)
 #define X_SOCKET_ERROR (uint32_t)(-1)
 
-// https://docs.microsoft.com/en-us/windows/win32/api/ntdef/ns-ntdef-list_entry
 struct X_LIST_ENTRY {
-  be<uint32_t> flink_ptr;  // next entry / head
-  be<uint32_t> blink_ptr;  // previous entry / head
+  be<uint32_t> flink_ptr;
+  be<uint32_t> blink_ptr;
 };
 static_assert_size(X_LIST_ENTRY, 8);
 
 struct X_SINGLE_LIST_ENTRY {
-  be<uint32_t> next;  // 0x0 pointer to next entry
+  be<uint32_t> next;
 };
 static_assert_size(X_SINGLE_LIST_ENTRY, 4);
 
-// https://www.nirsoft.net/kernel_struct/vista/SLIST_HEADER.html
 struct X_SLIST_HEADER {
-  X_SINGLE_LIST_ENTRY next;  // 0x0
-  be<uint16_t> depth;        // 0x4
-  be<uint16_t> sequence;     // 0x6
+  X_SINGLE_LIST_ENTRY next;
+  be<uint16_t> depth;
+  be<uint16_t> sequence;
 };
 static_assert_size(X_SLIST_HEADER, 8);
 
@@ -179,8 +169,6 @@ struct X_KSPINLOCK {
 };
 static_assert_size(X_KSPINLOCK, 4);
 
-// Typed guest pointer - holds a guest address but provides type documentation.
-// Implicitly converts to/from uint32_t via the be<uint32_t> member.
 template <typename T>
 struct TypedGuestPointer {
   be<uint32_t> value;
@@ -192,4 +180,4 @@ struct TypedGuestPointer {
   }
 };
 
-}  // namespace rex
+}

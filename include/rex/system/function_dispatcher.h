@@ -32,19 +32,11 @@
 
 namespace rex::runtime {
 
-// Forward declarations
 class ExportResolver;
 class ThreadState;
 
-/**
- * Narrow registration interface used by generated DLLs.
- */
 class IModuleRegistrar {
  public:
-  /**
-   * Returns false (and logs) if guest_address is outside every registered
-   * function-table range.
-   */
   virtual bool SetFunction(uint32_t guest_address, ::PPCFunc* func) = 0;
 
  protected:
@@ -53,9 +45,6 @@ class IModuleRegistrar {
 
 class FunctionDispatcher : public IModuleRegistrar {
  public:
-  /**
-   * Callback type for module registration functions.
-   */
   using RegisterFn = void (*)(IModuleRegistrar*);
 
   FunctionDispatcher(memory::Memory* memory, ExportResolver* export_resolver);
@@ -68,58 +57,26 @@ class FunctionDispatcher : public IModuleRegistrar {
   uint64_t ExecuteInterrupt(ThreadState* thread_state, uint32_t address, uint64_t args[],
                             size_t arg_count);
 
-  /**
-   * Executes guest code on a thread already running guest code, then restores
-   * its full register state, matching the 360 kernel's trap-frame APC delivery.
-   */
   uint64_t ExecuteTrap(ThreadState* thread_state, uint32_t address, uint64_t args[],
                        size_t arg_count);
 
-  // Shared thunk region size per module.
-  static constexpr uint32_t kThunkReserveSize = 0x10000;  // 64KB
+  static constexpr uint32_t kThunkReserveSize = 0x10000;
 
-  // rexglue function table management (per-module table at IMAGE_BASE + IMAGE_SIZE)
-  // Set is_entrypoint=true exactly once for the host-loaded entrypoint so
-  // AllocateThunk(caller_address=0) can route to its pool.
-  /// `table_base` is where the dispatch table goes (PPCImageInfo
-  /// function_table_base); 0 for image_base + image_size.
   bool InitializeFunctionTable(uint32_t code_base, uint32_t code_size, uint32_t image_base,
                                uint32_t image_size, bool is_entrypoint = false,
                                uint32_t table_base = 0);
   bool SetFunction(uint32_t guest_address, ::PPCFunc* func) override;
   ::PPCFunc* GetFunction(uint32_t guest_address);
-  /**
-   * The guest address of the registered function whose host code most likely
-   * contains `host_pc`: the one with the highest host entry at or below it.
-   * Returns 0 when none is below it. Takes no lock (used from fault reports).
-   */
+
   uint32_t FindGuestFunctionByHostPc(uint64_t host_pc, uint64_t* host_entry = nullptr) const;
   bool HasAnyFunctionTable() const { return !module_tables_.empty(); }
-  /**
-   * caller_address must be inside a registered module, or 0 to mean "host-
-   * initiated, route to the entrypoint pool".
-   */
+
   uint32_t AllocateThunk(::PPCFunc* func, uint32_t caller_address);
 
-  /**
-   * Returns the `code_base` of the module containing `guest_address`,
-   * or 0 if no module covers that address.
-   */
   uint32_t FindCallerModuleBase(uint32_t guest_address);
 
-  /**
-   * Register a module while recording guest addresses written via SetFunction.
-   * `code_base` must equal the value previously passed to InitializeFunctionTable
-   * for the same module.
-   */
   void RegisterModule(const std::string& module_id, uint32_t code_base, RegisterFn register_func);
 
-  /**
-   * Unregister `module_id`: clears its function-table entries, releases its
-   * thunk pool, and removes its per-module function table. Returns the
-   * cleared thunk-pool range `[lo, hi)` for external cache invalidation, or
-   * nullopt if the module was not registered.
-   */
   std::optional<std::pair<uint32_t, uint32_t>> UnregisterModule(const std::string& module_id);
 
  private:
@@ -142,16 +99,12 @@ class FunctionDispatcher : public IModuleRegistrar {
 
   rex::thread::global_critical_region global_critical_region_;
 
-  // Host-side function lookup.
   std::unordered_map<uint32_t, ::PPCFunc*> function_table_;
 
-  // Per-module function table metadata.
   std::vector<ModuleTableInfo> module_tables_;
 
-  // code_base of the entrypoint module, or 0 if not yet registered.
   uint32_t entrypoint_code_base_ = 0;
 
-  // Module recording for RegisterModule/UnregisterModule.
   bool recording_ = false;
   std::vector<uint32_t> recording_addresses_;
 
@@ -160,17 +113,11 @@ class FunctionDispatcher : public IModuleRegistrar {
     std::vector<uint32_t> addresses;
   };
 
-  // Recorded state per module, keyed by module_id.
   std::unordered_map<std::string, ModuleRegistration> module_addresses_;
 
-  // Protects dispatcher metadata during module registration and callback dispatch.
   mutable std::recursive_mutex dispatch_mutex_;
 };
 
-/// Adds `guest_address` to the indirect call trace at `path` (RG-GDK-066): a
-/// TOML file whose [functions] table the title's codegen config can include,
-/// so the next codegen registers every target a run found unregistered. The
-/// file keeps what earlier runs recorded. False if it can't be written.
 bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address);
 
-}  // namespace rex::runtime
+}

@@ -44,4 +44,4 @@ class XMutant : public XObject {
   XThread* owning_thread_ = nullptr;
 };
 
-}  // namespace rex::system
+}

@@ -23,8 +23,8 @@ namespace rex {
 class Memory;
 namespace system {
 class KernelState;
-}  // namespace system
-}  // namespace rex
+}
+}
 
 namespace rex {
 namespace system {
@@ -61,6 +61,6 @@ class AppManager {
   std::unordered_map<uint32_t, App*> app_lookup_;
 };
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

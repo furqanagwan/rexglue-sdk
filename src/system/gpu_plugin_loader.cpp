@@ -26,8 +26,6 @@ namespace rex::system {
 
 namespace {
 
-// Plugin binaries follow the SDK's per-config postfix convention; this TU is
-// part of rexruntime, so REXGLUE_BUILD_CONFIG matches the plugin's config.
 std::string PluginFileName(std::string_view name) {
   constexpr std::string_view kConfig = REXGLUE_BUILD_CONFIG;
   std::string_view postfix = "";
@@ -39,14 +37,12 @@ std::string PluginFileName(std::string_view name) {
   return fmt::format("rexgpu-{}{}.dll", name, postfix);
 }
 
-// Plugins stay loaded for process lifetime: guest threads may still be in
-// plugin code pages at shutdown.
 std::vector<platform::DynamicLibrary>& LoadedPlugins() {
   static std::vector<platform::DynamicLibrary> plugins;
   return plugins;
 }
 
-}  // namespace
+}
 
 std::string ResolveGpuPluginName(std::string_view configured, bool default_plugin_staged) {
   if (configured == kNoGpuPlugin) {
@@ -110,4 +106,4 @@ std::unique_ptr<IGraphicsSystem> LoadGpuPlugin(std::string_view name, std::strin
   return std::unique_ptr<IGraphicsSystem>(graphics_system);
 }
 
-}  // namespace rex::system
+}

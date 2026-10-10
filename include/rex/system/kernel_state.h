@@ -44,15 +44,6 @@
 #include <rex/thread/mutex.h>
 #include <rex/types.h>
 
-//=============================================================================
-// Kernel Import Trace Helpers
-//=============================================================================
-// Use these macros for consistent logging of kernel import function calls.
-// Example usage:
-//   REXKRNL_IMPORT_TRACE("NtCreateFile", "path={} options={:#x}", path, opts);
-//   REXKRNL_IMPORT_RESULT("NtCreateFile", "{:#x}", result);
-//   REXKRNL_IMPORT_FAIL("NtCreateFile", "path='{}' -> {:#x}", path, result);
-
 #define REXKRNL_IMPORT_TRACE(name, fmt, ...) REXKRNL_NOISY_TRACE("[" name "] " fmt, ##__VA_ARGS__)
 
 #define REXKRNL_IMPORT_RESULT(name, fmt, ...) \
@@ -61,13 +52,6 @@
 #define REXKRNL_IMPORT_FAIL(name, fmt, ...) REXKRNL_WARN("[" name "] FAILED: " fmt, ##__VA_ARGS__)
 
 #define REXKRNL_IMPORT_WARN(name, fmt, ...) REXKRNL_NOISY_DEBUG("[" name "] " fmt, ##__VA_ARGS__)
-
-//=============================================================================
-// Kernel State Access Macros
-//=============================================================================
-// Convenience macros for accessing the current thread's kernel state and
-// subsystems from kernel export (_entry) functions. These use the ThreadState
-// bound to the current thread via ThreadState::Bind().
 
 #define REX_KERNEL_STATE() (::rex::runtime::current_kernel_state())
 #define REX_KERNEL_MEMORY() (REX_KERNEL_STATE()->memory())
@@ -78,11 +62,11 @@ namespace rex {
 class Runtime;
 namespace stream {
 class ByteStream;
-}  // namespace stream
+}
 namespace runtime {
 class FunctionDispatcher;
-}  // namespace runtime
-}  // namespace rex
+}
+}
 
 struct PPCContext;
 
@@ -98,36 +82,34 @@ class XNotifyListener;
 class XThread;
 class UserModule;
 
-// (?), used by KeGetCurrentProcessType
 constexpr uint32_t X_PROCTYPE_IDLE = 0;
 constexpr uint32_t X_PROCTYPE_USER = 1;
 constexpr uint32_t X_PROCTYPE_SYSTEM = 2;
 
 struct X_KPROCESS {
-  X_KSPINLOCK thread_list_spinlock;           // 0x00
-  X_LIST_ENTRY thread_list;                   // 0x04
-  rex::be<int32_t> quantum;                   // 0x0C
-  rex::be<uint32_t> clrdataa_masked_ptr;      // 0x10
-  rex::be<uint32_t> thread_count;             // 0x14
-  uint8_t unk_18;                             // 0x18
-  uint8_t unk_19;                             // 0x19
-  uint8_t unk_1A;                             // 0x1A
-  uint8_t unk_1B;                             // 0x1B
-  rex::be<uint32_t> kernel_stack_size;        // 0x1C
-  rex::be<uint32_t> tls_static_data_address;  // 0x20
-  rex::be<uint32_t> tls_data_size;            // 0x24
-  rex::be<uint32_t> tls_raw_data_size;        // 0x28
-  rex::be<uint16_t> tls_slot_size;            // 0x2C
-  uint8_t is_terminating;                     // 0x2E
-  uint8_t process_type;                       // 0x2F
-  rex::be<uint32_t> tls_slot_bitmap[8];       // 0x30
-  rex::be<uint32_t> unk_50;                   // 0x50
-  X_LIST_ENTRY unk_54;                        // 0x54
-  rex::be<uint32_t> unk_5C;                   // 0x5C
+  X_KSPINLOCK thread_list_spinlock;
+  X_LIST_ENTRY thread_list;
+  rex::be<int32_t> quantum;
+  rex::be<uint32_t> clrdataa_masked_ptr;
+  rex::be<uint32_t> thread_count;
+  uint8_t unk_18;
+  uint8_t unk_19;
+  uint8_t unk_1A;
+  uint8_t unk_1B;
+  rex::be<uint32_t> kernel_stack_size;
+  rex::be<uint32_t> tls_static_data_address;
+  rex::be<uint32_t> tls_data_size;
+  rex::be<uint32_t> tls_raw_data_size;
+  rex::be<uint16_t> tls_slot_size;
+  uint8_t is_terminating;
+  uint8_t process_type;
+  rex::be<uint32_t> tls_slot_bitmap[8];
+  rex::be<uint32_t> unk_50;
+  X_LIST_ENTRY unk_54;
+  rex::be<uint32_t> unk_5C;
 };
 static_assert_size(X_KPROCESS, 0x60);
 
-// Keep old name as alias for code that still references it
 using ProcessInfoBlock = X_KPROCESS;
 
 struct X_UNKNOWN_TYPE_REFED {
@@ -138,7 +120,7 @@ struct X_UNKNOWN_TYPE_REFED {
 };
 static_assert_size(X_UNKNOWN_TYPE_REFED, 16);
 
-struct X_KEVENT;  // forward decl, defined in xevent.h
+struct X_KEVENT;
 
 struct KernelGuestGlobals {
   X_OBJECT_TYPE ExThreadObjectType;
@@ -157,8 +139,8 @@ struct KernelGuestGlobals {
   X_KPROCESS system_process;
   X_KSPINLOCK dispatcher_lock;
   X_KSPINLOCK ob_lock;
-  X_KSPINLOCK tls_lock;  // protects per-process TLS slot allocation bitmap
-  // UsbdBootEnumerationDoneEvent uses X_DISPATCH_HEADER layout (0x10 bytes)
+  X_KSPINLOCK tls_lock;
+
   uint8_t UsbdBootEnumerationDoneEvent[0x10];
 };
 
@@ -171,14 +153,13 @@ struct TerminateNotification {
   uint32_t priority;
 };
 
-/// Host-side metadata for a fiber managed by rexcrt hooks.
 struct FiberInfo {
-  rex::thread::Fiber* host_fiber;  ///< Host OS fiber handle
-  uint32_t uid;                    ///< Unique identifier
-  uint32_t guest_context_addr;     ///< Guest fiber context buffer address
-  uint32_t guest_stack_base;       ///< Top of guest kernel stack (0 for thread fibers)
-  uint32_t guest_stack_bottom;     ///< Bottom of guest kernel stack (0 for thread fibers)
-  bool is_thread_fiber;            ///< true = ConvertThreadToFiber (don't free guest stack)
+  rex::thread::Fiber* host_fiber;
+  uint32_t uid;
+  uint32_t guest_context_addr;
+  uint32_t guest_stack_base;
+  uint32_t guest_stack_bottom;
+  bool is_thread_fiber;
 };
 
 class KernelState {
@@ -194,8 +175,7 @@ class KernelState {
   rex::filesystem::VirtualFileSystem* file_system() const { return file_system_; }
 
   uint32_t title_id() const;
-  /// The title update the running code was built for; 0 for the original.
-  /// Only then are modules patched, from that update's update:\<name>p.
+
   uint32_t title_update_version() const { return title_update_version_; }
   void set_title_update_version(uint32_t version) { title_update_version_ = version; }
   util::XdbfGameData title_xdbf() const;
@@ -205,7 +185,6 @@ class KernelState {
   xam::ContentManager* content_manager() const { return content_manager_.get(); }
   xam::UserProfile* user_profile() const { return user_profile_.get(); }
 
-  // Access must be guarded by the global critical region.
   util::ObjectTable* object_table() { return &object_table_; }
 
   uint32_t process_type() const;
@@ -251,7 +230,6 @@ class KernelState {
   object_ref<UserModule> LoadUserModule(const std::string_view name, bool call_entry = true);
   void UnloadUserModule(const object_ref<UserModule>& module, bool call_entry = true);
 
-  // Recompiled module registry (populated by generated RegisterRecompiledModules)
   struct RecompiledModuleInfo {
     std::string pe_name;
     std::string guest_path;
@@ -275,12 +253,9 @@ class KernelState {
     return object_ref<T>(reinterpret_cast<T*>(module.release()));
   }
 
-  // Terminates a title: Unloads all modules, and kills all guest threads.
-  // This DOES NOT RETURN if called from a guest thread!
   void TerminateTitle();
   bool is_terminating_title() const { return terminating_title_.load(std::memory_order_acquire); }
-  // Signaled while TerminateTitle runs, so sleeps nothing else can end (a
-  // guest Sleep(INFINITE)) reach their termination point.
+
   rex::thread::Event* termination_event() const { return termination_event_.get(); }
 
   void RegisterThread(XThread* thread);
@@ -293,7 +268,6 @@ class KernelState {
   void RegisterFiber(uint32_t guest_addr, const FiberInfo& info);
   void UnregisterFiber(uint32_t guest_addr);
 
-  /// Returns a fiber name for profiling
   const char* GetOrCreateFiberName(uint32_t guest_addr, const char* thread_name);
 
   void RegisterNotifyListener(XNotifyListener* listener);
@@ -334,7 +308,7 @@ class KernelState {
   void SetLoadedAchievements(std::vector<AchievementInfo> achievements);
   void UnlockAchievement(uint32_t id);
   bool IsAchievementUnlocked(uint32_t id) const;
-  // Returns the unlock FILETIME (100-ns intervals since 1601-01-01), or 0 if locked.
+
   uint64_t GetAchievementUnlockTime(uint32_t id) const;
   std::vector<AchievementInfo> loaded_achievements() const;
   AchievementManager& achievements() { return achievement_manager_; }
@@ -365,17 +339,13 @@ class KernelState {
 
   rex::thread::global_critical_region global_critical_region_;
 
-  // Must be guarded by the global critical region.
   util::ObjectTable object_table_;
   std::unordered_map<uint32_t, XThread*> threads_by_id_;
   std::vector<object_ref<XNotifyListener>> notify_listeners_;
   bool has_notified_startup_ = false;
 
-  // Protected by global_critical_region_.
   std::unordered_map<uint32_t, FiberInfo> fiber_map_;
 
-  // Fiber name pool for profiling.
-  // Never erased, Tracy references pointers async.
   std::mutex fiber_name_pool_mutex_;
   std::unordered_map<uint32_t, std::unique_ptr<char[]>> fiber_name_pool_;
 
@@ -383,13 +353,12 @@ class KernelState {
   object_ref<UserModule> executable_module_;
   std::vector<object_ref<KernelModule>> kernel_modules_;
   std::vector<object_ref<UserModule>> user_modules_;
-  // Paths in-flight in LoadUserModule. Guarded by the global critical region.
+
   std::unordered_set<std::string> loading_paths_;
   std::vector<TerminateNotification> terminate_notifications_;
   std::vector<RecompiledModuleInfo> recompiled_modules_;
   std::unordered_map<std::string, rex::platform::DynamicLibrary> module_libraries_;
-  // FreeLibrary deferred to teardown so guest threads still in unloaded code
-  // don't return into freed pages. Drained at the end of ~KernelState.
+
   std::vector<rex::platform::DynamicLibrary> deferred_unload_libraries_;
 
   uint32_t kernel_guest_globals_ = 0;
@@ -401,7 +370,7 @@ class KernelState {
   std::unique_ptr<rex::thread::Event> termination_event_ =
       rex::thread::Event::CreateManualResetEvent(false);
   object_ref<XHostThread> dispatch_thread_;
-  // Must be guarded by the global critical region.
+
   util::NativeList dpc_list_;
   std::condition_variable_any dispatch_cond_;
   std::list<std::function<void()>> dispatch_queue_;
@@ -409,12 +378,10 @@ class KernelState {
   friend class XObject;
 };
 
-// Global kernel state accessor (defined in kernel_state.cpp)
 KernelState* kernel_state();
 
-// Convenience accessor for kernel memory
 inline memory::Memory* kernel_memory() {
   return kernel_state()->memory();
 }
 
-}  // namespace rex::system
+}

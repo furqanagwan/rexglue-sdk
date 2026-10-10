@@ -331,4 +331,4 @@ void AchievementManager::DispatchCallbacks(
   }
 }
 
-}  // namespace rex::system
+}

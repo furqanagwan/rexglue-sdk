@@ -27,8 +27,8 @@ namespace rex {
 class Runtime;
 namespace stream {
 class ByteStream;
-}  // namespace stream
-}  // namespace rex
+}
+}
 
 namespace rex::system {
 
@@ -39,7 +39,6 @@ class KernelState;
 template <typename T>
 class object_ref;
 
-// https://www.nirsoft.net/kernel_struct/vista/DISPATCHER_HEADER.html
 typedef struct {
   struct {
     uint8_t type;
@@ -68,7 +67,6 @@ typedef struct {
 } X_DISPATCH_HEADER;
 static_assert_size(X_DISPATCH_HEADER, 0x10);
 
-// https://www.nirsoft.net/kernel_struct/vista/OBJECT_HEADER.html
 struct X_OBJECT_HEADER {
   rex::be<uint32_t> pointer_count;
   union {
@@ -80,48 +78,37 @@ struct X_OBJECT_HEADER {
   uint8_t quota_info_offset;
   uint8_t flags;
   union {
-    rex::be<uint32_t> object_create_info;  // X_OBJECT_CREATE_INFORMATION
+    rex::be<uint32_t> object_create_info;
     rex::be<uint32_t> quota_block_charged;
   };
-  rex::be<uint32_t> object_type_ptr;  // -0x8 POBJECT_TYPE
-  rex::be<uint32_t> unk_04;           // -0x4
-
-  // Object lives after this header.
-  // (There's actually a body field here which is the object itself)
+  rex::be<uint32_t> object_type_ptr;
+  rex::be<uint32_t> unk_04;
 };
 
-// https://www.nirsoft.net/kernel_struct/vista/OBJECT_CREATE_INFORMATION.html
 struct X_OBJECT_CREATE_INFORMATION {
-  rex::be<uint32_t> attributes;                  // 0x0
-  rex::be<uint32_t> root_directory_ptr;          // 0x4
-  rex::be<uint32_t> parse_context_ptr;           // 0x8
-  rex::be<uint32_t> probe_mode;                  // 0xC
-  rex::be<uint32_t> paged_pool_charge;           // 0x10
-  rex::be<uint32_t> non_paged_pool_charge;       // 0x14
-  rex::be<uint32_t> security_descriptor_charge;  // 0x18
-  rex::be<uint32_t> security_descriptor;         // 0x1C
-  rex::be<uint32_t> security_qos_ptr;            // 0x20
-
-  // Security QoS here (SECURITY_QUALITY_OF_SERVICE) too!
+  rex::be<uint32_t> attributes;
+  rex::be<uint32_t> root_directory_ptr;
+  rex::be<uint32_t> parse_context_ptr;
+  rex::be<uint32_t> probe_mode;
+  rex::be<uint32_t> paged_pool_charge;
+  rex::be<uint32_t> non_paged_pool_charge;
+  rex::be<uint32_t> security_descriptor_charge;
+  rex::be<uint32_t> security_descriptor;
+  rex::be<uint32_t> security_qos_ptr;
 };
 
 struct X_OBJECT_TYPE {
-  rex::be<uint32_t> constructor;  // 0x0
-  rex::be<uint32_t> destructor;   // 0x4
-  rex::be<uint32_t> unk_08;       // 0x8
-  rex::be<uint32_t> unk_0C;       // 0xC
-  rex::be<uint32_t> unk_10;       // 0x10
-  rex::be<uint32_t> unk_14;       // 0x14 probably offset from ntobject to keobject
-  rex::be<uint32_t> pool_tag;     // 0x18
+  rex::be<uint32_t> constructor;
+  rex::be<uint32_t> destructor;
+  rex::be<uint32_t> unk_08;
+  rex::be<uint32_t> unk_0C;
+  rex::be<uint32_t> unk_10;
+  rex::be<uint32_t> unk_14;
+  rex::be<uint32_t> pool_tag;
 };
 
 class XObject {
  public:
-  // 45410806 needs proper handle value for certain calculations
-  // It gets handle value from TLS (without base handle value is 0x88)
-  // and substract 0xF8000088. Without base we're receiving wrong address
-  // Instead of receiving address that starts with 0x82... we're receiving
-  // one with 0x8A... which causes crash
   static constexpr uint32_t kHandleBase = 0xF8000000;
 
   enum class Type : uint32_t {
@@ -151,18 +138,14 @@ class XObject {
 
   Type type() const;
 
-  // Returns the primary handle of this object.
   X_HANDLE handle() const { return handles_[0]; }
 
-  // Returns all associated handles with this object.
   std::vector<X_HANDLE> handles() const { return handles_; }
   std::vector<X_HANDLE>& handles() { return handles_; }
 
   const std::string& name() const { return name_; }
   uint32_t guest_object() const { return guest_object_ptr_; }
 
-  // Has this object been created for use by the host?
-  // Host objects are persisted through reloads/etc.
   bool is_host_object() const { return host_object_; }
   void set_host_object(bool host_object) { host_object_ = host_object; }
 
@@ -177,9 +160,6 @@ class XObject {
   void Release();
   X_STATUS Delete();
 
-  // Called by the object table, under its lock, when the guest has closed the
-  // object's last handle, before the table drops its own reference. Objects
-  // that the kernel also keeps a reference to release it here.
   virtual void OnAllHandlesClosed() {}
 
   virtual bool Save(stream::ByteStream* stream) {
@@ -188,9 +168,6 @@ class XObject {
   }
   static object_ref<XObject> Restore(KernelState* kernel_state, Type type,
                                      stream::ByteStream* stream);
-
-  // Reference()
-  // Dereference()
 
   void SetAttributes(uint32_t obj_attributes_ptr);
 
@@ -212,20 +189,14 @@ class XObject {
   bool SaveObject(stream::ByteStream* stream);
   bool RestoreObject(stream::ByteStream* stream);
 
-  // Called on successful wait.
   virtual void WaitCallback() {}
-  // SignalAndWait signals through the host handle: BeginSignal records the
-  // signal before it, as Set/Release would, so a waiter it releases updates
-  // the state after; CancelSignal undoes it when the host signal failed.
+
   virtual void BeginSignal() {}
   virtual void CancelSignal() {}
-  // Called when the guest hands the kernel this object's dispatch header, the
-  // only point where a write the guest made to it directly (an inlined
-  // KeInitialize over a live object) can be picked up. Canary #1227.
+
   virtual void SyncFromGuest() {}
   virtual rex::thread::WaitHandle* GetWaitHandle() { return nullptr; }
 
-  // Creates the kernel object for guest code to use. Typically not needed.
   uint8_t* CreateNative(uint32_t size);
   void SetNativePointer(uint32_t native_ptr, bool uninitialized = false);
 
@@ -234,23 +205,18 @@ class XObject {
     return reinterpret_cast<T*>(CreateNative(sizeof(T)));
   }
 
-  // Stash native pointer into X_DISPATCH_HEADER
   static void StashHandle(X_DISPATCH_HEADER* header, uint32_t handle) {
     header->wait_list_flink = kXObjSignature;
     header->wait_list_blink = handle;
   }
 
-  // Guest timeouts are 100 ns ticks: negative is relative, positive an
-  // absolute guest system time, 0 is now.
   static int64_t GuestTicksUntil(int64_t timeout_ticks);
   static uint32_t TimeoutTicksToMs(int64_t timeout_ticks);
-  // The host duration of a guest timeout, scaled by the guest clock and
-  // rounded up to microseconds.
+
   static std::chrono::microseconds GuestTimeoutToHost(int64_t timeout_ticks);
 
   KernelState* kernel_state_;
 
-  // Host objects are persisted through resets/etc.
   bool host_object_ = false;
 
  private:
@@ -258,10 +224,8 @@ class XObject {
 
   Type type_;
   std::vector<X_HANDLE> handles_;
-  std::string name_;  // May be zero length.
+  std::string name_;
 
-  // Guest pointer for kernel object. Remember: X_OBJECT_HEADER precedes this
-  // if we allocated it!
   uint32_t guest_object_ptr_ = 0;
   bool allocated_guest_object_ = false;
 };
@@ -277,9 +241,7 @@ class object_ref {
     return (*this);
   }
 
-  explicit object_ref(T* value) noexcept : value_(value) {
-    // Assumes retained on call.
-  }
+  explicit object_ref(T* value) noexcept : value_(value) {}
   explicit object_ref(const object_ref& right) noexcept {
     reset(right.get());
     if (value_)
@@ -349,7 +311,6 @@ class object_ref {
   inline bool operator==(const T* right) const noexcept { return value_ == right; }
   inline bool operator!=(const T* right) const noexcept { return value_ != right; }
 
-  // Explicit nullptr comparison to avoid C++20 synthesized operator ambiguity
   inline bool operator==(std::nullptr_t) const noexcept { return value_ == nullptr; }
   inline bool operator!=(std::nullptr_t) const noexcept { return value_ != nullptr; }
 
@@ -397,9 +358,8 @@ object_ref<T> XObject::GetNativeObject(KernelState* kernel_state, void* native_p
       reinterpret_cast<T*>(GetNativeObject(kernel_state, native_ptr, as_type).release()));
 }
 
-}  // namespace rex::system
+}
 
-// fmt formatter for XObject::Type - format as underlying uint32_t
 template <>
 struct fmt::formatter<rex::system::XObject::Type> : fmt::formatter<uint32_t> {
   template <typename FormatContext>

@@ -72,4 +72,4 @@ uint32_t XStaticUntypedEnumerator::WriteItems(uint32_t buffer_ptr, uint8_t* buff
   return X_ERROR_SUCCESS;
 }
 
-}  // namespace rex::system
+}

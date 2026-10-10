@@ -44,22 +44,15 @@ using AchievementCallback = std::function<void(const AchievementEvent&)>;
 
 class AchievementManager {
  public:
-  // Adds a new achievement or overrides an existing achievement with the same
-  // ID. Intended for startup hooks so recomp-specific metadata can layer over
-  // extracted title metadata.
   bool RegisterAchievement(AchievementInfo info);
   void RegisterAchievements(std::span<const AchievementInfo> achievements);
   void ReplaceAchievements(std::vector<AchievementInfo> achievements);
 
-  // Loads and merges [[achievements]] entries from an editable TOML file.
   bool LoadMetadataFile(const std::filesystem::path& path);
 
   std::vector<AchievementInfo> ListAchievements() const;
   std::optional<AchievementInfo> FindAchievement(uint32_t id) const;
 
-  // Unlock persistence and presentation are separate by default. Pass kShow
-  // for a convenience notification, or call ShowAchievementNotification()
-  // explicitly when title-specific timing is required.
   AchievementUnlockResult UnlockAchievement(
       uint32_t id, AchievementNotification notification = AchievementNotification::kSuppress);
   bool ShowAchievementNotification(uint32_t id);
@@ -91,4 +84,4 @@ class AchievementManager {
   AchievementListenerHandle next_listener_handle_ = 1;
 };
 
-}  // namespace rex::system
+}

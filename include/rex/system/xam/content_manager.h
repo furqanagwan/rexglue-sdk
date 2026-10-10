@@ -27,15 +27,12 @@
 namespace rex {
 namespace system {
 class KernelState;
-}  // namespace system
-}  // namespace rex
+}
+}
 
 namespace rex {
 namespace system {
 namespace xam {
-
-// If set in XCONTENT_AGGREGATE_DATA, will be substituted with the running
-// titles ID
 
 constexpr uint32_t kCurrentlyRunningTitleId = 0xFFFFFFFF;
 
@@ -43,23 +40,15 @@ struct XCONTENT_DATA {
   be<uint32_t> device_id;
   be<XContentType> content_type;
   union {
-    // this should be be<uint16_t>, but that stops copy constructor being
-    // generated...
     uint16_t uint[128];
     char16_t chars[128];
   } display_name_raw;
 
   char file_name_raw[42];
 
-  // Some games use this padding field as a null-terminator, as eg.
-  // DLC packages usually fill the entire file_name_raw array
-  // Not every game sets it to 0 though, so make sure any file_name_raw reads
-  // only go up to 42 chars!
   uint8_t padding[2];
 
   bool operator==(const XCONTENT_DATA& other) const {
-    // Package is located via device_id/content_type/file_name, so only need to
-    // compare those
     return device_id == other.device_id && content_type == other.content_type &&
            file_name() == other.file_name();
   }
@@ -75,9 +64,6 @@ struct XCONTENT_DATA {
   }
 
   void set_display_name(const std::u16string_view value) {
-    // Some games (e.g. 584108A9) require multiple null-terminators for it to
-    // read the string properly, blanking the array should take care of that
-
     std::fill_n(display_name_raw.chars, countof(display_name_raw.chars), 0);
     rex::string::copy_and_swap_truncating(display_name_raw.chars, value,
                                           countof(display_name_raw.chars));
@@ -87,14 +73,13 @@ struct XCONTENT_DATA {
     std::fill_n(file_name_raw, countof(file_name_raw), 0);
     rex::string::copy_unterminated(file_name_raw, value, rex::countof(file_name_raw));
 
-    // Some games rely on padding field acting as a null-terminator...
     padding[0] = padding[1] = 0;
   }
 };
 static_assert_size(XCONTENT_DATA, 0x134);
 
 struct XCONTENT_AGGREGATE_DATA : XCONTENT_DATA {
-  be<uint64_t> xuid;  // some titles store XUID here?
+  be<uint64_t> xuid;
   be<uint32_t> title_id;
 
   XCONTENT_AGGREGATE_DATA() = default;
@@ -109,8 +94,6 @@ struct XCONTENT_AGGREGATE_DATA : XCONTENT_DATA {
   }
 
   bool operator==(const XCONTENT_AGGREGATE_DATA& other) const {
-    // Package is located via device_id/title_id/content_type/file_name, so only
-    // need to compare those
     return device_id == other.device_id && title_id == other.title_id &&
            content_type == other.content_type && file_name() == other.file_name();
   }
@@ -131,7 +114,6 @@ class ContentPackage {
 
   uint32_t GetPackageLicense() const { return license_; }
 
-  // The user the package was opened for.
   uint64_t xuid() const { return xuid_; }
 
  private:
@@ -162,8 +144,7 @@ class ContentManager {
   X_RESULT OpenContent(const std::string_view root_name, uint64_t xuid,
                        const XCONTENT_AGGREGATE_DATA& data, uint32_t& content_license);
   X_RESULT CloseContent(const std::string_view root_name);
-  // XamContentFlush: makes the open root's written files durable and ensures
-  // its header exists. X_ERROR_FILE_NOT_FOUND if the root is not open.
+
   X_RESULT FlushContent(const std::string_view root_name);
   X_RESULT GetContentThumbnail(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
                                std::vector<uint8_t>* buffer);
@@ -179,19 +160,15 @@ class ContentManager {
                                  XContentType content_type, XCONTENT_AGGREGATE_DATA& data) const;
 
   std::filesystem::path ResolveGameUserContentPath();
-  // The host folder of a package, open or not (the guide's Manage Storage).
+
   std::filesystem::path GetPackagePath(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
     return ResolvePackagePath(xuid, data);
   }
   bool IsContentOpen(const XCONTENT_AGGREGATE_DATA& data) const;
   void CloseOpenedFilesFromContent(const std::string_view root_name);
 
-  // Returns the host filesystem path for an open content package, or empty.
   std::filesystem::path GetOpenPackagePath(const std::string_view root_name) const;
 
-  // Installs an STFS content package from an arbitrary host path.
-  // Extracts the package into root_path_/0000000000000000/{title_id}/00000002/{filename}/
-  // and writes a .header file for XAM enumeration.
   X_RESULT InstallContent(const std::filesystem::path& package_path);
 
  private:
@@ -216,6 +193,6 @@ class ContentManager {
       open_packages_;
 };
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

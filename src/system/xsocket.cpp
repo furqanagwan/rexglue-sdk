@@ -15,11 +15,9 @@
 #include <rex/platform.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xsocket.h>
-// #include <rex/system/xnet.h>
 
 #include <rex/net/socket.h>
 
-// Standard socket types used by Xbox API emulation
 #include <WinSock2.h>
 
 #include <WS2tcpip.h>
@@ -41,7 +39,6 @@ X_STATUS XSocket::Initialize(AddressFamily af, Type type, Protocol proto) {
   proto_ = proto;
 
   if (proto == Protocol::X_IPPROTO_VDP) {
-    // VDP is a layer on top of UDP.
     proto = Protocol::X_IPPROTO_UDP;
   }
 
@@ -69,7 +66,6 @@ X_STATUS XSocket::Close() {
 
 X_STATUS XSocket::SetOption(uint32_t level, uint32_t optname, void* optval_ptr, uint32_t optlen) {
   if (level == 0xFFFF && (optname == 0x5801 || optname == 0x5802)) {
-    // Disable socket encryption
     secure_ = false;
     return X_STATUS_SUCCESS;
   }
@@ -79,7 +75,6 @@ X_STATUS XSocket::SetOption(uint32_t level, uint32_t optname, void* optval_ptr, 
     return X_STATUS_UNSUCCESSFUL;
   }
 
-  // SO_BROADCAST
   if (level == 0xFFFF && optname == 0x0020) {
     broadcast_socket_ = true;
   }
@@ -139,8 +134,6 @@ object_ref<XSocket> XSocket::Accept(N_XSOCKADDR* name, int* name_len) {
   std::memcpy(name, &n_sockaddr, n_name_len);
   *name_len = n_name_len;
 
-  // Create a kernel object to represent the new socket, and copy parameters
-  // over.
   auto socket = object_ref<XSocket>(new XSocket(kernel_state_, ret));
   socket->af_ = af_;
   socket->type_ = type_;
@@ -159,15 +152,13 @@ int XSocket::Recv(uint8_t* buf, uint32_t buf_len, uint32_t flags) {
 
 int XSocket::RecvFrom(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_IN* from,
                       uint32_t* from_len) {
-  // Pop from secure packets first
-
   sockaddr_in nfrom;
   socklen_t nfromlen = sizeof(sockaddr_in);
   int ret = recvfrom(native_handle_, reinterpret_cast<char*>(buf), buf_len, flags,
                      (sockaddr*)&nfrom, &nfromlen);
   if (from) {
     from->sin_family = nfrom.sin_family;
-    from->sin_addr = ntohl(nfrom.sin_addr.s_addr);  // BE <- BE
+    from->sin_addr = ntohl(nfrom.sin_addr.s_addr);
     from->sin_port = nfrom.sin_port;
     std::memset(from->x_sin_zero, 0, sizeof(from->x_sin_zero));
   }
@@ -185,9 +176,6 @@ int XSocket::Send(const uint8_t* buf, uint32_t buf_len, uint32_t flags) {
 
 int XSocket::SendTo(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_IN* to,
                     uint32_t to_len) {
-  // Send 2 copies of the packet: One to XNet (for network security) and an
-  // unencrypted copy for other Xenia hosts.
-
   sockaddr_in nto;
   if (to) {
     nto.sin_addr.s_addr = to->sin_addr;
@@ -213,4 +201,4 @@ bool XSocket::QueuePacket(uint32_t src_ip, uint16_t src_port, const uint8_t* buf
   return true;
 }
 
-}  // namespace rex::system
+}

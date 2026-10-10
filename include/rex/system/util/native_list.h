@@ -17,16 +17,6 @@
 
 namespace rex::system::util {
 
-// List is designed for storing pointers to objects in the guest heap.
-// All values in the list should be assumed to be in big endian.
-
-// Pass LIST_ENTRY pointers.
-// struct MYOBJ {
-//   uint32_t stuff;
-//   LIST_ENTRY list_entry; <-- pass this
-//   ...
-// }
-
 class NativeList {
  public:
   NativeList();
@@ -50,12 +40,6 @@ class NativeList {
   memory::Memory* memory_ = nullptr;
   uint32_t head_;
 };
-
-// Guest-memory linked list utilities.
-// VirtualTranslator is any type with TranslateVirtual<T*>(uint32_t)
-// and HostToGuestVirtual(void*) methods (e.g. memory::Memory*).
-// Overloads also accept a raw uint32_t guest pointer in place of the
-// translator when the caller already has the guest address.
 
 template <typename VirtualTranslator>
 X_LIST_ENTRY* XeHostList(uint32_t ptr, VirtualTranslator context) {
@@ -173,9 +157,6 @@ void XeInsertHeadList(X_LIST_ENTRY* list_head, X_LIST_ENTRY* entry, VirtualTrans
                    context);
 }
 
-// Typed intrusive list built on X_LIST_ENTRY.
-// TObject is the containing struct, EntryListOffset is offsetof the
-// X_LIST_ENTRY member within TObject.
 template <typename TObject, size_t EntryListOffset>
 struct X_TYPED_LIST : public X_LIST_ENTRY {
   using this_type = X_TYPED_LIST<TObject, EntryListOffset>;
@@ -255,4 +236,4 @@ struct X_TYPED_LIST : public X_LIST_ENTRY {
   }
 };
 
-}  // namespace rex::system::util
+}

@@ -66,4 +66,4 @@ bool NativeList::HasPending() {
   return head_ != kInvalidPointer;
 }
 
-}  // namespace rex::system::util
+}

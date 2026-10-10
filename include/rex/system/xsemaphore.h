@@ -49,15 +49,13 @@ class XSemaphore : public XObject {
   void SyncFromGuest() override;
 
  private:
-  // Writes host_count_ to the guest header; count_lock_ held.
   void WriteGuestCount();
 
   std::unique_ptr<rex::thread::Semaphore> semaphore_;
   uint32_t maximum_count_ = 0;
 
-  // The guest header's signal state mirrors the host count (Canary #1227).
   std::mutex count_lock_;
   int32_t host_count_ = 0;
 };
 
-}  // namespace rex::system
+}

@@ -22,4 +22,4 @@ class IInputSystem {
   virtual void Shutdown() = 0;
 };
 
-}  // namespace rex::system
+}

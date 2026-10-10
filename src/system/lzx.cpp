@@ -114,7 +114,6 @@ int lzx_decompress(const void* lzx_data, size_t lzx_len, void* dest, size_t dest
 
   if (lzxd) {
     if (window_data) {
-      // zero the window and then copy window_data to the end of it
       auto padding_len = window_size - window_data_len;
       std::memset(&lzxd->window[0], 0, padding_len);
       std::memcpy(&lzxd->window[padding_len], window_data, window_data_len);
@@ -152,21 +151,21 @@ int lzxdelta_apply_patch(rex::xex2_delta_patch* patch, size_t patch_len, uint32_
   auto* cur_patch = patch;
 
   while (patch_end > cur_patch) {
-    int patch_sz = -4;  // 0 byte patches need us to remove 4 byte from next
-                        // patch addr because of patch_data field
+    int patch_sz = -4;
+
     if (cur_patch->compressed_len == 0 && cur_patch->uncompressed_len == 0 &&
         cur_patch->new_addr == 0 && cur_patch->old_addr == 0)
       break;
     switch (cur_patch->compressed_len) {
-      case 0:  // fill with 0
+      case 0:
         std::memset((char*)dest + cur_patch->new_addr, 0, cur_patch->uncompressed_len);
         break;
-      case 1:  // copy from old -> new
+      case 1:
         std::memmove((char*)dest + cur_patch->new_addr, (char*)dest + cur_patch->old_addr,
                      cur_patch->uncompressed_len);
         break;
-      default:                                     // delta patch
-        patch_sz = cur_patch->compressed_len - 4;  // -4 because of patch_data field
+      default:
+        patch_sz = cur_patch->compressed_len - 4;
 
         int result = lzx_decompress(cur_patch->patch_data, cur_patch->compressed_len,
                                     (char*)dest + cur_patch->new_addr, cur_patch->uncompressed_len,

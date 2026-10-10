@@ -29,7 +29,6 @@ ObjectTable::~ObjectTable() {
 void ObjectTable::Reset() {
   auto global_lock = global_critical_region_.Acquire();
 
-  // Release all objects.
   for (uint32_t n = 0; n < table_capacity_; n++) {
     ObjectTableEntry& entry = table_[n];
     if (entry.object) {
@@ -44,7 +43,6 @@ void ObjectTable::Reset() {
 }
 
 X_STATUS ObjectTable::FindFreeSlot(uint32_t* out_slot) {
-  // Find a free slot.
   uint32_t slot = last_free_entry_;
   uint32_t scan_count = 0;
   while (scan_count < table_capacity_) {
@@ -56,19 +54,16 @@ X_STATUS ObjectTable::FindFreeSlot(uint32_t* out_slot) {
     scan_count++;
     slot = (slot + 1) % table_capacity_;
     if (slot == 0) {
-      // Never allow 0 handles.
       scan_count++;
       slot++;
     }
   }
 
-  // Table out of slots, expand.
   uint32_t new_table_capacity = std::max(16 * 1024u, table_capacity_ * 2);
   if (!Resize(new_table_capacity)) {
     return X_STATUS_NO_MEMORY;
   }
 
-  // Never allow 0 handles.
   slot = ++last_free_entry_;
   *out_slot = slot;
 
@@ -83,7 +78,6 @@ bool ObjectTable::Resize(uint32_t new_capacity) {
     return false;
   }
 
-  // Zero out new entries.
   if (new_size > old_size) {
     std::memset(reinterpret_cast<uint8_t*>(new_table) + old_size, 0, new_size - old_size);
   }
@@ -102,11 +96,9 @@ X_STATUS ObjectTable::AddHandle(XObject* object, X_HANDLE* out_handle) {
   {
     auto global_lock = global_critical_region_.Acquire();
 
-    // Find a free slot.
     uint32_t slot = 0;
     result = FindFreeSlot(&slot);
 
-    // Stash.
     if (XSUCCEEDED(result)) {
       ObjectTableEntry& entry = table_[slot];
       entry.object = object;
@@ -114,7 +106,6 @@ X_STATUS ObjectTable::AddHandle(XObject* object, X_HANDLE* out_handle) {
       handle = XObject::kHandleBase + (slot << 2);
       object->handles().push_back(handle);
 
-      // Retain so long as the object is in the table.
       object->Retain();
 
       REXSYS_NOISY_DEBUG("Added handle:{:08X} for {}", handle, typeid(*object).name());
@@ -137,7 +128,7 @@ X_STATUS ObjectTable::DuplicateHandle(X_HANDLE handle, X_HANDLE* out_handle) {
   XObject* object = LookupObject(handle, false);
   if (object) {
     result = AddHandle(object, out_handle);
-    object->Release();  // Release the ref that LookupObject took
+    object->Release();
   } else {
     result = X_STATUS_INVALID_HANDLE;
   }
@@ -166,7 +157,6 @@ X_STATUS ObjectTable::ReleaseHandle(X_HANDLE handle) {
   }
 
   if (--entry->handle_ref_count == 0) {
-    // No more references. Remove it from the table.
     return RemoveHandle(handle);
   }
 
@@ -193,7 +183,6 @@ X_STATUS ObjectTable::RemoveHandle(X_HANDLE handle) {
     assert_zero(entry->handle_ref_count);
     entry->handle_ref_count = 0;
 
-    // Walk the object's handles and remove this one.
     auto handle_entry = std::find(object->handles().begin(), object->handles().end(), handle);
     if (handle_entry != object->handles().end()) {
       object->handles().erase(handle_entry);
@@ -201,14 +190,13 @@ X_STATUS ObjectTable::RemoveHandle(X_HANDLE handle) {
 
     REXSYS_NOISY_DEBUG("Removed handle:{:08X} for {}", handle, typeid(*object).name());
 
-    // Remove object name from mapping to prevent naming collision.
     if (!object->name().empty()) {
       RemoveNameMapping(object->name());
     }
     if (object->handles().empty()) {
       object->OnAllHandlesClosed();
     }
-    // Release now that the object has been removed from the table.
+
     object->Release();
   }
 
@@ -251,7 +239,6 @@ ObjectTable::ObjectTableEntry* ObjectTable::LookupTable(X_HANDLE handle) {
 
   auto global_lock = global_critical_region_.Acquire();
 
-  // Lower 2 bits are ignored.
   uint32_t slot = GetHandleSlot(handle);
   if (slot < table_capacity_) {
     return &table_[slot];
@@ -260,7 +247,6 @@ ObjectTable::ObjectTableEntry* ObjectTable::LookupTable(X_HANDLE handle) {
   return nullptr;
 }
 
-// Generic lookup
 template <>
 object_ref<XObject> ObjectTable::LookupObject<XObject>(X_HANDLE handle) {
   auto object = ObjectTable::LookupObject(handle, false);
@@ -279,10 +265,8 @@ XObject* ObjectTable::LookupObject(X_HANDLE handle, bool already_locked) {
     global_critical_region_.mutex().lock();
   }
 
-  // Lower 2 bits are ignored.
   uint32_t slot = GetHandleSlot(handle);
 
-  // Verify slot.
   if (slot < table_capacity_) {
     ObjectTableEntry& entry = table_[slot];
     if (entry.object) {
@@ -290,7 +274,6 @@ XObject* ObjectTable::LookupObject(X_HANDLE handle, bool already_locked) {
     }
   }
 
-  // Retain the object pointer.
   if (object) {
     object->Retain();
   }
@@ -317,11 +300,8 @@ void ObjectTable::GetObjectsByType(XObject::Type type, std::vector<object_ref<XO
 
 X_HANDLE ObjectTable::TranslateHandle(X_HANDLE handle) {
   if (handle == 0xFFFFFFFF) {
-    // CurrentProcess
-    // assert_always();
     return 0;
   } else if (handle == 0xFFFFFFFE) {
-    // CurrentThread
     return XThread::GetCurrentThreadHandle();
   } else {
     return handle;
@@ -338,7 +318,6 @@ X_STATUS ObjectTable::AddNameMapping(const std::string_view name, X_HANDLE handl
 }
 
 void ObjectTable::RemoveNameMapping(const std::string_view name) {
-  // Names are case-insensitive.
   std::lock_guard<std::mutex> name_lock(name_mutex_);
   auto it = name_table_.find(string::string_key_case(name));
   if (it != name_table_.end()) {
@@ -347,9 +326,6 @@ void ObjectTable::RemoveNameMapping(const std::string_view name) {
 }
 
 X_STATUS ObjectTable::GetObjectByName(const std::string_view name, X_HANDLE* out_handle) {
-  // Names are case-insensitive.
-  // Look up handle under name lock only -- do NOT hold name_mutex_ while
-  // acquiring global lock (RemoveHandle takes global -> name ordering).
   X_HANDLE handle;
   {
     std::lock_guard<std::mutex> name_lock(name_mutex_);
@@ -362,9 +338,6 @@ X_STATUS ObjectTable::GetObjectByName(const std::string_view name, X_HANDLE* out
   }
   *out_handle = handle;
 
-  // Retain under global lock via normal LookupObject path.
-  // The handle may have been removed between releasing name_mutex_ and
-  // acquiring global lock -- LookupObject returns nullptr in that case.
   auto obj = LookupObject(handle, false);
   if (obj) {
     obj->RetainHandle();
@@ -388,7 +361,7 @@ bool ObjectTable::Restore(stream::ByteStream* stream) {
   Resize(stream->Read<uint32_t>());
   for (uint32_t i = 0; i < table_capacity_; i++) {
     auto& entry = table_[i];
-    // entry.object = nullptr;
+
     entry.handle_ref_count = stream->Read<int32_t>();
   }
 
@@ -408,4 +381,4 @@ X_STATUS ObjectTable::RestoreHandle(X_HANDLE handle, XObject* object) {
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::system::util
+}

@@ -23,9 +23,6 @@ namespace rex {
 namespace system {
 namespace util {
 
-// https://github.com/oukiar/freestyledash/blob/master/Freestyle/Tools/XEX/SPA.h
-// https://github.com/oukiar/freestyledash/blob/master/Freestyle/Tools/XEX/SPA.cpp
-
 enum class XdbfSection : uint16_t {
   kMetadata = 0x0001,
   kImage = 0x0002,
@@ -103,21 +100,14 @@ struct XdbfBlock {
   operator bool() const { return buffer != nullptr; }
 };
 
-// Wraps an XBDF (XboxDataBaseFormat) in-memory database.
-// https://free60project.github.io/wiki/XDBF.html
 class XdbfWrapper {
  public:
   XdbfWrapper(const uint8_t* data, size_t data_size);
 
-  // True if the target memory contains a valid XDBF instance.
   bool is_valid() const { return data_ != nullptr; }
 
-  // Gets an entry in the given section.
-  // If the entry is not found the returned block will be nullptr.
   XdbfBlock GetEntry(XdbfSection section, uint64_t id) const;
 
-  // Gets a string from the string table in the given language.
-  // Returns the empty string if the entry is not found.
   std::string GetStringTableEntry(XLanguage language, uint16_t string_id) const;
   std::vector<XdbfAchievementTableEntry> GetAchievements() const;
 
@@ -135,25 +125,20 @@ class XdbfGameData : public XdbfWrapper {
  public:
   XdbfGameData(const uint8_t* data, size_t data_size) : XdbfWrapper(data, data_size) {}
 
-  // Checks if provided language exist, if not returns default title language.
   XLanguage GetExistingLanguage(XLanguage language_to_check) const;
 
-  // The game icon image, if found.
   XdbfBlock icon() const;
 
-  // The game's default language.
   XLanguage default_language() const;
 
-  // The game's title in its default language.
   std::string title() const;
 
   std::string title(XLanguage language) const;
 };
 
-// A title name as shown in the window: without trademark, registered and
 // copyright signs (U+2122, U+00AE, U+00A9), and with whitespace collapsed.
 std::string TitleDisplayName(std::string_view name);
 
-}  // namespace util
-}  // namespace system
-}  // namespace rex
+}
+}
+}

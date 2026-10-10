@@ -50,4 +50,4 @@ class ScopedFileReadTimer {
   bool enabled_;
 };
 
-}  // namespace rex::system
+}

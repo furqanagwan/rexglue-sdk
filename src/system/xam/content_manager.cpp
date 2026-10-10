@@ -53,8 +53,8 @@ ContentPackage::ContentPackage(KernelState* kernel_state, const std::string_view
   content_data_ = data;
 
   auto fs = kernel_state_->file_system();
-  auto device = std::make_unique<rex::filesystem::HostPathDevice>(device_path_, package_path, false,
-                                                                  /*allow_share_delete=*/true);
+  auto device =
+      std::make_unique<rex::filesystem::HostPathDevice>(device_path_, package_path, false, true);
   device->Initialize();
   fs->RegisterDevice(std::move(device));
   fs->RegisterSymbolicLink(root_name_ + ":", device_path_);
@@ -101,8 +101,6 @@ std::filesystem::path ContentManager::ResolvePackageRoot(uint64_t xuid, XContent
   auto title_id_str = fmt::format("{:08X}", title_id);
   auto content_type_str = fmt::format("{:08X}", uint32_t(content_type));
 
-  // Package root path:
-  // content_root/xuid/title_id/content_type/
   return root_path_ / xuid_str / title_id_str / content_type_str;
 }
 
@@ -110,13 +108,10 @@ std::filesystem::path ContentManager::ResolvePackagePath(uint64_t xuid,
                                                          const XCONTENT_AGGREGATE_DATA& data) {
   uint64_t used_xuid = (data.xuid != uint64_t(-1) && data.xuid != 0) ? uint64_t(data.xuid) : xuid;
 
-  // DLCs are stored in common directory
   if (data.content_type == XContentType::kMarketplaceContent) {
     used_xuid = 0;
   }
 
-  // Content path:
-  // content_root/xuid/title_id/content_type/data_file_name/
   auto package_root = ResolvePackageRoot(used_xuid, data.content_type, data.title_id);
   return package_root / rex::to_path(data.file_name());
 }
@@ -137,8 +132,6 @@ std::filesystem::path ContentManager::ResolvePackageHeaderPath(const std::string
   auto content_type_str = fmt::format("{:08X}", uint32_t(content_type));
   std::string final_name = std::string(file_name) + ".header";
 
-  // Header root path:
-  // content_root/xuid/title_id/Headers/content_type/filename.header
   return root_path_ / xuid_str / title_id_str / kGameContentHeaderDirName / content_type_str /
          final_name;
 }
@@ -152,13 +145,10 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
     title_id = kernel_state_->title_id();
   }
 
-  // Search path:
-  // content_root/xuid/title_id/type_name/*
   auto package_root = ResolvePackageRoot(xuid, content_type, title_id);
   auto file_infos = rex::filesystem::ListFiles(package_root);
   for (const auto& file_info : file_infos) {
     if (file_info.type != rex::filesystem::FileInfo::Type::kDirectory) {
-      // Directories only.
       continue;
     }
 
@@ -223,7 +213,7 @@ X_RESULT ContentManager::WriteContentHeaderFile(uint64_t xuid, XCONTENT_AGGREGAT
     std::memcpy(bytes.data() + sizeof(XCONTENT_AGGREGATE_DATA), &license_mask,
                 sizeof(license_mask));
   }
-  // Written whole or not at all, so a crash never leaves a torn header.
+
   return rex::filesystem::WriteFileDurably(header_path, bytes) ? X_ERROR_SUCCESS
                                                                : X_ERROR_WRITE_FAULT;
 }
@@ -243,7 +233,6 @@ X_RESULT ContentManager::FlushContent(const std::string_view root_name) {
     kernel_state_->file_system()->FindSymbolicLink(std::string(root_name) + ':', resolved_path);
   }
 
-  // Guest writes go straight to host files; flushing makes them durable.
   X_RESULT result = X_ERROR_SUCCESS;
   const auto files = kernel_state_->object_table()->GetObjectsByType<XFile>(XObject::Type::File);
   for (const object_ref<XFile>& file : files) {
@@ -255,8 +244,6 @@ X_RESULT ContentManager::FlushContent(const std::string_view root_name) {
     }
   }
 
-  // Content created before a crash may be missing its header; the package
-  // is only listed with its metadata once the header exists.
   uint64_t used_xuid = (data.xuid != uint64_t(-1) && data.xuid != 0) ? uint64_t(data.xuid) : xuid;
   const auto header_path =
       ResolvePackageHeaderPath(data.file_name(), used_xuid, data.title_id, data.content_type);
@@ -350,8 +337,7 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
   package->LoadPackageLicenseMask(ResolvePackageHeaderPath(
       data.file_name(), xuid, kernel_state_->title_id(), data.content_type));
   content_license = package->GetPackageLicense();
-  // The license_mask cvar grants extra licenses to every package, as it does
-  // for XamContentGetLicenseMask (Edge aac25ad0c: any nonzero mask, not > 1).
+
   content_license |= REXCVAR_GET(license_mask);
 
   {
@@ -365,10 +351,6 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
 }
 
 X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
-  // Closing content commits it on the console. Make the writes durable before
-  // the handles go, so a save closed without XamContentFlush still survives a
-  // system crash (xenia-canary #1220). The package is closed either way; a
-  // failed flush is reported.
   const X_RESULT flush_result = FlushContent(root_name);
   if (flush_result == X_ERROR_FILE_NOT_FOUND) {
     return X_ERROR_FILE_NOT_FOUND;
@@ -377,7 +359,7 @@ X_RESULT ContentManager::CloseContent(const std::string_view root_name) {
   ContentPackage* package = nullptr;
   {
     auto global_lock = global_critical_region_.Acquire();
-    // Some games use different casing between Create and Close (e.g. "save" vs "SAVE")
+
     auto it = open_packages_.find(string::string_key_case(root_name));
     if (it == open_packages_.end()) {
       return X_ERROR_FILE_NOT_FOUND;
@@ -466,7 +448,6 @@ X_RESULT ContentManager::UnmountContent(uint64_t xuid, const XCONTENT_AGGREGATE_
 
 X_RESULT ContentManager::UnmountAndDeleteContent(uint64_t xuid,
                                                  const XCONTENT_AGGREGATE_DATA& data) {
-  // Unmount phase: tolerant of not-mounted state
   ContentPackage* package = nullptr;
   {
     auto global_lock = global_critical_region_.Acquire();
@@ -477,7 +458,6 @@ X_RESULT ContentManager::UnmountAndDeleteContent(uint64_t xuid,
   }
   delete package;
 
-  // Delete phase: remove package directory and .header file
   auto package_path = ResolvePackagePath(xuid, data);
 
   uint64_t used_xuid = (data.xuid != uint64_t(-1) && data.xuid != 0) ? uint64_t(data.xuid) : xuid;
@@ -504,15 +484,12 @@ std::filesystem::path ContentManager::ResolveGameUserContentPath() {
   auto title_id = fmt::format("{:08X}", kernel_state_->title_id());
   auto user_name = rex::to_path(kernel_state_->user_profile()->name());
 
-  // Per-game per-profile data location:
-  // content_root/title_id/profile/user_name
   return root_path_ / title_id / kGameUserContentDirName / user_name;
 }
 
 std::unordered_map<string::string_key_case, ContentPackage*,
                    string::string_key_case::Hash>::iterator
 ContentManager::FindOpenPackageByData(const XCONTENT_AGGREGATE_DATA& data) {
-  // Resolve kCurrentlyRunningTitleId so both sides compare actual title IDs.
   uint32_t query_title = data.title_id;
   if (query_title == kCurrentlyRunningTitleId) {
     query_title = kernel_state_->title_id();
@@ -526,8 +503,6 @@ ContentManager::FindOpenPackageByData(const XCONTENT_AGGREGATE_DATA& data) {
       pkg_title = kernel_state_->title_id();
     }
 
-    // Match on content_type + file_name + resolved title_id.
-    // device_id is a virtual storage selector, not a content identifier.
     if (data.content_type == pkg.content_type && data.file_name() == pkg.file_name() &&
         query_title == pkg_title) {
       return it;
@@ -589,7 +564,6 @@ static X_RESULT ExtractEntry(rex::filesystem::Entry* entry,
     return X_ERROR_SUCCESS;
   }
 
-  // Ensure parent directory exists
   std::error_code ec;
   std::filesystem::create_directories(dest_path.parent_path(), ec);
 
@@ -605,7 +579,7 @@ static X_RESULT ExtractEntry(rex::filesystem::Entry* entry,
     return X_ERROR_ACCESS_DENIED;
   }
 
-  constexpr size_t kBufferSize = 4 * 1024 * 1024;  // 4 MiB
+  constexpr size_t kBufferSize = 4 * 1024 * 1024;
   auto buffer = std::make_unique<uint8_t[]>(kBufferSize);
   size_t remaining = entry->size();
   size_t offset = 0;
@@ -632,14 +606,11 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
     return X_ERROR_FILE_NOT_FOUND;
   }
 
-  // Mount the STFS package as a virtual filesystem device
   auto device = std::make_unique<rex::filesystem::StfsContainerDevice>("", package_path);
   if (!device->Initialize()) {
     return X_ERROR_ACCESS_DENIED;
   }
 
-  // Derive install destination:
-  // root_path_/0000000000000000/{title_id}/00000002/{filename}/
   auto file_name = rex::path_to_utf8(package_path.filename());
 
   XCONTENT_AGGREGATE_DATA content_data;
@@ -649,7 +620,6 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
   content_data.xuid = 0;
   content_data.set_file_name(file_name);
 
-  // Read display name from STFS metadata
   auto display_name = device->header().metadata.display_name(rex::system::XLanguage::kEnglish);
   if (!display_name.empty()) {
     content_data.set_display_name(display_name);
@@ -659,14 +629,12 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
 
   auto install_path = ResolvePackagePath(0, content_data);
 
-  // Create destination directory
   std::error_code ec;
   std::filesystem::create_directories(install_path, ec);
   if (ec) {
     return X_ERROR_ACCESS_DENIED;
   }
 
-  // Extract all files breadth-first
   auto* root = device->ResolvePath("");
   if (!root) {
     return X_ERROR_ACCESS_DENIED;
@@ -689,7 +657,6 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
     }
   }
 
-  // Compute license mask from STFS header licenses
   uint32_t license_mask = 0;
   for (size_t i = 0; i < 0x10; i++) {
     if (device->header().header.licenses[i].license_flags) {
@@ -697,10 +664,9 @@ X_RESULT ContentManager::InstallContent(const std::filesystem::path& package_pat
     }
   }
 
-  // Write .header file
   return WriteContentHeaderFile(0, content_data, license_mask);
 }
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

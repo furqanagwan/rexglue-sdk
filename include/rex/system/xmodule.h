@@ -21,40 +21,38 @@ namespace rex::system {
 
 constexpr memory::fourcc_t kModuleSaveSignature = memory::make_fourcc("XMOD");
 
-// https://www.nirsoft.net/kernel_struct/vista/LDR_DATA_TABLE_ENTRY.html
-// HMODULE points to this struct!
 struct X_LDR_DATA_TABLE_ENTRY {
-  X_LIST_ENTRY in_load_order_links;            // 0x0
-  X_LIST_ENTRY in_memory_order_links;          // 0x8
-  X_LIST_ENTRY in_initialization_order_links;  // 0x10
+  X_LIST_ENTRY in_load_order_links;
+  X_LIST_ENTRY in_memory_order_links;
+  X_LIST_ENTRY in_initialization_order_links;
 
-  rex::be<uint32_t> dll_base;    // 0x18
-  rex::be<uint32_t> image_base;  // 0x1C
-  rex::be<uint32_t> image_size;  // 0x20
+  rex::be<uint32_t> dll_base;
+  rex::be<uint32_t> image_base;
+  rex::be<uint32_t> image_size;
 
-  X_UNICODE_STRING full_dll_name;  // 0x24
-  X_UNICODE_STRING base_dll_name;  // 0x2C
+  X_UNICODE_STRING full_dll_name;
+  X_UNICODE_STRING base_dll_name;
 
-  rex::be<uint32_t> flags;              // 0x34
-  rex::be<uint32_t> full_image_size;    // 0x38
-  rex::be<uint32_t> entry_point;        // 0x3C
-  rex::be<uint16_t> load_count;         // 0x40
-  rex::be<uint16_t> module_index;       // 0x42
-  rex::be<uint32_t> dll_base_original;  // 0x44
-  rex::be<uint32_t> checksum;           // 0x48 hijacked to hold kernel handle
-  rex::be<uint32_t> load_flags;         // 0x4C
-  rex::be<uint32_t> time_date_stamp;    // 0x50
-  rex::be<uint32_t> loaded_imports;     // 0x54
-  rex::be<uint32_t> xex_header_base;    // 0x58
-  // X_ANSI_STRING load_file_name;     // 0x5C
-  rex::be<uint32_t> closure_root;      // 0x5C
-  rex::be<uint32_t> traversal_parent;  // 0x60
+  rex::be<uint32_t> flags;
+  rex::be<uint32_t> full_image_size;
+  rex::be<uint32_t> entry_point;
+  rex::be<uint16_t> load_count;
+  rex::be<uint16_t> module_index;
+  rex::be<uint32_t> dll_base_original;
+  rex::be<uint32_t> checksum;
+  rex::be<uint32_t> load_flags;
+  rex::be<uint32_t> time_date_stamp;
+  rex::be<uint32_t> loaded_imports;
+  rex::be<uint32_t> xex_header_base;
+
+  rex::be<uint32_t> closure_root;
+  rex::be<uint32_t> traversal_parent;
 };
 
 class XModule : public XObject {
  public:
   enum class ModuleType {
-    // Matches debugger Module type.
+
     kKernelModule = 0,
     kUserModule = 1,
   };
@@ -91,7 +89,7 @@ class XModule : public XObject {
 
   rex::runtime::Module* processor_module_;
 
-  uint32_t hmodule_ptr_;  // This points to LDR_DATA_TABLE_ENTRY.
+  uint32_t hmodule_ptr_;
 };
 
-}  // namespace rex::system
+}

@@ -38,7 +38,7 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
                                    const GameSourceIdentity& expected,
                                    const std::function<bool()>& cancelled) {
   GameSourceResult result;
-  // Guest entrypoints must remain inside the selected source on every device.
+
   std::string guest_path(executable);
   std::replace(guest_path.begin(), guest_path.end(), '\\', '/');
   bool invalid_path = guest_path.empty() || guest_path.starts_with('/') ||
@@ -90,8 +90,7 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
     result.error = fmt::format("The source does not contain {}.", executable);
     return result;
   }
-  // Bound launcher header inspection and stream the remaining file. The checksum
-  // is a build/content fingerprint, not cryptographic or service authentication.
+
   if (entry->size() < 24 || entry->size() > 512 * 1024 * 1024) {
     result.error = "The executable has an invalid or unsupported size.";
     return result;
@@ -123,7 +122,7 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
     result.error = "The executable checksum could not be calculated.";
     return result;
   }
-  // A different game: keep its bytes to name it in the message.
+
   const bool other_title = expected.title_id && expected.title_id != result.identity.title_id;
   std::vector<uint8_t> whole;
   if (other_title)
@@ -189,7 +188,7 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
     if (!owns_staging)
       return;
     std::error_code ec;
-    // Verify the resolved target is the one newly created under this parent.
+
     const auto actual = std::filesystem::weakly_canonical(staging, ec);
     if (ec || std::filesystem::is_symlink(staging, ec))
       return;
@@ -301,4 +300,4 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
   }
   return result;
 }
-}  // namespace rex::system
+}

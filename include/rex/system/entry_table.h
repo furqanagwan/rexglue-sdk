@@ -49,4 +49,4 @@ class EntryTable {
   std::unordered_map<uint32_t, Entry*> map_;
 };
 
-}  // namespace rex::runtime
+}

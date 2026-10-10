@@ -20,7 +20,6 @@ namespace rex::runtime {
 
 class ThreadState {
  public:
-  // rexglue constructor - takes Memory directly, no Processor needed (maybe add later)
   ThreadState(uint32_t thread_id, uint32_t stack_base, uint32_t pcr_address,
               memory::Memory* memory);
   ~ThreadState();
@@ -39,26 +38,22 @@ class ThreadState {
   uint32_t pcr_address_ = 0;
   uint32_t thread_id_ = 0;
 
-  // NOTE: must be 64b aligned for SSE ops.
   alignas(64)::PPCContext context_storage_{};
   ::PPCContext* context_ = &context_storage_;
 };
 
-// Thread-safe accessors for current thread's PPC context and kernel state.
-// Require ThreadState::Bind() to have been called on the current thread.
 inline PPCContext* current_ppc_context() {
   auto* ts = ThreadState::Get();
   assert(ts && "current_ppc_context() called without bound ThreadState");
   return ts->context();
 }
 
-}  // namespace rex::runtime
+}
 
-// Forward declaration in correct namespace
 namespace rex::system {
 class KernelState;
 KernelState* kernel_state();
-}  // namespace rex::system
+}
 
 namespace rex::runtime {
 
@@ -66,4 +61,4 @@ inline rex::system::KernelState* current_kernel_state() {
   return rex::system::kernel_state();
 }
 
-}  // namespace rex::runtime
+}

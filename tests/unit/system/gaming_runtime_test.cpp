@@ -39,7 +39,6 @@ struct FakeRuntime {
   std::atomic<int> uninitialize_calls{0};
   std::string last_config;
 
-  // While `blocked`, initialize waits until Release(): a stalled runtime.
   std::mutex mutex;
   std::condition_variable cv;
   bool blocked = false;
@@ -52,7 +51,6 @@ struct FakeRuntime {
     cv.notify_all();
   }
 
-  // Captures a shared_ptr: a timed-out call outlives the test's GamingRuntime.
   static GamingRuntimeHooks Hooks(const std::shared_ptr<FakeRuntime>& fake) {
     return {
         [fake](const std::string& config_path) {
@@ -82,7 +80,7 @@ int32_t Hr(uint32_t code) {
   return int32_t(code);
 }
 
-}  // namespace
+}
 
 TEST_CASE("A ready runtime is uninitialized exactly once", "[gaming_runtime]") {
   auto fake = std::make_shared<FakeRuntime>();
@@ -91,7 +89,7 @@ TEST_CASE("A ready runtime is uninitialized exactly once", "[gaming_runtime]") {
     auto result = runtime.Initialize(5s);
     CHECK(result.ok());
     CHECK(result.hresult == 0);
-    // Initializing again while ready does not call the runtime again.
+
     CHECK(runtime.Initialize(5s).ok());
     CHECK(fake->initialize_calls == 1);
 
@@ -103,14 +101,14 @@ TEST_CASE("A ready runtime is uninitialized exactly once", "[gaming_runtime]") {
 
     REQUIRE(runtime.Initialize(5s).ok());
   }
-  // The destructor balances the second initialization.
+
   CHECK(fake->initialize_calls == 2);
   CHECK(fake->uninitialize_calls == 2);
 }
 
 TEST_CASE("A missing Gaming Runtime is reported and never uninitialized", "[gaming_runtime]") {
   auto fake = std::make_shared<FakeRuntime>();
-  fake->result = Hr(0x89240101);  // E_GAMERUNTIME_DLL_NOT_FOUND
+  fake->result = Hr(0x89240101);
   {
     GamingRuntime runtime(FakeRuntime::Hooks(fake));
     auto result = runtime.Initialize(5s);
@@ -125,7 +123,7 @@ TEST_CASE("A missing Gaming Runtime is reported and never uninitialized", "[gami
 
 TEST_CASE("Initialize results are classified", "[gaming_runtime]") {
   CHECK(ClassifyGamingRuntimeResult(0) == GamingRuntimeState::kReady);
-  CHECK(ClassifyGamingRuntimeResult(1) == GamingRuntimeState::kReady);  // S_FALSE
+  CHECK(ClassifyGamingRuntimeResult(1) == GamingRuntimeState::kReady);
   CHECK(ClassifyGamingRuntimeResult(Hr(0x89240107)) == GamingRuntimeState::kMissing);
   CHECK(ClassifyGamingRuntimeResult(Hr(0x8007007E)) == GamingRuntimeState::kMissing);
   CHECK(ClassifyGamingRuntimeResult(Hr(0x89240102)) == GamingRuntimeState::kVersionMismatch);
@@ -141,7 +139,7 @@ TEST_CASE("Initialize results are classified", "[gaming_runtime]") {
 
 TEST_CASE("A version mismatch names the GDK edition", "[gaming_runtime]") {
   auto fake = std::make_shared<FakeRuntime>();
-  fake->result = Hr(0x89240102);  // E_GAMERUNTIME_VERSION_MISMATCH
+  fake->result = Hr(0x89240102);
   GamingRuntime runtime(FakeRuntime::Hooks(fake));
   auto result = runtime.Initialize(5s);
   CHECK(result.state == GamingRuntimeState::kVersionMismatch);
@@ -156,12 +154,11 @@ TEST_CASE("A config path selects the options call; a missing file is a config er
   CHECK(fake->last_config == "C:\\title\\MicrosoftGame.config");
   runtime.Uninitialize();
 
-  fake->result = Hr(0x80070002);  // ERROR_FILE_NOT_FOUND, passed through unchanged
+  fake->result = Hr(0x80070002);
   auto missing = runtime.Initialize(5s, "C:\\nowhere\\MicrosoftGame.config");
   CHECK(missing.state == GamingRuntimeState::kConfigError);
   CHECK(missing.message.find("C:\\nowhere\\MicrosoftGame.config") != std::string::npos);
 
-  // The same code without a config path is not blamed on a config file.
   CHECK(runtime.Initialize(5s).state == GamingRuntimeState::kFailed);
 }
 
@@ -176,14 +173,12 @@ TEST_CASE("A stalled runtime times out and a late success is balanced", "[gaming
   CHECK(result.message.find("50 ms") != std::string::npos);
   CHECK(std::chrono::steady_clock::now() - start < 5s);
 
-  // No second call is made into a runtime that has not returned.
   CHECK(runtime.Initialize(50ms).state == GamingRuntimeState::kTimedOut);
 
   fake->Release();
   REQUIRE(WaitFor([&] { return fake->uninitialize_calls == 1; }));
   CHECK(fake->initialize_calls == 1);
 
-  // The next attempt starts fresh once the stalled call is over.
   REQUIRE(runtime.Initialize(5s).ok());
   CHECK(fake->initialize_calls == 2);
   runtime.Uninitialize();
@@ -198,7 +193,7 @@ TEST_CASE("A late failure after a timeout is not uninitialized", "[gaming_runtim
     GamingRuntime runtime(FakeRuntime::Hooks(fake));
     CHECK(runtime.Initialize(20ms).state == GamingRuntimeState::kTimedOut);
   }
-  // The GamingRuntime is gone before the call returns.
+
   fake->Release();
   REQUIRE(WaitFor([&] { return fake->initialize_calls == 1; }));
   std::this_thread::sleep_for(20ms);

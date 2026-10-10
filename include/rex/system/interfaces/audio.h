@@ -26,4 +26,4 @@ class IAudioSystem {
   virtual void Shutdown() = 0;
 };
 
-}  // namespace rex::system
+}

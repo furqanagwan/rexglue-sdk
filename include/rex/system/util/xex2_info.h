@@ -15,10 +15,6 @@
 
 #include <rex/types.h>
 
-// XEX version word is packed MSB-first on disk. After be<> byte-swap to native
-// LE the layout in `value` is: bits 28-31 major, 24-27 minor, 8-23 build, 0-7
-// qfe. x86 LE compilers allocate bitfields LSB-first, so list LSB fields first
-// to match the on-disk packing.
 union xe_xex2_version_t {
   uint32_t value;
   struct {
@@ -40,19 +36,19 @@ enum xe_pe_section_flags_e : uint32_t {
 
 class PESection {
  public:
-  char name[9];  // 8 + 1 for \0
+  char name[9];
   uint32_t raw_address;
   uint32_t raw_size;
   uint32_t address;
   uint32_t size;
-  uint32_t flags;  // kXEPESection*
+  uint32_t flags;
 };
 
 struct PEExport {
   const char* name;
   uint32_t ordinal;
 
-  uint64_t addr;  // Function address
+  uint64_t addr;
 };
 
 namespace rex {
@@ -78,7 +74,7 @@ enum xex2_image_flags : uint32_t {
   XEX_IMAGE_IPTV_TITLE_APPLICATION = 0x00020000,
   XEX_IMAGE_KEYVAULT_PRIVILEGES_REQUIRED = 0x04000000,
   XEX_IMAGE_ONLINE_ACTIVATION_REQUIRED = 0x08000000,
-  XEX_IMAGE_PAGE_SIZE_4KB = 0x10000000,  // else 64KB
+  XEX_IMAGE_PAGE_SIZE_4KB = 0x10000000,
   XEX_IMAGE_REGION_FREE = 0x20000000,
   XEX_IMAGE_REVOCATION_CHECK_OPTIONAL = 0x40000000,
   XEX_IMAGE_REVOCATION_CHECK_REQUIRED = 0x80000000,
@@ -162,7 +158,6 @@ enum xex2_system_flags : uint32_t {
 
 };
 
-// ESRB (Entertainment Software Rating Board)
 enum xex2_rating_esrb_value : uint32_t {
   XEX_RATING_ESRB_eC = 0x00,
   XEX_RATING_ESRB_E = 0x02,
@@ -172,7 +167,7 @@ enum xex2_rating_esrb_value : uint32_t {
   XEX_RATING_ESRB_AO = 0x0E,
   XEX_RATING_ESRB_UNRATED = 0xFF,
 };
-// PEGI (Pan European Game Information)
+
 enum xex2_rating_pegi_value : uint32_t {
   XEX_RATING_PEGI_3_PLUS = 0,
   XEX_RATING_PEGI_7_PLUS = 4,
@@ -181,7 +176,7 @@ enum xex2_rating_pegi_value : uint32_t {
   XEX_RATING_PEGI_18_PLUS = 14,
   XEX_RATING_PEGI_UNRATED = 0xFF,
 };
-// PEGI (Pan European Game Information) - Finland
+
 enum xex2_rating_pegi_fi_value : uint32_t {
   XEX_RATING_PEGI_FI_3_PLUS = 0,
   XEX_RATING_PEGI_FI_7_PLUS = 4,
@@ -190,7 +185,7 @@ enum xex2_rating_pegi_fi_value : uint32_t {
   XEX_RATING_PEGI_FI_18_PLUS = 14,
   XEX_RATING_PEGI_FI_UNRATED = 0xFF,
 };
-// PEGI (Pan European Game Information) - Portugal
+
 enum xex2_rating_pegi_pt_value : uint32_t {
   XEX_RATING_PEGI_PT_4_PLUS = 1,
   XEX_RATING_PEGI_PT_6_PLUS = 3,
@@ -199,7 +194,7 @@ enum xex2_rating_pegi_pt_value : uint32_t {
   XEX_RATING_PEGI_PT_18_PLUS = 14,
   XEX_RATING_PEGI_PT_UNRATED = 0xFF,
 };
-// BBFC (British Board of Film Classification) - UK/Ireland
+
 enum xex2_rating_bbfc_value : uint32_t {
   XEX_RATING_BBFC_UNIVERSAL = 1,
   XEX_RATING_BBFC_PG = 5,
@@ -211,7 +206,7 @@ enum xex2_rating_bbfc_value : uint32_t {
   XEX_RATING_BBFC_18_PLUS = 14,
   XEX_RATING_BBFC_UNRATED = 0xFF,
 };
-// CERO (Computer Entertainment Rating Organization)
+
 enum xex2_rating_cero_value : uint32_t {
   XEX_RATING_CERO_A = 0,
   XEX_RATING_CERO_B = 2,
@@ -220,7 +215,7 @@ enum xex2_rating_cero_value : uint32_t {
   XEX_RATING_CERO_Z = 8,
   XEX_RATING_CERO_UNRATED = 0xFF,
 };
-// USK (Unterhaltungssoftware SelbstKontrolle)
+
 enum xex2_rating_usk_value : uint32_t {
   XEX_RATING_USK_ALL = 0,
   XEX_RATING_USK_6_PLUS = 2,
@@ -229,7 +224,7 @@ enum xex2_rating_usk_value : uint32_t {
   XEX_RATING_USK_18_PLUS = 8,
   XEX_RATING_USK_UNRATED = 0xFF,
 };
-// OFLC (Office of Film and Literature Classification) - Australia
+
 enum xex2_rating_oflc_au_value : uint32_t {
   XEX_RATING_OFLC_AU_G = 0,
   XEX_RATING_OFLC_AU_PG = 2,
@@ -237,7 +232,7 @@ enum xex2_rating_oflc_au_value : uint32_t {
   XEX_RATING_OFLC_AU_MA15_PLUS = 6,
   XEX_RATING_OFLC_AU_UNRATED = 0xFF,
 };
-// OFLC (Office of Film and Literature Classification) - New Zealand
+
 enum xex2_rating_oflc_nz_value : uint32_t {
   XEX_RATING_OFLC_NZ_G = 0,
   XEX_RATING_OFLC_NZ_PG = 2,
@@ -245,7 +240,7 @@ enum xex2_rating_oflc_nz_value : uint32_t {
   XEX_RATING_OFLC_NZ_MA15_PLUS = 6,
   XEX_RATING_OFLC_NZ_UNRATED = 0xFF,
 };
-// KMRB (Korea Media Rating Board)
+
 enum xex2_rating_kmrb_value : uint32_t {
   XEX_RATING_KMRB_ALL = 0,
   XEX_RATING_KMRB_12_PLUS = 2,
@@ -253,7 +248,7 @@ enum xex2_rating_kmrb_value : uint32_t {
   XEX_RATING_KMRB_18_PLUS = 6,
   XEX_RATING_KMRB_UNRATED = 0xFF,
 };
-// Brazil
+
 enum xex2_rating_brazil_value : uint32_t {
   XEX_RATING_BRAZIL_ALL = 0,
   XEX_RATING_BRAZIL_12_PLUS = 2,
@@ -262,7 +257,7 @@ enum xex2_rating_brazil_value : uint32_t {
   XEX_RATING_BRAZIL_18_PLUS = 8,
   XEX_RATING_BRAZIL_UNRATED = 0xFF,
 };
-// FPB (Film and Publication Board)
+
 enum xex2_rating_fpb_value : uint32_t {
   XEX_RATING_FPB_ALL = 0,
   XEX_RATING_FPB_PG = 6,
@@ -369,7 +364,6 @@ struct xex2_opt_file_format_info {
   } compression_info;
 };
 
-// See xe_xex2_version_t for layout rationale.
 union xex2_version {
   uint32_t value;
   struct {
@@ -390,18 +384,18 @@ struct xex2_opt_bound_path {
 };
 
 struct xex2_opt_static_library {
-  char name[8];                // 0x0
-  be<uint16_t> version_major;  // 0x8
-  be<uint16_t> version_minor;  // 0xA
-  be<uint16_t> version_build;  // 0xC
-  uint8_t approval_type;       // 0xE
-  uint8_t version_qfe;         // 0xF
+  char name[8];
+  be<uint16_t> version_major;
+  be<uint16_t> version_minor;
+  be<uint16_t> version_build;
+  uint8_t approval_type;
+  uint8_t version_qfe;
 };
 static_assert_size(xex2_opt_static_library, 0x10);
 
 struct xex2_opt_static_libraries {
-  be<uint32_t> size;                     // 0x0
-  xex2_opt_static_library libraries[1];  // 0x4
+  be<uint32_t> size;
+  xex2_opt_static_library libraries[1];
 };
 
 struct xex2_opt_original_pe_name {
@@ -410,29 +404,29 @@ struct xex2_opt_original_pe_name {
 };
 
 struct xex2_opt_data_directory {
-  be<uint32_t> offset;  // 0x0
-  be<uint32_t> size;    // 0x4
+  be<uint32_t> offset;
+  be<uint32_t> size;
 };
 static_assert_size(xex2_opt_data_directory, 0x8);
 
 struct xex2_opt_tls_info {
-  be<uint32_t> slot_count;        // 0x0
-  be<uint32_t> raw_data_address;  // 0x4
-  be<uint32_t> data_size;         // 0x8
-  be<uint32_t> raw_data_size;     // 0xC
+  be<uint32_t> slot_count;
+  be<uint32_t> raw_data_address;
+  be<uint32_t> data_size;
+  be<uint32_t> raw_data_size;
 };
 static_assert_size(xex2_opt_tls_info, 0x10);
 
 struct xex2_resource {
-  char name[8];          // 0x0
-  be<uint32_t> address;  // 0x8
-  be<uint32_t> size;     // 0xC
+  char name[8];
+  be<uint32_t> address;
+  be<uint32_t> size;
 };
 static_assert_size(xex2_resource, 0x10);
 
 struct xex2_opt_resource_info {
-  be<uint32_t> size;           // 0x0 Resource count is (size - 4) / 16
-  xex2_resource resources[1];  // 0x4
+  be<uint32_t> size;
+  xex2_resource resources[1];
 };
 
 struct xex2_delta_patch {
@@ -444,19 +438,19 @@ struct xex2_delta_patch {
 };
 
 struct xex2_opt_delta_patch_descriptor {
-  be<uint32_t> size;                         // 0x0
-  be<uint32_t> target_version_value;         // 0x4
-  be<uint32_t> source_version_value;         // 0x8
-  uint8_t digest_source[0x14];               // 0xC
-  uint8_t image_key_source[0x10];            // 0x20
-  be<uint32_t> size_of_target_headers;       // 0x30
-  be<uint32_t> delta_headers_source_offset;  // 0x34
-  be<uint32_t> delta_headers_source_size;    // 0x38
-  be<uint32_t> delta_headers_target_offset;  // 0x3C
-  be<uint32_t> delta_image_source_offset;    // 0x40
-  be<uint32_t> delta_image_source_size;      // 0x44
-  be<uint32_t> delta_image_target_offset;    // 0x48
-  xex2_delta_patch info;                     // 0x4C
+  be<uint32_t> size;
+  be<uint32_t> target_version_value;
+  be<uint32_t> source_version_value;
+  uint8_t digest_source[0x14];
+  uint8_t image_key_source[0x10];
+  be<uint32_t> size_of_target_headers;
+  be<uint32_t> delta_headers_source_offset;
+  be<uint32_t> delta_headers_source_size;
+  be<uint32_t> delta_headers_target_offset;
+  be<uint32_t> delta_image_source_offset;
+  be<uint32_t> delta_image_source_size;
+  be<uint32_t> delta_image_target_offset;
+  xex2_delta_patch info;
 
   xex2_version target_version() const { return xex2_version{target_version_value}; }
 
@@ -468,15 +462,15 @@ struct xex2_opt_delta_patch_descriptor {
 };
 
 struct xex2_opt_execution_info {
-  be<uint32_t> media_id;            // 0x0
-  be<uint32_t> version_value;       // 0x4
-  be<uint32_t> base_version_value;  // 0x8
-  be<uint32_t> title_id;            // 0xC
-  uint8_t platform;                 // 0x10
-  uint8_t executable_table;         // 0x11
-  uint8_t disc_number;              // 0x12
-  uint8_t disc_count;               // 0x13
-  be<uint32_t> savegame_id;         // 0x14
+  be<uint32_t> media_id;
+  be<uint32_t> version_value;
+  be<uint32_t> base_version_value;
+  be<uint32_t> title_id;
+  uint8_t platform;
+  uint8_t executable_table;
+  uint8_t disc_number;
+  uint8_t disc_count;
+  be<uint32_t> savegame_id;
 
   xex2_version version() const { return xex2_version{version_value}; }
 
@@ -489,23 +483,23 @@ struct xex2_opt_execution_info {
 static_assert_size(xex2_opt_execution_info, 0x18);
 
 struct xex2_opt_import_libraries {
-  be<uint32_t> size;  // 0x0
+  be<uint32_t> size;
   struct {
-    be<uint32_t> size;   // 0x4
-    be<uint32_t> count;  // 0x8
-    char data[1];        // 0xC string_table_size bytes
+    be<uint32_t> size;
+    be<uint32_t> count;
+    char data[1];
   } string_table;
 };
 
 struct xex2_import_library {
-  be<uint32_t> size;               // 0x0
-  char next_import_digest[0x14];   // 0x4
-  be<uint32_t> id;                 // 0x18
-  be<uint32_t> version_value;      // 0x1C
-  be<uint32_t> version_min_value;  // 0x20
-  be<uint16_t> name_index;         // 0x24
-  be<uint16_t> count;              // 0x26
-  be<uint32_t> import_table[1];    // 0x28
+  be<uint32_t> size;
+  char next_import_digest[0x14];
+  be<uint32_t> id;
+  be<uint32_t> version_value;
+  be<uint32_t> version_min_value;
+  be<uint16_t> name_index;
+  be<uint16_t> count;
+  be<uint32_t> import_table[1];
 
   xex2_version version() const { return xex2_version{version_value}; }
 
@@ -524,54 +518,54 @@ struct xex2_opt_generic_u32 {
 };
 
 struct xex2_opt_header {
-  be<uint32_t> key;  // 0x0
+  be<uint32_t> key;
 
   union {
-    be<uint32_t> value;   // 0x4
-    be<uint32_t> offset;  // 0x4
+    be<uint32_t> value;
+    be<uint32_t> offset;
   };
 };
 
 struct xex2_header {
-  be<uint32_t> magic;                  // 0x0 'XEX2'
-  be<xex2_module_flags> module_flags;  // 0x4
-  be<uint32_t> header_size;            // 0x8
-  be<uint32_t> reserved;               // 0xC
-  be<uint32_t> security_offset;        // 0x10
-  be<uint32_t> header_count;           // 0x14
+  be<uint32_t> magic;
+  be<xex2_module_flags> module_flags;
+  be<uint32_t> header_size;
+  be<uint32_t> reserved;
+  be<uint32_t> security_offset;
+  be<uint32_t> header_count;
 
-  xex2_opt_header headers[1];  // 0x18
+  xex2_opt_header headers[1];
 };
 
 struct xex2_page_descriptor {
   union {
-    be<uint32_t> value;  // 0x0
+    be<uint32_t> value;
     struct {
       xex2_section_type info : 4;
       uint32_t page_count : 28;
     };
   };
-  char data_digest[0x14];  // 0x4
+  char data_digest[0x14];
 };
 
 struct xex2_security_info {
-  be<uint32_t> header_size;                  // 0x0
-  be<uint32_t> image_size;                   // 0x4
-  char rsa_signature[0x100];                 // 0x8
-  be<uint32_t> unk_108;                      // 0x108 unk length
-  be<uint32_t> image_flags;                  // 0x10C
-  be<uint32_t> load_address;                 // 0x110
-  char section_digest[0x14];                 // 0x114
-  be<uint32_t> import_table_count;           // 0x128
-  char import_table_digest[0x14];            // 0x12C
-  char xgd2_media_id[0x10];                  // 0x140
-  char aes_key[0x10];                        // 0x150
-  be<uint32_t> export_table;                 // 0x160
-  char header_digest[0x14];                  // 0x164
-  be<uint32_t> region;                       // 0x178
-  be<uint32_t> allowed_media_types;          // 0x17C
-  be<uint32_t> page_descriptor_count;        // 0x180
-  xex2_page_descriptor page_descriptors[1];  // 0x184
+  be<uint32_t> header_size;
+  be<uint32_t> image_size;
+  char rsa_signature[0x100];
+  be<uint32_t> unk_108;
+  be<uint32_t> image_flags;
+  be<uint32_t> load_address;
+  char section_digest[0x14];
+  be<uint32_t> import_table_count;
+  char import_table_digest[0x14];
+  char xgd2_media_id[0x10];
+  char aes_key[0x10];
+  be<uint32_t> export_table;
+  char header_digest[0x14];
+  be<uint32_t> region;
+  be<uint32_t> allowed_media_types;
+  be<uint32_t> page_descriptor_count;
+  xex2_page_descriptor page_descriptors[1];
 };
 
 struct xex1_security_info {
@@ -592,16 +586,15 @@ struct xex1_security_info {
 };
 
 struct xex2_export_table {
-  be<uint32_t> magic[3];         // 0x0
-  be<uint32_t> modulenumber[2];  // 0xC
-  be<uint32_t> version[3];       // 0x14
-  be<uint32_t> imagebaseaddr;    // 0x20 must be <<16 to be accurate
-  be<uint32_t> count;            // 0x24
-  be<uint32_t> base;             // 0x28
-  be<uint32_t> ordOffset[1];     // 0x2C ordOffset[0] + (imagebaseaddr << 16) = function
+  be<uint32_t> magic[3];
+  be<uint32_t> modulenumber[2];
+  be<uint32_t> version[3];
+  be<uint32_t> imagebaseaddr;
+  be<uint32_t> count;
+  be<uint32_t> base;
+  be<uint32_t> ordOffset[1];
 };
 
-// Little endian PE export directory (from winnt.h)
 struct X_IMAGE_EXPORT_DIRECTORY {
   uint32_t Characteristics;
   uint32_t TimeDateStamp;
@@ -611,9 +604,9 @@ struct X_IMAGE_EXPORT_DIRECTORY {
   uint32_t Base;
   uint32_t NumberOfFunctions;
   uint32_t NumberOfNames;
-  uint32_t AddressOfFunctions;     // RVA from base of image
-  uint32_t AddressOfNames;         // RVA from base of image
-  uint32_t AddressOfNameOrdinals;  // RVA from base of image
+  uint32_t AddressOfFunctions;
+  uint32_t AddressOfNames;
+  uint32_t AddressOfNameOrdinals;
 };
 
-}  // namespace rex
+}

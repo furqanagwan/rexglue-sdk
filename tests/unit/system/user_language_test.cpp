@@ -62,6 +62,6 @@ TEST_CASE("XAM and XConfig agree on the selected game language", "[language][ker
     CHECK(required == 4);
     CHECK(bytes == std::array<uint8_t, 4>{0, 0, 0, uint8_t(resolved)});
   }
-  REXCVAR_SET(user_language, 99);  // Defensive against callers bypassing validation.
+  REXCVAR_SET(user_language, 99);
   CHECK(rex::system::GetUserLanguage() == XLanguage::kEnglish);
 }

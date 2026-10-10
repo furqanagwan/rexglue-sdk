@@ -22,13 +22,12 @@ namespace rex::system {
 #pragma pack(push, 4)
 
 struct X_EX_TITLE_TERMINATE_REGISTRATION {
-  be<uint32_t> notification_routine;  // 0x0
-  be<uint32_t> priority;              // 0x4
-  X_LIST_ENTRY list_entry;            // 0x8
+  be<uint32_t> notification_routine;
+  be<uint32_t> priority;
+  X_LIST_ENTRY list_entry;
 };
 static_assert_size(X_EX_TITLE_TERMINATE_REGISTRATION, 16);
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/aa363082.aspx
 struct X_EXCEPTION_RECORD {
   be<uint32_t> code;
   be<uint32_t> exception_flags;
@@ -41,4 +40,4 @@ static_assert_size(X_EXCEPTION_RECORD, 0x50);
 
 #pragma pack(pop)
 
-}  // namespace rex::system
+}

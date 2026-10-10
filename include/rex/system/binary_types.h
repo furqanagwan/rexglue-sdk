@@ -30,9 +30,9 @@ struct BinarySection {
   std::string name;
   uint32_t virtual_address = 0;
   uint32_t virtual_size = 0;
-  const uint8_t* host_data = nullptr;  // Pointer to data in host memory
+  const uint8_t* host_data = nullptr;
   bool executable = false;
   bool writable = false;
 };
 
-}  // namespace rex::runtime
+}

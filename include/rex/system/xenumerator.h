@@ -104,4 +104,4 @@ class XStaticEnumerator : public XStaticUntypedEnumerator {
   }
 };
 
-}  // namespace rex::system
+}

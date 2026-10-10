@@ -19,9 +19,6 @@
 namespace rex::system {
 
 std::string NormalizeGuestPath(std::string_view path) {
-  // Manifest / config consumers expect POSIX-style guest paths: forward
-  // slashes, no device prefix, lowercase. The runtime VFS tolerates either
-  // separator, so converting backslashes here keeps writers (TOML) happy.
   std::string result = rex::string::utf8_fix_path_separators(path, U'/');
 
   auto colon = result.find(':');
@@ -57,4 +54,4 @@ std::optional<std::string> NormalizeDosDevicesRelativePath(std::string_view path
   return std::string(path);
 }
 
-}  // namespace rex::system
+}

@@ -18,7 +18,6 @@
 
 namespace rex::system {
 
-// https://www.nirsoft.net/kernel_struct/vista/KEVENT.html
 struct X_KEVENT {
   X_DISPATCH_HEADER header;
 };
@@ -52,17 +51,13 @@ class XEvent : public XObject {
   void SyncFromGuest() override;
 
  private:
-  // Writes the guest header's signal state and host_signaled_; state_lock_
-  // held.
   void SetSignalState(bool signaled);
 
   bool manual_reset_ = false;
   std::unique_ptr<rex::thread::Event> event_;
 
-  // The guest dispatch header mirrors the host event (Canary #1227): what the
-  // kernel last wrote there, so a different value was written by the guest.
   std::mutex state_lock_;
   bool host_signaled_ = false;
 };
 
-}  // namespace rex::system
+}

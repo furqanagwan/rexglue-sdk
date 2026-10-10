@@ -52,4 +52,4 @@ object_ref<XSymbolicLink> XSymbolicLink::Restore(KernelState* kernel_state,
   return object_ref<XSymbolicLink>(symlink);
 }
 
-}  // namespace rex::system
+}

@@ -29,28 +29,19 @@
 
 namespace rex::system {
 
-// Bump on any change to GpuCreateInfo or to the IGraphicsSystem interface.
 inline constexpr uint32_t kGpuPluginAbiVersion = 1;
 
 inline constexpr const char* kGpuCreateSymbol = "rex_gpu_create";
 inline constexpr const char* kGpuAbiVersionSymbol = "rex_gpu_abi_version";
 
 struct GpuCreateInfo {
-  uint32_t struct_size = 0;       // sizeof(GpuCreateInfo), set by the host
-  const char* backend = nullptr;  // "d3d12" or "any"
+  uint32_t struct_size = 0;
+  const char* backend = nullptr;
 };
 
-// extern "C" exports every GPU plugin must provide:
-//   uint32_t rex_gpu_abi_version(void);
-//   rex::system::IGraphicsSystem* rex_gpu_create(uint32_t abi_version,
-//                                                const GpuCreateInfo* info);
 using GpuAbiVersionFn = uint32_t (*)();
 using GpuCreateFn = IGraphicsSystem* (*)(uint32_t abi_version, const GpuCreateInfo* info);
 
-// Loads rexgpu-<name> from the executable's directory and constructs its
-// graphics system. Returns nullptr after logging a detailed error (missing
-// file, missing exports, ABI mismatch, or factory failure). The library
-// handle is retained for process lifetime; plugins are never unloaded.
 inline constexpr std::string_view kDefaultGpuPlugin = "xenos";
 inline constexpr std::string_view kNoGpuPlugin = "none";
 
@@ -60,4 +51,4 @@ bool IsGpuPluginStaged(std::string_view name);
 std::unique_ptr<IGraphicsSystem> LoadGpuPlugin(std::string_view name,
                                                std::string_view backend = "any");
 
-}  // namespace rex::system
+}

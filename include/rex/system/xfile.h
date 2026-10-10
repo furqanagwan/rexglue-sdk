@@ -25,21 +25,19 @@
 
 namespace rex::system {
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_directory_information
 class X_FILE_DIRECTORY_INFORMATION {
  public:
-  // FILE_DIRECTORY_INFORMATION
-  be<uint32_t> next_entry_offset;  // 0x0
-  be<uint32_t> file_index;         // 0x4
-  be<uint64_t> creation_time;      // 0x8
-  be<uint64_t> last_access_time;   // 0x10
-  be<uint64_t> last_write_time;    // 0x18
-  be<uint64_t> change_time;        // 0x20
-  be<uint64_t> end_of_file;        // 0x28 size in bytes
-  be<uint64_t> allocation_size;    // 0x30
-  be<uint32_t> attributes;         // 0x38 X_FILE_ATTRIBUTES
-  be<uint32_t> file_name_length;   // 0x3C
-  char file_name[1];               // 0x40
+  be<uint32_t> next_entry_offset;
+  be<uint32_t> file_index;
+  be<uint64_t> creation_time;
+  be<uint64_t> last_access_time;
+  be<uint64_t> last_write_time;
+  be<uint64_t> change_time;
+  be<uint64_t> end_of_file;
+  be<uint64_t> allocation_size;
+  be<uint32_t> attributes;
+  be<uint32_t> file_name_length;
+  char file_name[1];
 
   void Write(uint8_t* base, uint32_t p) {
     uint8_t* dst = base + p;
@@ -87,9 +85,6 @@ class XFile : public XObject {
   X_STATUS QueryDirectory(X_FILE_DIRECTORY_INFORMATION* out_info, size_t length,
                           const std::string_view file_name, bool restart);
 
-  // Don't do within the global critical region because invalidation callbacks
-  // may be triggered (as per the usual rule of not doing I/O within the global
-  // critical region).
   X_STATUS Read(uint32_t buffer_guess_address, uint32_t buffer_length, uint64_t byte_offset,
                 uint32_t* out_bytes_read, uint32_t apc_context, bool notify_completion = true);
 
@@ -145,4 +140,4 @@ class XFile : public XObject {
   bool is_synchronous_ = false;
 };
 
-}  // namespace rex::system
+}

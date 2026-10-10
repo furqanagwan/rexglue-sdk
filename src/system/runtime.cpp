@@ -19,8 +19,8 @@
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
 #include <rex/perf/counter.h>
-#include <rex/ppc/context.h>          // PPCFuncMapping
-#include <rex/platform/exceptions.h>  // SEH exception support
+#include <rex/ppc/context.h>
+#include <rex/platform/exceptions.h>
 #include <rex/kernel/crt/heap.h>
 #include <rex/runtime.h>
 #include <rex/system/export_resolver.h>
@@ -42,10 +42,7 @@ REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
 REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
 REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
 REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
-// As Xenia Canary does (mount_cache, on since 2024-08-31): EA's titles copy
-// their streaming archives to the utility partition and read them from there;
-// without it NHL Legacy Edition read D:\(null)\cacherender.big and drew its
-// matches black (RG-GDK-069).
+
 REXCVAR_DEFINE_BOOL(mount_cache, true, "Runtime",
                     "Mount the console's cache partitions (cache:, cache0:, cache1:) in the "
                     "cache folder");
@@ -54,9 +51,6 @@ namespace rex {
 
 namespace {
 
-// Names the recompiled guest function a fatal guest access violation came
-// from, with the faulting thread's guest LR and stack pointer. The host
-// module and offset let the PC be symbolized later.
 void ReportUnhandledGuestFault(void* context, uint64_t host_pc) {
   auto* dispatcher = static_cast<runtime::FunctionDispatcher*>(context);
   uint64_t host_entry = 0;
@@ -84,9 +78,8 @@ void ReportUnhandledGuestFault(void* context, uint64_t host_pc) {
   rex::FlushLogging();
 }
 
-}  // namespace
+}
 
-// Static instance for global access
 Runtime* Runtime::instance_ = nullptr;
 
 Runtime* Runtime::instance() {
@@ -151,20 +144,16 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
     return status;
   };
 
-  // Initialize SEH exception support for hardware exception handling
   rex::initialize_seh();
 
-  // Initialize clock
   chrono::Clock::set_guest_tick_frequency(50000000);
   chrono::Clock::set_guest_system_time_base(chrono::Clock::QueryHostSystemTime());
   chrono::Clock::set_guest_time_scalar(1.0);
 
-  // Enable threading affinity configuration
   thread::EnableAffinityConfiguration();
 
   tool_mode_ = config.tool_mode;
 
-  // Create memory system first
   memory_ = std::make_unique<memory::Memory>();
   if (!memory_->Initialize()) {
     return fail(X_STATUS_UNSUCCESSFUL, "memory init failed");
@@ -178,13 +167,10 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
     mmio->SetUnhandledFaultReporter(&ReportUnhandledGuestFault, function_dispatcher_.get());
   }
 
-  // Create virtual file system
   file_system_ = std::make_unique<rex::filesystem::VirtualFileSystem>();
 
-  // Create kernel state - this sets the global singleton
   kernel_state_ = std::make_unique<system::KernelState>(this);
 
-  // Initialize input from injected config
   if (config.input_factory) {
     input_system_ = config.input_factory(tool_mode_);
     if (input_system_) {
@@ -199,12 +185,10 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
     }
   }
 
-  // HLE kernel modules and apps.
   if (config.kernel_init) {
     config.kernel_init(this, kernel_state_.get());
   }
 
-  // Initialize the APU (Audio Processing Unit) from injected config
   if (config.audio_factory) {
     audio_system_ = config.audio_factory(function_dispatcher_.get());
     if (audio_system_) {
@@ -219,19 +203,16 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
     }
   }
 
-  // Set up VFS: game_data_root as game:/d:, update_data_root as update:
   if (!SetupVfs()) {
     return fail(X_STATUS_UNSUCCESSFUL, "VFS setup failed");
   }
 
-  // Skip GPU initialization in tool mode (for analysis tools like codegen)
   if (tool_mode_) {
     REXSYS_DEBUG("Runtime initialized in tool mode (no GPU)");
     setup_complete_ = true;
     return X_STATUS_SUCCESS;
   }
 
-  // Initialize GPU from injected config
   if (config.graphics) {
     graphics_system_ = std::move(config.graphics);
     bool with_presentation = (app_context_ != nullptr);
@@ -258,9 +239,9 @@ X_STATUS Runtime::Setup(const rex::PPCImageInfo& image_info, RuntimeConfig confi
 
   codegen_flags_ = image_info.codegen_flags;
 
-  if (!function_dispatcher_->InitializeFunctionTable(
-          image_info.code_base, image_info.code_size, image_info.image_base, image_info.image_size,
-          /*is_entrypoint=*/true, image_info.function_table_base)) {
+  if (!function_dispatcher_->InitializeFunctionTable(image_info.code_base, image_info.code_size,
+                                                     image_info.image_base, image_info.image_size,
+                                                     true, image_info.function_table_base)) {
     REXSYS_ERROR("Failed to initialize function table");
     Shutdown();
     return X_STATUS_UNSUCCESSFUL;
@@ -357,7 +338,6 @@ bool Runtime::SetupVfs() {
     return false;
   }
 
-  // Mount game_data_root as \Device\Harddisk0\Partition1
   auto mount_path = "\\Device\\Harddisk0\\Partition1";
   std::unique_ptr<rex::filesystem::Device> device;
   if (rex::filesystem::IsOpticalDiscPath(abs_game_root) ||
@@ -377,13 +357,10 @@ bool Runtime::SetupVfs() {
   }
   REXSYS_DEBUG("  Mounted {} at {}", abs_game_root.string(), mount_path);
 
-  // Register symbolic links for game: and D:
   file_system_->RegisterSymbolicLink("game:", mount_path);
   file_system_->RegisterSymbolicLink("d:", mount_path);
   REXSYS_DEBUG("  Registered symbolic links: game:, d:");
 
-  // Mount update_data_root as update:\ if provided: a folder of the title
-  // update's files, or its LIVE/CON package as it was downloaded.
   if (!update_data_root_.empty()) {
     auto abs_update_root = std::filesystem::absolute(update_data_root_);
     std::error_code ec;
@@ -407,12 +384,6 @@ bool Runtime::SetupVfs() {
     }
   }
 
-  // Setup NullDevice for raw HDD partition accesses
-  // Cache/STFC code baked into games tries reading/writing to these
-  // Using a NullDevice returns success to all IO requests, allowing games
-  // to believe cache/raw disk was accessed successfully.
-  // NOTE: Must be registered AFTER Partition1 so Partition1 requests don't
-  // go to NullDevice (VFS resolves devices in registration order)
   auto null_paths = {std::string("\\Partition0"), std::string("\\Cache0"), std::string("\\Cache1")};
   auto null_device =
       std::make_unique<rex::filesystem::NullDevice>("\\Device\\Harddisk0", null_paths);
@@ -421,8 +392,6 @@ bool Runtime::SetupVfs() {
     REXSYS_DEBUG("  Registered NullDevice for \\Device\\Harddisk0\\{{Partition0,Cache0,Cache1}}");
   }
 
-  // The utility partitions as host folders under the cache root (Canary's
-  // mount_cache): cache0: and cache1: first, since cache: is their prefix.
   if (REXCVAR_GET(mount_cache) && !cache_root_.empty()) {
     struct Partition {
       const char* device;
@@ -489,4 +458,4 @@ system::object_ref<system::XThread> Runtime::LaunchModule() {
   return thread;
 }
 
-}  // namespace rex
+}

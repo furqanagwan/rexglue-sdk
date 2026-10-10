@@ -51,6 +51,6 @@ X_HRESULT AppManager::DispatchMessageAsync(uint32_t app_id, uint32_t message, ui
   return app->DispatchMessageSync(message, buffer_ptr, buffer_length);
 }
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

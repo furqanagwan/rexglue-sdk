@@ -30,14 +30,8 @@ namespace system {
 namespace xam {
 namespace {
 
-// A 360 gamertag: up to 15 characters (XUSER_NAME_SIZE 16, with the null).
 constexpr size_t kMaxGamertag = 15;
 
-// The gamertag of the Xbox account signed in to Windows. The Xbox app's sign-in
-// keeps it in HKCU\Software\Microsoft\XboxLive (Gamertag, the classic form);
-// this is not a documented interface, so it is read only and may be missing.
-// XUserGetGamertag needs a Store package identity and a registered title, which
-// a recompiled title does not have (E_GAMEUSER_NO_PACKAGE_IDENTITY).
 std::string SignedInGamertag() {
   wchar_t value[64] = {};
   DWORD size = sizeof(value);
@@ -62,83 +56,74 @@ std::string ProfileName() {
       name.pop_back();
     }
     if (!name.empty() && (uint8_t(name.back()) & 0x80)) {
-      name.pop_back();  // the lead byte of the character cut short
+      name.pop_back();
     }
   }
   return name;
 }
 
-}  // namespace
+}
 
 UserProfile::UserProfile() {
-  // 58410A1F checks the user XUID against a mask of 0x00C0000000000000 (3<<54),
-  // if non-zero, it prevents the user from playing the game.
-  // "You do not have permissions to perform this operation."
   xuid_ = 0xB13EBABEBABEBABE;
   name_ = ProfileName();
 
-  // https://cs.rin.ru/forum/viewtopic.php?f=38&t=60668&hilit=gfwl+live&start=195
-  // https://github.com/arkem/py360/blob/master/py360/constants.py
-  // XPROFILE_GAMER_YAXIS_INVERSION
   AddSetting(std::make_unique<Int32Setting>(0x10040002, 0));
-  // XPROFILE_OPTION_CONTROLLER_VIBRATION
+
   AddSetting(std::make_unique<Int32Setting>(0x10040003, 3));
-  // XPROFILE_GAMERCARD_ZONE
+
   AddSetting(std::make_unique<Int32Setting>(0x10040004, 0));
-  // XPROFILE_GAMERCARD_REGION
+
   AddSetting(std::make_unique<Int32Setting>(0x10040005, 0));
-  // XPROFILE_GAMERCARD_CRED
+
   AddSetting(std::make_unique<Int32Setting>(0x10040006, 0xFA));
-  // XPROFILE_GAMERCARD_REP
+
   AddSetting(std::make_unique<FloatSetting>(0x5004000B, 0.0f));
-  // XPROFILE_OPTION_VOICE_MUTED
+
   AddSetting(std::make_unique<Int32Setting>(0x1004000C, 0));
-  // XPROFILE_OPTION_VOICE_THRU_SPEAKERS
+
   AddSetting(std::make_unique<Int32Setting>(0x1004000D, 0));
-  // XPROFILE_OPTION_VOICE_VOLUME
+
   AddSetting(std::make_unique<Int32Setting>(0x1004000E, 0x64));
-  // XPROFILE_GAMERCARD_MOTTO
+
   AddSetting(std::make_unique<UnicodeSetting>(0x402C0011, u""));
-  // XPROFILE_GAMERCARD_TITLES_PLAYED
+
   AddSetting(std::make_unique<Int32Setting>(0x10040012, 1));
-  // XPROFILE_GAMERCARD_ACHIEVEMENTS_EARNED
+
   AddSetting(std::make_unique<Int32Setting>(0x10040013, 0));
-  // XPROFILE_GAMER_DIFFICULTY
+
   AddSetting(std::make_unique<Int32Setting>(0x10040015, 0));
-  // XPROFILE_GAMER_CONTROL_SENSITIVITY
+
   AddSetting(std::make_unique<Int32Setting>(0x10040018, 0));
-  // Preferred color 1
+
   AddSetting(std::make_unique<Int32Setting>(0x1004001D, 0xFFFF0000u));
-  // Preferred color 2
+
   AddSetting(std::make_unique<Int32Setting>(0x1004001E, 0xFF00FF00u));
-  // XPROFILE_GAMER_ACTION_AUTO_AIM
+
   AddSetting(std::make_unique<Int32Setting>(0x10040022, 1));
-  // XPROFILE_GAMER_ACTION_AUTO_CENTER
+
   AddSetting(std::make_unique<Int32Setting>(0x10040023, 0));
-  // XPROFILE_GAMER_ACTION_MOVEMENT_CONTROL
+
   AddSetting(std::make_unique<Int32Setting>(0x10040024, 0));
-  // XPROFILE_GAMER_RACE_TRANSMISSION
+
   AddSetting(std::make_unique<Int32Setting>(0x10040026, 0));
-  // XPROFILE_GAMER_RACE_CAMERA_LOCATION
+
   AddSetting(std::make_unique<Int32Setting>(0x10040027, 0));
-  // XPROFILE_GAMER_RACE_BRAKE_CONTROL
+
   AddSetting(std::make_unique<Int32Setting>(0x10040028, 0));
-  // XPROFILE_GAMER_RACE_ACCELERATOR_CONTROL
+
   AddSetting(std::make_unique<Int32Setting>(0x10040029, 0));
-  // XPROFILE_GAMERCARD_TITLE_CRED_EARNED
+
   AddSetting(std::make_unique<Int32Setting>(0x10040038, 0));
-  // XPROFILE_GAMERCARD_TITLE_ACHIEVEMENTS_EARNED
+
   AddSetting(std::make_unique<Int32Setting>(0x10040039, 0));
 
-  // If we set this, games will try to get it.
-  // XPROFILE_GAMERCARD_PICTURE_KEY
   AddSetting(std::make_unique<UnicodeSetting>(0x4064000F, u"gamercard_picture_key"));
 
-  // XPROFILE_TITLE_SPECIFIC1
   AddSetting(std::make_unique<BinarySetting>(0x63E83FFF));
-  // XPROFILE_TITLE_SPECIFIC2
+
   AddSetting(std::make_unique<BinarySetting>(0x63E83FFE));
-  // XPROFILE_TITLE_SPECIFIC3
+
   AddSetting(std::make_unique<BinarySetting>(0x63E83FFD));
 }
 
@@ -146,8 +131,6 @@ bool UserProfile::AddSetting(std::unique_ptr<Setting> setting) {
   std::lock_guard<std::mutex> lock(settings_mutex_);
   bool saved = true;
   if (setting->is_title_specific()) {
-    // Written by a title, it is now that title's copy, saved or not. The
-    // defaults added before a kernel exists belong to no title.
     if (kernel_state_) {
       setting->loaded_title_id = kernel_state_->title_id();
       setting->title_loaded = true;
@@ -156,8 +139,7 @@ bool UserProfile::AddSetting(std::unique_ptr<Setting> setting) {
       saved = SaveSetting(setting.get());
     }
   }
-  // A reader still holding the previous setting keeps it alive. Read the id
-  // first: the right side of the assignment is evaluated (and moved) first.
+
   const uint32_t setting_id = setting->setting_id;
   settings_[setting_id] = std::shared_ptr<Setting>(std::move(setting));
   return saved;
@@ -170,8 +152,7 @@ std::shared_ptr<UserProfile::Setting> UserProfile::GetSetting(uint32_t setting_i
     return nullptr;
   }
   std::shared_ptr<UserProfile::Setting> setting = it->second;
-  // If what we have loaded in memory isn't for the title that is running right
-  // now, load that title's copy from disk.
+
   if (setting->is_title_specific() &&
       (!setting->title_loaded || kernel_state_->title_id() != setting->loaded_title_id)) {
     setting = LoadSetting(setting_id);
@@ -181,9 +162,6 @@ std::shared_ptr<UserProfile::Setting> UserProfile::GetSetting(uint32_t setting_i
 }
 
 std::shared_ptr<UserProfile::Setting> UserProfile::LoadSetting(uint32_t setting_id) {
-  // Title-specific settings are binary. A fresh object each time: readers of
-  // the previous one are unaffected, and a title with no saved copy gets an
-  // unset setting instead of the previous title's value.
   auto setting = std::make_shared<BinarySetting>(setting_id);
   setting->loaded_title_id = kernel_state_->title_id();
   setting->title_loaded = true;
@@ -218,7 +196,7 @@ bool UserProfile::SaveSetting(UserProfile::Setting* setting) {
     std::filesystem::create_directories(content_dir, ec);
     auto setting_id = fmt::format("{:08X}", setting->setting_id);
     auto file_path = content_dir / setting_id;
-    // Title-specific settings are save data too: written whole and flushed.
+
     if (!rex::filesystem::WriteFileDurably(file_path, serialized_setting)) {
       REXSYS_ERROR("Could not save profile setting {:08X} to {}", setting->setting_id,
                    rex::path_to_utf8(file_path));
@@ -226,13 +204,11 @@ bool UserProfile::SaveSetting(UserProfile::Setting* setting) {
     }
     return true;
   } else {
-    // Unsupported for now.  Other settings aren't per-game and need to be
-    // stored some other way.
     REXSYS_WARN("Attempting to save unsupported profile setting to disk");
     return true;
   }
 }
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

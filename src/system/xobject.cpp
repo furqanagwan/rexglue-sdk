@@ -15,7 +15,7 @@
 #include <rex/cvar.h>
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/util/string_utils.h>  // For TranslateAnsiStringAddress
+#include <rex/system/util/string_utils.h>
 #include <rex/system/xobject.h>
 
 #include <rex/system/xenumerator.h>
@@ -57,7 +57,6 @@ XObject::~XObject() {
     uint32_t ptr = guest_object_ptr_ - sizeof(X_OBJECT_HEADER);
     auto header = memory()->TranslateVirtual<X_OBJECT_HEADER*>(ptr);
 
-    // Free the object creation info
     if (header->object_type_ptr) {
       memory()->SystemHeapFree(header->object_type_ptr);
     }
@@ -100,7 +99,6 @@ void XObject::Release() {
 
 X_STATUS XObject::Delete() {
   if (kernel_state_ == nullptr) {
-    // Fake return value for api-scanner
     return X_STATUS_SUCCESS;
   } else {
     if (!name_.empty()) {
@@ -127,7 +125,6 @@ bool XObject::RestoreObject(stream::ByteStream* stream) {
   handles_.resize(stream->Read<uint32_t>());
   stream->Read(&handles_[0], handles_.size() * sizeof(X_HANDLE));
 
-  // Restore our pointer to our handles in the object table.
   for (size_t i = 0; i < handles_.size(); i++) {
     kernel_state_->object_table()->RestoreHandle(handles_[i], this);
   }
@@ -188,22 +185,18 @@ void XObject::SetAttributes(uint32_t obj_attributes_ptr) {
 
 int64_t XObject::GuestTicksUntil(int64_t timeout_ticks) {
   if (timeout_ticks > 0) {
-    // Absolute guest system time (100 ns units since 1601); one already
-    // passed is due now.
     int64_t now = static_cast<int64_t>(chrono::Clock::QueryGuestSystemTime());
     return std::max<int64_t>(timeout_ticks - now, 0);
   }
-  return -timeout_ticks;  // Relative, or 0.
+  return -timeout_ticks;
 }
 
 uint32_t XObject::TimeoutTicksToMs(int64_t timeout_ticks) {
-  // Truncated to whole milliseconds, as the Win32 millisecond waits take it.
   return static_cast<uint32_t>(
       std::min<int64_t>(GuestTicksUntil(timeout_ticks) / 10000, UINT32_MAX));
 }
 
 std::chrono::microseconds XObject::GuestTimeoutToHost(int64_t timeout_ticks) {
-  // Rounded up: a timeout never ends before the guest asked.
   double microseconds = double((GuestTicksUntil(timeout_ticks) + 9) / 10);
   if (!REXCVAR_GET(clock_no_scaling)) {
     microseconds *= chrono::Clock::guest_time_scalar();
@@ -215,7 +208,6 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
                        uint64_t* opt_timeout) {
   auto wait_handle = GetWaitHandle();
   if (!wait_handle) {
-    // Object doesn't support waiting.
     return X_STATUS_SUCCESS;
   }
 
@@ -239,7 +231,7 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
       WaitCallback();
       return X_STATUS_SUCCESS;
     case rex::thread::WaitResult::kUserCallback:
-      // Or X_STATUS_ALERTED?
+
       return X_STATUS_USER_APC;
     case rex::thread::WaitResult::kTimeout:
       rex::thread::MaybeYield();
@@ -263,7 +255,6 @@ X_STATUS XObject::SignalAndWait(XObject* signal_object, XObject* wait_object, ui
       rex::thread::SignalAndWait(signal_object->GetWaitHandle(), wait_object->GetWaitHandle(),
                                  alertable ? true : false, timeout_ms);
   if (result == rex::thread::WaitResult::kFailed) {
-    // Nothing was signaled (a semaphore at its limit, a bad handle).
     signal_object->CancelSignal();
   }
   switch (result) {
@@ -271,7 +262,7 @@ X_STATUS XObject::SignalAndWait(XObject* signal_object, XObject* wait_object, ui
       wait_object->WaitCallback();
       return X_STATUS_SUCCESS;
     case rex::thread::WaitResult::kUserCallback:
-      // Or X_STATUS_ALERTED?
+
       return X_STATUS_USER_APC;
     case rex::thread::WaitResult::kTimeout:
       rex::thread::MaybeYield();
@@ -298,8 +289,6 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
 
   XThread::CheckTitleTermination();
   if (wait_type) {
-    // Wait-all has no room for a timer in the set, so only wait-any gets a
-    // precise timeout.
     auto result =
         opt_timeout && *opt_timeout && REXCVAR_GET(guest_precise_timers)
             ? rex::thread::WaitAnyPrecise(wait_handles.data(), wait_handles.size(),
@@ -313,7 +302,7 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
 
         return X_STATUS(result.second);
       case rex::thread::WaitResult::kUserCallback:
-        // Or X_STATUS_ALERTED?
+
         return X_STATUS_USER_APC;
       case rex::thread::WaitResult::kTimeout:
         rex::thread::MaybeYield();
@@ -336,7 +325,7 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
 
         return X_STATUS_SUCCESS;
       case rex::thread::WaitResult::kUserCallback:
-        // Or X_STATUS_ALERTED?
+
         return X_STATUS_USER_APC;
       case rex::thread::WaitResult::kTimeout:
         rex::thread::MaybeYield();
@@ -356,7 +345,6 @@ uint8_t* XObject::CreateNative(uint32_t size) {
 
   auto mem = memory()->SystemHeapAlloc(total_size);
   if (!mem) {
-    // Out of memory!
     return nullptr;
   }
 
@@ -368,9 +356,6 @@ uint8_t* XObject::CreateNative(uint32_t size) {
 
   auto object_type = memory()->SystemHeapAlloc(sizeof(X_OBJECT_TYPE));
   if (object_type) {
-    // Set it up in the header.
-    // Some kernel method is accessing this struct and dereferencing a member
-    // @ offset 0x14
     header->object_type_ptr = object_type;
   }
 
@@ -380,17 +365,13 @@ uint8_t* XObject::CreateNative(uint32_t size) {
 void XObject::SetNativePointer(uint32_t native_ptr, bool uninitialized) {
   auto global_lock = rex::thread::global_critical_region::AcquireDirect();
 
-  // If hit: We've already setup the native ptr with CreateNative!
   assert_zero(guest_object_ptr_);
 
   auto header = kernel_state_->memory()->TranslateVirtual<X_DISPATCH_HEADER*>(native_ptr);
 
-  // Memory uninitialized, so don't bother with the check.
   if (!uninitialized) {
     assert_true(!(header->wait_list_blink & 0x1));
   }
-
-  // Stash pointer in struct.
 
   StashHandle(header, handle());
 
@@ -400,15 +381,6 @@ void XObject::SetNativePointer(uint32_t native_ptr, bool uninitialized) {
 object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* native_ptr,
                                              int32_t as_type) {
   assert_not_null(native_ptr);
-
-  // Unfortunately the XDK seems to inline some KeInitialize calls, meaning
-  // we never see it and just randomly start getting passed events/timers/etc.
-  // Luckily it seems like all other calls (Set/Reset/Wait/etc) are used and
-  // we don't have to worry about PPC code poking the struct. Because of that,
-  // we init on first use, store our handle in the struct, and dereference it
-  // each time.
-  // We identify this by setting wait_list_flink to a magic value. When set,
-  // wait_list_blink will hold a handle to our object.
 
   auto global_lock = rex::thread::global_critical_region::AcquireDirect();
 
@@ -420,14 +392,9 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
 
   const uint32_t guest_address = kernel_state->memory()->HostToGuestVirtual(native_ptr);
   if (header->wait_list_flink == kXObjSignature) {
-    // Already initialized.
-
     uint32_t handle = header->wait_list_blink;
     auto object = kernel_state->object_table()->LookupObject<XObject>(handle);
-    // An object that died leaves its signature behind, and the table hands
-    // its handle to the next object, so the handle must still name an object
-    // over this memory (Canary #1225, read side only; see
-    // docs/upstream-tracking.md). A stale signature is a first use.
+
     if (object && (!object->guest_object() || object->guest_object() == guest_address)) {
       object->SyncFromGuest();
       return object;
@@ -436,51 +403,43 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
                  guest_address);
   }
   {
-    // First use, create new.
-    // https://www.nirsoft.net/kernel_struct/vista/KOBJECTS.html
     XObject* object = nullptr;
     switch (as_type) {
-      case 0:  // EventNotificationObject
-      case 1:  // EventSynchronizationObject
-      {
+      case 0:
+      case 1: {
         auto ev = new XEvent(kernel_state);
         ev->InitializeNative(native_ptr, header);
         object = ev;
       } break;
-      case 2:  // MutantObject
-      {
+      case 2: {
         auto mutant = new XMutant(kernel_state);
         mutant->InitializeNative(native_ptr, header);
         object = mutant;
       } break;
-      case 5:  // SemaphoreObject
-      {
+      case 5: {
         auto sem = new XSemaphore(kernel_state);
         auto success = sem->InitializeNative(native_ptr, header);
-        // Can't report failure to the guest at late initialization:
+
         assert_true(success);
         object = sem;
       } break;
-      case 3:   // ProcessObject
-      case 4:   // QueueObject
-      case 6:   // ThreadObject
-      case 7:   // GateObject
-      case 8:   // TimerNotificationObject
-      case 9:   // TimerSynchronizationObject
-      case 18:  // ApcObject
-      case 19:  // DpcObject
-      case 20:  // DeviceQueueObject
-      case 21:  // EventPairObject
-      case 22:  // InterruptObject
-      case 23:  // ProfileObject
-      case 24:  // ThreadedDpcObject
+      case 3:
+      case 4:
+      case 6:
+      case 7:
+      case 8:
+      case 9:
+      case 18:
+      case 19:
+      case 20:
+      case 21:
+      case 22:
+      case 23:
+      case 24:
       default:
         assert_always();
         return NULL;
     }
-
-    // Record where the object lives and stash its handle there, so lookups
-    // can check it and header synchronization can reach the guest state.
 
     object->SetNativePointer(guest_address, true);
 
@@ -488,4 +447,4 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state, void* na
   }
 }
 
-}  // namespace rex::system
+}

@@ -71,4 +71,4 @@ void ExportResolver::SetVariableMapping(const std::string_view module_name, uint
   export_entry->variable_ptr = value;
 }
 
-}  // namespace rex::runtime
+}

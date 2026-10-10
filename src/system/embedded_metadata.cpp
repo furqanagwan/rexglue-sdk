@@ -42,7 +42,7 @@ std::unordered_map<std::string, RegisteredEmbeddedMetadataAsset>& Registry() {
   return registry;
 }
 
-}  // namespace
+}
 
 bool RegisterEmbeddedMetadataAsset(std::string_view relative_path, const std::uint8_t* data,
                                    std::size_t size) {
@@ -78,4 +78,4 @@ std::optional<EmbeddedMetadataAsset> FindEmbeddedMetadataAsset(
   };
 }
 
-}  // namespace rex
+}

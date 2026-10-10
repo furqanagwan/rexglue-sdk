@@ -42,4 +42,4 @@ class XSymbolicLink : public XObject {
   std::string target_;
 };
 
-}  // namespace rex::system
+}

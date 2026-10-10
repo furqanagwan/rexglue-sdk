@@ -43,4 +43,4 @@ bool XIOCompletion::WaitForNotification(uint64_t wait_ticks, IONotification* not
   return false;
 }
 
-}  // namespace rex::system
+}

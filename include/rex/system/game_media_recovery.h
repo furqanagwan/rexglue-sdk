@@ -6,8 +6,7 @@
 #include <string>
 
 namespace rex::system {
-// DiscImageDevice serializes Recover calls. Only the failing guest I/O waits;
-// validation/reopening runs on that worker, never on the UI thread.
+
 class GameMediaRecovery {
  public:
   GameMediaRecovery(std::function<bool()> reopen, std::function<void(std::string)> prompt);
@@ -23,4 +22,4 @@ class GameMediaRecovery {
   bool stopped_ = false;
   int choice_ = 0;
 };
-}  // namespace rex::system
+}

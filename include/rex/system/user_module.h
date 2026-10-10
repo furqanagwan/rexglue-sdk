@@ -21,11 +21,11 @@ namespace rex {
 namespace runtime {
 class XexModule;
 class ElfModule;
-}  // namespace runtime
+}
 namespace system {
 class XThread;
-}  // namespace system
-}  // namespace rex
+}
+}
 
 namespace rex::system {
 
@@ -54,7 +54,7 @@ class UserModule : public XModule {
 
   const xex2_header* xex_header() const { return xex_module()->xex_header(); }
   uint32_t guest_xex_header() const { return guest_xex_header_; }
-  // The title ID in the xex header or 0 if this is not a xex.
+
   uint32_t title_id() const;
   bool is_executable() const { return processor_module_->is_executable(); }
   bool is_dll_module() const { return is_dll_module_; }
@@ -71,16 +71,13 @@ class UserModule : public XModule {
   X_STATUS GetSection(const std::string_view name, uint32_t* out_section_data,
                       uint32_t* out_section_size) override;
 
-  // Get optional header - FOR HOST USE ONLY!
   X_STATUS GetOptHeader(xex2_header_keys key, void** out_ptr);
 
-  // Get optional header - FOR HOST USE ONLY!
   template <typename T>
   X_STATUS GetOptHeader(xex2_header_keys key, T* out_ptr) {
     return GetOptHeader(key, reinterpret_cast<void**>(out_ptr));
   }
 
-  // Get optional header that can safely be returned to guest code.
   X_STATUS GetOptHeader(xex2_header_keys key, uint32_t* out_header_guest_ptr);
   static X_STATUS GetOptHeader(const memory::Memory* memory, const xex2_header* header,
                                xex2_header_keys key, uint32_t* out_header_guest_ptr);
@@ -105,4 +102,4 @@ class UserModule : public XModule {
   uint32_t stack_size_ = 0;
 };
 
-}  // namespace rex::system
+}

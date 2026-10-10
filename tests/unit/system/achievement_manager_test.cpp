@@ -64,7 +64,7 @@ void WriteFile(const std::filesystem::path& path, std::string_view content) {
   file << content;
 }
 
-}  // namespace
+}
 
 TEST_CASE("achievement metadata layers embedded, TOML, and recomp entries", "[achievements]") {
   TempDirectory temp("rex_achievement_metadata");

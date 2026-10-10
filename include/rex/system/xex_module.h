@@ -18,7 +18,7 @@
 
 namespace rex::system {
 class KernelState;
-}  // namespace rex::system
+}
 
 namespace rex::runtime {
 
@@ -72,11 +72,9 @@ class XexModule : public Module {
   uint32_t image_size() const override {
     assert_not_zero(base_address_);
 
-    // Calculate the new total size of the XEX image from its headers.
     auto heap = memory()->LookupHeap(base_address_);
     uint32_t total_size = 0;
     for (uint32_t i = 0; i < xex_security_info()->page_descriptor_count; i++) {
-      // Byteswap the bitfield manually.
       xex2_page_descriptor desc;
       desc.value = rex::byte_swap(xex_security_info()->page_descriptors[i].value);
 
@@ -104,18 +102,11 @@ class XexModule : public Module {
   uint32_t base_address() const override { return base_address_; }
   bool is_dev_kit() const { return is_dev_kit_; }
 
-  // PE FileHeader TimeDateStamp (Unix epoch seconds) recorded by the linker.
   uint32_t pe_time_date_stamp() const { return pe_time_date_stamp_; }
 
-  // Gets an optional header. Returns NULL if not found.
-  // Special case: if key & 0xFF == 0x00, this function will return the value,
-  // not a pointer! This assumes out_ptr points to uint32_t.
   static bool GetOptHeader(const xex2_header* header, xex2_header_keys key, void** out_ptr);
   bool GetOptHeader(xex2_header_keys key, void** out_ptr) const;
 
-  // Ultra-cool templated version
-  // Special case: if key & 0xFF == 0x00, this function will return the value,
-  // not a pointer! This assumes out_ptr points to uint32_t.
   template <typename T>
   static bool GetOptHeader(const xex2_header* header, xex2_header_keys key, T* out_ptr) {
     return GetOptHeader(header, key, reinterpret_cast<void**>(out_ptr));
@@ -140,16 +131,12 @@ class XexModule : public Module {
 
   uint32_t export_table_address() const override { return xex_security_info()->export_table; }
 
-  // Exception DataDirectory accessors (for PDATA table)
-  // These return the correct PDATA location from the PE Optional Header,
-  // which may differ from the .pdata section's VirtualAddress.
   uint32_t exception_directory_rva() const override { return exception_dir_rva_; }
   uint32_t exception_directory_size() const override { return exception_dir_size_; }
   uint32_t exception_directory_address() const override {
     return base_address_ + exception_dir_rva_;
   }
 
-  // Binary introspection overrides
   std::span<const BinarySection> binary_sections() const override;
   const BinarySection* FindSectionByName(std::string_view name) const override;
   std::span<const BinarySymbol> binary_symbols() const override;
@@ -205,35 +192,31 @@ class XexModule : public Module {
   system::KernelState* kernel_state_ = nullptr;
   std::string name_;
   std::string path_;
-  std::vector<uint8_t> xex_header_mem_;  // Holds the xex header
-  std::vector<uint8_t> xexp_data_mem_;   // Holds XEXP patch data
+  std::vector<uint8_t> xex_header_mem_;
+  std::vector<uint8_t> xexp_data_mem_;
 
-  std::vector<ImportLibrary> import_libs_;  // pre-loaded import libraries for ease of use
+  std::vector<ImportLibrary> import_libs_;
   std::vector<PESection> pe_sections_;
 
-  // XEX_HEADER_ALTERNATE_TITLE_IDS loaded into a safe std::vector
   std::vector<uint32_t> opt_alternate_title_ids_;
 
   uint8_t session_key_[0x10];
   bool is_dev_kit_ = false;
 
-  bool loaded_ = false;         // Loaded into memory?
-  bool finished_load_ = false;  // PE/imports/symbols/etc all loaded?
+  bool loaded_ = false;
+  bool finished_load_ = false;
 
   uint32_t base_address_ = 0;
   uint32_t low_address_ = 0;
   uint32_t high_address_ = 0;
 
-  // Exception DataDirectory from PE Optional Header
   uint32_t exception_dir_rva_ = 0;
   uint32_t exception_dir_size_ = 0;
 
-  // PE FileHeader TimeDateStamp from the contained PE image.
   uint32_t pe_time_date_stamp_ = 0;
 
   XexFormat xex_format_ = kFormatUnknown;
   SecurityInfoContext security_info_ = {};
 };
 
-}  // namespace rex::runtime
-// (removed orphan xe namespace)
+}

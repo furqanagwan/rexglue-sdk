@@ -27,7 +27,6 @@ bool Module::ContainsAddress(uint32_t address) {
   return true;
 }
 
-// Binary introspection default implementations
 std::span<const BinarySection> Module::binary_sections() const {
   return binary_sections_;
 }
@@ -95,4 +94,4 @@ bool Module::isExecutableSection(uint32_t address) const {
   return false;
 }
 
-}  // namespace rex::runtime
+}

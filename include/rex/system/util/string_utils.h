@@ -17,7 +17,7 @@
 
 #include <rex/memory.h>
 #include <rex/string.h>
-#include <rex/system/xio.h>  // X_ANSI_STRING, X_UNICODE_STRING
+#include <rex/system/xio.h>
 #include <rex/system/xtypes.h>
 
 namespace rex {
@@ -65,6 +65,6 @@ inline std::u16string TranslateUnicodeString(const memory::Memory* memory,
   return result;
 }
 
-}  // namespace util
-}  // namespace system
-}  // namespace rex
+}
+}
+}

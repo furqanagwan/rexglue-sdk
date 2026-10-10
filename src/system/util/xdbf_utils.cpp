@@ -106,8 +106,6 @@ std::vector<XdbfAchievementTableEntry> XdbfWrapper::GetAchievements() const {
 }
 
 XLanguage XdbfGameData::GetExistingLanguage(XLanguage language_to_check) const {
-  // A bit of a hack. Check if title in specific language exist.
-  // If it doesn't then for sure language is not supported.
   return title(language_to_check).empty() ? default_language() : language_to_check;
 }
 
@@ -134,7 +132,6 @@ std::string XdbfGameData::title(XLanguage language) const {
 }
 
 std::string TitleDisplayName(std::string_view name) {
-  // UTF-8 for U+2122, U+00AE and U+00A9.
   static constexpr std::string_view kMarks[] = {"\xE2\x84\xA2", "\xC2\xAE", "\xC2\xA9"};
   std::string out;
   bool pending_space = false;
@@ -165,6 +162,6 @@ std::string TitleDisplayName(std::string_view name) {
   return out;
 }
 
-}  // namespace util
-}  // namespace system
-}  // namespace rex
+}
+}
+}
