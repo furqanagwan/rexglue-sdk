@@ -24,7 +24,7 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 2 DXT5 blocks to 8x4 R8G8B8A8 texels.
+
   XeTextureLoadInfo load_info = XeTextureLoadGetInfo(pass_push_consts_xe);
   uint3_xe block_index = in_global_thread_id_xe << uint3_xe(1u, 0u, 0u);
   dont_flatten_xe
@@ -44,15 +44,15 @@ entry_inputs_end_code_begin_compute_xe
   unroll_xe for (i = 0u; i < 2u; ++i) {
     if (i != 0u) {
       ++block_offset_host;
-      // Odd block = even block + 32 guest bytes when tiled.
+
       block_offset_guest += load_info.is_tiled ? 2u : 1u;
     }
     uint4_xe block = XeEndianSwap32(
         array_buffer_load_xe(xe_texture_load_source, block_offset_guest),
         load_info.endian_32);
     uint2_xe bgr_end_8in10 = XeDXTColorEndpointsToBGR8In10(block.z);
-    // Sort the color indices so they can be used as weights for the second
-    // endpoint.
+
+
     uint bgr_weights = XeDXTHighColorWeights(block.w);
     uint2_xe alpha_end = (block.xx >> uint2_xe(0u, 8u)) & 0xFFu;
     uint alpha_weights = XeDXT5HighAlphaWeights(

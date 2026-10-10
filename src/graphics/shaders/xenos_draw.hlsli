@@ -58,8 +58,8 @@ struct XeHSControlPointInputIndexed {
 };
 
 struct XeHSControlPointInputAdaptive {
-  // 1.0 added in the vertex shader to convert to Direct3D 11+, and clamped to
-  // the factor range in the vertex shader.
+
+
   float edge_factor : XETESSFACTOR;
 };
 
@@ -74,9 +74,9 @@ struct XeVertexPrePS {
 
 struct XeVertexPostGS {
   XeVertexPrePS pre_ps;
-  // Precise needed to preserve NaN - guest primitives may be converted to more
-  // than 1 triangle, so need to kill them entirely manually in GS if any vertex
-  // is NaN.
+
+
+
   precise float4 position : SV_Position;
   float4 clip_distance_0123 : SV_ClipDistance0;
   float2 clip_distance_45 : SV_ClipDistance1;
@@ -84,10 +84,10 @@ struct XeVertexPostGS {
 
 struct XeVertexPreGS {
   XeVertexPostGS post_gs;
-  // Guest primitives may be converted to more than 1 triangle, so need to kill
-  // them entirely manually in GS - must kill if all guest primitive vertices
-  // have negative cull distance.
+
+
+
   float cull_distance : SV_CullDistance;
 };
 
-#endif  // XENIA_GPU_D3D12_SHADERS_XENOS_DRAW_HLSLI_
+#endif

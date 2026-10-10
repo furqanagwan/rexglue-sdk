@@ -12,16 +12,16 @@
 
 #include "../../ui/shaders/xesl.xesli"
 
-// 2-bit (xenos::Endian) and 3-bit (xenos::Endian128).
+
 #define kXenosEndian_None 0u
 #define kXenosEndian_8in16 1u
 #define kXenosEndian_8in32 2u
 #define kXenosEndian_16in32 3u
-// 3-bit only.
+
 #define kXenosEndian_8in64 4u
 #define kXenosEndian_8in128 5u
 
-// Can also swap two packed 16-bit values.
+
 #define XE_ENDIAN_SWAP_16_OVERLOAD(XeEndianSwapType) \
 XeEndianSwapType XeEndianSwap16(XeEndianSwapType value, uint endian) { \
   if (endian == kXenosEndian_8in16) { \
@@ -73,4 +73,4 @@ uint4_xe XeEndianSwap128(uint4_xe value, uint endian) {
   return XeEndianSwap64(value, endian);
 }
 
-#endif  // XENIA_GPU_SHADERS_ENDIAN_XESLI_
+#endif

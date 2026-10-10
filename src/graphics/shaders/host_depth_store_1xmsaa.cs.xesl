@@ -26,11 +26,11 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 8 samples (same as resolve granularity).
+
   uint rect_constant = push_const_xe(xe_host_depth_store_rectangle);
   uint rt_constant = push_const_xe(xe_host_depth_store_render_target);
   uint2_xe resolution_scale = XeHostDepthStoreRTResolutionScale(rt_constant);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (in_global_thread_id_xe.x >=
       (XeHostDepthStoreRectUnscaledWidthDiv8(rect_constant) *

@@ -9,7 +9,7 @@
 
 #include "../../ui/shaders/xesl.xesli"
 
-// A clockwise triangle covering the whole viewport.
+
 
 entry_outputs_begin_xe
   entry_out_position_xe

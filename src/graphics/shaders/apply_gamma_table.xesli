@@ -55,13 +55,13 @@ entry_bindings_end_inputs_begin_xe
   entry_in_pixel_coord_xe
 entry_inputs_end_code_begin_xe
   uint2_xe pixel_index = uint2_xe(in_pixel_coord_xe.xy);
-#endif  // XE_APPLY_GAMMA_COMPUTE
-  // UNORM conversion according to the Direct3D 10+ rules.
+#endif
+
   uint3_xe apply_gamma_input = uint3_xe(
       texel_fetch_2d_xe(xe_apply_gamma_source, pixel_index, 0).rgb * 255.0f +
       0.5f);
-  // The ramp has blue in bits 0:9, green in 10:19, red in 20:29 - BGR passed as
-  // an R10G10B10A2 buffer.
+
+
   float4_xe apply_gamma_output;
   apply_gamma_output.r =
       texel_fetch_buffer_xe(xe_apply_gamma_ramp, apply_gamma_input.r).b;
@@ -70,11 +70,11 @@ entry_inputs_end_code_begin_xe
   apply_gamma_output.b =
       texel_fetch_buffer_xe(xe_apply_gamma_ramp, apply_gamma_input.b).r;
   #ifdef XE_APPLY_GAMMA_FXAA_LUMA
-    // Perceptual luma.
+
     apply_gamma_output.a =
         dot(apply_gamma_output.rgb, float3_xe(0.299f, 0.587f, 0.114f));
   #else
-    // Perceptual luma.
+
     apply_gamma_output.a = 1.0f;
   #endif
 #ifdef XE_APPLY_GAMMA_COMPUTE

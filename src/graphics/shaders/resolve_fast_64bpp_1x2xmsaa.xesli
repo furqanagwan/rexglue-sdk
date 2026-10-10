@@ -26,10 +26,10 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 4 host pixels.
+
   XeResolveInfo resolve_info = XeResolveGetInfo(pass_push_consts_xe);
   uint2_xe pixel_index = in_global_thread_id_xe.xy << uint2_xe(2u, 0u);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (pixel_index.x >= resolve_info.width_div_8_scaled << 3u) {
     return;
@@ -37,16 +37,16 @@ entry_inputs_end_code_begin_compute_xe
   uint4_xe pixels_01, pixels_23;
   dont_flatten_xe
   if (resolve_info.edram_msaa_samples == kXenosMsaaSamples_1X) {
-    // With 1x MSAA the pixels are the canonical samples, thus the scanline is
-    // contiguous and a single vectorized load suffices.
+
+
     uint source_address =
         XeResolveCopySourceFirstSampleAddressInts(resolve_info, pixel_index);
     pixels_01 = uint_vector_buffer_load4_xe(xe_resolve_edram, source_address);
     pixels_23 =
         uint_vector_buffer_load4_xe(xe_resolve_edram, source_address + 4u);
   } else {
-    // There's no fixed stride between horizontally adjacent pixels of a
-    // multisampled source, load each pixel from its respective address.
+
+
     pixels_01.xy = uint_vector_buffer_load2_xe(
         xe_resolve_edram,
         XeResolveCopySourceFirstSampleAddressInts(resolve_info, pixel_index));

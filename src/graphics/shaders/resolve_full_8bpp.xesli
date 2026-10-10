@@ -27,9 +27,9 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 8 host pixels.
+
   XeResolveInfo resolve_info = XeResolveGetInfo(pass_push_consts_xe);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (in_global_thread_id_xe.x >= resolve_info.width_div_8_scaled) {
     return;
@@ -53,7 +53,7 @@ entry_inputs_end_code_begin_compute_xe
     }
     pixels_0123.x = pixels_0123.y;
   }
-  // Convert to R8.
+
 
   array_buffer_store_xe(
       xe_resolve_dest,

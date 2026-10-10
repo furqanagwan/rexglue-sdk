@@ -26,10 +26,10 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 2 host pixels.
+
   XeResolveInfo resolve_info = XeResolveGetInfo(pass_push_consts_xe);
   uint2_xe pixel_index = in_global_thread_id_xe.xy << uint2_xe(1u, 0u);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (pixel_index.x >= resolve_info.width_div_8_scaled << 3u) {
     return;
@@ -43,17 +43,17 @@ entry_inputs_end_code_begin_compute_xe
                    resolve_info.half_pixel_offset_fill_source.x),
                pixel_index.y),
       pixel_0, pixel_1);
-  // Inside the half-pixel offset filling columns, pixel_0 now contains the
-  // pixel to stretch, pixel_1 contains the pixel after it. However, this means
-  // that the pixel offset is not aligned to 2 anymore. If 1 is the pixel to
-  // stretch, the two pixels will be 1 and 2 for pixel_index.x == 0. If 3 is,
-  // they will be 3 and 4 for pixel_index.x == 0 and 2. However, in the former
-  // case, they should be 1 and 1, and in the latter, 3 and 3.
+
+
+
+
+
+
   dont_flatten_xe
   if (pixel_index.x < resolve_info.half_pixel_offset_fill_source.x) {
     pixel_1 = pixel_0;
   }
-  // Only 32_32_32_32_FLOAT color format is 128bpp.
+
   uint dest_address =
       XeResolveDestPixelAddress(resolve_info, pixel_index, 4u) >> 4u;
   array_buffer_store_xe(

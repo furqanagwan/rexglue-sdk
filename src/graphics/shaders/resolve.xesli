@@ -26,14 +26,14 @@ push_const_begin_xe(b0, space0)
   #ifdef XE_RESOLVE_CLEAR
     uint2_xe xe_resolve_clear_value;
   #endif
-  // xe::gpu::draw_util::ResolveEdramInfo.
+
   uint xe_resolve_edram_info;
-  // xe::gpu::draw_util::ResolveCoordinateInfo.
+
   uint xe_resolve_coordinate_info;
   #ifndef XE_RESOLVE_CLEAR
-    // Sanitized RB_COPY_DEST_INFO.
+
     uint xe_resolve_dest_info;
-    // xe::gpu::draw_util::ResolveCopyDestCoordinateInfo.
+
     uint xe_resolve_dest_coordinate_info;
     #ifndef XE_RESOLVE_RESOLUTION_SCALED
       uint xe_resolve_dest_base;
@@ -61,7 +61,7 @@ push_const_end_xe
 struct XeResolveInfo {
   uint edram_pitch_tiles;
   uint edram_msaa_samples;
-  // Always false for non-one-to-one resolve.
+
   bool edram_is_depth;
   uint edram_base_tiles;
   uint edram_format;
@@ -85,7 +85,7 @@ struct XeResolveInfo {
     uint2_xe dest_xy_offset_scaled;
     uint sample_select;
     uint dest_base;
-  #endif  // XE_RESOLVE_CLEAR
+  #endif
 };
 
 XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
@@ -150,7 +150,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
     #else
       resolve_info.dest_base = 0;
     #endif
-  #endif  // XE_RESOLVE_CLEAR
+  #endif
   return resolve_info;
 }
 
@@ -180,8 +180,8 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
     return address;
   }
 
-  // Offset of the beginning of the odd R32G32/R32G32B32A32 store address from
-  // the address of the even store.
+
+
   uint XeResolveDestRightConsecutiveBlocksOffset(uint x, uint bpp_log2,
                                                  uint2_xe resolution_scale) {
     #ifdef XE_RESOLVE_RESOLUTION_SCALED
@@ -212,10 +212,10 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
     return sample_index;
   }
 
-  // Int address of the first needed sample for non-averaging copies.
-  // Horizontally adjacent pixels of a multisampled source don't have a fixed
-  // address stride in the sample layout (see XeEdramOffsetInts), thus each
-  // pixel computes its own address.
+
+
+
+
   uint XeResolveCopySourceFirstSampleAddressInts(XeResolveInfo resolve_info,
                                                  uint2_xe pixel_index) {
     return XeEdramOffsetInts(
@@ -230,8 +230,8 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         resolve_info.resolution_scale);
   }
 
-  // Int address for a given pixel and sample pair, per pixel for the same
-  // reason as above.
+
+
   uint XeResolveColorCopySourceSampleAddressInts(
       XeResolveInfo resolve_info, uint2_xe pixel_index, uint sample_index) {
     return XeEdramOffsetInts(
@@ -245,9 +245,9 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         resolve_info.resolution_scale);
   }
 
-  // Not using arrays for multi-pixel function arguments because indexable temps
-  // are generated for them by FXC, that may be compiled unoptimally by the host
-  // GPU driver.
+
+
+
 
   void XeResolveUnpack32bpp2Samples(
       uint2_xe packed, uint format, out_param_xe(float4_xe, sample_0),
@@ -277,7 +277,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         sample_1 = float4_xe(unpack_half_2x16_xe(packed.y), 0.0f, 0.0f);
         break;
       default:
-        // Treat as 32_FLOAT.
+
         sample_0 = float2_xe(uint_bits_to_float_xe(packed.x), 0.0f).xyyy;
         sample_1 = float2_xe(uint_bits_to_float_xe(packed.y), 0.0f).xyyy;
         break;
@@ -323,7 +323,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         sample_3 = float4_xe(unpack_half_2x16_xe(packed.w), 0.0f, 0.0f);
         break;
       default:
-        // Treat as 32_FLOAT.
+
         sample_0 = float2_xe(uint_bits_to_float_xe(packed.x), 0.0f).xyyy;
         sample_1 = float2_xe(uint_bits_to_float_xe(packed.y), 0.0f).xyyy;
         sample_2 = float2_xe(uint_bits_to_float_xe(packed.z), 0.0f).xyyy;
@@ -332,11 +332,11 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
     }
   }
 
-  // L8 and A8 both use GPUTEXTUREFORMAT_8 (XGCopySurface, the software copy,
-  // combines the source swizzle with the inverse destination one). Resolve
-  // maps L8 to LOW_RED and A8 to LOW_BLUE, so for k_8 destinations the swap
-  // selects alpha rather than blue; titles resolve opacity planes from the
-  // alpha of 8_8_8_8_GAMMA targets this way (xenia-canary 2b3f0cb456).
+
+
+
+
+
   void XeResolveUnpack32bpp8ScalarSamples(
       uint4_xe packed_0123, uint4_xe packed_4567, uint format,
       bool source_blue, bool source_alpha,
@@ -354,7 +354,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
       case kXenosColorRenderTargetFormat_2_10_10_10_FLOAT:
       case kXenosColorRenderTargetFormat_2_10_10_10_FLOAT_AS_16_16_16_16:
         dont_flatten_xe if (source_alpha) {
-          // 2-bit unsigned repeating fraction alpha, also with 7e3 RGB.
+
           samples_0123 = float4_xe(packed_0123 >> 30u) * (1.0f / 3.0f);
           samples_4567 = float4_xe(packed_4567 >> 30u) * (1.0f / 3.0f);
         } else {
@@ -373,7 +373,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         break;
       case kXenosColorRenderTargetFormat_16_16:
         dont_flatten_xe if (source_alpha) {
-          // Missing alpha is 1.0 before MSAA averaging and exponent bias.
+
           samples_0123 = float_x4_xe(1.0f);
           samples_4567 = float_x4_xe(1.0f);
         } else {
@@ -397,7 +397,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         }
         break;
       default:
-        // Treat as 32_FLOAT.
+
         dont_flatten_xe if (source_alpha) {
           samples_0123 = float_x4_xe(1.0f);
           samples_4567 = float_x4_xe(1.0f);
@@ -424,7 +424,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         sample_1.zw = unpack_half_2x16_xe(packed.w);
         break;
       default:
-        // Treat as 32_32_FLOAT.
+
         sample_0 = float4_xe(uint_bits_to_float_xe(packed.xy), 0.0f, 0.0f);
         sample_1 = float4_xe(uint_bits_to_float_xe(packed.zw), 0.0f, 0.0f);
         break;
@@ -453,7 +453,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         sample_3.zw = unpack_half_2x16_xe(packed_23.w);
         break;
       default:
-        // Treat as 32_32_FLOAT.
+
         sample_0 = float4_xe(uint_bits_to_float_xe(packed_01.xy), 0.0f, 0.0f);
         sample_1 = float4_xe(uint_bits_to_float_xe(packed_01.zw), 0.0f, 0.0f);
         sample_2 = float4_xe(uint_bits_to_float_xe(packed_23.xy), 0.0f, 0.0f);
@@ -462,8 +462,8 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
     }
   }
 
-  // The caller selects the second dword for blue or alpha. Alpha is the high
-  // half of it in the 16-bit component formats.
+
+
   void XeResolveUnpack64bpp8ScalarSamples(
       uint4_xe packed_0123, uint4_xe packed_4567, uint format,
       bool source_alpha, out_param_xe(float4_xe, samples_0123),
@@ -496,9 +496,9 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         }
         break;
       default:
-        // Treat as 32_32_FLOAT.
+
         dont_flatten_xe if (source_alpha) {
-          // Missing alpha is 1.0 before MSAA averaging and exponent bias.
+
           samples_0123 = float_x4_xe(1.0f);
           samples_4567 = float_x4_xe(1.0f);
         } else {
@@ -565,7 +565,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
       }
     }
 
-    // For blue or alpha from 64bpp, pre-add 1 to the addresses.
+
     void XeResolveLoad8ScalarPixelSamplesFromRaw(
         param_uint_vector_buffer_xe(xe_resolve_edram)
         param_next_after_uint_vector_buffer_xe
@@ -624,12 +624,12 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
               resolve_info, pixel_index + uint2_xe(3u, 0u), sample_index));
     }
 
-    // 8_8_8_8_GAMMA stores 10-bit linear color through the 8-bit PWL curve
-    // (host sRGB isn't a substitute). Hardware resolve decodes it to linear
-    // before MSAA averaging and format conversion, and every destination gets
-    // the linear values: a title keeping the encoded bytes re-aliases the
-    // surface as 8_8_8_8 before resolving. Averaging the encoded bytes left
-    // titles overexposed (xenia-canary d119505289, 2ddc5ef737, fc48d37cdc).
+
+
+
+
+
+
     float XePWLGammaToLinear(float gamma) {
       gamma = saturate_xe(gamma);
       float scale;
@@ -668,7 +668,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
              kXenosColorRenderTargetFormat_8_8_8_8_GAMMA;
     }
 
-    // RGB only: 8_8_8_8_GAMMA alpha is ordinary fixed data.
+
     void XeResolveDecodePWLGammaSource(XeResolveInfo resolve_info,
                                        inout_param_xe(float4_xe, pixel)) {
       dont_flatten_xe if (XeResolveSourceUsesPWLGamma(resolve_info)) {
@@ -678,8 +678,8 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
       }
     }
 
-    // Samples averaged for kXenosCopySampleSelect_01/_23/_0123: the first
-    // sample and first | 1 (the horizontal neighbor), then 2 and 3.
+
+
     void XeResolveLoad2RGBAColors(
         param_uint_vector_buffer_xe(xe_resolve_edram)
         param_next_after_uint_vector_buffer_xe
@@ -867,16 +867,16 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
         XeResolveInfo resolve_info, uint2_xe pixel_index,
         out_param_xe(float4_xe, pixels_0123),
         out_param_xe(float4_xe, pixels_4567)) {
-      // D3D maps A8 to k_8 with LOW_BLUE. k_8_A and k_8_B are still unknown,
-      // so they keep the red/blue swap.
+
+
       bool source_alpha =
           resolve_info.dest_swap && resolve_info.dest_format == kXenosFormat_8;
       bool source_blue = resolve_info.dest_swap && !source_alpha;
-      // The second dword of each 64bpp pixel holds blue and alpha.
+
       uint address_adjustment_ints = (source_blue || source_alpha)
                                          ? resolve_info.edram_format_ints_log2
                                          : 0u;
-      // The PWL encoding only covers RGB.
+
       bool decode_pwl_gamma =
           XeResolveSourceUsesPWLGamma(resolve_info) && !source_alpha;
       uint first_sample = XeResolveFirstSampleIndex(resolve_info.sample_select);
@@ -924,7 +924,7 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
       pixels_0123 *= exp_bias;
       pixels_4567 *= exp_bias;
     }
-  #endif  // XE_RESOLVE_COPY_EDRAM_IS_UINT_VECTOR_BUFFER
+  #endif
 
   uint4_xe XeResolveSwapRedBlue_8_8_8_8(uint4_xe pixels) {
     return (pixels & ~0xFF00FFu) | ((pixels & 0xFFu) << 16u) |
@@ -973,4 +973,4 @@ XeResolveInfo XeResolveGetInfo(param_push_consts_xe) {
   }
 #endif
 
-#endif  // XENIA_GPU_SHADERS_RESOLVE_XESLI_
+#endif
