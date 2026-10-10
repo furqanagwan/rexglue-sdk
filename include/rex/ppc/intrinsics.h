@@ -30,12 +30,6 @@
 
 namespace rex::ppc {
 
-//=============================================================================
-// Vector Load/Store Mask Tables
-//=============================================================================
-// These tables are used for lvlx/lvrx (load vector left/right) and
-// stvlx/stvrx (store vector left/right) instructions.
-
 inline uint8_t VectorMaskL[] = {
     0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00,
     0xFF, 0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
@@ -112,38 +106,29 @@ inline uint8_t VectorShiftTableR[] = {
     0x10, 0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
 };
 
-//=============================================================================
-// SIMD Helper Functions
-//=============================================================================
-
-// Unsigned 32-bit saturating add
 inline simde__m128i simde_mm_adds_epu32(simde__m128i a, simde__m128i b) {
   return simde_mm_add_epi32(
       a, simde_mm_min_epu32(simde_mm_xor_si128(a, simde_mm_cmpeq_epi32(a, a)), b));
 }
 
-// Signed 8-bit average (rounds towards zero)
 inline simde__m128i simde_mm_avg_epi8(simde__m128i a, simde__m128i b) {
   simde__m128i c = simde_mm_set1_epi8(char(128));
   return simde_mm_xor_si128(c,
                             simde_mm_avg_epu8(simde_mm_xor_si128(c, a), simde_mm_xor_si128(c, b)));
 }
 
-// Signed 16-bit average
 inline simde__m128i simde_mm_avg_epi16(simde__m128i a, simde__m128i b) {
   simde__m128i c = simde_mm_set1_epi16(short(32768));
   return simde_mm_xor_si128(c,
                             simde_mm_avg_epu16(simde_mm_xor_si128(c, a), simde_mm_xor_si128(c, b)));
 }
 
-// Signed 32-bit average
 inline simde__m128i simde_mm_avg_epi32(simde__m128i a, simde__m128i b) {
   simde__m128i sum = simde_mm_add_epi32(simde_mm_srai_epi32(a, 1), simde_mm_srai_epi32(b, 1));
   return simde_mm_add_epi32(sum,
                             simde_mm_and_si128(simde_mm_or_si128(a, b), simde_mm_set1_epi32(1)));
 }
 
-// Convert unsigned 32-bit integers to floats
 inline simde__m128 simde_mm_cvtepu32_ps_(simde__m128i src1) {
   simde__m128i xmm1 = simde_mm_add_epi32(src1, simde_mm_set1_epi32(127));
   simde__m128i xmm0 = simde_mm_slli_epi32(src1, 31 - 8);
@@ -155,7 +140,6 @@ inline simde__m128 simde_mm_cvtepu32_ps_(simde__m128i src1) {
   return simde_mm_blendv_ps(xmm2, simde_mm_castsi128_ps(xmm0), simde_mm_castsi128_ps(src1));
 }
 
-// Permute bytes from two vectors based on control vector
 inline simde__m128i simde_mm_perm_epi8_(simde__m128i a, simde__m128i b, simde__m128i c) {
   simde__m128i d = simde_mm_set1_epi8(0xF);
   simde__m128i e = simde_mm_sub_epi8(d, simde_mm_and_si128(c, d));
@@ -163,19 +147,16 @@ inline simde__m128i simde_mm_perm_epi8_(simde__m128i a, simde__m128i b, simde__m
                               simde_mm_slli_epi32(c, 3));
 }
 
-// Unsigned 8-bit compare greater than
 inline simde__m128i simde_mm_cmpgt_epu8(simde__m128i a, simde__m128i b) {
   simde__m128i c = simde_mm_set1_epi8(char(128));
   return simde_mm_cmpgt_epi8(simde_mm_xor_si128(a, c), simde_mm_xor_si128(b, c));
 }
 
-// Unsigned 16-bit compare greater than
 inline simde__m128i simde_mm_cmpgt_epu16(simde__m128i a, simde__m128i b) {
   simde__m128i c = simde_mm_set1_epi16(short(32768));
   return simde_mm_cmpgt_epi16(simde_mm_xor_si128(a, c), simde_mm_xor_si128(b, c));
 }
 
-// Vector Convert To Signed Fixed-Point Word Saturate
 inline simde__m128i simde_mm_vctsxs(simde__m128 src1) {
   simde__m128 xmm2 = simde_mm_cmpunord_ps(src1, src1);
   simde__m128i xmm0 = simde_mm_cvttps_epi32(src1);
@@ -187,32 +168,24 @@ inline simde__m128i simde_mm_vctsxs(simde__m128 src1) {
   return simde_mm_andnot_si128(simde_mm_castps_si128(xmm2), simde_mm_castps_si128(dest));
 }
 
-// Vector Convert To Unsigned Fixed-Point Word Saturate
-// Convert float to unsigned int with saturation to [0, UINT_MAX]
-// NaN -> 0, negative -> 0, > UINT_MAX -> UINT_MAX
 inline simde__m128i simde_mm_vctuxs(simde__m128 src1) {
   simde__m128 nan_mask = simde_mm_cmpunord_ps(src1, src1);
   simde__m128 neg_mask = simde_mm_cmplt_ps(src1, simde_mm_setzero_ps());
-  simde__m128 max_val = simde_mm_set1_ps(4294967295.0f);  // UINT_MAX as float
+  simde__m128 max_val = simde_mm_set1_ps(4294967295.0f);
   simde__m128 overflow_mask = simde_mm_cmpge_ps(src1, max_val);
 
-  // Clamp to [0, UINT_MAX]
   simde__m128 clamped = simde_mm_max_ps(src1, simde_mm_setzero_ps());
   clamped = simde_mm_min_ps(clamped, max_val);
 
-  // Convert to signed int first (will handle values up to INT_MAX correctly)
-  // For values > INT_MAX, we need special handling
-  simde__m128 half_range = simde_mm_set1_ps(2147483648.0f);  // 2^31
+  simde__m128 half_range = simde_mm_set1_ps(2147483648.0f);
   simde__m128 high_bit_mask = simde_mm_cmpge_ps(clamped, half_range);
 
-  // For values >= 2^31, subtract 2^31 before conversion and add it back after
   simde__m128 adjusted = simde_mm_sub_ps(clamped, simde_mm_and_ps(high_bit_mask, half_range));
   simde__m128i low_bits = simde_mm_cvttps_epi32(adjusted);
   simde__m128i high_bit = simde_mm_and_si128(simde_mm_castps_si128(high_bit_mask),
                                              simde_mm_set1_epi32(int(0x80000000u)));
   simde__m128i result = simde_mm_or_si128(low_bits, high_bit);
 
-  // Apply saturation: NaN -> 0, overflow -> UINT_MAX
   result = simde_mm_andnot_si128(simde_mm_castps_si128(nan_mask), result);
   result = simde_mm_andnot_si128(simde_mm_castps_si128(neg_mask), result);
   result = simde_mm_or_si128(
@@ -222,10 +195,6 @@ inline simde__m128i simde_mm_vctuxs(simde__m128 src1) {
   return result;
 }
 
-// vmsum3fp128/vmsum4fp128: the dot product of the elements in kMask's high
-// nibble, in every element (as dpps). Hardware adds the products before
-// flushing, so a sum that flushes to zero keeps its sign; dpps flushes the
-// products first and adds them to +0.
 template <int kMask>
 inline simde__m128 simde_mm_vmsumfp(simde__m128 a, simde__m128 b) {
   simde__m128 result = simde_mm_dp_ps(a, b, kMask);
@@ -247,7 +216,6 @@ inline simde__m128 simde_mm_vmsumfp(simde__m128 a, simde__m128 b) {
   return result;
 }
 
-// Vector Shift Right
 inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b) {
   b = simde_mm_srli_epi64(simde_mm_slli_epi64(b, 61), 61);
   return simde_mm_castps_si128(simde_mm_insert_ps(
@@ -255,18 +223,14 @@ inline simde__m128i simde_mm_vsr(simde__m128i a, simde__m128i b) {
       simde_mm_castsi128_ps(simde_mm_srl_epi64(simde_mm_srli_si128(a, 4), b)), 0x10));
 }
 
-// Vector Shift Left - shift entire 128-bit vector left by bits in low 3 bits of b
 inline simde__m128i simde_mm_vsl(simde__m128i a, simde__m128i b) {
-  // On hardware each byte shifts by its own count, taking the bits of the
-  // next lower-addressed byte; the 128-bit shift below is the usual case where
-  // all counts agree (a vspltisb count).
   const simde__m128i counts = simde_mm_and_si128(b, simde_mm_set1_epi8(0x7));
   if (simde_mm_movemask_epi8(simde_mm_cmpeq_epi8(
           counts, simde_mm_shuffle_epi8(counts, simde_mm_setzero_si128()))) != 0xFFFF) {
     alignas(16) uint8_t src[16], count[16], dst[16];
     simde_mm_store_si128((simde__m128i*)src, a);
     simde_mm_store_si128((simde__m128i*)count, counts);
-    // Host byte j is guest byte 15 - j, so the next guest byte is host j - 1.
+
     for (int j = 0; j < 16; ++j) {
       dst[j] = uint8_t((src[j] << count[j]) | (j ? src[j - 1] >> (8 - count[j]) : 0));
     }
@@ -277,38 +241,32 @@ inline simde__m128i simde_mm_vsl(simde__m128i a, simde__m128i b) {
     return a;
 
 #if defined(__x86_64__) || defined(_M_X64)
-  // Split into high and low 64-bit parts
+
   simde__m128i low_shifted = simde_mm_slli_epi64(a, shift);
   simde__m128i high_carry = simde_mm_srli_epi64(a, 64 - shift);
-  // Shift the carry from low qword to high qword position
+
   high_carry = simde_mm_slli_si128(high_carry, 8);
   return simde_mm_or_si128(low_shifted, high_carry);
 #elif defined(__aarch64__) || defined(_M_ARM64)
-  // ARM64 NEON implementation using vld1/vst1 for conversion
+
   uint64_t vals[2];
   uint64_t res[2] = {0, 0};
 
-  // Store simde__m128i to memory
   simde_mm_store_si128((simde__m128i*)vals, a);
 
-  // Load as NEON vector
   uint64x2_t va = vld1q_u64(vals);
 
-  // vshlq_u64 accepts variable shift per lane
   int64x2_t shift_vector = vdupq_n_s64(shift);
   uint64x2_t low_shifted = vshlq_u64(va, shift_vector);
 
-  // NEON vshl uses negative counts for right shifts.
   int64x2_t rshift_vector = vdupq_n_s64(shift - 64);
   uint64x2_t high_carry = vshlq_u64(va, rshift_vector);
 
-  // Combine results
   uint64x2_t result_vec = vdupq_n_u64(0);
   result_vec = vsetq_lane_u64(vgetq_lane_u64(low_shifted, 0), result_vec, 0);
   result_vec =
       vsetq_lane_u64(vgetq_lane_u64(low_shifted, 1) | vgetq_lane_u64(high_carry, 0), result_vec, 1);
 
-  // Store back to memory and reload as simde__m128i
   vst1q_u64(res, result_vec);
   return simde_mm_load_si128((simde__m128i*)res);
 #else
@@ -316,10 +274,6 @@ inline simde__m128i simde_mm_vsl(simde__m128i a, simde__m128i b) {
 #endif
 }
 
-// Vector Shift Left by Octet - shift entire vector left by bytes in bits [121:124] of vB
-// In PPC big-endian byte 15 is at LSB position, which in x86 LE is at index 0
-// Bits 121:124 within the byte are extracted as (byte >> 3) & 0xF
-// PPC left shift = shift towards MSB (lower PPC addresses) = shift towards higher x86 addresses
 inline simde__m128i simde_mm_vslo(simde__m128i a, simde__m128i b) {
   int shift_bytes = (simde_mm_extract_epi8(b, 0) >> 3) & 0xF;
   if (shift_bytes == 0)
@@ -334,7 +288,7 @@ inline simde__m128i simde_mm_vslo(simde__m128i a, simde__m128i b) {
   memcpy(dst + shift_bytes, src, 16 - shift_bytes);
   return simde_mm_load_si128((simde__m128i*)dst);
 #elif defined(__aarch64__) || defined(_M_ARM64)
-  // ARM64 NEON implementation using memory for conversion
+
   uint8_t src[16];
   uint8_t dst[16] = {0};
 
@@ -347,10 +301,6 @@ inline simde__m128i simde_mm_vslo(simde__m128i a, simde__m128i b) {
 #endif
 }
 
-// Vector Shift Right by Octet - shift entire vector right by bytes in bits [121:124] of vB
-// In PPC big-endian byte 15 is at LSB position, which in x86 LE is at index 0
-// Bits 121:124 within the byte are extracted as (byte >> 3) & 0xF
-// PPC right shift = shift towards LSB (higher PPC addresses) = shift towards lower x86 addresses
 inline simde__m128i simde_mm_vsro(simde__m128i a, simde__m128i b) {
   int shift_bytes = (simde_mm_extract_epi8(b, 0) >> 3) & 0xF;
   if (shift_bytes == 0)
@@ -365,7 +315,7 @@ inline simde__m128i simde_mm_vsro(simde__m128i a, simde__m128i b) {
   memcpy(dst, src + shift_bytes, 16 - shift_bytes);
   return simde_mm_load_si128((simde__m128i*)dst);
 #elif defined(__aarch64__) || defined(_M_ARM64)
-  // ARM64 NEON implementation using memory for conversion
+
   uint8_t src[16];
   uint8_t dst[16] = {0};
 
@@ -378,7 +328,6 @@ inline simde__m128i simde_mm_vsro(simde__m128i a, simde__m128i b) {
 #endif
 }
 
-// Variable 16-bit shift left: widen to 32-bit, shift, narrow back
 inline simde__m128i simde_mm_sllv_epi16(simde__m128i a, simde__m128i count) {
   simde__m128i zero = simde_mm_setzero_si128();
   simde__m128i a_lo = simde_mm_unpacklo_epi16(a, zero);
@@ -393,7 +342,6 @@ inline simde__m128i simde_mm_sllv_epi16(simde__m128i a, simde__m128i count) {
   return simde_mm_packus_epi32(r_lo, r_hi);
 }
 
-// Variable 16-bit logical right shift: widen to 32-bit, shift, narrow back
 inline simde__m128i simde_mm_srlv_epi16(simde__m128i a, simde__m128i count) {
   simde__m128i zero = simde_mm_setzero_si128();
   simde__m128i a_lo = simde_mm_unpacklo_epi16(a, zero);
@@ -405,10 +353,9 @@ inline simde__m128i simde_mm_srlv_epi16(simde__m128i a, simde__m128i count) {
   return simde_mm_packus_epi32(r_lo, r_hi);
 }
 
-// Variable 16-bit arithmetic right shift: sign-extend to 32-bit, shift, narrow back
 inline simde__m128i simde_mm_srav_epi16(simde__m128i a, simde__m128i count) {
   simde__m128i zero = simde_mm_setzero_si128();
-  // Sign-extend a: duplicate each 16-bit lane, then arithmetic shift right by 16
+
   simde__m128i a_lo = simde_mm_srai_epi32(simde_mm_unpacklo_epi16(a, a), 16);
   simde__m128i a_hi = simde_mm_srai_epi32(simde_mm_unpackhi_epi16(a, a), 16);
   simde__m128i s_lo = simde_mm_unpacklo_epi16(count, zero);
@@ -418,7 +365,6 @@ inline simde__m128i simde_mm_srav_epi16(simde__m128i a, simde__m128i count) {
   return simde_mm_packs_epi32(r_lo, r_hi);
 }
 
-// Variable 8-bit shift left: widen to 16-bit, shift, narrow back
 inline simde__m128i simde_mm_sllv_epi8(simde__m128i a, simde__m128i count) {
   simde__m128i zero = simde_mm_setzero_si128();
   simde__m128i a_lo = simde_mm_unpacklo_epi8(a, zero);
@@ -433,12 +379,8 @@ inline simde__m128i simde_mm_sllv_epi8(simde__m128i a, simde__m128i count) {
   return simde_mm_packus_epi16(r_lo, r_hi);
 }
 
-}  // namespace rex::ppc
+}
 
-//=============================================================================
-// Global Aliases for Generated Code
-//=============================================================================
-// Vector mask tables accessible from global scope for generated code
 using rex::ppc::VectorMaskL;
 using rex::ppc::VectorMaskR;
 using rex::ppc::VectorShiftTableL;

@@ -7,8 +7,7 @@
 using rex::ppc::NonlocalJumpFrame;
 
 namespace {
-// Keep Catch assertions out of the frames being unwound. This is the same
-// control-flow shape emitted into a recompiled guest caller.
+
 __declspec(noinline) void Deeper(PPCContext& ctx, uint32_t address, int32_t value) {
   struct ScribbleOnUnwind {
     PPCContext& ctx;
@@ -28,7 +27,7 @@ __declspec(noinline) void RoundTrip(PPCContext& ctx, int32_t value) {
   if (setjmp(frame.Save(0x1000, ctx)) == 0) {
     ctx.r3.s64 = 0;
     Deeper(ctx, 0x1000, value);
-    ctx.r15.u64 = 999;  // must never execute
+    ctx.r15.u64 = 999;
   } else
     frame.Restore(ctx);
 }
@@ -44,7 +43,7 @@ __declspec(noinline) void TwoBuffers(PPCContext& ctx) {
   } else
     frame.Restore(ctx);
 }
-}  // namespace
+}
 
 TEST_CASE("Native guest jumps restore state and unwind nested frames", "[ppc][crt-jump]") {
   for (int32_t value : {0, 1, -7, 42}) {

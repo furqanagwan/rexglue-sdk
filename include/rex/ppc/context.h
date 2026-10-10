@@ -25,20 +25,12 @@
 #include <simde/x86/sse.h>
 #include <simde/x86/sse4.1.h>
 
-//=============================================================================
-// Pack/Unpack Constants (NORMPACKED32 - 2:10:10:10 format)
-//=============================================================================
-
 constexpr float kPack2101010_Min10 = std::bit_cast<float>(0x403FFE01u);
 constexpr float kPack2101010_Max10 = std::bit_cast<float>(0x404001FFu);
 constexpr float kPack2101010_Min2 = std::bit_cast<float>(0x40400000u);
 constexpr float kPack2101010_Max2 = std::bit_cast<float>(0x40400003u);
 
 namespace rex::ppc {
-
-//=============================================================================
-// General Purpose Register
-//=============================================================================
 
 union Register {
   int8_t s8;
@@ -53,19 +45,11 @@ union Register {
   double f64;
 };
 
-//=============================================================================
-// Fixed-Point Exception Register (XER)
-//=============================================================================
-
 struct XERRegister {
   uint8_t so;
   uint8_t ov;
   uint8_t ca;
 };
-
-//=============================================================================
-// Condition Register (CR) Field
-//=============================================================================
 
 struct CRRegister {
   uint8_t lt;
@@ -117,10 +101,6 @@ struct CRRegister {
   }
 };
 
-//=============================================================================
-// Vector Register (128-bit)
-//=============================================================================
-
 union alignas(0x10) VRegister {
   int8_t s8[16];
   uint8_t u8[16];
@@ -134,10 +114,6 @@ union alignas(0x10) VRegister {
   double f64[2];
 };
 
-//=============================================================================
-// Floating-Point Status and Control Register (FPSCR)
-//=============================================================================
-
 constexpr uint32_t kRoundNearest = 0x00;
 constexpr uint32_t kRoundTowardZero = 0x01;
 constexpr uint32_t kRoundUp = 0x02;
@@ -146,8 +122,7 @@ constexpr uint32_t kRoundMask = 0x03;
 
 struct FPSCRRegister {
   uint32_t csr;
-  // FPSCR bits other than RN as the guest last wrote them with mtfsf. Only RN
-  // reaches the host; arithmetic status is accumulated here for mffs/mcrfs.
+
   uint32_t guest_bits = 0;
 
   static constexpr uint32_t kFX = 0x80000000;
@@ -191,13 +166,11 @@ struct FPSCRRegister {
   static constexpr size_t RoundMaskVal = Platform::RoundMaskVal;
   static constexpr size_t FlushMask = Platform::FlushMask;
 
-  // Bits the guest owns; the rest is host policy seeded by InitHost.
   static constexpr uint32_t GuestMask = uint32_t(RoundMaskVal) | uint32_t(FlushMask);
 
   inline uint32_t getcsr() noexcept { return Platform::getcsr(); }
   inline void setcsr(uint32_t csr) noexcept { Platform::setcsr(csr); }
 
-  // Restoring the whole word would unmask every FP exception when csr is 0.
   inline void restoreGuestBits(uint32_t saved) noexcept {
     csr = (getcsr() & ~GuestMask) | (saved & GuestMask);
     setcsr(csr);
@@ -215,9 +188,6 @@ struct FPSCRRegister {
     setcsr(csr);
   }
 
-  /// Record exception cause bits produced by a guest floating-point operation.
-  /// FX is set only when an exception flag changes from zero to one; FEX and
-  /// VX are summaries of their enables/cause bits.
   inline void recordExceptions(uint32_t causes) noexcept {
     causes &= kExceptionCauses;
     const uint32_t newly_set = causes & ~guest_bits;
@@ -274,18 +244,6 @@ struct FPSCRRegister {
   }
 };
 
-//=============================================================================
-// Host and guest FP modes
-//=============================================================================
-// Generated code runs with the guest's rounding mode and VMX flush-to-zero in
-// the host control register, and caches it in ctx.fpscr.csr. Host code
-// (kernel exports, XAM, the guide, audio) must not run in that mode, and
-// guest code entered from the host must find its cache true. Each scope
-// writes the register only when the mode differs, and restores it on exit.
-
-/// Host code called from guest code: round to nearest, no flush. On the way
-/// back the guest bits come from `fpscr`, which a guest callback made inside
-/// the host code may have changed.
 struct HostFpScope {
   FPSCRRegister& fpscr;
 
@@ -305,8 +263,6 @@ struct HostFpScope {
   HostFpScope& operator=(const HostFpScope&) = delete;
 };
 
-/// Guest code called from host code: the guest bits of `fpscr` go in, the
-/// host's exception masks stay, and the cache is made to match.
 struct GuestFpScope {
   uint32_t saved;
 
@@ -324,17 +280,13 @@ struct GuestFpScope {
   GuestFpScope& operator=(const GuestFpScope&) = delete;
 };
 
-}  // namespace rex::ppc
+}
 
 using PPCRegister = rex::ppc::Register;
 using PPCXERRegister = rex::ppc::XERRegister;
 using PPCCRRegister = rex::ppc::CRRegister;
 using PPCVRegister = rex::ppc::VRegister;
 using PPCFPSCRRegister = rex::ppc::FPSCRRegister;
-
-//=============================================================================
-// PPCContext Structure
-//=============================================================================
 
 struct alignas(0x40) PPCContext {
   PPCRegister r3;
@@ -374,7 +326,7 @@ struct alignas(0x40) PPCContext {
   PPCRegister ctr;
   PPCXERRegister xer;
   PPCRegister reserved;
-  // The address lwarx/ldarx reserved; all ones when none is held.
+
   uint64_t reserved_address = ~uint64_t(0);
   uint32_t msr = 0x200A000;
   PPCCRRegister cr0;
@@ -386,15 +338,9 @@ struct alignas(0x40) PPCContext {
   PPCCRRegister cr6;
   PPCCRRegister cr7;
   PPCFPSCRRegister fpscr;
-  uint8_t vscr_sat = 0;  // VSCR saturation flag (for vector ops)
-  uint8_t vscr_nj = 1;   // VSCR non-Java mode; Xenon defaults to flushing VMX denormals.
+  uint8_t vscr_sat = 0;
+  uint8_t vscr_nj = 1;
 
-  /**
-   * Last indirect call target address. Set by REX_CALL_INDIRECT_FUNC before
-   * dispatch. Used by the invalid-function trap to report the faulting address.
-   * Unconditional (not guarded by config flags) because ctr may be optimized
-   * to a local variable via REX_CONFIG_CTR_AS_LOCAL.
-   */
   uint32_t last_indirect_target = 0;
 
   PPCRegister f0;
@@ -559,9 +505,6 @@ struct alignas(0x40) PPCContext {
   PPCVRegister v126;
   PPCVRegister v127;
 
-  //--- Non-volatile register save/restore --------
-  // Layout: r14-r31 (144) | f14-f31 (144) | v14-v31 (288) | v64-v127 (1024)
-  //       | cr2-cr4 (12) | fpscr (4).  Total: 1616 bytes.
   static constexpr size_t kNonVolatileSaveSize =
       18 * sizeof(PPCRegister) + 18 * sizeof(PPCRegister) + 18 * sizeof(PPCVRegister) +
       64 * sizeof(PPCVRegister) + 3 * sizeof(PPCCRRegister) + sizeof(PPCFPSCRRegister);

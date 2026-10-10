@@ -1,6 +1,4 @@
-/**
- * Tests for ArgTranslator stack argument support and ImportFunction isolation.
- */
+
 
 #include <cstdint>
 #include <cstring>
@@ -20,7 +18,6 @@ u32 NtOpenFile_entry(mapped_u32 handle_out, u32 desired_access,
 
 using namespace rex::ppc;
 
-// Fake 64KB guest memory block for tests
 alignas(64) static uint8_t g_test_mem[0x10000] = {};
 
 static uint32_t g_share_access = 0;
@@ -40,24 +37,22 @@ TEST_CASE("NtOpenFile keeps ShareAccess in r7 and OpenOptions in r8", "[ppc][ker
   ctx.r4.u64 = 0x200;
   ctx.r5.u64 = 0x300;
   ctx.r6.u64 = 0x400;
-  ctx.r7.u64 = 0x00000003;  // Share read/write.
-  ctx.r8.u64 = 0x00000040;  // FILE_NON_DIRECTORY_FILE.
+  ctx.r7.u64 = 0x00000003;
+  ctx.r8.u64 = 0x00000040;
 
   HostToGuestFunction<&CaptureNtOpenFileRegisters>(ctx, g_test_mem);
   CHECK(g_share_access == 0x00000003);
   CHECK(g_open_options == 0x00000040);
   CHECK(ctx.r3.u64 == 0x1234);
 
-  // Link and invoke the real six-argument export. A five-argument definition
-  // cannot satisfy this call, even if the generic translator above works.
   ctx.r3.u64 = 0;
   ctx.r4.u64 = 0;
-  ctx.r5.u64 = 0;  // Invalid object attributes are rejected before file I/O.
+  ctx.r5.u64 = 0;
   ctx.r6.u64 = 0;
   ctx.r7.u64 = 0x00000003;
   ctx.r8.u64 = 0x00000040;
   HostToGuestFunction<&rex::kernel::xboxkrnl::NtOpenFile_entry>(ctx, g_test_mem);
-  CHECK(ctx.r3.u64 == 0xC000000Du);  // X_STATUS_INVALID_PARAMETER.
+  CHECK(ctx.r3.u64 == 0xC000000Du);
 }
 
 TEST_CASE("SetIntegerArgumentValue writes stack args for index > 7", "[ppc][arg_translator]") {

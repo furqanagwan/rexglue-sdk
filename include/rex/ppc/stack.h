@@ -23,12 +23,6 @@
 
 namespace rex::ppc {
 
-//=============================================================================
-// Stack bounds helper
-//=============================================================================
-
-/// Read stack_end_ptr from KPCR at r13 + 0x74.
-/// Returns 0 if r13 is not set (e.g. in unit tests without a live thread).
 inline uint32_t stack_limit_from_pcr(PPCContext& ctx, uint8_t* base) {
   if (ctx.r13.u32 == 0)
     return 0;
@@ -45,17 +39,10 @@ inline void stack_bounds_check(PPCContext& ctx, uint8_t* base, uint32_t new_r1) 
   }
 }
 
-// note(tomc): PPC64 ABI requires 16-byte frame alignment, but r1 is already frame-aligned
-// on entry; individual pushes round to 8 bytes to maintain doubleword alignment.
 inline constexpr uint32_t stack_align(uint32_t size) {
   return (size + 7u) & ~7u;
 }
 
-//=============================================================================
-// Core push/pop (explicit ctx/base)
-//=============================================================================
-
-/// Push a byte-swapped scalar onto the guest stack.
 template <typename T>
   requires std::is_arithmetic_v<T>
 inline uint32_t stack_push(PPCContext& ctx, uint8_t* base, T value) {
@@ -64,7 +51,6 @@ inline uint32_t stack_push(PPCContext& ctx, uint8_t* base, T value) {
   stack_bounds_check(ctx, base, new_r1);
   ctx.r1.u32 = new_r1;
 
-  // Byte-swap and write
   T swapped;
   if constexpr (sizeof(T) == 1) {
     swapped = value;
@@ -88,7 +74,6 @@ inline uint32_t stack_push(PPCContext& ctx, uint8_t* base, T value) {
   return new_r1;
 }
 
-/// Push a NUL-terminated string onto the guest stack (no byte-swap, raw bytes).
 inline uint32_t stack_push_string(PPCContext& ctx, uint8_t* base, const char* str) {
   uint32_t len = static_cast<uint32_t>(std::strlen(str)) + 1;
   uint32_t alloc = stack_align(len);
@@ -99,7 +84,6 @@ inline uint32_t stack_push_string(PPCContext& ctx, uint8_t* base, const char* st
   return new_r1;
 }
 
-/// Push raw bytes onto the guest stack (no byte-swap).
 inline uint32_t stack_push(PPCContext& ctx, uint8_t* base, const void* data, uint32_t len) {
   uint32_t alloc = stack_align(len);
   uint32_t new_r1 = ctx.r1.u32 - alloc;
@@ -109,16 +93,10 @@ inline uint32_t stack_push(PPCContext& ctx, uint8_t* base, const void* data, uin
   return new_r1;
 }
 
-/// Pop bytes from the guest stack.
 inline void stack_pop(PPCContext& ctx, uint32_t size) {
   ctx.r1.u32 += stack_align(size);
 }
 
-//=============================================================================
-// Scope guard
-//=============================================================================
-
-/// RAII guard that saves r1 on construction and restores on destruction.
 class stack_guard {
   PPCContext& ctx_;
   uint32_t saved_r1_;
@@ -132,10 +110,6 @@ class stack_guard {
   stack_guard& operator=(const stack_guard&) = delete;
 };
 
-//=============================================================================
-// Implicit ctx/base overloads (use current thread context)
-//=============================================================================
-
 namespace detail {
 inline PPCContext& current_ctx() {
   return *rex::runtime::ThreadState::Get()->context();
@@ -143,7 +117,7 @@ inline PPCContext& current_ctx() {
 inline uint8_t* current_base() {
   return rex::system::kernel_state()->memory()->virtual_membase();
 }
-}  // namespace detail
+}
 
 template <typename T>
   requires std::is_arithmetic_v<T>
@@ -163,4 +137,4 @@ inline void stack_pop(uint32_t size) {
   stack_pop(detail::current_ctx(), size);
 }
 
-}  // namespace rex::ppc
+}
