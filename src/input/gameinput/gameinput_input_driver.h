@@ -17,16 +17,12 @@
 
 #include "../ble_battery.h"
 
-// The GDK headers need the Windows headers first.
 #include <windows.h>
 
 #include <GameInput.h>
 
 namespace rex::input::gameinput {
 
-// Gamepads through GameInput (GameInputKindGamepad). The runtime DLL is loaded
-// at Setup, so a machine without GameInput gets a logged diagnostic and the
-// caller falls back to another driver instead of failing to start.
 class GameInputDriver final : public InputDriver {
  public:
   explicit GameInputDriver(rex::ui::Window* window, size_t window_z_order);
@@ -43,8 +39,6 @@ class GameInputDriver final : public InputDriver {
                               X_INPUT_KEYSTROKE* out_keystroke) override;
   bool GetDeviceBattery(DeviceId id, PadBattery* out) override;
 
-  /// Connected pads with this USB vendor and product ID, for the XInput
-  /// supplement to skip.
   size_t CountDevices(uint16_t vendor_id, uint16_t product_id);
 
  private:
@@ -53,8 +47,6 @@ class GameInputDriver final : public InputDriver {
                                       GameInputDeviceStatus current,
                                       GameInputDeviceStatus previous);
 
-  // All require mutex_. ActiveLocked reads is_active() and applies a focus
-  // change to the motors; PollLocked stores the device's current reading.
   bool ActiveLocked();
   void PollLocked(DeviceId id);
   void ApplyRumbleLocked(const void* host_device, const Rumble& rumble);
@@ -64,9 +56,9 @@ class GameInputDriver final : public InputDriver {
   IGameInput* game_input_ = nullptr;
   GameInputCallbackToken device_token_ = 0;
   GamepadDevices devices_;
-  // Connected devices, each holding one reference; keyed like devices_.
+
   std::unordered_map<const void*, IGameInputDevice*> host_devices_;
   BleBatteryMonitor ble_battery_;
 };
 
-}  // namespace rex::input::gameinput
+}

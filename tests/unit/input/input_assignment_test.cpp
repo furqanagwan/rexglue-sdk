@@ -12,8 +12,6 @@
 #include <rex/input/device_assignment.h>
 #include <rex/input/input_system.h>
 
-// The X_STATUS_* / X_ERROR_* macros cast through these unqualified, so
-// FakeDriver cannot match the base class signatures without them.
 using rex::X_RESULT;
 using rex::X_STATUS;
 
@@ -46,7 +44,6 @@ std::vector<DeviceId> For(const DeviceAssignment& a, uint32_t user) {
   return out;
 }
 
-/// Exercises assignment with no driver, window, or OS behind it.
 class FakeDriver : public InputDriver {
  public:
   FakeDriver() : InputDriver(nullptr, 0) {}
@@ -92,7 +89,7 @@ class FakeDriver : public InputDriver {
       return X_ERROR_DEVICE_NOT_CONNECTED;
     }
     *out = {};
-    // Stamp the id so the test can tell which device answered.
+
     out->sub_type = static_cast<uint8_t>(id);
     return X_ERROR_SUCCESS;
   }
@@ -128,7 +125,7 @@ std::unique_ptr<InputSystem> SharedSystem(FakeDriver** out_driver) {
   return system;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Concurrent input polls serialize device refresh", "[input]") {
   class ConcurrentDriver final : public FakeDriver {
@@ -253,7 +250,6 @@ TEST_CASE("A reconnected pad comes back to guest user 0", "[input]") {
   X_INPUT_STATE state = {};
   REQUIRE(system->GetState(0, &state) == X_ERROR_SUCCESS);
 
-  // Replugging arrives as a new device id, not as the old one coming back.
   driver->Remove(1);
   driver->Add(2);
   driver->SetButtons(2, X_INPUT_GAMEPAD_B);
@@ -268,7 +264,6 @@ TEST_CASE("A synthetic device does not push the first pad off guest user 0", "[i
   system->AddDriver(std::move(owned));
   system->SetDeviceAssignment(std::make_unique<SlotAssignment>());
 
-  // The NOP stand-in is always present and enumerates before any pad connects.
   driver->Add(1, true);
   X_INPUT_STATE state = {};
   REQUIRE(system->GetState(0, &state) == X_ERROR_SUCCESS);

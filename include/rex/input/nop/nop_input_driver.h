@@ -30,4 +30,4 @@ class NopInputDriver final : public InputDriver {
                               X_INPUT_KEYSTROKE* out_keystroke) override;
 };
 
-}  // namespace rex::input::nop
+}

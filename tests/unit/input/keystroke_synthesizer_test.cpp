@@ -30,7 +30,7 @@ Event Next(KeystrokeSynthesizer& s, const X_INPUT_GAMEPAD& pad, uint64_t now, bo
   return {result, uint16_t(k.virtual_key), uint16_t(k.flags)};
 }
 
-}  // namespace
+}
 
 TEST_CASE("Keystrokes report one edge per call, key-ups first", "[input][keystroke]") {
   KeystrokeSynthesizer s;
@@ -44,7 +44,6 @@ TEST_CASE("Keystrokes report one edge per call, key-ups first", "[input][keystro
   CHECK(e.flags == X_INPUT_KEYSTROKE_KEYDOWN);
   CHECK(Next(s, pad, 10).result == X_ERROR_EMPTY);
 
-  // Release A and press B together: the release comes first.
   pad.buttons = X_INPUT_GAMEPAD_B;
   e = Next(s, pad, 20);
   CHECK(e.vk == uint16_t(VirtualKey::kXInputPadA));
@@ -78,7 +77,7 @@ TEST_CASE("Analog inputs become virtual keys past their thresholds", "[input][ke
 
   pad = {};
   pad.thumb_lx = -32768;
-  pad.thumb_ly = 32767;  // up-left is its own key, not up plus left
+  pad.thumb_ly = 32767;
   CHECK(KeystrokeSynthesizer::AnalogToKeyfield(pad) == (uint64_t(1) << 22));
   pad = {};
   pad.thumb_ry = -32768;
@@ -95,6 +94,6 @@ TEST_CASE("Inactive input releases every held key", "[input][keystroke]") {
   CHECK(Next(s, pad, 0, false).flags == X_INPUT_KEYSTROKE_KEYUP);
   CHECK(Next(s, pad, 0, false).flags == X_INPUT_KEYSTROKE_KEYUP);
   CHECK(Next(s, pad, 0, false).result == X_ERROR_EMPTY);
-  // Back in focus, still held: key-downs again.
+
   CHECK(Next(s, pad, 10).flags == X_INPUT_KEYSTROKE_KEYDOWN);
 }

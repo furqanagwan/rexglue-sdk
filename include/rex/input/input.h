@@ -15,7 +15,6 @@
 
 namespace rex::input {
 
-// XInput's published thresholds.
 constexpr int32_t X_INPUT_GAMEPAD_LEFT_THUMB_DEADZONE = 7849;
 constexpr int32_t X_INPUT_GAMEPAD_RIGHT_THUMB_DEADZONE = 8689;
 constexpr uint8_t X_INPUT_GAMEPAD_TRIGGER_THRESHOLD = 30;
@@ -75,8 +74,6 @@ enum X_INPUT_GAMEPAD_BUTTON {
   X_INPUT_GAMEPAD_Y = 0x8000,
 };
 
-// For VK_PAD, use ui::VirtualKey.
-
 enum X_INPUT_KEYSTROKE_FLAGS {
   X_INPUT_KEYSTROKE_KEYDOWN = 0x0001,
   X_INPUT_KEYSTROKE_KEYUP = 0x0002,
@@ -119,7 +116,6 @@ struct X_INPUT_CAPABILITIES {
 };
 static_assert_size(X_INPUT_CAPABILITIES, sizeof(X_INPUT_GAMEPAD) + sizeof(X_INPUT_VIBRATION) + 4);
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinput_keystroke(v=vs.85).aspx
 struct X_INPUT_KEYSTROKE {
   be<uint16_t> virtual_key;
   be<uint16_t> unicode;
@@ -129,4 +125,4 @@ struct X_INPUT_KEYSTROKE {
 };
 static_assert_size(X_INPUT_KEYSTROKE, 8);
 
-}  // namespace rex::input
+}

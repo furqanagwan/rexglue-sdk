@@ -22,12 +22,8 @@ namespace rex::input::gameinput {
 
 namespace {
 
-// How long teardown waits for a callback that is already running.
 constexpr uint64_t kUnregisterTimeoutUs = 5'000'000;
 
-// Zeroed parameters rather than nullptr: the header allows null, but the
-// installed runtime (inbox GameInput.dll 0.2309, GameInputRedist 3.5.270)
-// dereferences it and crashes.
 void StopRumble(IGameInputDevice* device) {
   GameInputRumbleParams stop = {};
   device->SetRumbleState(&stop);
@@ -52,15 +48,13 @@ std::string DeviceName(IGameInputDevice* device) {
   return fmt::format("GameInput {} gamepad {:04X}:{:04X}", family, info->vendorId, info->productId);
 }
 
-}  // namespace
+}
 
 GameInputDriver::GameInputDriver(rex::ui::Window* window, size_t window_z_order)
     : InputDriver(window, window_z_order) {}
 
 GameInputDriver::~GameInputDriver() {
   if (game_input_) {
-    // Unregister first: a callback in flight must finish before the state it
-    // touches goes away. UnregisterCallback waits for it.
     if (device_token_) {
       game_input_->UnregisterCallback(device_token_, kUnregisterTimeoutUs);
     }
@@ -73,13 +67,9 @@ GameInputDriver::~GameInputDriver() {
     game_input_->Release();
     game_input_ = nullptr;
   }
-  // GameInput.dll stays loaded: its worker threads outlive the last release,
-  // and unloading it under them crashes the process.
 }
 
 X_STATUS GameInputDriver::Setup() {
-  // GameInput.dll ships with Windows and forwards to the GameInput runtime
-  // (GameInputRedist). Loaded here, not linked, so its absence is reported.
   module_ = LoadLibraryW(L"GameInput.dll");
   if (!module_) {
     REXLOG_ERROR(
@@ -108,8 +98,6 @@ X_STATUS GameInputDriver::Setup() {
     return X_STATUS_UNSUCCESSFUL;
   }
 
-  // Blocking enumeration reports every already-connected pad before this
-  // returns, so the first EnumerateDevices sees them.
   hr = game_input_->RegisterDeviceCallback(nullptr, GameInputKindGamepad, GameInputDeviceConnected,
                                            GameInputBlockingEnumeration, this, OnDeviceStatus,
                                            &device_token_);
@@ -121,11 +109,7 @@ X_STATUS GameInputDriver::Setup() {
     module_ = nullptr;
     return X_STATUS_UNSUCCESSFUL;
   }
-  // No guide button: it is not part of GameInputGamepadState, and the
-  // installed runtime (inbox GameInput.dll 0.2309 forwarding to GameInputRedist
-  // 3.5.270) does not take RegisterGuideButtonCallback's documented arguments.
-  // It wrote its callback token through the context argument, over this
-  // object's vtable pointer, and the next virtual call crashed.
+
   REXLOG_INFO("GameInput: driver ready");
   return X_STATUS_SUCCESS;
 }
@@ -163,7 +147,6 @@ void CALLBACK GameInputDriver::OnDeviceStatus(GameInputCallbackToken, void* cont
     self->devices_.Disconnect(key);
     auto it = self->host_devices_.find(key);
     if (it != self->host_devices_.end()) {
-      // A reconnect must not resume the old rumble.
       StopRumble(it->second);
       it->second->Release();
       self->host_devices_.erase(it);
@@ -188,12 +171,11 @@ void GameInputDriver::PollLocked(DeviceId id) {
   }
   IGameInputReading* reading = nullptr;
   if (FAILED(game_input_->GetCurrentReading(GameInputKindGamepad, it->second, &reading))) {
-    // No reading yet: keep the last state (initially an untouched pad).
     return;
   }
   GameInputGamepadState state = {};
   if (reading->GetGamepadState(&state)) {
-    devices_.Update(id, GamepadToXInput(state, /*guide=*/false));
+    devices_.Update(id, GamepadToXInput(state, false));
   }
   reading->Release();
 }
@@ -227,8 +209,8 @@ X_RESULT GameInputDriver::GetDeviceCapabilities(DeviceId id, uint32_t,
     return X_ERROR_BAD_ARGUMENTS;
   }
   std::lock_guard lock(mutex_);
-  // No guide button through GameInput (see Setup).
-  return devices_.GetCapabilities(id, /*guide_button=*/false, out_caps);
+
+  return devices_.GetCapabilities(id, false, out_caps);
 }
 
 X_RESULT GameInputDriver::SetDeviceVibration(DeviceId id, X_INPUT_VIBRATION* vibration) {
@@ -277,8 +259,6 @@ bool GameInputDriver::GetDeviceBattery(DeviceId id, PadBattery* out) {
         int(battery.remainingCapacity / battery.fullChargeCapacity * 100.0f + 0.5f), 0, 100);
   }
   if (out->percent < 0) {
-    // GameInput reports a Bluetooth LE pad wired, with no battery; a battery
-    // service under the pad's IDs says otherwise.
     const GameInputDeviceInfo* info = it->second->GetDeviceInfo();
     const int percent = ble_battery_.Percent(info->vendorId, info->productId);
     if (percent >= 0) {
@@ -301,4 +281,4 @@ size_t GameInputDriver::CountDevices(uint16_t vendor_id, uint16_t product_id) {
   return count;
 }
 
-}  // namespace rex::input::gameinput
+}

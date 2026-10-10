@@ -28,17 +28,12 @@ namespace rex::input {
 
 namespace {
 
-// Battery Service and its Battery Level characteristic.
 constexpr GUID kBatteryService = {
     0x0000180F, 0x0000, 0x1000, {0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB}};
 constexpr USHORT kBatteryLevel = 0x2A19;
 
-// Between device reads of a pad already read once.
 constexpr auto kRefreshInterval = std::chrono::seconds(60);
 
-// The battery service interface of the connected BLE device whose PnP ID
-// carries this USB vendor and product, as in
-// "...#{0000180f-...}_dev_vid&020b05_pid&1c93_rev&0001_<address>#...".
 std::wstring FindBatteryService(uint16_t vendor_id, uint16_t product_id) {
   const std::wstring needle = fmt::format(L"{:04x}_pid&{:04x}_", vendor_id, product_id);
   HDEVINFO set = SetupDiGetClassDevsW(&kBatteryService, nullptr, nullptr,
@@ -72,7 +67,6 @@ std::wstring FindBatteryService(uint16_t vendor_id, uint16_t product_id) {
   return found;
 }
 
-// The Battery Level value, from Windows' cache or from the device, or -1.
 int ReadLevel(HANDLE service, BTH_LE_GATT_CHARACTERISTIC& level, ULONG flags) {
   USHORT size = 0;
   BluetoothGATTGetCharacteristicValue(service, &level, 0, nullptr, &size, flags);
@@ -88,8 +82,6 @@ int ReadLevel(HANDLE service, BTH_LE_GATT_CHARACTERISTIC& level, ULONG flags) {
   return value->Data[0];
 }
 
-// Reads the level of one pad: the cached value first, which costs about a
-// millisecond, then the device's, which costs a radio round trip.
 int ReadPercent(uint16_t vendor_id, uint16_t product_id) {
   const std::wstring path = FindBatteryService(vendor_id, product_id);
   if (path.empty()) {
@@ -123,7 +115,7 @@ int ReadPercent(uint16_t vendor_id, uint16_t product_id) {
   return percent;
 }
 
-}  // namespace
+}
 
 BleBatteryMonitor::~BleBatteryMonitor() {
   {
@@ -167,11 +159,11 @@ void BleBatteryMonitor::Run(std::shared_ptr<State> state) {
       }
     }
     lock.lock();
-    // Wakes early when a new pad is asked about.
+
     const size_t known = state->levels.size();
     state->wake.wait_for(lock, kRefreshInterval,
                          [&] { return state->stop || state->levels.size() != known; });
   }
 }
 
-}  // namespace rex::input
+}

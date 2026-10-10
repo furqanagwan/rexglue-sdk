@@ -45,7 +45,7 @@ TEST_CASE("Host menu input never spoofs a pad when no physical backend is availa
     std::string value;
     ~Restore() { REXCVAR_SET(input_backend, value); }
   } restore{original};
-  // Exercise the no-driver branch without depending on attached hardware.
+
   REXCVAR_SET(input_backend, "none");
   auto physical = rex::input::CreatePhysicalInputSystem();
   auto guest = rex::input::CreateDefaultInputSystem(true);
@@ -62,8 +62,6 @@ namespace {
 
 constexpr StickRange kFullRange = {0xFFFF, 0xFFFF};
 
-/// One pad per id, reporting a standard pad's capabilities and recording the
-/// last vibration it was sent.
 class PadDriver : public InputDriver {
  public:
   PadDriver() : InputDriver(nullptr, 0) {}
@@ -167,7 +165,6 @@ struct Harness {
   std::unique_ptr<InputSystem> system;
 };
 
-/// Restores a double cvar when the test ends.
 class ScopedDeadzones {
  public:
   ScopedDeadzones(double left, double right)
@@ -186,23 +183,23 @@ class ScopedDeadzones {
   double right_;
 };
 
-}  // namespace
+}
 
 TEST_CASE("Stick deadzones cut every direction, not only up and right", "[input][deadzone]") {
   using Axes = std::pair<int16_t, int16_t>;
-  // 0.12 of a standard pad's range is about XInput's own 7849.
+
   CHECK(ApplyStickDeadzone(0.12, kFullRange, 5000, 0) == Axes{0, 0});
-  // Upstream compared against the signed projection and let these through.
+
   CHECK(ApplyStickDeadzone(0.12, kFullRange, -5000, 0) == Axes{0, 0});
   CHECK(ApplyStickDeadzone(0.12, kFullRange, 0, -5000) == Axes{0, 0});
   CHECK(ApplyStickDeadzone(0.12, kFullRange, -5000, -5000) == Axes{0, 0});
-  // Past it, the stick is untouched.
+
   CHECK(ApplyStickDeadzone(0.12, kFullRange, -30000, 0) == Axes{-30000, 0});
   CHECK(ApplyStickDeadzone(0.12, kFullRange, 0, 32767) == Axes{0, 32767});
-  // Off, or out of range: leave the stick alone.
+
   CHECK(ApplyStickDeadzone(0.0, kFullRange, -5000, 100) == Axes{-5000, 100});
   CHECK(ApplyStickDeadzone(1.0, kFullRange, -5000, 100) == Axes{-5000, 100});
-  // A device reporting no range gets no deadzone.
+
   CHECK(ApplyStickDeadzone(0.12, StickRange{0, 0}, -5000, 100) == Axes{-5000, 100});
 }
 
@@ -229,14 +226,13 @@ TEST_CASE("Turning vibration off stops the motors the guest asks for", "[input][
   CHECK(uint16_t(h.driver->last_vibration.right_motor_speed) == 20000);
 
   REXCVAR_SET(vibration, false);
-  // Still a success: the pad is there, it just does not buzz.
+
   REQUIRE(h.system->SetState(0, &request) == X_ERROR_SUCCESS);
   CHECK(uint16_t(h.driver->last_vibration.left_motor_speed) == 0);
   CHECK(uint16_t(h.driver->last_vibration.right_motor_speed) == 0);
-  // The guest's own request is not rewritten.
+
   CHECK(uint16_t(request.left_motor_speed) == 40000);
 
-  // Toggling silences a running motor at once.
   REXCVAR_SET(vibration, true);
   REQUIRE(h.system->SetState(0, &request) == X_ERROR_SUCCESS);
   h.system->ToggleVibration();
@@ -251,20 +247,19 @@ TEST_CASE("A dialog holds the pad and the press that closes it", "[input][ui_blo
   CHECK(uint16_t(h.Read().gamepad.buttons) == X_INPUT_GAMEPAD_B);
 
   h.system->AddUIInputBlocker();
-  // The guest sees an untouched pad; the dialog still reads the real one.
+
   CHECK(uint16_t(h.Read().gamepad.buttons) == 0);
   X_INPUT_STATE ui = {};
   REQUIRE(h.system->GetStateForUI(0, &ui) == X_ERROR_SUCCESS);
   CHECK(uint16_t(ui.gamepad.buttons) == X_INPUT_GAMEPAD_B);
 
-  // A is pressed to dismiss, and still held as the dialog closes.
   h.driver->State(1).gamepad.buttons = X_INPUT_GAMEPAD_A;
   h.system->RemoveUIInputBlocker();
   CHECK(uint16_t(h.Read().gamepad.buttons) == 0);
-  // Other buttons pressed meanwhile get through.
+
   h.driver->State(1).gamepad.buttons = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B;
   CHECK(uint16_t(h.Read().gamepad.buttons) == X_INPUT_GAMEPAD_B);
-  // A counts again once released and pressed anew.
+
   h.driver->State(1).gamepad.buttons = 0;
   CHECK(uint16_t(h.Read().gamepad.buttons) == 0);
   h.driver->State(1).gamepad.buttons = X_INPUT_GAMEPAD_A;
@@ -280,7 +275,7 @@ TEST_CASE("Nested dialogs hold input until the last one closes", "[input][ui_blo
   CHECK(int16_t(h.Read().gamepad.thumb_lx) == 0);
   h.system->RemoveUIInputBlocker();
   CHECK(int16_t(h.Read().gamepad.thumb_lx) == 20000);
-  // An unmatched remove does not unbalance the count.
+
   h.system->RemoveUIInputBlocker();
   h.system->AddUIInputBlocker();
   CHECK(int16_t(h.Read().gamepad.thumb_lx) == 0);
@@ -291,14 +286,14 @@ TEST_CASE("Keystrokes made during a dialog stay with the dialog", "[input][ui_bl
   Harness h;
   X_INPUT_KEYSTROKE keystroke = {};
   h.system->AddUIInputBlocker();
-  h.driver->QueueKeystroke(1, 0x5800);  // VK_PAD_A
+  h.driver->QueueKeystroke(1, 0x5800);
   CHECK(h.system->GetKeystroke(0, 0, &keystroke) == X_ERROR_EMPTY);
-  // Ones the guest never polled for are spent when the dialog closes.
+
   h.driver->QueueKeystroke(1, 0x5800);
   h.system->RemoveUIInputBlocker();
   CHECK(h.driver->PendingKeystrokes(1) == 0);
   CHECK(h.system->GetKeystroke(0, 0, &keystroke) == X_ERROR_EMPTY);
-  h.driver->QueueKeystroke(1, 0x5801);  // VK_PAD_B
+  h.driver->QueueKeystroke(1, 0x5801);
   REQUIRE(h.system->GetKeystroke(0, 0, &keystroke) == X_ERROR_SUCCESS);
   CHECK(uint16_t(keystroke.virtual_key) == 0x5801);
 }
@@ -325,7 +320,7 @@ TEST_CASE("Connected users follow pads coming and going", "[input][hotplug]") {
 TEST_CASE("GetBattery reports the power of the user's pad", "[input]") {
   Harness h;
   PadBattery battery;
-  // The driver cannot tell.
+
   CHECK_FALSE(h.system->GetBattery(0, &battery));
 
   h.driver->batteries[static_cast<DeviceId>(1)] = {.wireless = true, .percent = 83};
@@ -334,7 +329,6 @@ TEST_CASE("GetBattery reports the power of the user's pad", "[input]") {
   CHECK(battery.percent == 83);
   CHECK_FALSE(battery.charging);
 
-  // No pad for user 1, and none for user 0 once it is unplugged.
   CHECK_FALSE(h.system->GetBattery(1, &battery));
   h.driver->Remove(1);
   CHECK_FALSE(h.system->GetBattery(0, &battery));

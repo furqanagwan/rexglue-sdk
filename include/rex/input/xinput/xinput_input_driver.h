@@ -22,19 +22,16 @@
 
 namespace rex::input {
 class BleBatteryMonitor;
-}  // namespace rex::input
+}
 
 namespace rex::input::xinput {
 
 class XinputInputDriver final : public InputDriver {
  public:
-  /// How many pads with this USB vendor and product ID another driver
-  /// already serves.
   using ClaimedCount = std::function<size_t(uint16_t vendor_id, uint16_t product_id)>;
 
   explicit XinputInputDriver(rex::ui::Window* window, size_t window_z_order);
-  /// Supplement mode, beside GameInput: lists only the pads the other driver
-  /// does not serve, such as Bluetooth LE pads that GameInput does not see.
+
   XinputInputDriver(rex::ui::Window* window, size_t window_z_order, ClaimedCount claimed);
   ~XinputInputDriver() override;
 
@@ -50,7 +47,6 @@ class XinputInputDriver final : public InputDriver {
   bool GetDeviceBattery(DeviceId id, PadBattery* out) override;
 
  private:
-  /// The slot's USB vendor and product ID (XInputGetCapabilitiesEx).
   bool SlotIds(uint32_t slot, uint16_t* vendor_id, uint16_t* product_id);
 
   ClaimedCount claimed_;
@@ -66,4 +62,4 @@ class XinputInputDriver final : public InputDriver {
   void* XInputGetCapabilitiesEx_ = nullptr;
 };
 
-}  // namespace rex::input::xinput
+}

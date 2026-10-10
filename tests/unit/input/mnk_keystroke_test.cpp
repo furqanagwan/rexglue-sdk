@@ -74,17 +74,17 @@ std::vector<X_INPUT_KEYSTROKE> Drain(MnkInputDriver& driver, DeviceId id) {
   return out;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A bound key produces its pad button's keystrokes", "[input][mnk]") {
-  ScopedMnk cvars(/*mode=*/true, /*passthrough=*/false);
+  ScopedMnk cvars(true, false);
   MnkInputDriver driver(nullptr, 0);
   DeviceId id = Device(driver);
 
   auto down = Key(VirtualKey::kSpace);
   driver.OnKeyDown(down);
-  // OS auto-repeat of a held key is not a second press.
-  auto repeat = Key(VirtualKey::kSpace, /*repeat=*/true);
+
+  auto repeat = Key(VirtualKey::kSpace, true);
   driver.OnKeyDown(repeat);
   auto up = Key(VirtualKey::kSpace);
   driver.OnKeyUp(up);
@@ -96,14 +96,13 @@ TEST_CASE("A bound key produces its pad button's keystrokes", "[input][mnk]") {
   CHECK(uint16_t(keystrokes[1].virtual_key) == uint16_t(VirtualKey::kXInputPadA));
   CHECK(uint16_t(keystrokes[1].flags) == X_INPUT_KEYSTROKE_KEYUP);
 
-  // An unbound key says nothing.
   auto other = Key(VirtualKey::kF7);
   driver.OnKeyDown(other);
   CHECK(Drain(driver, id).empty());
 }
 
 TEST_CASE("Passthrough hands the guest a USB keyboard", "[input][mnk]") {
-  ScopedMnk cvars(/*mode=*/false, /*passthrough=*/true);
+  ScopedMnk cvars(false, true);
   MnkInputDriver driver(nullptr, 0);
   DeviceId id = Device(driver);
 
@@ -111,16 +110,16 @@ TEST_CASE("Passthrough hands the guest a USB keyboard", "[input][mnk]") {
   REQUIRE(driver.GetDeviceCapabilities(id, 0, &caps) == X_ERROR_SUCCESS);
   CHECK(caps.type == XINPUT_DEVTYPE_KEYBOARD);
   CHECK(caps.sub_type == XINPUT_DEVSUBTYPE_USB_KEYBOARD);
-  // Not a pad, so a real controller keeps the guest user.
+
   X_INPUT_STATE state = {};
   CHECK(driver.GetDeviceState(id, &state) == X_ERROR_DEVICE_NOT_CONNECTED);
 
-  auto down = Key(VirtualKey::kA, false, /*shift=*/true);
+  auto down = Key(VirtualKey::kA, false, true);
   driver.OnKeyDown(down);
-  // The character follows its key-down, as WM_CHAR does.
+
   auto chr = Key(VirtualKey('A'));
   driver.OnKeyChar(chr);
-  auto repeat = Key(VirtualKey::kA, /*repeat=*/true);
+  auto repeat = Key(VirtualKey::kA, true);
   driver.OnKeyDown(repeat);
   auto up = Key(VirtualKey::kA);
   driver.OnKeyUp(up);
@@ -128,7 +127,7 @@ TEST_CASE("Passthrough hands the guest a USB keyboard", "[input][mnk]") {
   auto keystrokes = Drain(driver, id);
   REQUIRE(keystrokes.size() == 3);
   CHECK(uint16_t(keystrokes[0].virtual_key) == uint16_t(VirtualKey::kA));
-  CHECK(keystrokes[0].hid_code == 0x04);  // USB HID usage for A
+  CHECK(keystrokes[0].hid_code == 0x04);
   CHECK(uint16_t(keystrokes[0].flags) ==
         (X_INPUT_KEYSTROKE_KEYDOWN | X_INPUT_KEYSTROKE_SHIFT | X_INPUT_KEYSTROKE_VALIDUNICODE));
   CHECK(uint16_t(keystrokes[0].unicode) == 'A');
@@ -137,7 +136,7 @@ TEST_CASE("Passthrough hands the guest a USB keyboard", "[input][mnk]") {
 }
 
 TEST_CASE("Unread keystrokes cannot grow without bound", "[input][mnk]") {
-  ScopedMnk cvars(/*mode=*/false, /*passthrough=*/true);
+  ScopedMnk cvars(false, true);
   MnkInputDriver driver(nullptr, 0);
   DeviceId id = Device(driver);
   for (int i = 0; i < 1000; i++) {
