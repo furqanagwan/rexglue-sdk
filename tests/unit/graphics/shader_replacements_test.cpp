@@ -1,7 +1,4 @@
-/**
- * @file        shader_replacements_test.cpp
- * @brief       Replacement shaders matched by ucode hash, with fallback (RG-GDK-067)
- */
+
 
 #include <cstdint>
 #include <filesystem>
@@ -24,7 +21,7 @@ std::vector<uint8_t> Dxbc(uint8_t tag) {
   return dxbc;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Replacement names give the hash, stage and modification", "[graphics][replacements]") {
   ShaderReplacements::Key key;
@@ -37,7 +34,6 @@ TEST_CASE("Replacement names give the hash, stage and modification", "[graphics]
   CHECK(key.stage == Stage::kPixelRov);
   CHECK(key.modification == 0x42u);
 
-  // Wrong length, unknown stage, wrong extension, no stage.
   CHECK_FALSE(ShaderReplacements::ParseName("112233.vs.dxbc", key));
   CHECK_FALSE(ShaderReplacements::ParseName("00112233AABBCCDD.gs.dxbc", key));
   CHECK_FALSE(ShaderReplacements::ParseName("00112233AABBCCDD.vs.hlsl", key));
@@ -59,12 +55,10 @@ TEST_CASE("An exact modification wins, any modification is next, else translate"
   REQUIRE(found);
   CHECK((*found)[4] == 1);
 
-  // Another stage, path or hash: no replacement, so the translation stays.
   CHECK(replacements.Find(kHash, Stage::kPixelRov, 7) == nullptr);
   CHECK(replacements.Find(kHash, Stage::kVertex, 7) == nullptr);
   CHECK(replacements.Find(kHash + 1, Stage::kPixelRtv, 7) == nullptr);
 
-  // Only DXBC containers are taken.
   CHECK_FALSE(replacements.Add({kHash, Stage::kVertex, std::nullopt}, std::vector<uint8_t>(32, 0)));
   CHECK(replacements.size() == 2);
 }
@@ -79,9 +73,9 @@ TEST_CASE("A replacement folder loads the named DXBC files only", "[graphics][re
         .write(reinterpret_cast<const char*>(data.data()), std::streamsize(data.size()));
   };
   write("00000000000000A1.vs.dxbc", Dxbc(3));
-  write("00000000000000A2.ps_rtv.dxbc", std::vector<uint8_t>(32, 0));  // not DXBC
-  write("readme.dxbc", Dxbc(4));                                       // bad name
-  write("00000000000000A3.ps_rtv.hlsl", Dxbc(5));                      // source, not shipped
+  write("00000000000000A2.ps_rtv.dxbc", std::vector<uint8_t>(32, 0));
+  write("readme.dxbc", Dxbc(4));
+  write("00000000000000A3.ps_rtv.hlsl", Dxbc(5));
 
   ShaderReplacements replacements;
   CHECK(replacements.Load(folder) == 1);

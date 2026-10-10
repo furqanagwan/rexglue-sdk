@@ -32,13 +32,9 @@ using namespace rex::testing::guest_draw;  // NOLINT
 constexpr uint32_t kSize = 32;
 constexpr uint32_t kBackground = 0xFF0000FF, kForeground = 0xFF00FF00;
 constexpr uint32_t kUnwritten = 0xDEADBEEF;
-// The foreground's right edge, in guest pixels: a quarter into a guest pixel
-// whichever way the half-pixel convention shifts it, so at 2x the pixel's
-// top-left host sample is covered and its center sample isn't.
+
 constexpr float kEdge = 8.125f;
 
-// The fixtures' cvars outlive them: put back what these runs set, so later
-// tests in the process run at the default scale.
 struct RestoreCvars {
   ~RestoreCvars() {
     for (const char* name : {"draw_resolution_scale_x", "draw_resolution_scale_y",
@@ -49,9 +45,6 @@ struct RestoreCvars {
   }
 };
 
-// Draws the background over 32x32, then the foreground from the left up to
-// kEdge, resolves 32x32 at 2x2 resolution scale with `list` as
-// resolution_scale_targets, and reads the texels back (row by row).
 bool DrawAndResolve(const char* path, const char* list, std::vector<uint32_t>& texels_out,
                     std::string& error, bool average = false) {
   auto fixture =
@@ -65,14 +58,13 @@ bool DrawAndResolve(const char* path, const char* list, std::vector<uint32_t>& t
   }
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve_half_pixel_offset", "false"));
-  // Otherwise draws are dropped while their pipelines compile.
+
   REQUIRE(rex::cvar::SetFlagByName("async_shader_compilation", "false"));
 
   const Surface surface = {xenos::MsaaSamples::k1X, 64};
   SetupDraw(*fixture, surface, kSize, kSize);
   DrawRect(*fixture, 0, 0, kSize, kSize, kBackground);
 
-  // The foreground's own geometry, ending inside a guest pixel.
   const uint32_t vertices = fixture->AllocPhysical(0x100);
   std::vector<uint32_t> vertex_data;
   for (float v : {-8.0f, -8.0f, 0.0f, 1.0f, kEdge, -8.0f, 0.0f, 1.0f, -8.0f, 40.0f, 0.0f, 1.0f,
@@ -104,22 +96,20 @@ bool DrawAndResolve(const char* path, const char* list, std::vector<uint32_t>& t
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A resolve the list doesn't name is written at the guest's size",
           "[gpu][resolve][native]") {
-  // Both render target paths resolve from the scaled EDRAM copy.
   const char* path = GENERATE("rtv", "rov");
   INFO("render_target_path_d3d12 " << path);
   RestoreCvars restore;
   std::vector<uint32_t> scaled, native;
   std::string error;
-  // 32 wide is listed: the resolve stays scaled, read back from the top-left
-  // host sample of each texel.
+
   if (!DrawAndResolve(path, "32x0", scaled, error)) {
     SKIP("GPU fixture host unavailable: " << error);
   }
-  // Not listed: written at the guest's size from each texel's center sample.
+
   REQUIRE(DrawAndResolve(path, "999x0", native, error));
 
   uint32_t unwritten = 0, differing_columns = 0, other_differences = 0;
@@ -130,7 +120,7 @@ TEST_CASE("A resolve the list doesn't name is written at the guest's size",
       unwritten += n == kUnwritten;
       if (s != n) {
         ++column_differences;
-        // The edge pixel: covered at its top-left sample, not at its center.
+
         if (!(s == kForeground && n == kBackground)) {
           ++other_differences;
         }
@@ -157,15 +147,12 @@ TEST_CASE("Averaged native resolves supersample the upscaled samples", "[gpu][re
   RestoreCvars restore;
   std::vector<uint32_t> center, averaged;
   std::string error;
-  // none: every resolve at the guest's size.
+
   if (!DrawAndResolve(path, "none", center, error)) {
     SKIP("GPU fixture host unavailable: " << error);
   }
   REQUIRE(DrawAndResolve(path, "none", averaged, error, true));
 
-  // The edge pixel has 2 of its 4 host samples covered: each byte is the mean
-  // of two foreground and two background bytes. Everywhere else the block is
-  // uniform, so the average is the center sample.
   const uint32_t foreground = center[0], background = center[kSize - 1];
   uint32_t mixed = 0;
   for (uint32_t i = 0; i < 4; ++i) {

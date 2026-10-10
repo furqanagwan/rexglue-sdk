@@ -89,7 +89,7 @@ uint32_t Sample(GpuFixture& fixture, uint32_t source_swizzle, uint32_t width, ui
   REQUIRE(fixture.Flush());
   return ReadTexel(fixture, dest, kSize / 2, kSize / 2);
 }
-}  // namespace
+}
 
 TEST_CASE("Wide 1D textures are fetched from their 8192-texel rows", "[gpu][wide-1d]") {
   const uint32_t source_swizzle = GENERATE(kSwizzleXXX, kSwizzleXYZ);

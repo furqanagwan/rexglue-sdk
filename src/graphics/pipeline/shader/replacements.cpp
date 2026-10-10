@@ -28,7 +28,7 @@ bool ParseHex64(std::string_view text, uint64_t& value_out) {
   return result.ec == std::errc() && result.ptr == text.data() + text.size();
 }
 
-}  // namespace
+}
 
 bool ShaderReplacements::ParseName(std::string_view file_name, Key& key_out) {
   constexpr std::string_view kExtension = ".dxbc";
@@ -119,4 +119,4 @@ const std::vector<uint8_t>* ShaderReplacements::Find(uint64_t ucode_hash, Stage 
   return it == replacements_.end() ? nullptr : &it->second;
 }
 
-}  // namespace rex::graphics
+}

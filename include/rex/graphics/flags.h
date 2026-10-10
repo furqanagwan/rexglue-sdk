@@ -13,13 +13,11 @@
 
 #include <rex/cvar.h>
 
-// GPU Core
 REXCVAR_DECLARE(bool, vsync);
 REXCVAR_DECLARE(bool, clear_memory_page_state);
 REXCVAR_DECLARE(bool, half_pixel_offset);
 REXCVAR_DECLARE(bool, async_shader_compilation);
 
-// GPU Resolution / Readback / Queries
 REXCVAR_DECLARE(int32_t, resolution_scale);
 REXCVAR_DECLARE(int32_t, draw_resolution_scale_x);
 REXCVAR_DECLARE(int32_t, draw_resolution_scale_y);
@@ -37,7 +35,6 @@ REXCVAR_DECLARE(bool, gpu_scalar_approximation_rounding);
 REXCVAR_DECLARE(bool, mulsc_round_toward_zero);
 REXCVAR_DECLARE(int32_t, query_occlusion_fake_sample_count);
 
-// GPU Depth / Render Target Behavior
 REXCVAR_DECLARE(bool, depth_float24_round);
 REXCVAR_DECLARE(bool, depth_float24_convert_in_pixel_shader);
 REXCVAR_DECLARE(bool, depth_transfer_not_equal_test);
@@ -49,7 +46,6 @@ REXCVAR_DECLARE(bool, snorm16_render_target_full_range);
 REXCVAR_DECLARE(bool, mrt_edram_used_range_clamp_to_min);
 REXCVAR_DECLARE(bool, direct_host_resolve);
 
-// GPU Textures
 REXCVAR_DECLARE(bool, gpu_allow_invalid_fetch_constants);
 REXCVAR_DECLARE(bool, gpu_3d_to_2d_texture);
 REXCVAR_DECLARE(int32_t, anisotropic_override);
@@ -59,7 +55,6 @@ REXCVAR_DECLARE(int32_t, texture_cache_memory_limit_hard);
 REXCVAR_DECLARE(int32_t, texture_cache_memory_limit_soft_lifetime);
 REXCVAR_DECLARE(bool, non_seamless_cube_map);
 
-// GPU Primitive Processing
 REXCVAR_DECLARE(bool, execute_unclipped_draw_vs_on_cpu);
 REXCVAR_DECLARE(bool, execute_unclipped_draw_vs_on_cpu_for_psi_render_backend);
 REXCVAR_DECLARE(bool, execute_unclipped_draw_vs_on_cpu_with_scissor);
@@ -68,14 +63,11 @@ REXCVAR_DECLARE(bool, force_convert_quad_lists_to_triangle_lists);
 REXCVAR_DECLARE(bool, force_convert_triangle_fans_to_lists);
 REXCVAR_DECLARE(int32_t, primitive_processor_cache_min_indices);
 
-// GPU Debug
 REXCVAR_DECLARE(bool, gpu_debug_markers);
 bool IsGpuDebugMarkersEnabled();
 
-// GPU Alpha Test
 REXCVAR_DECLARE(bool, use_fuzzy_alpha_epsilon);
 
-// GPU Shader Translation
 REXCVAR_DECLARE(std::string, dump_shaders);
 REXCVAR_DECLARE(std::string, gpu_shader_path);
 REXCVAR_DECLARE(std::string, swap_post_effect);
@@ -90,7 +82,7 @@ REXCVAR_DECLARE(int32_t, d3d12_pipeline_creation_threads);
 REXCVAR_DECLARE(bool, d3d12_tessellation_wireframe);
 REXCVAR_DECLARE(bool, d3d12_tiled_shared_memory);
 REXCVAR_DECLARE(std::string, render_target_path_d3d12);
-// Legacy backend compatibility aliases for shared readback controls.
+
 REXCVAR_DECLARE(bool, d3d12_readback_memexport);
 REXCVAR_DECLARE(bool, d3d12_readback_resolve);
 

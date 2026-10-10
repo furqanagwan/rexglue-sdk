@@ -28,8 +28,6 @@ namespace xenos = rex::graphics::xenos;
 using rex::testing::GpuFixture;
 using namespace rex::testing::guest_draw;  // NOLINT
 
-// The ucode hash the command processor gives kPixelShader: XXH3 of the
-// dwords as the guest stores them, big-endian.
 uint64_t PixelShaderHash() {
   std::vector<uint8_t> bytes;
   for (uint32_t dword : kPixelShader) {
@@ -40,8 +38,6 @@ uint64_t PixelShaderHash() {
   return XXH3_64bits(bytes.data(), bytes.size());
 }
 
-// Draws an 8x8 rectangle of `color` with kPixelShader, resolves it, and reads
-// the first texel; false if the fixture can't run.
 bool DrawAndRead(bool replacements, uint32_t color, uint32_t& texel_out, std::string& error) {
   auto fixture =
       GpuFixture::Create(&error, {{"shader_replacements", replacements ? "true" : "false"},
@@ -50,7 +46,7 @@ bool DrawAndRead(bool replacements, uint32_t color, uint32_t& texel_out, std::st
     return false;
   }
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
-  // Otherwise draws are dropped while their pipelines compile.
+
   REQUIRE(rex::cvar::SetFlagByName("async_shader_compilation", "false"));
   const Surface surface = {xenos::MsaaSamples::k1X, 64};
   SetupDraw(*fixture, surface, 8, 8);
@@ -62,7 +58,7 @@ bool DrawAndRead(bool replacements, uint32_t color, uint32_t& texel_out, std::st
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A title's replacement pixel shader stands in for the translated one",
           "[gpu][replacements]") {
@@ -81,10 +77,10 @@ TEST_CASE("A title's replacement pixel shader stands in for the translated one",
     SKIP("GPU fixture host unavailable: " << error);
   }
   REQUIRE(DrawAndRead(false, kGreen, green, error));
-  // The replacement draws magenta whatever the guest asks for.
+
   REQUIRE(DrawAndRead(true, kGreen, replaced, error));
   std::filesystem::remove_all(folder);
-  // The fixtures' cvars outlive them.
+
   rex::cvar::ResetToDefault("shader_replacements");
   rex::cvar::ResetToDefault("render_target_path_d3d12");
 

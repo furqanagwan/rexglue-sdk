@@ -47,13 +47,10 @@ struct RestoreCvars {
   }
 };
 
-// alloc position; exec_end (mad oPos, r0.yzxx, c0, c1): the domain location
-// (u, v) in r0.yz scaled by c0 and offset by c1, w from c1.w. The patch index
-// in r0.x is 0 here, so it zeroes z and w before the offset.
 std::vector<uint32_t> DomainShader() {
   std::vector<uint32_t> ucode;
   PackCf(ucode, Alloc(rex::graphics::ucode::AllocType::kVsPosition), Exec(1, 1, 0, true));
-  // Component-relative: x from y, y from z, z and w from x.
+
   constexpr uint32_t kSwizzleYZXX = 1 | (1 << 2) | (2 << 4) | (1 << 6);
   const std::vector<uint32_t> mad =
       AluExport(62, kAluMad, 0, 0, 1, kSwizzleYZXX, true, false, false);
@@ -61,8 +58,6 @@ std::vector<uint32_t> DomainShader() {
   return ucode;
 }
 
-// Fills the target black, then draws one tessellated quad patch in white and
-// returns the resolved texels.
 bool DrawPatch(const char* path, xenos::TessellationMode mode, std::vector<uint32_t>& texels_out,
                std::string& error) {
   auto fixture = GpuFixture::Create(
@@ -92,7 +87,7 @@ bool DrawPatch(const char* path, xenos::TessellationMode mode, std::vector<uint3
   output_path.path_select = xenos::VGTOutputPath::kTessellationEnable;
   reg::VGT_HOS_CNTL hos_cntl = {};
   hos_cntl.tess_mode = mode;
-  // Factors of 1 (the guest adds 1): one quad over the whole domain.
+
   fixture->Submit(GpuFixture::SetRegisters(XE_GPU_REG_VGT_OUTPUT_PATH_CNTL,
                                            {output_path.value, hos_cntl.value, 0, 0}));
   reg::PA_SC_WINDOW_SCISSOR_TL window_tl = {};
@@ -118,7 +113,7 @@ bool DrawPatch(const char* path, xenos::TessellationMode mode, std::vector<uint3
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A tessellated quad patch covers the domain the shader maps", "[gpu][tessellation]") {
   const char* path = GENERATE("rtv", "rov");
@@ -131,7 +126,7 @@ TEST_CASE("A tessellated quad patch covers the domain the shader maps", "[gpu][t
   if (!DrawPatch(path, mode, texels, error)) {
     SKIP("GPU fixture host unavailable: " << error);
   }
-  // White inside the patch, the black fill outside, away from the edges.
+
   for (uint32_t y = 0; y < kSize; ++y) {
     for (uint32_t x = 0; x < kSize; ++x) {
       if (x == kPatchSize - 1 || x == kPatchSize || y == kPatchSize - 1 || y == kPatchSize) {

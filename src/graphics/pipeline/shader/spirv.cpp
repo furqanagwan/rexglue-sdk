@@ -25,4 +25,4 @@ Shader::Translation* SpirvShader::CreateTranslationInstance(uint64_t modificatio
   return new SpirvTranslation(*this, modification);
 }
 
-}  // namespace rex::graphics
+}

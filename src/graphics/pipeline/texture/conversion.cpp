@@ -33,8 +33,8 @@ void CopySwapBlock(xenos::Endian endian, void* output, const void* input, size_t
     case xenos::Endian::k8in32:
       memory::copy_and_swap_32_unaligned(output, input, length / 4);
       break;
-    case xenos::Endian::k16in32:  // Swap high and low 16 bits within a 32 bit
-                                  // word
+    case xenos::Endian::k16in32:
+
       memory::copy_and_swap_16_in_32_unaligned(output, input, length);
       break;
     default:
@@ -45,9 +45,6 @@ void CopySwapBlock(xenos::Endian endian, void* output, const void* input, size_t
 }
 
 void ConvertTexelCTX1ToR8G8(xenos::Endian endian, void* output, const void* input, size_t length) {
-  // https://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/talks/unc-xenos-doggett.pdf
-  // (R is in the higher bits, according to how this format is used in
-  //  4D5307E6).
   union {
     uint8_t data[8];
     struct {
@@ -84,7 +81,6 @@ void ConvertTexelDXT3AToDXT3(xenos::Endian endian, void* output, const void* inp
   std::memset(&output_bytes[8], 0, 8);
 }
 
-// https://github.com/BinomialLLC/crunch/blob/ea9b8d8c00c8329791256adafa8cf11e4e7942a2/inc/crn_decomp.h#L4108
 static uint32_t TiledOffset2DRow(uint32_t y, uint32_t width, uint32_t log2_bpp) {
   uint32_t macro = ((y / 32) * (width / 32)) << (log2_bpp + 7);
   uint32_t micro = ((y & 6) << 2) << log2_bpp;
@@ -111,17 +107,14 @@ void Untile(uint8_t* output_buffer, const uint8_t* input_buffer, const UntileInf
   uint32_t output_bytes_per_block = untile_info->output_format_info->bytes_per_block();
   uint32_t output_pitch = untile_info->output_pitch * output_bytes_per_block;
 
-  // Bytes per pixel
   auto log2_bpp =
       (input_bytes_per_block / 4) + ((input_bytes_per_block / 2) >> (input_bytes_per_block / 4));
 
-  // Offset to the current row, in bytes.
   uint32_t output_row_offset = 0;
   for (uint32_t y = 0; y < untile_info->height; y++) {
     auto input_row_offset =
         TiledOffset2DRow(untile_info->offset_y + y, untile_info->input_pitch, log2_bpp);
 
-    // Go block-by-block on this row.
     uint32_t output_offset = output_row_offset;
 
     for (uint32_t x = 0; x < untile_info->width; x++) {
@@ -140,4 +133,4 @@ void Untile(uint8_t* output_buffer, const uint8_t* input_buffer, const UntileInf
   }
 }
 
-}  // namespace rex::graphics::texture_conversion
+}

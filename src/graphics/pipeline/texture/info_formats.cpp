@@ -17,8 +17,8 @@ namespace rex::graphics {
 
 using namespace rex::graphics::xenos;
 
-// Component widths and whether the format is fixed point are from
-// xenia-canary d119505289 (RG-GDK-045), for the integer num_format scale.
+
+
 #define FORMAT_INFO(texture_format, format, block_width, block_height, bits_per_pixel, component_bits_0, component_bits_1, component_bits_2, component_bits_3, fixed) \
     {xenos::TextureFormat::texture_format, #texture_format, FormatType::format, block_width, block_height, bits_per_pixel, {component_bits_0, component_bits_1, component_bits_2, component_bits_3}, fixed}
 const FormatInfo* FormatInfo::Get(uint32_t gpu_format) {
@@ -92,4 +92,4 @@ const FormatInfo* FormatInfo::Get(uint32_t gpu_format) {
 }
 #undef FORMAT_INFO
 
-}  //  namespace rex::graphics
+}

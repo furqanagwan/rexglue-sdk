@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
-// CPU-only coverage of the real primitive converter and memory watch contract.
+
 #include <array>
 #include <cstdint>
 #include <deque>
@@ -83,11 +83,10 @@ struct Fixture {
     ~PhysicalAllocation() { heap_->Release(kVirtualBase, nullptr); }
     PhysicalAllocation(const PhysicalAllocation&) = delete;
     PhysicalAllocation& operator=(const PhysicalAllocation&) = delete;
-    rex::memory::BaseHeap* heap_;  // Borrowed allocator; this guard owns the region.
+    rex::memory::BaseHeap* heap_;
   };
   rex::memory::Memory& memory_ = rex::testing::GetTestMemory();
-  // Declared first so watches unregister before the region is released, also
-  // if the rest of fixture initialization fails.
+
   PhysicalAllocation allocation_{memory_};
   RegisterFile registers_;
   CpuSharedMemory shared_{memory_};
@@ -135,7 +134,7 @@ struct Fixture {
 };
 
 constexpr std::array kFormats{xenos::IndexFormat::kInt16, xenos::IndexFormat::kInt32};
-}  // namespace
+}
 
 TEST_CASE("Primitive conversions invalidate for every exact overlapping range", "[primitive]") {
   const auto format = GENERATE(from_range(kFormats));
@@ -228,7 +227,7 @@ TEST_CASE("Guest index writes refresh converted primitive contents", "[primitive
   Fixture fixture(GENERATE(from_range(kFormats)));
   const auto first = fixture.Convert();
   CHECK(fixture.processor_.Index(first, 0) == 11);
-  // Exercise the actual physical-memory watch dispatch, not only the converter callback.
+
   REQUIRE(fixture.memory_.TriggerPhysicalMemoryCallbacks(
       rex::thread::global_critical_region::AcquireDirect(),
       Fixture::kVirtualBase + (fixture.base_ & 0xFFFFF), fixture.size_, true, true));

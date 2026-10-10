@@ -28,7 +28,7 @@ namespace xenos = rex::graphics::xenos;
 constexpr uint32_t kSize = 32;
 constexpr uint32_t kColor = 0xFF5599CC;
 
-}  // namespace
+}
 
 TEST_CASE("A vertex fetch constant with a texture type draws only when allowed",
           "[gpu][invalid-fetch]") {

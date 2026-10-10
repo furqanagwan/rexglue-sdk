@@ -440,7 +440,6 @@ class DeferredCommandList {
         std::min(num_samples_per_pixel * num_pixels, UINT(16)) * sizeof(D3D12_SAMPLE_POSITION));
   }
 
-  // Colors are 0xAARRGGBB (pix::Color).
   void BeginDebugMarker(const char* label_name, uint64_t color) {
     WriteDebugMarker(Command::kBeginDebugMarker, label_name, color);
   }
@@ -643,7 +642,6 @@ class DeferredCommandList {
   struct DebugMarkerHeader {
     uint64_t color;
     uint32_t label_length;
-    // Followed by null-terminated label string.
   };
 
   void WriteDebugMarker(Command command, const char* label_name, uint64_t color) {
@@ -660,8 +658,7 @@ class DeferredCommandList {
 
   const D3D12CommandProcessor& command_processor_;
 
-  // uintmax_t to ensure uint64_t and pointer alignment of all structures.
   std::vector<uintmax_t> command_stream_;
 };
 
-}  // namespace rex::graphics::d3d12
+}

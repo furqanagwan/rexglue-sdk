@@ -35,17 +35,13 @@ class SpirvShader : public Shader {
                        const uint32_t* ucode_dwords, size_t ucode_dword_count,
                        std::endian ucode_source_endian = std::endian::big);
 
-  // Resource bindings are gathered after the successful translation of any
-  // modification for simplicity of translation (and they don't depend on
-  // modification bits).
-
   struct TextureBinding {
     uint32_t fetch_constant : 5;
-    // Stacked and 3D are separate TextureBindings.
+
     xenos::FetchOpDimension dimension : 2;
     uint32_t is_signed : 1;
   };
-  // Safe to hash and compare with memcmp for layout hashing.
+
   const std::vector<TextureBinding>& GetTextureBindingsAfterTranslation() const {
     return texture_bindings_;
   }
@@ -57,7 +53,7 @@ class SpirvShader : public Shader {
     xenos::TextureFilter min_filter : 2;
     xenos::TextureFilter mip_filter : 2;
     xenos::AnisoFilter aniso_filter : 3;
-    // getBCF samples with the border color forced to forced_border_color.
+
     uint32_t border_color_forced : 1;
     xenos::BorderColor forced_border_color : 2;
   };
@@ -65,10 +61,6 @@ class SpirvShader : public Shader {
     return sampler_bindings_;
   }
 
-  // True once a translation has gathered the resource bindings above. Set with
-  // release ordering after the binding vectors are filled (which may happen on
-  // a pipeline creation thread), so a draw-thread reader that sees this true
-  // (acquire) is guaranteed the bindings are fully written and immutable.
   bool bindings_ready() const { return bindings_ready_.load(std::memory_order_acquire); }
 
  protected:
@@ -84,6 +76,6 @@ class SpirvShader : public Shader {
   uint32_t used_texture_mask_ = 0;
 };
 
-}  // namespace rex::graphics
+}
 
-#endif  // REX_GRAPHICS_PIPELINE_SHADER_SPIRV_SHADER_H_
+#endif

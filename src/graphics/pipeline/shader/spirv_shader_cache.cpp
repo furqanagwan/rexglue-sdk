@@ -59,26 +59,19 @@ uint64_t GuestSpirvShaderCache::GetVertexShaderModification(
 
   modification.vertex.interpolator_mask = interpolator_mask;
 
-  // Tessellation mode selects the domain shader spacing.
   if (Shader::IsHostVertexShaderTypeDomain(host_vertex_shader_type)) {
     modification.vertex.tessellation_mode = regs.Get<reg::VGT_HOS_CNTL>().tess_mode;
   }
 
-  // User clip planes.
   auto pa_cl_clip_cntl = regs.Get<reg::PA_CL_CLIP_CNTL>();
   uint32_t user_clip_planes = pa_cl_clip_cntl.clip_disable ? 0 : pa_cl_clip_cntl.ucp_ena;
   modification.vertex.user_clip_plane_count = rex::bit_count(user_clip_planes);
   modification.vertex.user_clip_plane_cull =
       uint32_t(user_clip_planes && pa_cl_clip_cntl.ucp_cull_only_ena);
 
-  // Vertex kill via the kill flag (oPts.z). The "and" operator (kill only when
-  // all vertices of the primitive request it) is emulated with a cull distance.
-  // The "or" operator sets the position to NaN in the translator.
   modification.vertex.vertex_kill_and = uint32_t(
       (shader.writes_point_size_edge_flag_kill_vertex() & 0b100) && !pa_cl_clip_cntl.vtx_kill_or);
 
-  // For kPointListAsTriangleStrip the bit means output coordinates (only the
-  // Vulkan fallback uses that host type). Otherwise it means output point size.
   if (host_vertex_shader_type == Shader::HostVertexShaderType::kPointListAsTriangleStrip) {
     modification.vertex.output_point_parameters = uint32_t(ps_param_gen_used);
   } else {
@@ -119,11 +112,7 @@ uint64_t GuestSpirvShaderCache::GetPixelShaderModification(
     modification.pixel.param_gen_point = 0;
   }
 
-  // Depth/stencil mode, blend pre-multiply and the color target mask are host
-  // render target path state, left at their defaults on the FSI path.
   if (render_target_cache_.GetPath() == RenderTargetCache::Path::kHostRenderTargets) {
-    // ReXGlue has no per-draw native scale threshold (xenia-edge's
-    // draw_resolution_scale_threshold): every draw takes the target's scale.
     modification.pixel.resolution_scale_native = 0;
 
     using DepthStencilMode = SpirvShaderTranslator::Modification::DepthStencilMode;
@@ -139,15 +128,10 @@ uint64_t GuestSpirvShaderCache::GetPixelShaderModification(
       if (apply_polygon_offset_in_shader) {
         modification.pixel.depth_stencil_mode = DepthStencilMode::kPolygonOffset;
       } else {
-        // kEarlyHint triggers a GPU fault on nvidia (Alan Wake gameplay), so
-        // use the safe alternative.
         modification.pixel.depth_stencil_mode = DepthStencilMode::kNoModifiers;
       }
     }
 
-    // MIN/MAX blend ignores fixed-function factors on the host, but the Xbox
-    // 360 applies them. When the destination factor is ONE we pre-multiply the
-    // shader output by the source factor. Only RT0 is supported for now.
     modification.pixel.rt0_blend_rgb_factor_for_premult = xenos::BlendFactor::kOne;
     modification.pixel.rt0_blend_a_factor_for_premult = xenos::BlendFactor::kOne;
 
@@ -173,13 +157,8 @@ uint64_t GuestSpirvShaderCache::GetPixelShaderModification(
                                             (((normalized_color_mask >> 8) & 0xF) ? 4 : 0) |
                                             (((normalized_color_mask >> 12) & 0xF) ? 8 : 0);
   } else {
-    // The FSI shader runs the EDRAM ROP itself, so specialize it for the
-    // sample count. No new pipeline permutations, they already vary by it.
     modification.pixel.set_fsi_msaa_samples(regs.Get<reg::RB_SURFACE_INFO>().msaa_samples);
-    // Per render target, the format that drives the pack and unpack trees
-    // and whether it blends. Unlike the sample count these add pipeline
-    // permutations - the FSI render pass has no attachments to vary by - so
-    // skip render targets the draw masks off, which the shader skips anyway.
+
     bool any_blending = false;
     for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
       if (!shader.writes_color_target(i) || !((normalized_color_mask >> (i * 4)) & 0xF)) {
@@ -187,13 +166,13 @@ uint64_t GuestSpirvShaderCache::GetPixelShaderModification(
       }
       modification.pixel.set_fsi_rt_format(
           i, regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]).color_format);
-      // The shader treats 1 * source + 0 * destination as no blending.
+
       if ((regs.Get<reg::RB_BLENDCONTROL>(reg::RB_BLENDCONTROL::rt_register_indices[i]).value &
            0x1FFF1FFF) != 0x00010001) {
         any_blending = true;
       }
     }
-    // With no blending anywhere, the whole blending path can be left out.
+
     modification.pixel.set_fsi_no_blending(!any_blending);
   }
 
@@ -214,14 +193,11 @@ Shader::Translation* GuestSpirvShaderCache::TranslateSpirv(SpirvShaderTranslator
                                                            bool use_try_claim) {
   if (!translation.is_translated()) {
     bool should_translate = true;
-    // ReXGlue translates on one thread per shader here; claiming a translation
-    // across threads (xenia-edge TryClaimTranslation) isn't needed.
+
     (void)use_try_claim;
     if (should_translate) {
       translator.TranslateAnalyzedShader(translation);
-      // ReXGlue's ShaderTranslator leaves publishing to the backend (the DXBC
-      // path publishes after its replacement step); without it every draw
-      // would translate again. Failures are published too, so they stay.
+
       translation.PublishTranslated();
     }
   }
@@ -231,7 +207,7 @@ Shader::Translation* GuestSpirvShaderCache::TranslateSpirv(SpirvShaderTranslator
 Shader::Translation* GuestSpirvShaderCache::EnsureAndTranslate(SpirvShader& shader,
                                                                uint64_t modification) {
   Shader::Translation* translation = EnsureTranslation(shader, modification);
-  return TranslateSpirv(*translator_, *translation, /*use_try_claim=*/false);
+  return TranslateSpirv(*translator_, *translation, false);
 }
 
 bool GuestSpirvShaderCache::GetGeometryShaderKey(PipelineGeometryShader geometry_shader_type,
@@ -243,10 +219,7 @@ bool GuestSpirvShaderCache::GetGeometryShaderKey(PipelineGeometryShader geometry
   }
   SpirvShaderTranslator::Modification vertex_mod(vertex_shader_modification);
   SpirvShaderTranslator::Modification pixel_mod(pixel_shader_modification);
-  // The *AsTriangleStrip host vertex shader types are the fallback for when
-  // geometry shaders are unsupported. There geometry_shader_type is kNone and
-  // this is not called. output_point_parameters means coordinates, not size,
-  // for those, so reject them.
+
   if (vertex_mod.vertex.host_vertex_shader_type ==
           Shader::HostVertexShaderType::kPointListAsTriangleStrip ||
       vertex_mod.vertex.host_vertex_shader_type ==
@@ -268,4 +241,4 @@ bool GuestSpirvShaderCache::GetGeometryShaderKey(PipelineGeometryShader geometry
   return true;
 }
 
-}  // namespace rex::graphics
+}

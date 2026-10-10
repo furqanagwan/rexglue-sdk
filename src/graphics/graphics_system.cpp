@@ -57,19 +57,14 @@ rex::graphics::CommandProcessor::SwapPostEffect ParseSwapPostEffect(
   }
   return rex::graphics::CommandProcessor::SwapPostEffect::kNone;
 }
-}  // namespace
+}
 
 namespace rex::graphics {
 
-// Nvidia Optimus/AMD PowerXpress support.
-// These exports force the process to trigger the discrete GPU in multi-GPU
-// systems.
-// https://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/OptimusRenderingPolicies.pdf
-// https://stackoverflow.com/questions/17458803/amd-equivalent-to-nvoptimusenablement
 extern "C" {
 __declspec(dllexport) uint32_t NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) uint32_t AmdPowerXpressRequestHighPerformance = 1;
-}  // extern "C"
+}
 
 GraphicsSystem::GraphicsSystem() : vsync_worker_running_(false) {}
 
@@ -88,8 +83,6 @@ X_STATUS GraphicsSystem::SetupPresentation(ui::WindowedAppContext* app_context) 
     }
     provider_supports_presentation_ = true;
   } else if (!provider_supports_presentation_) {
-    // A prior SetupGuestGpu built a headless provider; backends like Vulkan
-    // need swapchain support baked in at provider creation time.
     REXGPU_ERROR("SetupPresentation called after headless SetupGuestGpu; call order is reversed");
     return X_STATUS_UNSUCCESSFUL;
   }
@@ -99,11 +92,9 @@ X_STATUS GraphicsSystem::SetupPresentation(ui::WindowedAppContext* app_context) 
     OnHostGpuLossFromAnyThread(is_responsible);
   };
   if (app_context_) {
-    // Presenter creation must happen on the UI thread.
     app_context_->CallInUIThreadSynchronous(
         [this, loss_cb]() { presenter_ = provider_->CreatePresenter(loss_cb); });
   } else {
-    // Offscreen path (e.g. capturing guest output without a window).
     presenter_ = provider_->CreatePresenter(loss_cb);
   }
 
@@ -120,15 +111,11 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
   function_dispatcher_ = function_dispatcher;
   kernel_state_ = kernel_state;
 
-  // Headless path: no one set up presentation, so build a no-presentation
-  // provider just for the command processor.
   if (!provider_) {
     CreateProvider(false);
     provider_supports_presentation_ = false;
   }
 
-  // Create command processor. This will spin up a thread to process all
-  // incoming ringbuffer packets.
   command_processor_ = CreateCommandProcessor();
   if (!command_processor_->Initialize()) {
     REXGPU_ERROR("Unable to initialize command processor");
@@ -136,16 +123,10 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
   }
   command_processor_->SetDesiredSwapPostEffect(ParseSwapPostEffect(REXCVAR_GET(swap_post_effect)));
 
-  // Register GPU MMIO handlers
-  // GPU registers are at 0x7FC80000-0x7FCFFFFF
-  memory_->AddVirtualMappedRange(0x7FC80000,  // base address
-                                 0xFFFF0000,  // mask
-                                 0x0000FFFF,  // size (64KB)
-                                 this,        // context (GraphicsSystem*)
+  memory_->AddVirtualMappedRange(0x7FC80000, 0xFFFF0000, 0x0000FFFF, this,
                                  reinterpret_cast<runtime::MMIOReadCallback>(ReadRegisterThunk),
                                  reinterpret_cast<runtime::MMIOWriteCallback>(WriteRegisterThunk));
 
-  // Guest vblank timer based on the configured guest video mode.
   vsync_worker_running_ = true;
   vsync_worker_thread_ = system::object_ref<system::XHostThread>(
       new system::XHostThread(kernel_state_, 128 * 1024, 0, [this]() {
@@ -156,12 +137,7 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
         uint64_t vsync_interval_ticks =
             std::max(uint64_t(1), uint64_t(double(guest_tick_frequency) / refresh_rate_hz));
         uint64_t no_vsync_interval_ticks = std::max(uint64_t(1), guest_tick_frequency / 1000);
-        // One vblank per interval, on time. Sleeping in whole milliseconds
-        // woke only every 15.6 ms (the default Windows timer), so vblanks came
-        // in bursts and gaps, and a title waiting for the next one often missed
-        // a refresh (Quantum of Solace ran at ~36 fps with its 60 fps patch).
-        // A high-resolution timer sleeps to just before the vblank and a short
-        // yield loop covers the rest.
+
         constexpr uint64_t kSpinMicroseconds = 500;
         bool vsync = REXCVAR_GET(vsync);
         VblankPacer pacer(vsync ? vsync_interval_ticks : no_vsync_interval_ticks,
@@ -210,9 +186,7 @@ void GraphicsSystem::Shutdown() {
     if (app_context_) {
       app_context_->CallInUIThreadSynchronous([this]() { presenter_.reset(); });
     }
-    // If there's no app context (thus the presenter is owned by the thread that
-    // initialized the GraphicsSystem) or can't be queueing UI thread calls
-    // anymore, shutdown anyway.
+
     presenter_.reset();
   }
 
@@ -239,21 +213,20 @@ uint32_t GraphicsSystem::ReadRegister(uint32_t addr) {
   uint32_t r = (addr & 0xFFFF) / 4;
 
   switch (r) {
-    case 0x0F00:  // RB_EDRAM_TIMING
+    case 0x0F00:
       return 0x08100748;
-    case 0x0F01:  // RB_BC_CONTROL
+    case 0x0F01:
       return 0x0000200E;
     case XE_GPU_REG_RB_HSIO_INTERFACE_ALIGNER_VALUE:
       return 0x00BBBBBB;
-    case 0x194C: {  // R500_D1MODE_V_COUNTER
+    case 0x194C: {
       system::X_VIDEO_MODE video_mode;
       kernel::xboxkrnl::VdQueryVideoMode(&video_mode);
       return std::min(uint32_t(video_mode.display_height), uint32_t(0x0FFF));
     }
-    case 0x1951:    // interrupt status
-      return 1;     // vblank
-    case 0x1961: {  // AVIVO_D1MODE_VIEWPORT_SIZE
-      // Maximum [width(0x0FFF), height(0x0FFF)].
+    case 0x1951:
+      return 1;
+    case 0x1961: {
       system::X_VIDEO_MODE video_mode;
       kernel::xboxkrnl::VdQueryVideoMode(&video_mode);
       uint32_t viewport_width = std::min(uint32_t(video_mode.display_width), uint32_t(0x0FFF));
@@ -274,12 +247,12 @@ void GraphicsSystem::WriteRegister(uint32_t addr, uint32_t value) {
   uint32_t r = (addr & 0xFFFF) / 4;
 
   switch (r) {
-    case 0x01C5:  // CP_RB_WPTR
+    case 0x01C5:
       command_processor_->UpdateWritePointer(value);
       break;
     case XE_GPU_REG_RB_BC_CONTROL:
     case XE_GPU_REG_RB_HSIO_INTERFACE_ALIGNER_VALUE:
-    case 0x1844:  // AVIVO_D1GRPH_PRIMARY_SURFACE_ADDRESS
+    case 0x1844:
       break;
     default:
       REXGPU_WARN("Unknown GPU register {:04X} write: {:08X}", r, value);
@@ -312,14 +285,10 @@ void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
   auto thread = system::XThread::GetCurrentThread();
   assert_not_null(thread);
 
-  // Pick a CPU, if needed. We're going to guess 2. Because.
   if (cpu == 0xFFFFFFFF) {
     cpu = 2;
   }
   thread->SetActiveCpu(cpu);
-
-  // REXGPU_INFO("Dispatching GPU interrupt at {:08X} w/ mode {} on cpu {}",
-  //          interrupt_callback_, source, cpu);
 
   uint64_t args[] = {source, interrupt_callback_data_};
   function_dispatcher_->ExecuteInterrupt(thread->thread_state(), interrupt_callback_, args,
@@ -327,7 +296,6 @@ void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
 }
 
 void GraphicsSystem::MarkVblank() {
-  // Increment vblank counter (so the game sees us making progress).
   if (command_processor_) {
     command_processor_->increment_counter();
   }
@@ -350,8 +318,6 @@ void GraphicsSystem::InitializeShaderStorage(const std::filesystem::path& cache_
   }
   if (blocking) {
     if (command_processor_->is_paused()) {
-      // Safe to run on any thread while the command processor is paused, no
-      // race condition.
       command_processor_->InitializeShaderStorage(cache_root, title_id, true);
     } else {
       rex::thread::Fence fence;
@@ -390,4 +356,4 @@ bool GraphicsSystem::Restore(::rex::stream::ByteStream* stream) {
   return command_processor_->Restore(stream);
 }
 
-}  // namespace rex::graphics
+}

@@ -31,7 +31,6 @@ namespace xenos = rex::graphics::xenos;
 using rex::testing::GpuFixture;
 using namespace rex::testing::guest_draw;  // NOLINT
 
-// Scalar opcodes (ucode::AluScalarOpcode).
 enum class Op : uint32_t {
   kExp = 14,
   kLogc = 15,
@@ -71,27 +70,18 @@ const char* OpName(Op op) {
   return "?";
 }
 
-// Scalar operation on r1.x exported to eM0.x, the vector operation writing
-// nothing. For one-operand scalar operations the operand is src3's W, so the
-// swizzle selects X there.
 std::vector<uint32_t> ScalarExport(Op op) {
   constexpr uint32_t kSrc3SwizzleXAsW = 1 << 6;
   return {33u | (1u << 15) | (0x1u << 20) | (uint32_t(op) << 26), kSrc3SwizzleXAsW,
           1u | (1u << 8) | (1u << 16) | (kAluMax << 24) | (7u << 29)};
 }
 
-// mulsc (MUL_CONST_1, so the temporary register's low bit is 1: r1) exported
-// to eM0.x: c3.w * r1.x. The constant operand is src3's W and the temporary
-// its X, so a zero swizzle selects both; src3 is the constant (sel 0).
-// Source of the rounding under test: xenia-canary #1245.
 std::vector<uint32_t> MulscExport() {
   constexpr uint32_t kMulsc1 = 43;
   return {33u | (1u << 15) | (0x1u << 20) | (kMulsc1 << 26), 0,
           3u | (1u << 8) | (1u << 16) | (kAluMax << 24) | (6u << 29)};
 }
 
-// vfetch r1 (the input in X); oPos = r1; eA from c2 by the vertex index; eM0.x
-// = the scalar operation `data` on r1.x. One exported float per vertex.
 std::vector<uint32_t> ScalarVertexShader(const std::vector<uint32_t>& data) {
   std::vector<uint32_t> ucode;
   PackCf(ucode, Exec(3, 1, 1, false), Alloc(ucode::AllocType::kVsPosition));
@@ -110,21 +100,16 @@ float F(uint32_t bits) {
   return std::bit_cast<float>(bits);
 }
 
-// Inputs: signed zeros, infinities, a NaN, negatives, and finite values across
-// the exponent range (no denormals - the host flushes them).
 const std::vector<float> kInputs = {
     0.0f,  -0.0f,         INFINITY, -INFINITY, F(0x7FC00000), -1.0f,   -4.0f,    1.0f,    2.0f,
     0.5f,  3.0f,          10.0f,    0.1f,      1.0e-30f,      1.0e30f, 123.456f, -2.5f,   0.75f,
     -0.3f, F(0x3F812345), 7.0e-20f, FLT_MAX,   FLT_MIN,       1.5f,    100.0f,   -100.0f, 64.0f,
 };
 
-// Runs the scalar operation `data` on every input through a translated vertex
-// shader, with c3.w = `c3_w`, and returns the exported results, or an empty
-// vector if the draw didn't complete.
 std::vector<float> RunScalar(GpuFixture& fixture, const std::vector<uint32_t>& data,
                              const std::vector<float>& inputs, float c3_w = 0.0f) {
   uint32_t count = uint32_t(inputs.size());
-  // Triangle lists need a multiple of three vertices; pad with 1.0.
+
   uint32_t vertex_count = (count + 2) / 3 * 3;
   std::vector<uint32_t> vertices;
   for (uint32_t i = 0; i < vertex_count; ++i) {
@@ -181,9 +166,6 @@ std::vector<float> RunScalarOp(GpuFixture& fixture, Op op) {
   return RunScalar(fixture, ScalarExport(op), kInputs);
 }
 
-// The documented special cases, and the double-precision value for finite
-// results. Clamped variants (C) turn infinite results into +-FLT_MAX, flushed
-// ones (F) into signed zero; LOGC turns -Inf into -FLT_MAX.
 double Reference(Op op, float input) {
   double x = input;
   double r = 0.0;
@@ -209,7 +191,7 @@ double Reference(Op op, float input) {
       r = std::sqrt(x);
       break;
   }
-  // Single precision range.
+
   if (std::isfinite(r) && std::abs(r) > double(FLT_MAX) * (1.0 + 1.0 / (1 << 22))) {
     r = std::copysign(INFINITY, r);
   }
@@ -238,10 +220,6 @@ double Reference(Op op, float input) {
   return r;
 }
 
-// Mismatch description, or empty if `result` meets the reference: bit-exact
-// for special values, within 2^-20 relative (or 2^-20 absolute near zero) for
-// finite ones, which covers the host's documented approximation error and the
-// optional 21-bit reduction.
 std::string Check(Op op, float input, float result) {
   double ref = Reference(op, input);
   if (std::isnan(ref)) {
@@ -255,7 +233,7 @@ std::string Check(Op op, float input, float result) {
   if (!std::isfinite(result)) {
     return "expected finite " + std::to_string(ref);
   }
-  // A denormal result may be flushed to zero by the host float controls.
+
   if (std::abs(ref) < double(FLT_MIN) && result == 0.0f) {
     return "";
   }
@@ -264,7 +242,7 @@ std::string Check(Op op, float input, float result) {
   return error <= tolerance ? "" : "expected " + std::to_string(ref);
 }
 
-}  // namespace
+}
 
 TEST_CASE("Scalar approximations follow the documented special cases and precision", "[gpu][alu]") {
   bool rounding = GENERATE(false, true);
@@ -291,17 +269,12 @@ TEST_CASE("Scalar approximations follow the documented special cases and precisi
                       << ": " << mismatch);
       CHECK(mismatch.empty());
       if (rounding && std::isfinite(results[i]) && std::abs(results[i]) != FLT_MAX) {
-        // The opt-in reduction leaves 21 mantissa bits. The clamped variants
-        // turn infinity into exactly +-FLT_MAX after it.
         CHECK((std::bit_cast<uint32_t>(results[i]) & 3u) == 0u);
       }
     }
   }
 }
 
-// xenia-canary #1245: MULSC rounds to nearest even by default; the opt-in
-// mulsc_round_toward_zero steps a product that rounded away from zero back by
-// one ulp.
 TEST_CASE("MULSC rounds to nearest, or toward zero when asked", "[gpu][alu]") {
   bool toward_zero = GENERATE(false, true);
   std::string error;
@@ -315,9 +288,8 @@ TEST_CASE("MULSC rounds to nearest, or toward zero when asked", "[gpu][alu]") {
   }
   INFO(fixture->Metadata());
   INFO("mulsc_round_toward_zero " << toward_zero);
-  // Batch indices times 1/3 as the Volition titles split them, and other
-  // products whose float result rounds up, down or is exact.
-  const float multiplier = F(0x3EAAAAAB);  // 1/3 rounded up
+
+  const float multiplier = F(0x3EAAAAAB);
   const std::vector<float> inputs = {1.0f,   2.0f,    3.0f,   5.0f,     7.0f,    11.0f, 12.0f,
                                      299.0f, 300.0f,  301.0f, 1000.0f,  -2.0f,   -5.0f, -7.0f,
                                      0.1f,   1.0e10f, 0.75f,  123.456f, 65535.0f};
@@ -334,6 +306,6 @@ TEST_CASE("MULSC rounds to nearest, or toward zero when asked", "[gpu][alu]") {
                    << ", expected 0x" << std::bit_cast<uint32_t>(expected) << std::dec);
     CHECK(std::bit_cast<uint32_t>(results[i]) == std::bit_cast<uint32_t>(expected));
   }
-  // The inputs must exercise the case the option changes.
+
   CHECK(rounded_away > 0);
 }

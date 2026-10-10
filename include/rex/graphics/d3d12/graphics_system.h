@@ -33,4 +33,4 @@ class D3D12GraphicsSystem : public GraphicsSystem {
   std::unique_ptr<CommandProcessor> CreateCommandProcessor() override;
 };
 
-}  // namespace rex::graphics::d3d12
+}

@@ -22,7 +22,7 @@ bool ParseDimension(std::string_view text, uint32_t& value_out) {
   return result.ec == std::errc() && result.ptr == text.data() + text.size();
 }
 
-}  // namespace
+}
 
 bool ScalingResolutionList::Parse(std::string_view text, std::string* error_out) {
   entries_.clear();
@@ -78,4 +78,4 @@ bool ScalingResolutionList::Matches(uint32_t width, uint32_t height) const {
   return false;
 }
 
-}  // namespace rex::graphics
+}

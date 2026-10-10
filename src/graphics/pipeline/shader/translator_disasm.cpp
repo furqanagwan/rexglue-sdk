@@ -67,9 +67,7 @@ void DisassembleResultOperand(const InstructionResult& result, string::StringBuf
         break;
     }
   }
-  // Not using GetUsedWriteMask/IsStandardSwizzle because they filter out
-  // components not having any runtime effect, but those components are still
-  // present in the microcode.
+
   if (!result.original_write_mask) {
     out->Append("._");
   } else if (result.original_write_mask != 0b1111 || result.components[0] != SwizzleSource::kX ||
@@ -151,8 +149,6 @@ void ParsedExecInstruction::Disassemble(string::StringBuffer* out) const {
   }
   if (is_yield) {
     if (type == Type::kConditional) {
-      // For `exec` or `(p0) exec` (but not `cexec`), "unexpected token ','" if
-      // preceded by a comma.
       out->Append(',');
     }
     out->Append(" Yield=true");
@@ -236,7 +232,7 @@ void ParsedAllocInstruction::Disassemble(string::StringBuffer* out) const {
     case AllocType::kVsPosition:
       out->Append("position");
       break;
-    case AllocType::kVsInterpolators:  // or AllocType::kPsColors
+    case AllocType::kVsInterpolators:
       if (is_vertex_shader) {
         out->Append("interpolators");
       } else {
@@ -262,8 +258,8 @@ void ParsedVertexFetchInstruction::Disassemble(string::StringBuffer* out) const 
       {0},
       {0},
       {0},
-      TYPE(FMT_8_8_8_8),     // 6
-      TYPE(FMT_2_10_10_10),  // 7
+      TYPE(FMT_8_8_8_8),
+      TYPE(FMT_2_10_10_10),
       {0},
       {0},
       {0},
@@ -272,8 +268,8 @@ void ParsedVertexFetchInstruction::Disassemble(string::StringBuffer* out) const 
       {0},
       {0},
       {0},
-      TYPE(FMT_10_11_11),  // 16
-      TYPE(FMT_11_11_10),  // 17
+      TYPE(FMT_10_11_11),
+      TYPE(FMT_11_11_10),
       {0},
       {0},
       {0},
@@ -281,29 +277,20 @@ void ParsedVertexFetchInstruction::Disassemble(string::StringBuffer* out) const 
       {0},
       {0},
       {0},
-      TYPE(FMT_16_16),        // 25
-      TYPE(FMT_16_16_16_16),  // 26
+      TYPE(FMT_16_16),
+      TYPE(FMT_16_16_16_16),
       {0},
       {0},
       {0},
       {0},
-      TYPE(FMT_16_16_FLOAT),        // 31
-      TYPE(FMT_16_16_16_16_FLOAT),  // 32
-      TYPE(FMT_32),                 // 33
-      TYPE(FMT_32_32),              // 34
-      TYPE(FMT_32_32_32_32),        // 35
-      TYPE(FMT_32_FLOAT),           // 36
-      TYPE(FMT_32_32_FLOAT),        // 37
-      TYPE(FMT_32_32_32_32_FLOAT),  // 38
-      {0},
-      {0},
-      {0},
-      {0},
-      {0},
-      {0},
-      {0},
-      {0},
-      {0},
+      TYPE(FMT_16_16_FLOAT),
+      TYPE(FMT_16_16_16_16_FLOAT),
+      TYPE(FMT_32),
+      TYPE(FMT_32_32),
+      TYPE(FMT_32_32_32_32),
+      TYPE(FMT_32_FLOAT),
+      TYPE(FMT_32_32_FLOAT),
+      TYPE(FMT_32_32_32_32_FLOAT),
       {0},
       {0},
       {0},
@@ -313,7 +300,16 @@ void ParsedVertexFetchInstruction::Disassemble(string::StringBuffer* out) const 
       {0},
       {0},
       {0},
-      TYPE(FMT_32_32_32_FLOAT),  // 57
+      {0},
+      {0},
+      {0},
+      {0},
+      {0},
+      {0},
+      {0},
+      {0},
+      {0},
+      TYPE(FMT_32_32_32_FLOAT),
 #undef TYPE
   };
   out->Append("   ");
@@ -504,4 +500,4 @@ void ParsedAluInstruction::Disassemble(string::StringBuffer* out) const {
   }
 }
 
-}  // namespace rex::graphics
+}

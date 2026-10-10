@@ -30,17 +30,16 @@
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/presenter.h>
 
-// Forward declarations
 namespace rex {
 class Memory;
 namespace stream {
 class ByteStream;
-}  // namespace stream
-}  // namespace rex
+}
+}
 
 namespace rex::ui {
 class WindowedAppContext;
-}  // namespace rex::ui
+}
 
 namespace rex::graphics {
 
@@ -64,8 +63,6 @@ class GraphicsSystem : public system::IGraphicsSystem {
   bool has_presentation() const override { return presenter_ != nullptr; }
   void Shutdown() override;
 
-  // May be called from any thread any number of times, even during recovery
-  // from a device loss.
   void OnHostGpuLossFromAnyThread(bool is_responsible);
 
   RegisterFile* register_file() { return &register_file_; }
@@ -93,8 +90,6 @@ class GraphicsSystem : public system::IGraphicsSystem {
  protected:
   GraphicsSystem();
 
-  // Backends build their provider here. Called lazily from either setup
-  // entry point; with_presentation is false only on headless guest-GPU paths.
   virtual void CreateProvider(bool with_presentation) = 0;
 
   virtual std::unique_ptr<CommandProcessor> CreateCommandProcessor() = 0;
@@ -132,4 +127,4 @@ class GraphicsSystem : public system::IGraphicsSystem {
   std::atomic_flag host_gpu_loss_reported_;
 };
 
-}  // namespace rex::graphics
+}

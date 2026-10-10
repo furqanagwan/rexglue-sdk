@@ -18,8 +18,6 @@
 
 namespace rex::graphics {
 
-// Collects the time between guest frame swaps and summarizes a window of them.
-// Not thread-safe: the command processor thread owns it.
 class FrameStats {
  public:
   struct Summary {
@@ -30,7 +28,7 @@ class FrameStats {
     double p95_ms = 0;
     double p99_ms = 0;
     double max_ms = 0;
-    // Frames that took longer than one or two 60 Hz refreshes.
+
     size_t over_16_7_ms = 0;
     size_t over_33_3_ms = 0;
   };
@@ -43,7 +41,6 @@ class FrameStats {
   double window_seconds() const { return total_ms_ / 1000.0; }
   bool empty() const { return frame_ms_.empty(); }
 
-  // Summarizes the frames since the last call and starts a new window.
   Summary Take() {
     Summary summary;
     summary.frames = frame_ms_.size();
@@ -79,12 +76,10 @@ class FrameStats {
   }
 
  private:
-  // Swap timing jitters by a fraction of a millisecond; a frame is only late
-  // when it clearly misses a refresh.
   static constexpr double kSlackMs = 1.0;
 
   std::vector<double> frame_ms_;
   double total_ms_ = 0;
 };
 
-}  // namespace rex::graphics
+}

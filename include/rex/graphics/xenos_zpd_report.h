@@ -20,42 +20,7 @@
 
 namespace rex::graphics {
 
-// One EVENT_WRITE_ZPD occlusion query sample counter report.
-//
-// Z-Pass Done (ZPD) reports are a headache to emulate for a few reasons:
-//
-// 1. D3D has two ZPD occlusion query APIs, and some titles use both.
-//    - A conventional query brackets a draw interval within BEGIN and END calls
-//      then reads the result back with GetData.
-//    - QueryBatch writes a cumulative counter snapshot for every Issue call.
-//      Lock readies the snapshot and results are gotten by subtracting adjacent
-//      slots. So N intervals need N + 1 reports:
-//        Issue, draw_A, Issue, draw_B, Issue
-//
-// 2. Xenos doesn't have a hardware counter for each query. EVENT_WRITE_ZPD
-//    writes the counters to RB_SAMPLE_COUNT_ADDR, and D3D subtracts the BEGIN
-//    report from the END report in software to get the sample counts. So we
-//    have to track every interval between writes, including ones that aren't
-//    bracketed by BEGIN and END.
-//
-// 3. Each report contains four counters, each with A and B lanes:
-//    - ZFail: samples that fail depth
-//    - ZPass: samples that pass depth
-//    - StencilFail: samples that fail stencil
-//    - Total: ZFail + ZPass + StencilFail
-//
-//    D3D sums A and B. The exact meaning of the A/B lane split still isn't
-//    known. But for every 50 titles that merely ask for the summed ZPass,
-//    there's one example like 425307EC that masks each lane to 24 bits before
-//    summing, so we need to evenly split the counts. Samples rejected by hi-Z
-//    or hi-stencil aren't included in ZFail or StencilFail respectively.
-//
-// Host occlusion queries can only count ZPass. Canary's in-shader counting of
-// the other counters (occlusion_query_full_counters and the ROV counter path)
-// isn't ported yet, so ZFail and StencilFail stay zero and Total equals ZPass.
 struct XenosZPDReport {
-  // Lanes of a host counter slot (four uint32 per open query), written by the
-  // ROV pixel shaders.
   enum Counter : uint32_t {
     kTotal,
     kZFail,
@@ -79,9 +44,6 @@ struct XenosZPDReport {
     return *this;
   }
 
-  // Native host occlusion query. ZPass only.
-  // A counter slot read back from the host. Total is not stored separately:
-  // it is always the sum of the other three.
   static XenosZPDReport FromCounterSlot(const uint32_t* slot) {
     XenosZPDReport report;
     report.z_fail = slot[kZFail];
@@ -90,9 +52,6 @@ struct XenosZPDReport {
     return report;
   }
 
-  // Hybrid RTV query: ZPass from the native query, Total from the pixel
-  // shaders (coverage entering the depth / stencil test). The rejected rest
-  // is ZFail: host render targets cannot tell it from StencilFail.
   static XenosZPDReport FromNativeQueryAndTotal(uint64_t passed, uint64_t coverage) {
     XenosZPDReport report;
     report.z_pass = passed;
@@ -106,7 +65,6 @@ struct XenosZPDReport {
     return report;
   }
 
-  // Divides host counts by the draw scale area, rounding to nearest.
   XenosZPDReport Normalized(uint32_t scale_area) const {
     auto normalize = [scale_area](uint64_t count) {
       return scale_area <= 1 || !count
@@ -120,10 +78,6 @@ struct XenosZPDReport {
     return report;
   }
 
-  // Writes the report to guest memory, each counter split across the A and B
-  // lanes. Low 32 bits only, the hardware counters wrap and so do we.
-  // GetData (usually) wakes on the ZPass lanes and QueryBatch Lock on ZPass_A
-  // or StencilFail_B, so those four are written last, in one copy.
   void WriteTo(xenos::xe_gpu_depth_sample_counts* guest) const {
     auto lane_a = [](uint64_t count) { return uint32_t(count) - (uint32_t(count) >> 1); };
     auto lane_b = [](uint64_t count) { return uint32_t(count) >> 1; };
@@ -141,4 +95,4 @@ struct XenosZPDReport {
   }
 };
 
-}  // namespace rex::graphics
+}

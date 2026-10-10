@@ -30,9 +30,6 @@ namespace xenos = rex::graphics::xenos;
 using rex::testing::GpuFixture;
 using namespace rex::testing::guest_draw;  // NOLINT
 
-// Draws one pixel at a time with its own constant color, so every pixel of the
-// region (0, 0)-(width, height) holds a distinct value regardless of how the
-// rasterizer treats the edges.
 void DrawPixels(GpuFixture& fixture, const Surface& surface, uint32_t width, uint32_t height,
                 const std::function<uint32_t(uint32_t, uint32_t)>& color) {
   SetupDraw(fixture, surface, width, height);
@@ -43,7 +40,6 @@ void DrawPixels(GpuFixture& fixture, const Surface& surface, uint32_t width, uin
   }
 }
 
-// A distinct 32bpp value per 1x pixel of a 16x16 region.
 uint32_t PixelColor(uint32_t x, uint32_t y) {
   return x | (y << 8) | 0x80400000;
 }
@@ -52,8 +48,6 @@ struct Coord {
   uint32_t x, y;
 };
 
-// Canary #1163's canonical layout: the 1x pixel holding sample `s` of the
-// MSAA pixel (x, y) at the same EDRAM address (XeEdramOffsetBytes).
 Coord CanonicalSampleTo1x(xenos::MsaaSamples msaa, uint32_t x, uint32_t y, uint32_t s) {
   if (msaa == xenos::MsaaSamples::k4X) {
     return {((x & ~1u) << 1) | (x & 1) | ((s & 1) << 1), ((y & ~1u) << 1) | (y & 1) | (s & 2)};
@@ -61,12 +55,8 @@ Coord CanonicalSampleTo1x(xenos::MsaaSamples msaa, uint32_t x, uint32_t y, uint3
   return {(x & ~2u) | (s << 1), ((y & ~1u) << 1) | (y & 1) | (x & 2)};
 }
 
-}  // namespace
+}
 
-// Canary #1163: MSAA samples of a pixel are spread over 4x4 blocks of the 1x
-// view of the same EDRAM, so a 1x target re-aliased as MSAA (and back) sees the
-// console's arrangement. 8x8-aligned clears can't show this; one draw per
-// pixel gives every 1x pixel a distinct value.
 TEST_CASE("1x EDRAM re-aliased as MSAA uses the canonical sample layout", "[gpu][edram]") {
   auto msaa = GENERATE(xenos::MsaaSamples::k2X, xenos::MsaaSamples::k4X);
   std::string error;
@@ -75,7 +65,7 @@ TEST_CASE("1x EDRAM re-aliased as MSAA uses the canonical sample layout", "[gpu]
     SKIP("GPU fixture host unavailable: " << error);
   }
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
-  // Otherwise draws are dropped while their pipelines compile.
+
   REQUIRE(rex::cvar::SetFlagByName("async_shader_compilation", "false"));
   bool is_4x = msaa == xenos::MsaaSamples::k4X;
   INFO((is_4x ? "4x" : "2x"));
@@ -86,8 +76,6 @@ TEST_CASE("1x EDRAM re-aliased as MSAA uses the canonical sample layout", "[gpu]
   uint32_t reference = fixture->AllocPhysical(0x1000);
   Resolve(*fixture, surface_1x, k1xSize, k1xSize, xenos::CopySampleSelect::k0, reference);
 
-  // The MSAA alias of the same EDRAM rows: 2x halves the height, 4x also the
-  // width (the pitch is in samples either way).
   Surface surface_msaa = {msaa, 64};
   uint32_t msaa_width = is_4x ? k1xSize / 2 : k1xSize;
   uint32_t msaa_height = k1xSize / 2;
@@ -136,12 +124,11 @@ TEST_CASE("MSAA EDRAM re-aliased as 1x uses the canonical sample layout", "[gpu]
     SKIP("GPU fixture host unavailable: " << error);
   }
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
-  // Otherwise draws are dropped while their pipelines compile.
+
   REQUIRE(rex::cvar::SetFlagByName("async_shader_compilation", "false"));
   bool is_4x = msaa == xenos::MsaaSamples::k4X;
   INFO((is_4x ? "4x" : "2x"));
 
-  // Every sample of an MSAA pixel gets the pixel's color.
   Surface surface_msaa = {msaa, 64};
   uint32_t msaa_width = is_4x ? 8 : 16, msaa_height = 8;
   DrawPixels(*fixture, surface_msaa, msaa_width, msaa_height, PixelColor);
@@ -182,9 +169,6 @@ TEST_CASE("MSAA EDRAM re-aliased as 1x uses the canonical sample layout", "[gpu]
   CHECK(mismatches == 0);
 }
 
-// Canary #1222 (title 4D530A26): a color target aliasing the depth buffer's
-// EDRAM base that writes only the stencil byte (red of k_8_8_8_8 over D24S8)
-// must not disable a read-only depth test, and the depth bits must survive.
 TEST_CASE("Color aliasing depth keeps a read-only depth test", "[gpu][edram]") {
   std::string error;
   auto fixture = GpuFixture::Create(&error);
@@ -194,11 +178,9 @@ TEST_CASE("Color aliasing depth keeps a read-only depth test", "[gpu][edram]") {
   REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
   REQUIRE(rex::cvar::SetFlagByName("async_shader_compilation", "false"));
 
-  // Depth tiles store their 40-sample halves swapped relative to color, so a
-  // whole 80-sample tile row covers both the color and the depth bits.
   constexpr uint32_t kWidth = 80, kHeight = 16, kPitch = 96;
   Surface surface = {xenos::MsaaSamples::k1X, kWidth};
-  // Depth 0.5 everywhere, no color writes.
+
   DrawOptions depth_fill;
   depth_fill.z = 0.5f;
   depth_fill.depth_control.z_enable = 1;
@@ -210,8 +192,6 @@ TEST_CASE("Color aliasing depth keeps a read-only depth test", "[gpu][edram]") {
   uint32_t before = fixture->AllocPhysical(0x4000);
   Resolve(*fixture, surface, kWidth, kHeight, xenos::CopySampleSelect::k0, before, kPitch);
 
-  // Red only, depth test less without writes: the left half (z 0.25) passes,
-  // the right half (z 0.75) fails.
   for (uint32_t half = 0; half < 2; ++half) {
     DrawOptions stencil_byte;
     stencil_byte.z = half ? 0.75f : 0.25f;
@@ -249,10 +229,6 @@ TEST_CASE("Color aliasing depth keeps a read-only depth test", "[gpu][edram]") {
   CHECK(not_written == 0);
 }
 
-// Canary #1238: when a float24 depth target is transferred back into after an
-// alias, the host depth store saves its float32 depth per sample in the layout
-// the transfer shader reads it with. A wrong layout loses the host precision,
-// so redrawing the same geometry with an equal depth test fails.
 TEST_CASE("MSAA float24 depth keeps host precision through an alias", "[gpu][edram]") {
   auto msaa = GENERATE(xenos::MsaaSamples::k2X, xenos::MsaaSamples::k4X);
   std::string error;
@@ -266,9 +242,9 @@ TEST_CASE("MSAA float24 depth keeps host precision through an alias", "[gpu][edr
   INFO((is_4x ? "4x" : "2x"));
 
   constexpr uint32_t kWidth = 32, kHeight = 16;
-  // 80 samples, a whole tile row, for both halves of the depth tile.
+
   Surface surface = {msaa, 80};
-  // A color target far from the depth one to record the equal test.
+
   constexpr uint32_t kColorBaseTiles = 1024;
   DrawOptions gradient;
   gradient.z = 0.1f;
@@ -282,9 +258,6 @@ TEST_CASE("MSAA float24 depth keeps host precision through an alias", "[gpu][edr
   SetupDraw(*fixture, surface, kWidth, kHeight, gradient);
   DrawRect(*fixture, 0, 0, kWidth, kHeight, 0);
 
-  // A color draw over the depth range makes the color target its owner. It
-  // writes only the stencil byte, so the EDRAM depth bits still match the
-  // host depth when the range goes back to the depth target.
   DrawOptions alias;
   alias.color_mask = 0b0001;
   SetupDraw(*fixture, surface, kWidth, kHeight, alias);
@@ -312,8 +285,6 @@ TEST_CASE("MSAA float24 depth keeps host precision through an alias", "[gpu][edr
   CHECK(failed == 0);
 }
 
-// Canary #1163: a 64bpp sample is two horizontally adjacent 32bpp sample
-// columns, u = 2 * u_64bpp + half, for any sample count of the 64bpp view.
 TEST_CASE("64bpp EDRAM re-aliased as 32bpp uses the canonical sample layout", "[gpu][edram]") {
   auto msaa = GENERATE(xenos::MsaaSamples::k1X, xenos::MsaaSamples::k4X);
   std::string error;
@@ -326,7 +297,6 @@ TEST_CASE("64bpp EDRAM re-aliased as 32bpp uses the canonical sample layout", "[
   bool is_4x = msaa == xenos::MsaaSamples::k4X;
   INFO((is_4x ? "4x" : "1x"));
 
-  // 40 64bpp samples (a tile row), 80 32bpp ones in the 1x alias.
   Surface surface_64bpp = {msaa, 40};
   uint32_t width = is_4x ? 8 : 16, height = is_4x ? 8 : 16;
   DrawOptions options;

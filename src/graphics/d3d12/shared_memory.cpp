@@ -64,8 +64,6 @@ bool D3D12SharedMemory::Initialize() {
         "because a full {} MB buffer will be created",
         kBufferSize >> 20);
     if (provider.GetGraphicsAnalysis()) {
-      // As of October 8th, 2018, PIX doesn't support tiled buffers.
-
       REXGPU_INFO(
           "This is caused by PIX being attached, which doesn't support tiled "
           "resources yet.");
@@ -146,7 +144,6 @@ void D3D12SharedMemory::Shutdown(bool from_destructor) {
 
   ui::d3d12::util::ReleaseAndNull(buffer_descriptor_heap_);
 
-  // First free the buffer to detach it from the heaps.
   ui::d3d12::util::ReleaseAndNull(buffer_);
 
   for (ID3D12Heap* heap : buffer_tiled_heaps_) {
@@ -154,8 +151,6 @@ void D3D12SharedMemory::Shutdown(bool from_destructor) {
   }
   buffer_tiled_heaps_.clear();
 
-  // If calling from the destructor, the SharedMemory destructor will call
-  // ShutdownCommon.
   if (!from_destructor) {
     ShutdownCommon();
   }
@@ -172,7 +167,6 @@ void D3D12SharedMemory::CompletedSubmissionUpdated() {
 }
 
 void D3D12SharedMemory::BeginSubmission() {
-  // ExecuteCommandLists is a full UAV barrier.
   buffer_uav_writes_commit_needed_ = false;
 }
 
@@ -186,7 +180,7 @@ void D3D12SharedMemory::CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATES
   }
   command_processor_.PushTransitionBarrier(buffer_, buffer_state_, new_state);
   buffer_state_ = new_state;
-  // "UAV -> anything" transition commits the writes implicitly.
+
   buffer_uav_writes_commit_needed_ = false;
 }
 
@@ -338,4 +332,4 @@ bool D3D12SharedMemory::UploadRanges(
   return true;
 }
 
-}  // namespace rex::graphics::d3d12
+}

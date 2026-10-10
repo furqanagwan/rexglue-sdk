@@ -34,8 +34,6 @@ void WriteFragmentShaderInterlockSystemConstants(
   auto rb_stencilrefmask_bf = regs.Get<reg::RB_STENCILREFMASK>(XE_GPU_REG_RB_STENCILREFMASK_BF);
   auto rb_surface_info = regs.Get<reg::RB_SURFACE_INFO>();
 
-  // Per render target clamp ranges and write keep masks (two UINT32_MAX when no
-  // components actually existing in the RT are written).
   reg::RB_COLOR_INFO color_infos[xenos::kMaxColorRenderTargets];
   float rt_clamp[4][4];
   uint32_t rt_keep_masks[4][2];
@@ -47,10 +45,6 @@ void WriteFragmentShaderInterlockSystemConstants(
         rt_clamp[i][1], rt_clamp[i][2], rt_clamp[i][3], rt_keep_masks[i][0], rt_keep_masks[i][1]);
   }
 
-  // Disable depth and stencil only if an aliased color target writes bits used
-  // by either test. Otherwise its keep-masked store preserves them.
-  // Don't exclude fully overlapping render targets - two with the same base are
-  // used in the lighting pass of 4D5307E6, picked with dynamic control flow.
   bool depth_stencil_enabled =
       normalized_depth_control.stencil_enable || normalized_depth_control.z_enable;
   if (depth_stencil_enabled) {
@@ -65,7 +59,6 @@ void WriteFragmentShaderInterlockSystemConstants(
     }
   }
 
-  // Depth / stencil flag bits.
   xenos::CompareFunction alpha_test_function = rb_colorcontrol.alpha_test_enable
                                                    ? rb_colorcontrol.alpha_func
                                                    : xenos::CompareFunction::kAlways;
@@ -78,8 +71,6 @@ void WriteFragmentShaderInterlockSystemConstants(
         flags |= SpirvTranslator::kSysFlag_FSIDepthWrite;
       }
     } else {
-      // In case stencil is used without depth testing - always pass, and don't
-      // modify the stored depth.
       flags |= SpirvTranslator::kSysFlag_FSIDepthPassIfLess |
                SpirvTranslator::kSysFlag_FSIDepthPassIfEqual |
                SpirvTranslator::kSysFlag_FSIDepthPassIfGreater;
@@ -87,7 +78,7 @@ void WriteFragmentShaderInterlockSystemConstants(
     if (normalized_depth_control.stencil_enable) {
       flags |= SpirvTranslator::kSysFlag_FSIStencilTest;
     }
-    // Hint - if not applicable to the shader, will not have effect.
+
     if (alpha_test_function == xenos::CompareFunction::kAlways &&
         !rb_colorcontrol.alpha_to_mask_enable) {
       flags |= SpirvTranslator::kSysFlag_FSIDepthStencilEarlyWrite;
@@ -101,8 +92,6 @@ void WriteFragmentShaderInterlockSystemConstants(
                                       xenos::kEdramTileHeightSamples *
                                       (draw_resolution_scale_x * draw_resolution_scale_y);
 
-  // EDRAM pitch for FSI render target writing. Align, then multiply by the
-  // 32bpp tile size in dwords.
   uint32_t edram_32bpp_tile_pitch_dwords_scaled =
       ((rb_surface_info.surface_pitch *
         (rb_surface_info.msaa_samples >= xenos::MsaaSamples::k4X ? 2 : 1)) +
@@ -112,7 +101,6 @@ void WriteFragmentShaderInterlockSystemConstants(
       system_constants.edram_32bpp_tile_pitch_dwords_scaled != edram_32bpp_tile_pitch_dwords_scaled;
   system_constants.edram_32bpp_tile_pitch_dwords_scaled = edram_32bpp_tile_pitch_dwords_scaled;
 
-  // Per render target FSI write state.
   for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
     reg::RB_COLOR_INFO color_info = color_infos[i];
     dirty |= system_constants.edram_rt_keep_mask[i][0] != rt_keep_masks[i][0];
@@ -126,8 +114,7 @@ void WriteFragmentShaderInterlockSystemConstants(
       uint32_t blend_factors_ops = regs[reg::RB_BLENDCONTROL::rt_register_indices[i]] & 0x1FFF1FFF;
       dirty |= system_constants.edram_rt_blend_factors_ops[i] != blend_factors_ops;
       system_constants.edram_rt_blend_factors_ops[i] = blend_factors_ops;
-      // Can't do float comparisons here because NaNs would result in always
-      // setting the dirty flag.
+
       dirty |= std::memcmp(system_constants.edram_rt_clamp[i], rt_clamp[i], 4 * sizeof(float)) != 0;
       std::memcpy(system_constants.edram_rt_clamp[i], rt_clamp[i], 4 * sizeof(float));
     }
@@ -137,8 +124,6 @@ void WriteFragmentShaderInterlockSystemConstants(
   dirty |= system_constants.edram_depth_base_dwords_scaled != depth_base_dwords_scaled;
   system_constants.edram_depth_base_dwords_scaled = depth_base_dwords_scaled;
 
-  // For non-polygons, front polygon offset is used, enabled if
-  // POLY_OFFSET_PARA_ENABLED is set. For polygons, front and back are separate.
   float poly_offset_front_scale = 0.0f, poly_offset_front_offset = 0.0f;
   float poly_offset_back_scale = 0.0f, poly_offset_back_offset = 0.0f;
   if (primitive_polygonal) {
@@ -158,10 +143,7 @@ void WriteFragmentShaderInterlockSystemConstants(
       poly_offset_back_offset = poly_offset_front_offset;
     }
   }
-  // With non-square resolution scaling, make sure the worst-case impact is
-  // reverted (slope only along the scaled axis), thus max. More bias is better
-  // than less bias, because less bias means Z fighting with the background is
-  // more likely.
+
   float poly_offset_scale_factor = xenos::kPolygonOffsetScaleSubpixelUnit *
                                    std::max(draw_resolution_scale_x, draw_resolution_scale_y);
   poly_offset_front_scale *= poly_offset_scale_factor;
@@ -208,4 +190,4 @@ void WriteFragmentShaderInterlockSystemConstants(
   system_constants.edram_blend_constant[3] = regs.Get<float>(XE_GPU_REG_RB_BLEND_ALPHA);
 }
 
-}  // namespace rex::graphics
+}

@@ -38,7 +38,7 @@ void DrawFan(GpuFixture& fixture, uint32_t indices) {
   REQUIRE(fixture.Submit(
       {xenos::MakePacketType3(xenos::PM4_DRAW_INDX_2, 3), draw.value, indices, dma.value}));
 }
-}  // namespace
+}
 
 TEST_CASE("Guest writes replace a cached triangle fan on the GPU", "[gpu][primitive]") {
   RestoreCvars restore;
@@ -69,8 +69,6 @@ TEST_CASE("Guest writes replace a cached triangle fan on the GPU", "[gpu][primit
   REQUIRE(fixture->Flush());
   CHECK(ReadTexel(*fixture, destination, 16, 16) == 0xFFFFFFFF);
 
-  // Keep the same index address/key in this frame. A guest write collapses the
-  // fan to degenerate triangles; stale conversion would still draw white.
   fixture->WriteDwordsAsGuest(indices, {0, 0, 0, 0});
   SetupDraw(*fixture, surface, kSize, kSize);
   DrawRect(*fixture, 0, 0, kSize, kSize, 0xFF0000FF);

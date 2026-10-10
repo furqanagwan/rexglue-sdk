@@ -85,4 +85,4 @@ class RegisterFile {
   }
 };
 
-}  // namespace rex::graphics
+}

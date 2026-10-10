@@ -26,12 +26,8 @@ namespace rex::graphics {
 
 spv::Id SpirvShaderTranslator::PreClampedFloat32To7e3(SpirvBuilder& builder, spv::Id f32_scalar,
                                                       spv::Id ext_inst_glsl_std_450) {
-  // https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
-  // Assuming the value is already clamped to [0, 31.875].
-
   spv::Id type_uint = builder.makeUintType(32);
 
-  // Need the source as uint for bit operations.
   {
     spv::Id source_type = builder.getTypeId(f32_scalar);
     assert_true(builder.isScalarType(source_type));
@@ -40,8 +36,6 @@ spv::Id SpirvShaderTranslator::PreClampedFloat32To7e3(SpirvBuilder& builder, spv
     }
   }
 
-  // The denormal 7e3 case.
-  // denormal_biased_f32 = (f32 & 0x7FFFFF) | 0x800000
   spv::Id denormal_biased_f32;
   {
     spv::Instruction* denormal_insert_instruction =
@@ -54,8 +48,7 @@ spv::Id SpirvShaderTranslator::PreClampedFloat32To7e3(SpirvBuilder& builder, spv
         std::unique_ptr<spv::Instruction>(denormal_insert_instruction));
     denormal_biased_f32 = denormal_insert_instruction->getResultId();
   }
-  // denormal_biased_f32_shift_amount = min(125 - (f32 >> 23), 24)
-  // Not allowing the shift to overflow as that's undefined in SPIR-V.
+
   spv::Id denormal_biased_f32_shift_amount;
   {
     spv::Instruction* denormal_shift_amount_instruction =
@@ -71,27 +64,19 @@ spv::Id SpirvShaderTranslator::PreClampedFloat32To7e3(SpirvBuilder& builder, spv
         std::unique_ptr<spv::Instruction>(denormal_shift_amount_instruction));
     denormal_biased_f32_shift_amount = denormal_shift_amount_instruction->getResultId();
   }
-  // denormal_biased_f32 =
-  //     ((f32 & 0x7FFFFF) | 0x800000) >> min(125 - (f32 >> 23), 24)
+
   denormal_biased_f32 = builder.createBinOp(spv::OpShiftRightLogical, type_uint,
                                             denormal_biased_f32, denormal_biased_f32_shift_amount);
 
-  // The normal 7e3 case.
-  // Bias the exponent.
-  // normal_biased_f32 = f32 - (124 << 23)
   spv::Id normal_biased_f32 = builder.createBinOp(spv::OpISub, type_uint, f32_scalar,
                                                   builder.makeUintConstant(UINT32_C(124) << 23));
 
-  // Select the needed conversion depending on whether the number is too small
-  // to be represented as normalized 7e3.
   spv::Id biased_f32 =
       builder.createTriOp(spv::OpSelect, type_uint,
                           builder.createBinOp(spv::OpULessThan, builder.makeBoolType(), f32_scalar,
                                               builder.makeUintConstant(0x3E800000)),
                           denormal_biased_f32, normal_biased_f32);
 
-  // Build the 7e3 number rounding to the nearest even.
-  // ((biased_f32 + 0x7FFF + ((biased_f32 >> 16) & 1)) >> 16) & 0x3FF
   return builder.createTriOp(
       spv::OpBitFieldUExtract, type_uint,
       builder.createBinOp(
@@ -106,7 +91,6 @@ spv::Id SpirvShaderTranslator::UnclampedFloat32To7e3(SpirvBuilder& builder, spv:
                                                      spv::Id ext_inst_glsl_std_450) {
   spv::Id type_float = builder.makeFloatType(32);
 
-  // Need the source as float for clamping.
   {
     spv::Id source_type = builder.getTypeId(f32_scalar);
     assert_true(builder.isScalarType(source_type));
@@ -133,8 +117,6 @@ spv::Id SpirvShaderTranslator::UnclampedFloat32To7e3(SpirvBuilder& builder, spv:
 spv::Id SpirvShaderTranslator::Float7e3To32(SpirvBuilder& builder, spv::Id f10_uint_scalar,
                                             uint32_t f10_shift, bool result_as_uint,
                                             spv::Id ext_inst_glsl_std_450) {
-  // https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
-
   assert_true(builder.isUintType(builder.getTypeId(f10_uint_scalar)));
   assert_true(f10_shift <= (32 - 10));
 
@@ -149,8 +131,6 @@ spv::Id SpirvShaderTranslator::Float7e3To32(SpirvBuilder& builder, spv::Id f10_u
       builder.createTriOp(spv::OpBitFieldUExtract, type_uint, f10_uint_scalar,
                           builder.makeUintConstant(f10_shift), builder.makeUintConstant(7));
 
-  // The denormal nonzero 7e3 case.
-  // denormal_mantissa_msb = findMSB(f10_mantissa)
   spv::Id denormal_mantissa_msb;
   {
     spv::Instruction* denormal_mantissa_msb_instruction =
@@ -163,29 +143,24 @@ spv::Id SpirvShaderTranslator::Float7e3To32(SpirvBuilder& builder, spv::Id f10_u
     denormal_mantissa_msb = denormal_mantissa_msb_instruction->getResultId();
   }
   denormal_mantissa_msb = builder.createUnaryOp(spv::OpBitcast, type_uint, denormal_mantissa_msb);
-  // denormal_f32_unbiased_exponent = 1 - (7 - findMSB(f10_mantissa))
-  // Or:
-  // denormal_f32_unbiased_exponent = findMSB(f10_mantissa) - 6
+
   spv::Id denormal_f32_unbiased_exponent = builder.createBinOp(
       spv::OpISub, type_uint, denormal_mantissa_msb, builder.makeUintConstant(6));
-  // Normalize the mantissa.
-  // denormal_f32_mantissa = f10_mantissa << (7 - findMSB(f10_mantissa))
+
   spv::Id denormal_f32_mantissa =
       builder.createBinOp(spv::OpShiftLeftLogical, type_uint, f10_mantissa,
                           builder.createBinOp(spv::OpISub, type_uint, builder.makeUintConstant(7),
                                               denormal_mantissa_msb));
-  // If the 7e3 number is zero, make sure the float32 number is zero too.
+
   spv::Id f10_mantissa_is_nonzero =
       builder.createBinOp(spv::OpINotEqual, type_bool, f10_mantissa, builder.makeUintConstant(0));
-  // Set the unbiased exponent to -124 for zero - 124 will be added later,
-  // resulting in zero float32.
+
   denormal_f32_unbiased_exponent =
       builder.createTriOp(spv::OpSelect, type_uint, f10_mantissa_is_nonzero,
                           denormal_f32_unbiased_exponent, builder.makeUintConstant(uint32_t(-124)));
   denormal_f32_mantissa = builder.createTriOp(spv::OpSelect, type_uint, f10_mantissa_is_nonzero,
                                               denormal_f32_mantissa, builder.makeUintConstant(0));
 
-  // Select the needed conversion depending on whether the number is normal.
   spv::Id f10_is_normal = builder.createBinOp(spv::OpINotEqual, type_bool, f10_unbiased_exponent,
                                               builder.makeUintConstant(0));
   spv::Id f32_unbiased_exponent =
@@ -194,7 +169,6 @@ spv::Id SpirvShaderTranslator::Float7e3To32(SpirvBuilder& builder, spv::Id f10_u
   spv::Id f32_mantissa = builder.createTriOp(spv::OpSelect, type_uint, f10_is_normal, f10_mantissa,
                                              denormal_f32_mantissa);
 
-  // Bias the exponent and construct the build the float32 number.
   spv::Id f32_shifted;
   {
     spv::Instruction* f32_insert_instruction =
@@ -222,16 +196,10 @@ spv::Id SpirvShaderTranslator::PreClampedDepthTo20e4(SpirvBuilder& builder, spv:
                                                      bool round_to_nearest_even,
                                                      bool remap_from_0_to_0_5,
                                                      spv::Id ext_inst_glsl_std_450) {
-  // CFloat24 from d3dref9.dll +
-  // https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
-  // Assuming the value is already clamped to [0, 2) (in all places, the depth
-  // is written with saturation).
-
   uint32_t remap_bias = uint32_t(remap_from_0_to_0_5);
 
   spv::Id type_uint = builder.makeUintType(32);
 
-  // Need the source as uint for bit operations.
   {
     spv::Id source_type = builder.getTypeId(f32_scalar);
     assert_true(builder.isScalarType(source_type));
@@ -240,8 +208,6 @@ spv::Id SpirvShaderTranslator::PreClampedDepthTo20e4(SpirvBuilder& builder, spv:
     }
   }
 
-  // The denormal 20e4 case.
-  // denormal_biased_f32 = (f32 & 0x7FFFFF) | 0x800000
   spv::Id denormal_biased_f32;
   {
     spv::Instruction* denormal_insert_instruction =
@@ -254,8 +220,7 @@ spv::Id SpirvShaderTranslator::PreClampedDepthTo20e4(SpirvBuilder& builder, spv:
         std::unique_ptr<spv::Instruction>(denormal_insert_instruction));
     denormal_biased_f32 = denormal_insert_instruction->getResultId();
   }
-  // denormal_biased_f32_shift_amount = min(113 - (f32 >> 23), 24)
-  // Not allowing the shift to overflow as that's undefined in SPIR-V.
+
   spv::Id denormal_biased_f32_shift_amount;
   {
     spv::Instruction* denormal_shift_amount_instruction =
@@ -271,29 +236,21 @@ spv::Id SpirvShaderTranslator::PreClampedDepthTo20e4(SpirvBuilder& builder, spv:
         std::unique_ptr<spv::Instruction>(denormal_shift_amount_instruction));
     denormal_biased_f32_shift_amount = denormal_shift_amount_instruction->getResultId();
   }
-  // denormal_biased_f32 =
-  //     ((f32 & 0x7FFFFF) | 0x800000) >> min(113 - (f32 >> 23), 24)
+
   denormal_biased_f32 = builder.createBinOp(spv::OpShiftRightLogical, type_uint,
                                             denormal_biased_f32, denormal_biased_f32_shift_amount);
 
-  // The normal 20e4 case.
-  // Bias the exponent.
-  // normal_biased_f32 = f32 - (112 << 23)
   spv::Id normal_biased_f32 =
       builder.createBinOp(spv::OpISub, type_uint, f32_scalar,
                           builder.makeUintConstant((UINT32_C(112) - remap_bias) << 23));
 
-  // Select the needed conversion depending on whether the number is too small
-  // to be represented as normalized 20e4.
   spv::Id biased_f32 = builder.createTriOp(
       spv::OpSelect, type_uint,
       builder.createBinOp(spv::OpULessThan, builder.makeBoolType(), f32_scalar,
                           builder.makeUintConstant(0x38800000 - (remap_bias << 23))),
       denormal_biased_f32, normal_biased_f32);
 
-  // Build the 20e4 number rounding to the nearest even or towards zero.
   if (round_to_nearest_even) {
-    // biased_f32 += 3 + ((biased_f32 >> 3) & 1)
     biased_f32 = builder.createBinOp(
         spv::OpIAdd, type_uint,
         builder.createBinOp(spv::OpIAdd, type_uint, biased_f32, builder.makeUintConstant(3)),
@@ -307,9 +264,6 @@ spv::Id SpirvShaderTranslator::PreClampedDepthTo20e4(SpirvBuilder& builder, spv:
 spv::Id SpirvShaderTranslator::Depth20e4To32(SpirvBuilder& builder, spv::Id f24_uint_scalar,
                                              uint32_t f24_shift, bool remap_to_0_to_0_5,
                                              bool result_as_uint, spv::Id ext_inst_glsl_std_450) {
-  // CFloat24 from d3dref9.dll +
-  // https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
-
   assert_true(builder.isUintType(builder.getTypeId(f24_uint_scalar)));
   assert_true(f24_shift <= (32 - 24));
 
@@ -326,8 +280,6 @@ spv::Id SpirvShaderTranslator::Depth20e4To32(SpirvBuilder& builder, spv::Id f24_
       builder.createTriOp(spv::OpBitFieldUExtract, type_uint, f24_uint_scalar,
                           builder.makeUintConstant(f24_shift), builder.makeUintConstant(20));
 
-  // The denormal nonzero 20e4 case.
-  // denormal_mantissa_msb = findMSB(f24_mantissa)
   spv::Id denormal_mantissa_msb;
   {
     spv::Instruction* denormal_mantissa_msb_instruction =
@@ -340,29 +292,24 @@ spv::Id SpirvShaderTranslator::Depth20e4To32(SpirvBuilder& builder, spv::Id f24_
     denormal_mantissa_msb = denormal_mantissa_msb_instruction->getResultId();
   }
   denormal_mantissa_msb = builder.createUnaryOp(spv::OpBitcast, type_uint, denormal_mantissa_msb);
-  // denormal_f32_unbiased_exponent = 1 - (20 - findMSB(f24_mantissa))
-  // Or:
-  // denormal_f32_unbiased_exponent = findMSB(f24_mantissa) - 19
+
   spv::Id denormal_f32_unbiased_exponent = builder.createBinOp(
       spv::OpISub, type_uint, denormal_mantissa_msb, builder.makeUintConstant(19));
-  // Normalize the mantissa.
-  // denormal_f32_mantissa = f24_mantissa << (20 - findMSB(f24_mantissa))
+
   spv::Id denormal_f32_mantissa =
       builder.createBinOp(spv::OpShiftLeftLogical, type_uint, f24_mantissa,
                           builder.createBinOp(spv::OpISub, type_uint, builder.makeUintConstant(20),
                                               denormal_mantissa_msb));
-  // If the 20e4 number is zero, make sure the float32 number is zero too.
+
   spv::Id f24_mantissa_is_nonzero =
       builder.createBinOp(spv::OpINotEqual, type_bool, f24_mantissa, builder.makeUintConstant(0));
-  // Set the unbiased exponent to -112 for zero - 112 will be added later,
-  // resulting in zero float32.
+
   denormal_f32_unbiased_exponent = builder.createTriOp(
       spv::OpSelect, type_uint, f24_mantissa_is_nonzero, denormal_f32_unbiased_exponent,
       builder.makeUintConstant(uint32_t(-int32_t(112 - remap_bias))));
   denormal_f32_mantissa = builder.createTriOp(spv::OpSelect, type_uint, f24_mantissa_is_nonzero,
                                               denormal_f32_mantissa, builder.makeUintConstant(0));
 
-  // Select the needed conversion depending on whether the number is normal.
   spv::Id f24_is_normal = builder.createBinOp(spv::OpINotEqual, type_bool, f24_unbiased_exponent,
                                               builder.makeUintConstant(0));
   spv::Id f32_unbiased_exponent =
@@ -371,7 +318,6 @@ spv::Id SpirvShaderTranslator::Depth20e4To32(SpirvBuilder& builder, spv::Id f24_
   spv::Id f32_mantissa = builder.createTriOp(spv::OpSelect, type_uint, f24_is_normal, f24_mantissa,
                                              denormal_f32_mantissa);
 
-  // Bias the exponent and construct the build the float32 number.
   spv::Id f32_shifted;
   {
     spv::Instruction* f32_insert_instruction =
@@ -398,13 +344,9 @@ spv::Id SpirvShaderTranslator::Depth20e4To32(SpirvBuilder& builder, spv::Id f24_
 void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
   BisectOverrideColorOutput();
 
-  // Baked into the FSI shader through the modification. Every loop bounded by
-  // it below is on the FSI path.
   uint32_t fsi_sample_count = edram_fragment_shader_interlock_ ? FSI_GetSampleCount() : 0;
 
   if (edram_fragment_shader_interlock_ && !FSI_IsDepthStencilEarly()) {
-    // Load the sample mask, which may be modified later by killing from
-    // different sources.
     FSI_LoadSampleMask();
   }
 
@@ -421,15 +363,13 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       }
     } else {
       if (!features_.demote_to_helper_invocation) {
-        // Kill the pixel once the guest control flow and derivatives are not
-        // needed anymore.
         assert_true(var_main_kill_pixel_ != spv::NoResult);
         SpirvBuilder::IfBuilder kill_pixel_if(
             builder_->createLoad(var_main_kill_pixel_, spv::NoPrecision),
             spv::SelectionControlMaskNone, *builder_);
 
         builder_->createNoResultOp(spv::OpKill);
-        // OpKill terminates the block.
+
         kill_pixel_if.makeEndIf(false);
       }
     }
@@ -443,8 +383,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
     spv::Block* block_rt_0_alpha_tests_rt_written_merge = nullptr;
     builder_->makeNewBlock();
     if (var_main_fsi_color_written_ != spv::NoResult) {
-      // Skip the alpha test and alpha to coverage if the render target 0 is not
-      // written to dynamically. This check is used by both FSI and FBO paths.
       if (edram_fragment_shader_interlock_) {
         fsi_sample_mask_in_rt_0_alpha_tests = main_fsi_sample_mask_;
       }
@@ -466,7 +404,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         rt_0_written_branch_conditional_op->addIdOperand(block_rt_0_alpha_tests_rt_written.getId());
         rt_0_written_branch_conditional_op->addIdOperand(
             block_rt_0_alpha_tests_rt_written_merge->getId());
-        // More likely to write to the render target 0 than not.
+
         rt_0_written_branch_conditional_op->addImmediateOperand(2);
         rt_0_written_branch_conditional_op->addImmediateOperand(1);
         builder_->getBuildPoint()->addInstruction(std::move(rt_0_written_branch_conditional_op));
@@ -477,13 +415,10 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       builder_->setBuildPoint(&block_rt_0_alpha_tests_rt_written);
     }
 
-    // Alpha test.
-
     spv::Id alpha_test_function = builder_->createTriOp(
         spv::OpBitFieldUExtract, type_uint_, main_system_constant_flags_,
         builder_->makeUintConstant(kSysFlag_AlphaPassIfLess_Shift), builder_->makeUintConstant(3));
-    // Check if the comparison function is not "always" - that should pass even
-    // for NaN likely, unlike "less, equal or greater".
+
     SpirvBuilder::IfBuilder if_alpha_test_function_is_non_always(
         builder_->createBinOp(
             spv::OpINotEqual, type_bool_, alpha_test_function,
@@ -502,9 +437,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
           builder_->createAccessChain(spv::StorageClassUniform, uniform_system_constants_,
                                       id_vector_temp_),
           spv::NoPrecision);
-      // The comparison function is not "always" - perform the alpha test.
-      // Handle "not equal" specially (specifically as "not equal" so it's true
-      // for NaN, not "less or greater" which is false for NaN).
+
       SpirvBuilder::IfBuilder if_alpha_test_function_is_not_equal(
           builder_->createBinOp(
               spv::OpIEqual, type_bool_, alpha_test_function,
@@ -512,14 +445,12 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
           spv::SelectionControlDontFlattenMask, *builder_, 1, 2);
       spv::Id alpha_test_result_not_equal;
       {
-        // "Not equal" function.
         alpha_test_result_not_equal = builder_->createBinOp(spv::OpFUnordNotEqual, type_bool_,
                                                             alpha_test_alpha, alpha_test_reference);
       }
       if_alpha_test_function_is_not_equal.makeBeginElse();
       spv::Id alpha_test_result_non_not_equal;
       {
-        // Function other than "not equal".
         static constexpr spv::Op kAlphaTestOps[] = {spv::OpFOrdLessThan, spv::OpFOrdEqual,
                                                     spv::OpFOrdGreaterThan};
         for (uint32_t i = 0; i < 3; ++i) {
@@ -544,7 +475,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       if_alpha_test_function_is_not_equal.makeEndIf();
       spv::Id alpha_test_result = if_alpha_test_function_is_not_equal.createMergePhi(
           alpha_test_result_not_equal, alpha_test_result_non_not_equal);
-      // Discard the pixel if the alpha test has failed.
+
       if (edram_fragment_shader_interlock_ && !features_.demote_to_helper_invocation) {
         fsi_pixel_potentially_killed = true;
         fsi_sample_mask_in_rt_0_alpha_tests =
@@ -564,7 +495,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
           builder_->createNoResultOp(spv::OpDemoteToHelperInvocationEXT);
         } else {
           builder_->createNoResultOp(spv::OpKill);
-          // OpKill terminates the block.
+
           branch_to_alpha_test_kill_merge = false;
         }
         alpha_test_kill_if.makeEndIf(branch_to_alpha_test_kill_merge);
@@ -572,17 +503,13 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
     }
     if_alpha_test_function_is_non_always.makeEndIf();
 
-    // Alpha to coverage.
     FSI_AlphaToMask();
 
     if (block_rt_0_alpha_tests_rt_written_merge) {
-      // Close the render target 0 written check (used by both FSI and FBO).
       builder_->createBranch(block_rt_0_alpha_tests_rt_written_merge);
       spv::Block& block_rt_0_alpha_tests_rt_written_end = *builder_->getBuildPoint();
       builder_->setBuildPoint(block_rt_0_alpha_tests_rt_written_merge);
       if (edram_fragment_shader_interlock_ && !features_.demote_to_helper_invocation) {
-        // The tests might have modified the sample mask via
-        // fsi_sample_mask_in_rt_0_alpha_tests.
         id_vector_temp_.clear();
         id_vector_temp_.push_back(fsi_sample_mask_in_rt_0_alpha_tests);
         id_vector_temp_.push_back(block_rt_0_alpha_tests_rt_written_end.getId());
@@ -590,12 +517,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         id_vector_temp_.push_back(block_rt_0_alpha_tests_rt_written_head->getId());
         main_fsi_sample_mask_ = builder_->createOp(spv::OpPhi, type_uint_, id_vector_temp_);
       } else if (edram_fragment_shader_interlock_) {
-        // Demote path: the alpha test demotes instead of touching the mask, but
-        // alpha to coverage still modified main_fsi_sample_mask_ inside the
-        // written branch. Merge in the pre-branch mask
-        // (fsi_sample_mask_in_rt_0_alpha_tests) on the not-written edge so the
-        // value dominates the merge. Otherwise it is undefined there (invalid
-        // SPIR-V dominance and garbage coverage).
         id_vector_temp_.clear();
         id_vector_temp_.push_back(main_fsi_sample_mask_);
         id_vector_temp_.push_back(block_rt_0_alpha_tests_rt_written_end.getId());
@@ -619,8 +540,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
   if (edram_fragment_shader_interlock_) {
     if (fsi_pixel_potentially_killed) {
       if (features_.demote_to_helper_invocation) {
-        // Don't do anything related to writing to the EDRAM if the pixel was
-        // killed.
         id_vector_temp_.clear();
 
         main_fsi_sample_mask_ = builder_->createTriOp(
@@ -628,8 +547,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             builder_->createOp(spv::OpIsHelperInvocationEXT, type_bool_, id_vector_temp_),
             const_uint_0_, main_fsi_sample_mask_);
       }
-      // Check the condition before the OpSelectionMerge, which must be the
-      // penultimate instruction in a block.
+
       spv::Id pixel_not_killed =
           builder_->createBinOp(spv::OpINotEqual, type_bool_, main_fsi_sample_mask_, const_uint_0_);
       block_fsi_if_after_kill = &builder_->makeNewBlock();
@@ -643,7 +561,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
 
     spv::Id color_write_depth_stencil_condition = spv::NoResult;
     if (FSI_IsDepthStencilEarly()) {
-      // Perform late depth / stencil writes for samples not discarded.
       for (uint32_t i = 0; i < fsi_sample_count; ++i) {
         spv::Id sample_late_depth_stencil_write_needed = builder_->createBinOp(
             spv::OpINotEqual, type_bool_,
@@ -655,7 +572,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             *builder_);
         spv::Id depth_stencil_sample_address = FSI_AddSampleOffset(main_fsi_address_depth_, i);
         id_vector_temp_.clear();
-        // First SSBO structure element.
+
         id_vector_temp_.push_back(const_int_0_);
         id_vector_temp_.push_back(depth_stencil_sample_address);
         builder_->createStore(main_fsi_late_write_depth_stencil_[i],
@@ -666,9 +583,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         if_sample_late_depth_stencil_write_needed.makeEndIf();
       }
       if (color_targets_written) {
-        // Only take the remaining coverage bits, not the late depth / stencil
-        // write bits, into account in the check whether anything needs to be
-        // done for the color targets.
         color_write_depth_stencil_condition = builder_->createBinOp(
             spv::OpINotEqual, type_bool_,
             builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_fsi_sample_mask_,
@@ -677,18 +591,11 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       }
     } else {
       FSI_LoadEdramOffsets();
-      // Begin the critical section on the outermost control flow level so it's
-      // entered exactly once on any control flow path as required by the SPIR-V
-      // extension specification.
+
       builder_->createNoResultOp(spv::OpBeginInvocationInterlockEXT);
-      // Do the depth / stencil test.
-      // The sample mask might have been made narrower than the initially loaded
-      // mask by various conditions that discard the whole pixel, as well as by
-      // alpha to coverage.
+
       FSI_DepthStencilTest(fsi_pixel_potentially_killed || (color_targets_written & 0b1));
       if (color_targets_written) {
-        // Only bits 0:3 of main_fsi_sample_mask_ are written by the late
-        // depth / stencil test.
         color_write_depth_stencil_condition = builder_->createBinOp(
             spv::OpINotEqual, type_bool_, main_fsi_sample_mask_, const_uint_0_);
       }
@@ -697,7 +604,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
     FSI_AddMSAASamplesToZPD(true, zpd_full_counters_ && !FSI_IsDepthStencilEarly());
 
     if (color_write_depth_stencil_condition != spv::NoResult) {
-      // Skip all color operations if the pixel has failed the tests entirely.
       block_fsi_if_after_depth_stencil = &builder_->makeNewBlock();
       block_fsi_if_after_depth_stencil_merge = &builder_->makeNewBlock();
       builder_->createSelectionMerge(block_fsi_if_after_depth_stencil_merge,
@@ -718,7 +624,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       fsi_color_targets_written =
           builder_->createLoad(var_main_fsi_color_written_, spv::NoPrecision);
       fsi_const_int_1 = builder_->makeIntConstant(1);
-      // Apply resolution scaling to EDRAM size.
+
       fsi_const_edram_size_dwords = builder_->makeUintConstant(
           xenos::kEdramTileWidthSamples * draw_resolution_scale_x_ *
           xenos::kEdramTileHeightSamples * draw_resolution_scale_y_ * xenos::kEdramTileCount);
@@ -737,8 +643,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       spv::Id color_variable = output_or_var_fragment_data_[color_target_index];
       spv::Id color = builder_->createLoad(color_variable, spv::NoPrecision);
 
-      // Apply the exponent bias after the alpha test and alpha to coverage
-      // because they need the unbiased alpha from the shader.
       id_vector_temp_.clear();
       id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantColorExpBias));
       id_vector_temp_.push_back(builder_->makeIntConstant(int32_t(color_target_index)));
@@ -750,30 +654,21 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
               spv::NoPrecision));
 
       if (edram_fragment_shader_interlock_) {
-        // Write the color to the target in the EDRAM only it was written on the
-        // shader's execution path, according to the Direct3D 9 rules that games
-        // rely on.
         spv::Id fsi_color_written = builder_->createBinOp(
             spv::OpINotEqual, type_bool_,
             builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, fsi_color_targets_written,
                                   builder_->makeUintConstant(uint32_t(1) << color_target_index)),
             const_uint_0_);
-        // More likely to write to the render target than not.
+
         SpirvBuilder::IfBuilder if_fsi_color_written(
             fsi_color_written, spv::SelectionControlDontFlattenMask, *builder_, 2, 1);
 
-        // For accessing uint2 arrays of per-render-target data which are passed
-        // as uint4 arrays due to std140 array element alignment.
         spv::Id rt_uint2_index_array = builder_->makeIntConstant(color_target_index >> 1);
         spv::Id rt_uint2_index_element[] = {
             builder_->makeIntConstant((color_target_index & 1) << 1),
             builder_->makeIntConstant(((color_target_index & 1) << 1) + 1),
         };
 
-        // Load the mask of the bits of the destination color that should be
-        // preserved (in 32-bit halves), which are 0, 0 if the color is fully
-        // overwritten, or UINT32_MAX, UINT32_MAX if writing to the target is
-        // disabled completely.
         id_vector_temp_.clear();
         id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantEdramRTKeepMask));
         id_vector_temp_.push_back(rt_uint2_index_array);
@@ -789,7 +684,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                         id_vector_temp_),
             spv::NoPrecision);
 
-        // Check if writing to the render target is not disabled completely.
         spv::Id const_uint32_max = builder_->makeUintConstant(UINT32_MAX);
         spv::Id rt_write_mask_not_empty = builder_->createBinOp(
             spv::OpLogicalOr, type_bool_,
@@ -800,10 +694,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
 
         spv::Id const_int_rt_index = builder_->makeIntConstant(color_target_index);
 
-        // Load the information about the render target.
-
-        // Baked into the modification, so the pack and unpack trees collapse
-        // to this format's path alone.
         xenos::ColorRenderTargetFormat rt_format = FSI_GetRtFormat(color_target_index);
         uint32_t rt_format_flags = RenderTargetCache::AddPSIColorFormatFlags(rt_format);
         bool rt_is_64bpp = (rt_format_flags & RenderTargetCache::kPSIColorFormatFlag_64bpp) != 0;
@@ -813,7 +703,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         id_vector_temp_.push_back(
             builder_->makeIntConstant(kSystemConstantEdramRTBaseDwordsScaled));
         id_vector_temp_.push_back(const_int_rt_index);
-        // EDRAM addresses are wrapped on the Xenos (modulo the EDRAM size).
+
         spv::Id rt_sample_0_address = builder_->createUnaryOp(
             spv::OpBitcast, type_int_,
             builder_->createBinOp(
@@ -828,16 +718,10 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                           main_fsi_offset_64bpp_, main_fsi_offset_32bpp_)),
                 fsi_const_edram_size_dwords));
 
-        // The overwrite path is emitted on its own when nothing blends, and
-        // as the else branch otherwise.
         auto emit_overwrite_path = [&]() {
           {
-            // Non-blending paths.
-
-            // Pack the new color for all samples.
             std::array<spv::Id, 2> color_packed = FSI_ClampAndPackColor(color, rt_format);
 
-            // Check if need to load the original contents.
             spv::Id rt_keep_mask_not_empty = builder_->createBinOp(
                 spv::OpLogicalOr, type_bool_,
                 builder_->createBinOp(spv::OpINotEqual, type_bool_, rt_keep_mask[0], const_uint_0_),
@@ -847,7 +731,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             SpirvBuilder::IfBuilder if_rt_keep_mask_not_empty(
                 rt_keep_mask_not_empty, spv::SelectionControlDontFlattenMask, *builder_);
             {
-              // Loading and masking path.
               std::array<spv::Id, 2> color_packed_masked;
               for (uint32_t i = 0; i < 2; ++i) {
                 color_packed_masked[i] = builder_->createBinOp(
@@ -860,7 +743,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                 spv::Id rt_sample_address =
                     FSI_AddSampleOffset(rt_sample_0_address, i, rt_is_64bpp_id);
                 id_vector_temp_.clear();
-                // First SSBO structure element.
+
                 id_vector_temp_.push_back(const_int_0_);
                 id_vector_temp_.push_back(rt_sample_address);
                 spv::Id rt_access_chain_0 = builder_->createAccessChain(
@@ -898,14 +781,13 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             }
             if_rt_keep_mask_not_empty.makeBeginElse();
             {
-              // Fully overwriting path.
               for (uint32_t i = 0; i < fsi_sample_count; ++i) {
                 SpirvBuilder::IfBuilder if_sample_covered(
                     fsi_samples_covered[i], spv::SelectionControlDontFlattenMask, *builder_);
                 spv::Id rt_sample_address =
                     FSI_AddSampleOffset(rt_sample_0_address, i, rt_is_64bpp_id);
                 id_vector_temp_.clear();
-                // First SSBO structure element.
+
                 id_vector_temp_.push_back(const_int_0_);
                 id_vector_temp_.push_back(rt_sample_address);
                 builder_->createStore(color_packed[0], builder_->createAccessChain(
@@ -931,7 +813,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         if (FSI_GetNoBlending()) {
           emit_overwrite_path();
         } else {
-          // Only this branch reads the blending parameters.
           id_vector_temp_.clear();
           id_vector_temp_.push_back(
               builder_->makeIntConstant(kSystemConstantEdramRTBlendFactorsOps));
@@ -941,17 +822,12 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                           id_vector_temp_),
               spv::NoPrecision);
 
-          // Check if blending (the blending is not 1 * source + 0 *
-          // destination).
           spv::Id rt_blend_enabled =
               builder_->createBinOp(spv::OpINotEqual, type_bool_, rt_blend_factors_equations,
                                     builder_->makeUintConstant(0x00010001));
           SpirvBuilder::IfBuilder if_rt_blend_enabled(
               rt_blend_enabled, spv::SelectionControlDontFlattenMask, *builder_);
           {
-            // Blending path.
-
-            // Get various parameters used in blending.
             spv::Id rt_color_is_fixed_point = builder_->makeBoolConstant(
                 (rt_format_flags & RenderTargetCache::kPSIColorFormatFlag_FixedPointColor) != 0);
             spv::Id rt_alpha_is_fixed_point = builder_->makeBoolConstant(
@@ -1030,7 +906,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
               rt_replace_mask[i] = builder_->createUnaryOp(spv::OpNot, type_uint_, rt_keep_mask[i]);
             }
 
-            // Blend and mask each sample.
             for (uint32_t i = 0; i < fsi_sample_count; ++i) {
               SpirvBuilder::IfBuilder if_sample_covered(
                   fsi_samples_covered[i], spv::SelectionControlDontFlattenMask, *builder_);
@@ -1038,7 +913,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
               spv::Id rt_sample_address =
                   FSI_AddSampleOffset(rt_sample_0_address, i, rt_is_64bpp_id);
               id_vector_temp_.clear();
-              // First SSBO structure element.
+
               id_vector_temp_.push_back(const_int_0_);
               id_vector_temp_.push_back(rt_sample_address);
               spv::Id rt_access_chain_0 = builder_->createAccessChain(
@@ -1052,7 +927,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                                           : spv::StorageClassUniform,
                   buffer_edram_, id_vector_temp_);
 
-              // Load the destination color.
               std::array<spv::Id, 2> dest_packed;
               dest_packed[0] = builder_->createLoad(rt_access_chain_0, spv::NoPrecision);
               dest_packed[1] = rt_is_64bpp
@@ -1066,7 +940,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
               spv::Id dest_color =
                   builder_->createCompositeConstruct(type_float3_, id_vector_temp_);
 
-              // Blend the components.
               spv::Id result_color = FSI_BlendColorOrAlphaWithUnclampedResult(
                   rt_color_is_fixed_point, rt_clamp_color_min, rt_clamp_color_max,
                   source_color_clamped, source_alpha_clamped, dest_color, dest_unpacked[3],
@@ -1078,11 +951,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                   blend_constant_alpha_clamped, rt_alpha_equation, rt_alpha_source_factor,
                   rt_alpha_dest_factor);
 
-              // Pack and store the result.
-              // Bypass the `getNumTypeConstituents(typeId) ==
-              // (int)constituents.size()` assertion in
-              // createCompositeConstruct, OpCompositeConstruct can construct
-              // vectors not only from scalars, but also from other vectors.
               spv::Id result_float4;
               {
                 std::unique_ptr<spv::Instruction> result_composite_construct_op =
@@ -1125,10 +993,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         if_rt_write_mask_not_empty.makeEndIf();
         if_fsi_color_written.makeEndIf();
       } else {
-        // Convert to gamma space - this is incorrect, since it must be done
-        // after blending on the Xbox 360, but this is just one of many blending
-        // issues in the host render target path.
-
         uint_vector_temp_.clear();
         uint_vector_temp_.push_back(0);
         uint_vector_temp_.push_back(1);
@@ -1166,9 +1030,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
   }
 
   if (!edram_fragment_shader_interlock_) {
-    // FBO path: Copy from Function-scoped variables to Output variables.
-    // This is done at the end after alpha test/coverage so we can read the
-    // color values during those operations.
     Modification shader_modification = GetHostRtShaderModification();
     xenos::BlendFactor rt0_rgb_premult_factor =
         shader_modification.pixel.rt0_blend_rgb_factor_for_premult;
@@ -1184,12 +1045,8 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
       if (var_color != spv::NoResult && out_color != spv::NoResult) {
         spv::Id color = builder_->createLoad(var_color, spv::NoPrecision);
 
-        // For RT0, apply pre-multiply by source blend factor if needed for
-        // MIN/MAX blend emulation (since Vulkan/D3D12 ignores blend factors
-        // for MIN/MAX but Xbox 360 applies them).
         if (color_target_index == 0 && (rt0_rgb_premult_factor != xenos::BlendFactor::kOne ||
                                         rt0_a_premult_factor != xenos::BlendFactor::kOne)) {
-          // Helper to extract RGB (xyz) from a float4.
           auto extract_rgb = [&](spv::Id vec4) -> spv::Id {
             uint_vector_temp_.clear();
             uint_vector_temp_.push_back(0);
@@ -1199,7 +1056,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                                  uint_vector_temp_);
           };
 
-          // Get blend factor values.
           auto get_factor_value = [&](xenos::BlendFactor factor, bool for_alpha) -> spv::Id {
             spv::Id src_color = color;
             switch (factor) {
@@ -1236,7 +1092,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
               }
               case xenos::BlendFactor::kConstantColor:
               case xenos::BlendFactor::kConstantAlpha: {
-                // Load blend constant from system constants.
                 id_vector_temp_.clear();
                 id_vector_temp_.push_back(
                     builder_->makeIntConstant(kSystemConstantEdramBlendConstant));
@@ -1286,17 +1141,16 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
                                              one, constant_value);
               }
               default:
-                // Unsupported factors - return 1 (no multiply).
+
                 return for_alpha ? const_float_1_ : const_float3_1_;
             }
           };
 
-          // Apply RGB pre-multiply.
           if (rt0_rgb_premult_factor != xenos::BlendFactor::kOne) {
             spv::Id rgb_factor = get_factor_value(rt0_rgb_premult_factor, false);
             spv::Id rgb = extract_rgb(color);
             rgb = builder_->createBinOp(spv::OpFMul, type_float3_, rgb, rgb_factor);
-            // Reconstruct float4 with new RGB and original alpha.
+
             spv::Id alpha = builder_->createCompositeExtract(color, type_float_, 3);
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->createCompositeExtract(rgb, type_float_, 0));
@@ -1306,12 +1160,11 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             color = builder_->createCompositeConstruct(type_float4_, id_vector_temp_);
           }
 
-          // Apply alpha pre-multiply.
           if (rt0_a_premult_factor != xenos::BlendFactor::kOne) {
             spv::Id a_factor = get_factor_value(rt0_a_premult_factor, true);
             spv::Id alpha = builder_->createCompositeExtract(color, type_float_, 3);
             alpha = builder_->createBinOp(spv::OpFMul, type_float_, alpha, a_factor);
-            // Replace alpha in color (extract RGB, reconstruct with new alpha).
+
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->createCompositeExtract(color, type_float_, 0));
             id_vector_temp_.push_back(builder_->createCompositeExtract(color, type_float_, 1));
@@ -1326,8 +1179,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
     }
   }
 
-  // Copies the staged depth to the FBO gl_FragDepth output.
-  // No-op for FSI and when no host depth output was declared.
   CompleteFragmentShader_DSV_DepthTo24Bit();
 
   if (edram_fragment_shader_interlock_) {
@@ -1351,8 +1202,6 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
 }
 
 void SpirvShaderTranslator::CompleteFragmentShader_DSV_DepthTo24Bit() {
-  // FSI manages its own depth via the EDRAM buffer - this hook is FBO-only.
-  // Likewise, if no Output FragDepth was declared, there is nothing to write.
   if (edram_fragment_shader_interlock_ || output_fragment_depth_ == spv::NoResult) {
     return;
   }
@@ -1361,8 +1210,6 @@ void SpirvShaderTranslator::CompleteFragmentShader_DSV_DepthTo24Bit() {
   bool apply_polygon_offset = DSV_IsApplyingPolygonOffset() && !shader_writes_depth;
   assert_true(shader_writes_depth || is_float24 || apply_polygon_offset);
 
-  // Source depth from guest oDepth, or from raster depth for float24 conversion
-  // and the host RT decal path.
   spv::Id depth_value;
   if (shader_writes_depth) {
     depth_value = builder_->createLoad(output_or_var_fragment_depth_, spv::NoPrecision);
@@ -1428,9 +1275,7 @@ void SpirvShaderTranslator::CompleteFragmentShader_DSV_DepthTo24Bit() {
       builder_->createStore(depth_value, output_fragment_depth_);
       return;
     }
-    // Legacy path: shader writes oDepth, but the modification is not in float24
-    // mode (the host buffer may still be float24 if depth_float24_convert_in_
-    // pixel_shader is off - check dynamically via the system flag).
+
     spv::Id depth_float24_flag = builder_->createBinOp(
         spv::OpINotEqual, type_bool_,
         builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_system_constant_flags_,
@@ -1444,26 +1289,20 @@ void SpirvShaderTranslator::CompleteFragmentShader_DSV_DepthTo24Bit() {
     return;
   }
 
-  // Float24 mode: statically known float24 host buffer; perform the conversion.
   Modification::DepthStencilMode mode = GetHostRtShaderModification().pixel.depth_stencil_mode;
   if (mode == Modification::DepthStencilMode::kFloat24Truncating ||
       mode == Modification::DepthStencilMode::kFloat24TruncatingPolygonOffset) {
-    // Mantissa bit-truncation, then guest 0...1 -> host 0...0.5.
     spv::Id depth_uint = builder_->createUnaryOp(spv::OpBitcast, type_uint_, depth_value);
-    // Representable as float24 (exponent >= -34): bit pattern >= 0x2E800000.
+
     spv::Id representable = builder_->createBinOp(spv::OpUGreaterThanEqual, type_bool_, depth_uint,
                                                   builder_->makeUintConstant(0x2E800000));
     SpirvBuilder::IfBuilder representable_if(representable, spv::SelectionControlDontFlattenMask,
                                              *builder_);
     {
-      // Biased exponent: 113+ at exp -14+; 93 at exp -34.
       spv::Id exponent =
           builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, depth_uint,
                                 builder_->makeUintConstant(23), builder_->makeUintConstant(8));
-      // trunc_bits = max(116 - exponent, 3), in signed - drops 3 mantissa bits
-      // at exp -14+ and 23 at exp -34. Must be signed: exponent > 116 (i.e.
-      // values larger than ~2^-11) makes 116 - exponent negative; an unsigned
-      // underflow would feed OpBitFieldInsert a Count > 32 (undefined).
+
       spv::Id trunc_bits_signed =
           builder_->createBinOp(spv::OpISub, type_int_, builder_->makeIntConstant(116),
                                 builder_->createUnaryOp(spv::OpBitcast, type_int_, exponent));
@@ -1480,14 +1319,9 @@ void SpirvShaderTranslator::CompleteFragmentShader_DSV_DepthTo24Bit() {
       builder_->createStore(remapped, output_fragment_depth_);
     }
     representable_if.makeBeginElse();
-    {
-      // Not representable - zero.
-      builder_->createStore(const_float_0_, output_fragment_depth_);
-    }
+    { builder_->createStore(const_float_0_, output_fragment_depth_); }
     representable_if.makeEndIf();
   } else {
-    // kFloat24Rounding: round-trip through 20e4 (round to nearest even), with
-    // the 0...0.5 host remap baked in via remap_to_0_to_0_5 on Depth20e4To32.
     spv::Id f24_uint =
         PreClampedDepthTo20e4(*builder_, depth_value, true, false, ext_inst_glsl_std_450_);
     spv::Id depth_f32 = Depth20e4To32(*builder_, f24_uint, 0, true, false, ext_inst_glsl_std_450_);
@@ -1502,14 +1336,6 @@ spv::Id SpirvShaderTranslator::LoadMsaaSamplesFromFlags() {
 }
 
 void SpirvShaderTranslator::FSI_LoadSampleMask() {
-  // On the Xbox 360, 2x MSAA doubles the storage height, 4x MSAA doubles the
-  // storage width.
-  // The guest 4x sample numbering is the Vulkan one, bit 0 horizontal and
-  // bit 1 vertical, so 4x coverage passes through as is. Guest 2x puts
-  // sample 0 at the top while Vulkan counts from the bottom, so the guest
-  // samples map to Vulkan 1, 0 with native 2x MSAA and to 0, 3 with 2x
-  // emulated as 4x.
-
   assert_true(input_sample_mask_ != spv::NoResult);
   main_fsi_z_fail_sample_mask_ = const_uint_0_;
   main_fsi_stencil_fail_sample_mask_ = const_uint_0_;
@@ -1522,21 +1348,17 @@ void SpirvShaderTranslator::FSI_LoadSampleMask() {
           spv::NoPrecision));
 
   if (FSI_GetMsaaSamples() != xenos::MsaaSamples::k2X) {
-    // 1x has the one sample, and at 4x the numbering matches - pass the
-    // coverage through.
     main_fsi_sample_mask_ = input_sample_mask_value;
     return;
   }
 
   spv::Id const_uint_1 = builder_->makeUintConstant(1);
   if (native_2x_msaa_no_attachments_) {
-    // 1 and 0 to 0 and 1.
     main_fsi_sample_mask_ = builder_->createBinOp(
         spv::OpShiftRightLogical, type_uint_,
         builder_->createUnaryOp(spv::OpBitReverse, type_uint_, input_sample_mask_value),
         builder_->makeUintConstant(32 - 2));
   } else {
-    // 0 and 3 to 0 and 1 - guest sample 1 comes from host sample 3
     main_fsi_sample_mask_ = builder_->createQuadOp(
         spv::OpBitFieldInsert, type_uint_, input_sample_mask_value,
         builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, input_sample_mask_value,
@@ -1546,13 +1368,6 @@ void SpirvShaderTranslator::FSI_LoadSampleMask() {
 }
 
 void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
-  // Convert the floating-point pixel coordinates to the canonical sample 0
-  // coordinates, meaning the coordinates of the pixel's sample 0 in the
-  // single sampled view of the EDRAM data. The layout is described in
-  // XeEdramOffsetBytes (see edram.xesli). What matters here is that the offsets
-  // of the other samples from sample 0 are constant, FSI_AddSampleOffset
-  // adds them, and that with resolution scaling the rearrangement happens at
-  // guest pixel granularity.
   assert_true(input_fragment_coordinates_ != spv::NoResult);
   spv::Id const_uint_1 = builder_->makeUintConstant(1);
   spv::Id const_uint_2 = builder_->makeUintConstant(2);
@@ -1579,8 +1394,7 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
       guest_subpixel[i] = spv::NoResult;
     }
   }
-  // (((x or y) >> 1) << 2) | ((x or y) & 1), the sample 0 part of the
-  // rearrangement shared by the 4x u and v and the 2x v.
+
   auto expand_pixel_low_bit = [&](spv::Id pixel_x_or_y) {
     return builder_->createQuadOp(
         spv::OpBitFieldInsert, type_uint_,
@@ -1588,7 +1402,7 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
         builder_->createBinOp(spv::OpShiftRightLogical, type_uint_, pixel_x_or_y, const_uint_1),
         const_uint_2, builder_->makeUintConstant(30));
   };
-  // u0 is ((x >> 1) << 2) | (x & 1) at 4x, x & ~2 at 2x and plain x at 1x.
+
   spv::Id sample_u;
   if (msaa_is_4x) {
     sample_u = expand_pixel_low_bit(guest_pixel[0]);
@@ -1598,8 +1412,7 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
   } else {
     sample_u = guest_pixel[0];
   }
-  // v0 is ((y >> 1) << 2) | (y & 1) at 2x and 4x, with x bit 1 in bit 1 at
-  // 2x only. At 1x it's plain y.
+
   spv::Id sample_v;
   if (msaa_is_2x_or_4x) {
     sample_v = expand_pixel_low_bit(guest_pixel[1]);
@@ -1611,7 +1424,7 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
   } else {
     sample_v = guest_pixel[1];
   }
-  // Restore the host pixel granularity.
+
   spv::Id sample_coordinates[2] = {sample_u, sample_v};
   for (uint32_t i = 0; i < 2; ++i) {
     if (resolution_scale[i] > 1) {
@@ -1623,10 +1436,6 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
     }
   }
 
-  // Get 40 x 16 x resolution scale 32bpp half-tile or 40x16 64bpp tile index.
-  // Working with 40x16-sample portions for 64bpp and for swapping for depth -
-  // dividing by 40, not by 80.
-  // Apply resolution scaling to tile dimensions.
   uint32_t tile_width = xenos::kEdramTileWidthSamples * draw_resolution_scale_x_;
   spv::Id const_tile_half_width = builder_->makeUintConstant(tile_width >> 1);
   uint32_t tile_height = xenos::kEdramTileHeightSamples * draw_resolution_scale_y_;
@@ -1641,15 +1450,10 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
         builder_->createBinOp(spv::OpUMod, type_uint_, sample_x_or_y, tile_half_width_or_height);
   }
 
-  // Convert the Y sample 0 position within the half-tile or tile to the dword
-  // offset of the row within a 80x16 32bpp tile or a 40x16 64bpp half-tile.
   spv::Id const_tile_width = builder_->makeUintConstant(tile_width);
   spv::Id row_offset_in_tile_at_32bpp = builder_->createBinOp(
       spv::OpIMul, type_uint_, tile_half_sample_coordinates[1], const_tile_width);
 
-  // Multiply the Y tile position by the surface tile pitch in dwords at 32bpp
-  // to get the address of the origin of the row of tiles within a 32bpp surface
-  // in dwords (later it needs to be multiplied by 2 for 64bpp).
   id_vector_temp_.clear();
   id_vector_temp_.push_back(
       builder_->makeIntConstant(kSystemConstantEdram32bppTilePitchDwordsScaled));
@@ -1663,8 +1467,6 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
   uint32_t tile_size = tile_width * tile_height;
   spv::Id const_tile_size = builder_->makeUintConstant(tile_size);
 
-  // Get the dword offset of the sample 0 in the first half-tile in the tile
-  // within a 32bpp surface.
   spv::Id offset_in_first_tile_half_at_32bpp = builder_->createBinOp(
       spv::OpIAdd, type_uint_,
       builder_->createBinOp(
@@ -1677,16 +1479,11 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
               row_offset_in_tile_at_32bpp)),
       tile_half_sample_coordinates[0]);
 
-  // Get whether the sample is in the second half-tile in a 32bpp surface.
   spv::Id is_second_tile_half = builder_->createBinOp(
       spv::OpINotEqual, type_bool_,
       builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, tile_half_index[0], const_uint_1),
       const_uint_0_);
 
-  // Get the offset of the sample 0 within a depth / stencil surface, with
-  // samples 40...79 in the first half-tile, 0...39 in the second (flipped as
-  // opposed to color). Then add the EDRAM base for depth / stencil, and wrap
-  // addressing.
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantEdramDepthBaseDwordsScaled));
   main_fsi_address_depth_ = builder_->createBinOp(
@@ -1704,14 +1501,11 @@ void SpirvShaderTranslator::FSI_LoadEdramOffsets() {
       builder_->makeUintConstant(tile_size * xenos::kEdramTileCount));
 
   if (current_shader().writes_color_targets()) {
-    // Get the offset of the sample 0 within a 32bpp surface, with samples
-    // 0...39 in the first half-tile, 40...79 in the second.
     main_fsi_offset_32bpp_ =
         builder_->createBinOp(spv::OpIAdd, type_uint_, offset_in_first_tile_half_at_32bpp,
                               builder_->createTriOp(spv::OpSelect, type_uint_, is_second_tile_half,
                                                     const_tile_half_width, const_uint_0_));
 
-    // Get the offset of the sample 0 within a 64bpp surface.
     main_fsi_offset_64bpp_ = builder_->createBinOp(
         spv::OpIAdd, type_uint_,
         builder_->createBinOp(
@@ -1732,9 +1526,7 @@ spv::Id SpirvShaderTranslator::FSI_AddSampleOffset(spv::Id sample_0_address, uin
   if (!sample_index) {
     return sample_0_address;
   }
-  // In the canonical layout, the horizontal (or the only 2x) sample bit is
-  // +2 sample columns from sample 0, 2 dwords wide each for 64bpp, and the
-  // vertical sample bit is +2 sample rows, all at the guest scale.
+
   uint32_t tile_width = xenos::kEdramTileWidthSamples * draw_resolution_scale_x_;
   uint32_t sample_row_offset = 2 * draw_resolution_scale_y_ * tile_width * (sample_index >> 1);
   uint32_t sample_column_offset_32bpp = 2 * draw_resolution_scale_x_ * (sample_index & 1);
@@ -1755,7 +1547,6 @@ void SpirvShaderTranslator::FSI_AddMSAASamplesToZPD(bool count_passed, bool coun
   assert_true(edram_fragment_shader_interlock_);
   assert_true(buffer_zpd_counter_ != spv::NoResult);
 
-  // UINT32_MAX means no ZPD segment is currently open for this draw.
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantZpdFsiCounterIndex));
   spv::Id counter_index =
@@ -1774,12 +1565,9 @@ void SpirvShaderTranslator::FSI_AddMSAASamplesToZPD(bool count_passed, bool coun
       builder_->makeUintConstant(static_cast<unsigned int>(spv::ScopeDevice));
   spv::Id const_semantics_relaxed = const_uint_0_;
 
-  // One slot holds every ZPD counter.
   spv::Id counter_base = builder_->createBinOp(spv::OpIMul, type_uint_, counter_index,
                                                builder_->makeUintConstant(XenosZPDReport::kCount));
 
-  // For VIZ, an atomic store of 1 replaces the atomic add since the survey's
-  // ID consumer only cares about zero vs non-zero.
   auto add_lane = [&](spv::Id sample_mask, uint32_t lane, bool flag) {
     spv::Id sample_count = builder_->createUnaryOp(spv::OpBitCount, type_uint_, sample_mask);
     SpirvBuilder::IfBuilder if_any_samples(
@@ -1808,8 +1596,6 @@ void SpirvShaderTranslator::FSI_AddMSAASamplesToZPD(bool count_passed, bool coun
   };
 
   if (count_passed) {
-    // Only bits 0:3 are surviving coverage. 4:7 are deferred depth/stencil and
-    // don't contribute to the counter.
     add_lane(builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_fsi_sample_mask_,
                                    builder_->makeUintConstant((uint32_t(1) << 4) - 1)),
              XenosZPDReport::kZPass, is_viz_survey_fragment_shader_);
@@ -1838,7 +1624,6 @@ void SpirvShaderTranslator::FBO_AddMSAASamplesToZPDTotal() {
                             builder_->makeUintConstant(UINT32_MAX)),
       spv::SelectionControlDontFlattenMask, *builder_);
 
-  // Demoted fragments shouldn't be counted here.
   spv::Id coverage = builder_->createLoad(var_main_zpd_coverage_, spv::NoPrecision);
   if (features_.demote_to_helper_invocation) {
     id_vector_temp_.clear();
@@ -1852,7 +1637,6 @@ void SpirvShaderTranslator::FBO_AddMSAASamplesToZPDTotal() {
       builder_->createBinOp(spv::OpINotEqual, type_bool_, sample_count, const_uint_0_),
       spv::SelectionControlDontFlattenMask, *builder_);
 
-  // Total is the slot's first counter.
   spv::Id counter_offset = builder_->createBinOp(
       spv::OpIMul, type_uint_, counter_index, builder_->makeUintConstant(XenosZPDReport::kCount));
   id_vector_temp_.clear();
@@ -1880,7 +1664,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
   spv::Id const_uint_1 = builder_->makeUintConstant(1);
   spv::Id const_uint_8 = builder_->makeUintConstant(8);
 
-  // Check if depth or stencil testing is needed.
   spv::Id depth_stencil_enabled = builder_->createBinOp(
       spv::OpINotEqual, type_bool_,
       builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_system_constant_flags_,
@@ -1892,8 +1675,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
   spv::Id center_depth32_unbiased;
   std::array<spv::Id, 2> depth_dxy;
 
-  // Guest oDepth replaces the depth value FSI tests. It's not the raster depth
-  // plane, so don't take FragCoord for it.
   if (current_shader().writes_depth()) {
     assert_false(is_early);
     assert_true(output_or_var_fragment_depth_ != spv::NoResult);
@@ -1901,8 +1682,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     depth_dxy[0] = const_float_0_;
     depth_dxy[1] = const_float_0_;
   } else {
-    // Load the depth in the center of the pixel and calculate the derivatives
-    // of the depth outside non-uniform control flow.
     assert_true(input_fragment_coordinates_ != spv::NoResult);
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(2));
@@ -1915,8 +1694,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     depth_dxy[1] = builder_->createUnaryOp(spv::OpDPdyCoarse, type_float_, center_depth32_unbiased);
   }
 
-  // Skip everything if potentially discarded all the samples previously in the
-  // shader.
   spv::Block* block_any_sample_covered_head = nullptr;
   spv::Block* block_any_sample_covered = nullptr;
   spv::Block* block_any_sample_covered_merge = nullptr;
@@ -1933,7 +1710,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     builder_->setBuildPoint(block_any_sample_covered);
   }
 
-  // Load values involved in depth and stencil testing.
   xenos::MsaaSamples msaa_samples = FSI_GetMsaaSamples();
   bool msaa_is_2x_4x = msaa_samples >= xenos::MsaaSamples::k2X;
   bool msaa_is_4x = msaa_samples >= xenos::MsaaSamples::k4X;
@@ -2061,13 +1837,9 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
 
   spv::Id center_depth32_biased;
 
-  // When the guest shader replaces depth, don't apply offset from the original
-  // FragCoord.z plane. That would mix two different depth sources.
   if (current_shader().writes_depth()) {
     center_depth32_biased = center_depth32_unbiased;
   } else {
-    // Get the maximum depth slope for the polygon offset.
-    // https://docs.microsoft.com/en-us/windows/desktop/direct3d9/depth-bias
     std::array<spv::Id, 2> depth_dxy_abs;
     for (uint32_t i = 0; i < 2; ++i) {
       depth_dxy_abs[i] = builder_->createUnaryBuiltinCall(type_float_, ext_inst_glsl_std_450_,
@@ -2075,21 +1847,16 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     }
     spv::Id depth_max_slope = builder_->createBinBuiltinCall(
         type_float_, ext_inst_glsl_std_450_, GLSLstd450FMax, depth_dxy_abs[0], depth_dxy_abs[1]);
-    // Calculate the polygon offset.
+
     spv::Id slope_scaled_poly_offset = builder_->createNoContractionBinOp(
         spv::OpFMul, type_float_, poly_offset_scale, depth_max_slope);
     spv::Id poly_offset = builder_->createNoContractionBinOp(
         spv::OpFAdd, type_float_, slope_scaled_poly_offset, poly_offset_offset);
-    // Apply the post-clip and post-viewport polygon offset to the fragment's
-    // depth. Not clamping yet as this is at the center, which is not
-    // necessarily covered and not necessarily inside the bounds - derivatives
-    // scaled by sample locations will be added to this value, and it must be
-    // linear.
+
     center_depth32_biased = builder_->createNoContractionBinOp(
         spv::OpFAdd, type_float_, center_depth32_unbiased, poly_offset);
   }
 
-  // Perform depth and stencil testing for each covered sample.
   spv::Id new_sample_mask = main_fsi_sample_mask_;
   spv::Id z_fail_sample_mask = const_uint_0_;
   spv::Id stencil_fail_sample_mask = const_uint_0_;
@@ -2103,10 +1870,9 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     SpirvBuilder::IfBuilder if_sample_covered(sample_covered, spv::SelectionControlDontFlattenMask,
                                               *builder_);
 
-    // Load the original depth and stencil for the sample.
     spv::Id sample_address = FSI_AddSampleOffset(main_fsi_address_depth_, i);
     id_vector_temp_.clear();
-    // First SSBO structure element.
+
     id_vector_temp_.push_back(const_int_0_);
     id_vector_temp_.push_back(sample_address);
     spv::Id sample_access_chain = builder_->createAccessChain(
@@ -2115,15 +1881,9 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         buffer_edram_, id_vector_temp_);
     spv::Id old_depth_stencil = builder_->createLoad(sample_access_chain, spv::NoPrecision);
 
-    // Calculate the new depth at the sample.
-    // interpolateAtSample(gl_FragCoord) is not valid in GLSL because
-    // gl_FragCoord is not an interpolator, calculating the depths at the
-    // samples manually.
     std::array<spv::Id, 2> sample_location;
     switch (i) {
       case 0: {
-        // The center sample without MSAA, otherwise the top-left one - native
-        // 2x sample 1 in Vulkan, 0 for 2x as 4x and for 4x.
         if (!msaa_is_2x_4x) {
           sample_location.fill(const_float_0_);
         } else {
@@ -2137,10 +1897,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         }
       } break;
       case 1: {
-        // For guest 2x this is the bottom sample, Vulkan 0 for native 2x and
-        // Vulkan 3 for 2x as 4x.
-        // For guest 4x this is the top-right sample since the horizontal
-        // sample bit is bit 0, Vulkan 1.
         const int8_t* sample_location_int =
             msaa_is_4x
                 ? draw_util::kD3D10StandardSamplePositions4x[1]
@@ -2151,8 +1907,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         }
       } break;
       default: {
-        // Guest samples 2 and 3, bottom-left and bottom-right with the
-        // vertical sample bit being bit 1, map to Vulkan samples 2 and 3.
         const int8_t* sample_location_int = draw_util::kD3D10StandardSamplePositions4x[i];
         for (uint32_t j = 0; j < 2; ++j) {
           sample_location[j] = builder_->makeFloatConstant(sample_location_int[j] * (1.0f / 16.0f));
@@ -2172,15 +1926,12 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
                                                sample_depth_dxy[1])),
         const_float_0_, const_float_1_);
 
-    // Convert the new depth to 24-bit.
     SpirvBuilder::IfBuilder depth_format_if(depth_is_float24, spv::SelectionControlDontFlattenMask,
                                             *builder_);
     spv::Id sample_depth_float24 = SpirvShaderTranslator::PreClampedDepthTo20e4(
         *builder_, sample_depth32, true, false, ext_inst_glsl_std_450_);
     depth_format_if.makeBeginElse();
-    // Round to the nearest even integer. This seems to be the correct
-    // conversion, adding +0.5 and rounding towards zero results in red instead
-    // of black in the 4D5307E6 clear shader.
+
     spv::Id sample_depth_unorm24 = builder_->createUnaryOp(
         spv::OpConvertFToU, type_uint_,
         builder_->createUnaryBuiltinCall(
@@ -2188,11 +1939,10 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
             builder_->createNoContractionBinOp(spv::OpFMul, type_float_, sample_depth32,
                                                builder_->makeFloatConstant(float(0xFFFFFF)))));
     depth_format_if.makeEndIf();
-    // Merge between the two formats.
+
     spv::Id sample_depth24 =
         depth_format_if.createMergePhi(sample_depth_float24, sample_depth_unorm24);
 
-    // Perform the depth test.
     spv::Id old_depth = builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
                                               old_depth_stencil, const_uint_8);
     spv::Id depth_passed = builder_->createBinOp(
@@ -2209,14 +1959,11 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
             spv::OpLogicalAnd, type_bool_, depth_pass_if_greater,
             builder_->createBinOp(spv::OpUGreaterThan, type_bool_, sample_depth24, old_depth)));
 
-    // Perform the stencil test if enabled.
     SpirvBuilder::IfBuilder stencil_if(stencil_enabled, spv::SelectionControlDontFlattenMask,
                                        *builder_);
     spv::Id stencil_passed_if_enabled;
     spv::Id new_stencil_and_old_depth_if_stencil_enabled;
     {
-      // The read mask has zeros in the upper bits, applying it to the combined
-      // stencil and depth will remove the depth part.
       spv::Id old_stencil_read_masked = builder_->createBinOp(spv::OpBitwiseAnd, type_uint_,
                                                               old_depth_stencil, stencil_read_mask);
       stencil_passed_if_enabled = builder_->createBinOp(
@@ -2258,7 +2005,7 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         std::unique_ptr<spv::Instruction> stencil_op_switch_op =
             std::make_unique<spv::Instruction>(spv::OpSwitch);
         stencil_op_switch_op->addIdOperand(stencil_op);
-        // Make keep the default.
+
         stencil_op_switch_op->addIdOperand(block_stencil_op_keep.getId());
         stencil_op_switch_op->addImmediateOperand(int32_t(xenos::StencilOp::kZero));
         stencil_op_switch_op->addIdOperand(block_stencil_op_zero.getId());
@@ -2284,16 +2031,16 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
       block_stencil_op_invert.addPredecessor(&block_stencil_op_head);
       block_stencil_op_increment_wrap.addPredecessor(&block_stencil_op_head);
       block_stencil_op_decrement_wrap.addPredecessor(&block_stencil_op_head);
-      // Keep - will use the old stencil in the phi.
+
       builder_->setBuildPoint(&block_stencil_op_keep);
       builder_->createBranch(&block_stencil_op_merge);
-      // Zero - will use the zero constant in the phi.
+
       builder_->setBuildPoint(&block_stencil_op_zero);
       builder_->createBranch(&block_stencil_op_merge);
-      // Replace - will use the stencil reference in the phi.
+
       builder_->setBuildPoint(&block_stencil_op_replace);
       builder_->createBranch(&block_stencil_op_merge);
-      // Increment and clamp.
+
       builder_->setBuildPoint(&block_stencil_op_increment_clamp);
       spv::Id new_stencil_in_low_bits_increment_clamp = builder_->createBinOp(
           spv::OpIAdd, type_uint_,
@@ -2304,7 +2051,7 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
                                     builder_->makeUintConstant(UINT8_MAX))),
           const_uint_1);
       builder_->createBranch(&block_stencil_op_merge);
-      // Decrement and clamp.
+
       builder_->setBuildPoint(&block_stencil_op_decrement_clamp);
       spv::Id new_stencil_in_low_bits_decrement_clamp = builder_->createBinOp(
           spv::OpISub, type_uint_,
@@ -2314,25 +2061,22 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
                                     builder_->makeUintConstant(UINT8_MAX))),
           const_uint_1);
       builder_->createBranch(&block_stencil_op_merge);
-      // Invert.
+
       builder_->setBuildPoint(&block_stencil_op_invert);
       spv::Id new_stencil_in_low_bits_invert =
           builder_->createUnaryOp(spv::OpNot, type_uint_, old_depth_stencil);
       builder_->createBranch(&block_stencil_op_merge);
-      // Increment and wrap.
-      // The upper bits containing the old depth have no effect on the behavior.
+
       builder_->setBuildPoint(&block_stencil_op_increment_wrap);
       spv::Id new_stencil_in_low_bits_increment_wrap =
           builder_->createBinOp(spv::OpIAdd, type_uint_, old_depth_stencil, const_uint_1);
       builder_->createBranch(&block_stencil_op_merge);
-      // Decrement and wrap.
-      // The upper bits containing the old depth have no effect on the behavior.
+
       builder_->setBuildPoint(&block_stencil_op_decrement_wrap);
       spv::Id new_stencil_in_low_bits_decrement_wrap =
           builder_->createBinOp(spv::OpISub, type_uint_, old_depth_stencil, const_uint_1);
       builder_->createBranch(&block_stencil_op_merge);
-      // Select the new stencil (with undefined data in bits starting from 8)
-      // based on the stencil operation.
+
       builder_->setBuildPoint(&block_stencil_op_merge);
       id_vector_temp_.clear();
       id_vector_temp_.reserve(2 * 8);
@@ -2354,9 +2098,7 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
       id_vector_temp_.push_back(block_stencil_op_decrement_wrap.getId());
       spv::Id new_stencil_in_low_bits_if_enabled =
           builder_->createOp(spv::OpPhi, type_uint_, id_vector_temp_);
-      // Merge the old depth / stencil (old depth kept from the old depth /
-      // stencil so the separate old depth register is not needed anymore after
-      // the depth test) and the new stencil based on the write mask.
+
       new_stencil_and_old_depth_if_stencil_enabled = builder_->createBinOp(
           spv::OpBitwiseOr, type_uint_,
           builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, old_depth_stencil,
@@ -2365,22 +2107,17 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
                                 stencil_write_mask));
     }
     stencil_if.makeEndIf();
-    // Choose the result based on whether the stencil test was done.
-    // All phi operations must be the first in the block.
+
     spv::Id stencil_passed =
         stencil_if.createMergePhi(stencil_passed_if_enabled, builder_->makeBoolConstant(true));
     spv::Id new_stencil_and_old_depth =
         stencil_if.createMergePhi(new_stencil_and_old_depth_if_stencil_enabled, old_depth_stencil);
 
-    // Check whether the tests have passed, and exclude the bit from the
-    // coverage if not.
     spv::Id depth_stencil_passed =
         builder_->createBinOp(spv::OpLogicalAnd, type_bool_, depth_passed, stencil_passed);
     spv::Id z_fail_sample_mask_after_sample = z_fail_sample_mask;
     spv::Id stencil_fail_sample_mask_after_sample = stencil_fail_sample_mask;
     if (zpd_full_counters_) {
-      // Remember the failures for the ZFail and StencilFail counters. Stencil
-      // failure takes precedence over depth failure.
       spv::Id sample_bit = builder_->makeUintConstant(uint32_t(1) << i);
       z_fail_sample_mask_after_sample = builder_->createTriOp(
           spv::OpSelect, type_uint_,
@@ -2400,8 +2137,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, new_sample_mask,
                               builder_->makeUintConstant(~(uint32_t(1) << i))));
 
-    // Combine the new depth and the new stencil taking into account whether the
-    // new depth should be written.
     spv::Id new_stencil_and_unconditional_new_depth =
         builder_->createQuadOp(spv::OpBitFieldInsert, type_uint_, new_stencil_and_old_depth,
                                sample_depth24, const_uint_8, builder_->makeUintConstant(24));
@@ -2410,8 +2145,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         builder_->createBinOp(spv::OpLogicalAnd, type_bool_, depth_stencil_passed, depth_write),
         new_stencil_and_unconditional_new_depth, new_stencil_and_old_depth);
 
-    // Write (or defer writing if the test is early, but may discard samples
-    // later still) the new depth and stencil if they're different.
     spv::Id new_depth_stencil_different =
         builder_->createBinOp(spv::OpINotEqual, type_bool_, new_depth_stencil, old_depth_stencil);
     spv::Id new_depth_stencil_write_condition = spv::NoResult;
@@ -2427,8 +2160,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         new_depth_stencil_write_condition = builder_->createBinOp(
             spv::OpLogicalAnd, type_bool_, new_depth_stencil_different, early_write);
       } else {
-        // Always need to write late in this shader, as it may do something like
-        // explicitly killing pixels.
         new_sample_mask_after_sample = builder_->createTriOp(
             spv::OpSelect, type_uint_, new_depth_stencil_different,
             builder_->createBinOp(spv::OpBitwiseOr, type_uint_, new_sample_mask_after_sample,
@@ -2460,7 +2191,6 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
     }
   }
 
-  // Close the conditionals for whether depth / stencil testing is needed.
   if (block_any_sample_covered_merge) {
     builder_->createBranch(block_any_sample_covered_merge);
     spv::Block& block_any_sample_covered_end = *builder_->getBuildPoint();
@@ -2514,16 +2244,10 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
 }
 
 spv::Id SpirvShaderTranslator::PackFloat16x2ExtendedRange(spv::Id float2_value) {
-  // The Xbox 360 float16 has no NaN, map it to 0. Also keeps the overflow
-  // detection below from misreading a NaN's exponent 31 as a finite extended
-  // value, and FClamp's NaN result is undefined.
   float2_value = builder_->createTriOp(
       spv::OpSelect, type_float2_, builder_->createUnaryOp(spv::OpIsNan, type_bool2_, float2_value),
       const_float2_0_, float2_value);
-  // Standard conversion handles +-0..65504; larger magnitudes overflow to Inf
-  // (exponent field 0x7C00). Re-encode the overflowed lanes using the extended
-  // range: halve into the standard range, convert (exponent <= 30), then bump
-  // the exponent by 1 into the exponent 31 slot the Xbox 360 treats as finite.
+
   spv::Id standard = builder_->createUnaryBuiltinCall(type_uint_, ext_inst_glsl_std_450_,
                                                       GLSLstd450PackHalf2x16, float2_value);
   spv::Id const_0x7C00 = builder_->makeUintConstant(0x7C00);
@@ -2553,8 +2277,7 @@ spv::Id SpirvShaderTranslator::PackFloat16x2ExtendedRange(spv::Id float2_value) 
                             builder_->makeCompositeConstant(type_float2_, id_vector_temp_));
   spv::Id halved_packed = builder_->createUnaryBuiltinCall(type_uint_, ext_inst_glsl_std_450_,
                                                            GLSLstd450PackHalf2x16, halved);
-  // halved_packed has exponent <= 30 in both lanes, so adding 0x0400 per lane
-  // bumps the exponent without ever carrying across lanes.
+
   spv::Id extended = builder_->createBinOp(spv::OpIAdd, type_uint_, halved_packed,
                                            builder_->makeUintConstant(0x04000400));
   spv::Id const_0xFFFF = builder_->makeUintConstant(0xFFFF);
@@ -2571,9 +2294,6 @@ spv::Id SpirvShaderTranslator::PackFloat16x2ExtendedRange(spv::Id float2_value) 
 }
 
 spv::Id SpirvShaderTranslator::UnpackFloat16x2ExtendedRange(spv::Id packed_uint) {
-  // Inverse of PackFloat16x2ExtendedRange. Exponent 31 lanes are large finite
-  // values, not Inf/NaN - decrement their exponent by 1 into the standard
-  // range, unpack, then double to compensate.
   spv::Id const_0x7C00 = builder_->makeUintConstant(0x7C00);
   spv::Id lower_overflow = builder_->createBinOp(
       spv::OpIEqual, type_bool_,
@@ -2588,8 +2308,7 @@ spv::Id SpirvShaderTranslator::UnpackFloat16x2ExtendedRange(spv::Id packed_uint)
       const_0x7C00);
   spv::Id standard = builder_->createUnaryBuiltinCall(type_float2_, ext_inst_glsl_std_450_,
                                                       GLSLstd450UnpackHalf2x16, packed_uint);
-  // Decrement the exponent only in overflowed lanes (0x0400 in the low lane,
-  // 0x04000000 in the high one) so the subtraction never borrows across lanes.
+
   spv::Id sub_lower = builder_->createTriOp(spv::OpSelect, type_uint_, lower_overflow,
                                             builder_->makeUintConstant(0x0400), const_uint_0_);
   spv::Id sub_upper = builder_->createTriOp(spv::OpSelect, type_uint_, upper_overflow,
@@ -2667,9 +2386,7 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
           type_float_, ext_inst_glsl_std_450_, GLSLstd450NClamp,
           builder_->createCompositeExtract(color_float4, type_float_, 3), const_float_0_,
           const_float_1_);
-      // Bypass the `getNumTypeConstituents(typeId) == (int)constituents.size()`
-      // assertion in createCompositeConstruct, OpCompositeConstruct can
-      // construct vectors not only from scalars, but also from other vectors.
+
       spv::Id color_gamma;
       {
         std::unique_ptr<spv::Instruction> color_gamma_composite_construct_op =
@@ -2725,13 +2442,13 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
     case xenos::ColorRenderTargetFormat::k_2_10_10_10_FLOAT_AS_16_16_16_16: {
       spv::Id packed_2_10_10_10_float;
       std::array<spv::Id, 4> color_components;
-      // RGB.
+
       for (uint32_t i = 0; i < 3; ++i) {
         color_components[i] = UnclampedFloat32To7e3(
             *builder_, builder_->createCompositeExtract(color_float4, type_float_, i),
             ext_inst_glsl_std_450_);
       }
-      // Alpha.
+
       spv::Id alpha_scaled = builder_->createNoContractionBinOp(
           spv::OpFMul, type_float_,
           builder_->createTriBuiltinCall(
@@ -2742,7 +2459,7 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
       spv::Id alpha_offset = builder_->createNoContractionBinOp(
           spv::OpFAdd, type_float_, alpha_scaled, unorm_round_offset_float);
       color_components[3] = builder_->createUnaryOp(spv::OpConvertFToU, type_uint_, alpha_offset);
-      // Pack.
+
       packed_2_10_10_10_float = color_components[0];
       spv::Id rgb_width = builder_->makeUintConstant(10);
       for (uint32_t i = 1; i < 3; ++i) {
@@ -2766,7 +2483,7 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
       id_vector_temp_.resize(4, builder_->makeFloatConstant(32.0f));
       spv::Id const_float4_32 = builder_->makeCompositeConstant(type_float4_, id_vector_temp_);
       id_vector_temp_.clear();
-      // NaN to 0, not to -32.
+
       spv::Id color_scaled = builder_->createNoContractionBinOp(
           spv::OpVectorTimesScalar, type_float4_,
           builder_->createTriBuiltinCall(
@@ -2791,7 +2508,7 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
           spv::OpBitcast, type_uint4_,
           builder_->createUnaryOp(spv::OpConvertFToS, type_int4_, color_offset));
       spv::Id component_offset_width = builder_->makeUintConstant(16);
-      // The high dword only exists on the 64bpp formats.
+
       for (uint32_t i = 0; i < (rt_format_is_64bpp ? 2u : 1u); ++i) {
         packed_16[i] = builder_->createQuadOp(
             spv::OpBitFieldInsert, type_uint_,
@@ -2804,8 +2521,7 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
     case xenos::ColorRenderTargetFormat::k_16_16_FLOAT:
     case xenos::ColorRenderTargetFormat::k_16_16_16_16_FLOAT: {
       std::array<spv::Id, 2> packed_16_float{const_uint_0_, const_uint_0_};
-      // NaN is flushed to 0 inside PackFloat16x2ExtendedRange. The high dword
-      // only exists on the 64bpp formats.
+
       for (uint32_t i = 0; i < (rt_format_is_64bpp ? 2u : 1u); ++i) {
         uint_vector_temp_.clear();
         uint_vector_temp_.push_back(2 * i);
@@ -2815,10 +2531,10 @@ std::array<spv::Id, 2> SpirvShaderTranslator::FSI_ClampAndPackColor(
       }
       packed = packed_16_float;
     } break;
-    // k_32_FLOAT, k_32_32_FLOAT and anything undefined.
+
     default: {
       std::array<spv::Id, 2> packed_32_float{const_uint_0_, const_uint_0_};
-      // The high dword only exists on the 64bpp formats.
+
       for (uint32_t i = 0; i < (rt_format_is_64bpp ? 2u : 1u); ++i) {
         packed_32_float[i] =
             builder_->createUnaryOp(spv::OpBitcast, type_uint_,
@@ -2939,7 +2655,7 @@ std::array<spv::Id, 4> SpirvShaderTranslator::FSI_UnpackColor(
       }
       unpacked = unpacked_16_float[i];
     } break;
-    // k_32_FLOAT, k_32_32_FLOAT and anything undefined.
+
     default: {
       const uint32_t i = format == xenos::ColorRenderTargetFormat::k_32_32_FLOAT ? 1 : 0;
       std::array<std::array<spv::Id, 4>, 2> unpacked_32_float;
@@ -2974,8 +2690,6 @@ spv::Id SpirvShaderTranslator::FSI_FlushNaNClampAndInBlending(spv::Id color_or_a
                                          *builder_);
   spv::Id color_or_alpha_clamped;
   {
-    // Flush NaN to 0 even for signed (NMax would flush it to the minimum
-    // value).
     color_or_alpha_clamped = builder_->createTriBuiltinCall(
         color_or_alpha_type, ext_inst_glsl_std_450_, GLSLstd450FClamp,
         builder_->createTriOp(
@@ -2994,16 +2708,10 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
     spv::Id value, spv::Id is_fixed_point, spv::Id clamp_min_value, spv::Id clamp_max_value,
     spv::Id factor, spv::Id source_color, spv::Id source_alpha, spv::Id dest_color,
     spv::Id dest_alpha, spv::Id constant_color, spv::Id constant_alpha) {
-  // If the factor is zero, don't use it in the multiplication at all, so that
-  // infinity and NaN are not potentially involved in the multiplication.
-  // Calculate the condition before the selection merge, which must be the
-  // penultimate instruction in the block.
   SpirvBuilder::IfBuilder factor_not_zero_if(
       builder_->createBinOp(spv::OpINotEqual, type_bool_, factor,
                             builder_->makeUintConstant(uint32_t(xenos::BlendFactor::kZero))),
       spv::SelectionControlDontFlattenMask, *builder_);
-
-  // Non-zero factor case.
 
   spv::Block& block_factor_head = *builder_->getBuildPoint();
   spv::Block& block_factor_one = builder_->makeNewBlock();
@@ -3030,7 +2738,7 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
     std::unique_ptr<spv::Instruction> factor_switch_op =
         std::make_unique<spv::Instruction>(spv::OpSwitch);
     factor_switch_op->addIdOperand(factor);
-    // Make one the default factor.
+
     factor_switch_op->addIdOperand(block_factor_one.getId());
     factor_switch_op->addImmediateOperand(int32_t(xenos::BlendFactor::kSrcColor));
     factor_switch_op->addIdOperand(color_factor_blocks[0]->getId());
@@ -3069,12 +2777,10 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
   }
   block_factor_source_alpha_saturate.addPredecessor(&block_factor_head);
 
-  // kOne
   builder_->setBuildPoint(&block_factor_one);
-  // The result is the value itself.
+
   builder_->createBranch(&block_factor_merge);
 
-  // k[OneMinus]Src/Dest/ConstantColor/Alpha
   std::array<spv::Id, 3> color_factors = {
       source_color,
       dest_color,
@@ -3093,7 +2799,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
     spv::Id color_factor = color_factors[i];
     spv::Id alpha_factor = alpha_factors[i];
 
-    // kSrc/Dst/ConstantColor
     {
       builder_->setBuildPoint(color_factor_blocks[i]);
       color_factor_results[i] =
@@ -3101,7 +2806,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
       builder_->createBranch(&block_factor_merge);
     }
 
-    // kOneMinusSrc/Dst/ConstantColor
     {
       builder_->setBuildPoint(one_minus_color_factor_blocks[i]);
       one_minus_color_factor_results[i] = builder_->createNoContractionBinOp(
@@ -3111,7 +2815,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
       builder_->createBranch(&block_factor_merge);
     }
 
-    // kSrc/Dst/ConstantAlpha
     {
       builder_->setBuildPoint(alpha_factor_blocks[i]);
       alpha_factor_results[i] = builder_->createNoContractionBinOp(
@@ -3119,7 +2822,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
       builder_->createBranch(&block_factor_merge);
     }
 
-    // kOneMinusSrc/Dst/ConstantAlpha
     {
       builder_->setBuildPoint(one_minus_alpha_factor_blocks[i]);
       one_minus_alpha_factor_results[i] = builder_->createNoContractionBinOp(
@@ -3130,7 +2832,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
     }
   }
 
-  // kSrcAlphaSaturate
   spv::Id result_source_alpha_saturate;
   {
     builder_->setBuildPoint(&block_factor_source_alpha_saturate);
@@ -3143,7 +2844,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
     builder_->createBranch(&block_factor_merge);
   }
 
-  // Select the term for the non-zero factor.
   builder_->setBuildPoint(&block_factor_merge);
   id_vector_temp_.clear();
   id_vector_temp_.reserve(2 * 14);
@@ -3167,7 +2867,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyColorBlendFactor(
 
   factor_not_zero_if.makeEndIf();
 
-  // Make the result zero if the factor is zero.
   return factor_not_zero_if.createMergePhi(result, const_float3_0_);
 }
 
@@ -3176,16 +2875,10 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
                                                          spv::Id clamp_max_value, spv::Id factor,
                                                          spv::Id source_alpha, spv::Id dest_alpha,
                                                          spv::Id constant_alpha) {
-  // If the factor is zero, don't use it in the multiplication at all, so that
-  // infinity and NaN are not potentially involved in the multiplication.
-  // Calculate the condition before the selection merge, which must be the
-  // penultimate instruction in the block.
   SpirvBuilder::IfBuilder factor_not_zero_if(
       builder_->createBinOp(spv::OpINotEqual, type_bool_, factor,
                             builder_->makeUintConstant(uint32_t(xenos::BlendFactor::kZero))),
       spv::SelectionControlDontFlattenMask, *builder_);
-
-  // Non-zero factor case.
 
   spv::Block& block_factor_head = *builder_->getBuildPoint();
   spv::Block& block_factor_one = builder_->makeNewBlock();
@@ -3204,7 +2897,7 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
     std::unique_ptr<spv::Instruction> factor_switch_op =
         std::make_unique<spv::Instruction>(spv::OpSwitch);
     factor_switch_op->addIdOperand(factor);
-    // Make one the default factor.
+
     factor_switch_op->addIdOperand(block_factor_one.getId());
     factor_switch_op->addImmediateOperand(int32_t(xenos::BlendFactor::kSrcColor));
     factor_switch_op->addIdOperand(alpha_factor_blocks[0]->getId());
@@ -3241,12 +2934,10 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
   }
   block_factor_source_alpha_saturate.addPredecessor(&block_factor_head);
 
-  // kOne
   builder_->setBuildPoint(&block_factor_one);
-  // The result is the value itself.
+
   builder_->createBranch(&block_factor_merge);
 
-  // k[OneMinus]Src/Dest/ConstantColor/Alpha
   std::array<spv::Id, 3> alpha_factors = {
       source_alpha,
       dest_alpha,
@@ -3257,7 +2948,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
   for (uint32_t i = 0; i < 3; ++i) {
     spv::Id alpha_factor = alpha_factors[i];
 
-    // kSrc/Dst/ConstantColor/Alpha
     {
       builder_->setBuildPoint(alpha_factor_blocks[i]);
       alpha_factor_results[i] =
@@ -3265,7 +2955,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
       builder_->createBranch(&block_factor_merge);
     }
 
-    // kOneMinusSrc/Dst/ConstantColor/Alpha
     {
       builder_->setBuildPoint(one_minus_alpha_factor_blocks[i]);
       one_minus_alpha_factor_results[i] = builder_->createNoContractionBinOp(
@@ -3276,7 +2965,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
     }
   }
 
-  // kSrcAlphaSaturate
   spv::Id result_source_alpha_saturate;
   {
     builder_->setBuildPoint(&block_factor_source_alpha_saturate);
@@ -3289,7 +2977,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
     builder_->createBranch(&block_factor_merge);
   }
 
-  // Select the term for the non-zero factor.
   builder_->setBuildPoint(&block_factor_merge);
   id_vector_temp_.clear();
   id_vector_temp_.reserve(2 * 8);
@@ -3309,7 +2996,6 @@ spv::Id SpirvShaderTranslator::FSI_ApplyAlphaBlendFactor(spv::Id value, spv::Id 
 
   factor_not_zero_if.makeEndIf();
 
-  // Make the result zero if the factor is zero.
   return factor_not_zero_if.createMergePhi(result, const_float_0_);
 }
 
@@ -3325,10 +3011,6 @@ spv::Id SpirvShaderTranslator::FSI_BlendColorOrAlphaWithUnclampedResult(
                (dest_color != spv::NoResult || constant_color_clamped != spv::NoResult));
   spv::Id value_type = is_alpha ? type_float_ : type_float3_;
 
-  // Apply blend factors to source and destination first.
-  // Note: Unlike Vulkan's VK_BLEND_OP_MIN/MAX which ignore blend factors,
-  // the Xbox 360 applies blend factors before the min/max operation.
-  // So we apply factors unconditionally, then switch on the equation.
   spv::Id term_source, term_dest;
   if (is_alpha) {
     term_source = FSI_ApplyAlphaBlendFactor(source_alpha_clamped, is_fixed_point, clamp_min_value,
@@ -3348,7 +3030,6 @@ spv::Id SpirvShaderTranslator::FSI_BlendColorOrAlphaWithUnclampedResult(
                                           constant_color_clamped, constant_alpha_clamped);
   }
 
-  // Now switch on the blend equation to combine the factored terms.
   spv::Block& block_equation_head = *builder_->getBuildPoint();
   spv::Block& block_equation_add = builder_->makeNewBlock();
   spv::Block& block_equation_subtract = builder_->makeNewBlock();
@@ -3361,7 +3042,7 @@ spv::Id SpirvShaderTranslator::FSI_BlendColorOrAlphaWithUnclampedResult(
     std::unique_ptr<spv::Instruction> equation_switch_op =
         std::make_unique<spv::Instruction>(spv::OpSwitch);
     equation_switch_op->addIdOperand(equation);
-    // Make addition the default.
+
     equation_switch_op->addIdOperand(block_equation_add.getId());
     equation_switch_op->addImmediateOperand(int32_t(xenos::BlendOp::kSubtract));
     equation_switch_op->addIdOperand(block_equation_subtract.getId());
@@ -3379,37 +3060,31 @@ spv::Id SpirvShaderTranslator::FSI_BlendColorOrAlphaWithUnclampedResult(
   block_equation_min.addPredecessor(&block_equation_head);
   block_equation_max.addPredecessor(&block_equation_head);
 
-  // Addition case (default).
   builder_->setBuildPoint(&block_equation_add);
   spv::Id result_add =
       builder_->createNoContractionBinOp(spv::OpFAdd, value_type, term_source, term_dest);
   builder_->createBranch(&block_equation_merge);
 
-  // Subtraction case.
   builder_->setBuildPoint(&block_equation_subtract);
   spv::Id result_subtract =
       builder_->createNoContractionBinOp(spv::OpFSub, value_type, term_source, term_dest);
   builder_->createBranch(&block_equation_merge);
 
-  // Reverse subtraction case.
   builder_->setBuildPoint(&block_equation_rev_subtract);
   spv::Id result_rev_subtract =
       builder_->createNoContractionBinOp(spv::OpFSub, value_type, term_dest, term_source);
   builder_->createBranch(&block_equation_merge);
 
-  // Min case.
   builder_->setBuildPoint(&block_equation_min);
   spv::Id result_min = builder_->createBinBuiltinCall(value_type, ext_inst_glsl_std_450_,
                                                       GLSLstd450FMin, term_source, term_dest);
   builder_->createBranch(&block_equation_merge);
 
-  // Max case.
   builder_->setBuildPoint(&block_equation_max);
   spv::Id result_max = builder_->createBinBuiltinCall(value_type, ext_inst_glsl_std_450_,
                                                       GLSLstd450FMax, term_source, term_dest);
   builder_->createBranch(&block_equation_merge);
 
-  // Merge and create phi for the result.
   builder_->setBuildPoint(&block_equation_merge);
   id_vector_temp_.clear();
   id_vector_temp_.push_back(result_add);
@@ -3432,10 +3107,6 @@ void SpirvShaderTranslator::FSI_AlphaToMaskSample(bool initialize, uint32_t samp
                                                   float threshold_base, spv::Id threshold_offset,
                                                   float threshold_offset_scale, spv::Id alpha,
                                                   spv::Id& coverage_out) {
-  // Based on D3D12's CompletePixelShader_AlphaToMaskSample.
-  // Calculates threshold and tests alpha against it.
-  // threshold = threshold_base + threshold_offset * (-threshold_offset_scale)
-
   spv::Id const_threshold_offset_scale = builder_->makeFloatConstant(-threshold_offset_scale);
   spv::Id threshold = builder_->createNoContractionBinOp(spv::OpFMul, type_float_, threshold_offset,
                                                          const_threshold_offset_scale);
@@ -3444,42 +3115,25 @@ void SpirvShaderTranslator::FSI_AlphaToMaskSample(bool initialize, uint32_t samp
   threshold =
       builder_->createNoContractionBinOp(spv::OpFAdd, type_float_, const_threshold_base, threshold);
 
-  // Test: alpha >= threshold
-  // Using OpFOrdGreaterThanEqual for proper NaN handling (NaN results in false)
   spv::Id sample_passes =
       builder_->createBinOp(spv::OpFOrdGreaterThanEqual, type_bool_, alpha, threshold);
 
   if (edram_fragment_shader_interlock_) {
-    // FSI mode: Clear both coverage and deferred depth bits for failed samples.
-    // This matches the D3D12 ROV implementation which uses ~(0b00010001 <<
-    // sample_index). The test must affect not only the coverage bits (0-3), but
-    // also the deferred depth/stencil write bits (4-7) since if a sample is
-    // discarded by alpha to coverage, it must not be written at all.
-
-    // Optimized: Pre-compute the clear mask constant
-    // clear_mask = ~(0b00010001 << sample_index)
     spv::Id clear_mask = builder_->makeUintConstant(~(0b00010001u << sample_index));
 
-    // If test passes, keep all bits; if test fails, apply clear_mask
-    // This avoids doing OpNot on every call by pre-computing the clear mask
     spv::Id mask_to_apply =
         builder_->createTriOp(spv::OpSelect, type_uint_, sample_passes,
                               builder_->makeUintConstant(0xFFFFFFFFu), clear_mask);
 
-    // Apply mask: coverage &= mask_to_apply
     coverage_out =
         builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, coverage_out, mask_to_apply);
   } else {
-    // Non-FSI mode: Start with zero coverage, set bits for passed samples.
     if (initialize) {
       coverage_out = builder_->makeUintConstant(0u);
     }
 
-    // If sample passes, set its bit in coverage mask.
-    // Create a mask with the sample bit set: (1 << sample_index)
     spv::Id sample_bit = builder_->makeUintConstant(1u << sample_index);
 
-    // coverage = select(sample_passes, coverage | sample_bit, coverage)
     spv::Id coverage_set =
         builder_->createBinOp(spv::OpBitwiseOr, type_uint_, coverage_out, sample_bit);
     coverage_out =
@@ -3488,27 +3142,21 @@ void SpirvShaderTranslator::FSI_AlphaToMaskSample(bool initialize, uint32_t samp
 }
 
 void SpirvShaderTranslator::FSI_AlphaToMask() {
-  // Based on D3D12's CompletePixelShader_AlphaToMask.
-
-  // FSI mode implementation
   if (edram_fragment_shader_interlock_) {
-    // Check if alpha to coverage can be done at all in this shader.
     if (!current_shader().writes_color_target(0)) {
       return;
     }
 
-    // Check if we have the required variables
     if (main_fsi_sample_mask_ == spv::NoResult) {
-      return;  // Sample mask not available
+      return;
     }
     if (input_fragment_coordinates_ == spv::NoResult) {
-      return;  // Fragment coordinates not available
+      return;
     }
     if (output_or_var_fragment_data_[0] == spv::NoResult) {
-      return;  // RT0 not available
+      return;
     }
 
-    // Load alpha_to_mask constant and check if enabled
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantAlphaToMask));
     spv::Id alpha_to_mask_constant = builder_->createLoad(
@@ -3519,27 +3167,17 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
     spv::Id alpha_to_mask_enabled = builder_->createBinOp(
         spv::OpINotEqual, type_bool_, alpha_to_mask_constant, builder_->makeUintConstant(0));
 
-    // Save the current block for PHI
     spv::Block* block_before = builder_->getBuildPoint();
     spv::Id mask_before = main_fsi_sample_mask_;
 
-    // Create blocks for control flow
     spv::Block& block_alpha_enabled = builder_->makeNewBlock();
     spv::Block& block_merge = builder_->makeNewBlock();
 
-    // Set up the conditional branch
     builder_->createSelectionMerge(&block_merge, spv::SelectionControlDontFlattenMask);
     builder_->createConditionalBranch(alpha_to_mask_enabled, &block_alpha_enabled, &block_merge);
 
-    // Alpha to coverage enabled path
     builder_->setBuildPoint(&block_alpha_enabled);
 
-    // Start with the current sample mask (which includes both coverage bits 0-3
-    // and deferred depth bits 4-7). Alpha to coverage will clear both the
-    // coverage and deferred depth bits for samples that fail the alpha test.
-    // This matches the D3D12 ROV implementation.
-
-    // Extract dithering threshold offset from fragment position
     spv::Id frag_coord = builder_->createLoad(input_fragment_coordinates_, spv::NoPrecision);
 
     spv::Id frag_x_float = builder_->createCompositeExtract(frag_coord, type_float_, 0);
@@ -3548,7 +3186,6 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
     spv::Id frag_x = builder_->createUnaryOp(spv::OpConvertFToU, type_uint_, frag_x_float);
     spv::Id frag_y = builder_->createUnaryOp(spv::OpConvertFToU, type_uint_, frag_y_float);
 
-    // Calculate dithering offset: (Y & 1) | ((X & 1) << 1)
     spv::Id y_bit =
         builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, frag_y, builder_->makeUintConstant(1));
     spv::Id x_bit =
@@ -3558,7 +3195,6 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
     spv::Id offset_index =
         builder_->createBinOp(spv::OpBitwiseOr, type_uint_, y_bit, x_bit_shifted);
 
-    // Extract 2-bit offset from alpha_to_mask constant
     spv::Id bit_position = builder_->createBinOp(spv::OpShiftLeftLogical, type_uint_, offset_index,
                                                  builder_->makeUintConstant(1));
     spv::Id offset_shifted = builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
@@ -3568,16 +3204,14 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
     spv::Id threshold_offset =
         builder_->createUnaryOp(spv::OpConvertUToF, type_float_, threshold_offset_uint);
 
-    // Load alpha from RT0.w (oC0.w) once for all samples (optimization)
     assert_true(output_or_var_fragment_data_[0] != spv::NoResult);
     id_vector_temp_.clear();
-    id_vector_temp_.push_back(builder_->makeIntConstant(3));  // W component
+    id_vector_temp_.push_back(builder_->makeIntConstant(3));
     spv::Id alpha = builder_->createLoad(
         builder_->createAccessChain(spv::StorageClassFunction, output_or_var_fragment_data_[0],
                                     id_vector_temp_),
         spv::NoPrecision);
 
-    // Only this shader's own samples and dithering thresholds are emitted.
     spv::Id coverage = main_fsi_sample_mask_;
     switch (FSI_GetMsaaSamples()) {
       case xenos::MsaaSamples::k4X:
@@ -3595,36 +3229,29 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
         break;
     }
 
-    // Branch to main merge
     spv::Block* block_alpha_enabled_end = builder_->getBuildPoint();
     builder_->createBranch(&block_merge);
 
-    // Continue from merge block with PHI for the final mask
     builder_->setBuildPoint(&block_merge);
     id_vector_temp_.clear();
     id_vector_temp_.push_back(coverage);
-    id_vector_temp_.push_back(block_alpha_enabled_end->getId());  // Coming from the enabled path
+    id_vector_temp_.push_back(block_alpha_enabled_end->getId());
     id_vector_temp_.push_back(mask_before);
-    id_vector_temp_.push_back(block_before->getId());  // Coming from the disabled path
+    id_vector_temp_.push_back(block_before->getId());
     main_fsi_sample_mask_ = builder_->createOp(spv::OpPhi, type_uint_, id_vector_temp_);
   }
 
-  // For FBO mode, ensure gl_SampleMask output was created
-  // For depth-only shaders, we don't create gl_SampleMask, so skip
   if (output_fragment_sample_mask_ == spv::NoResult) {
     return;
   }
 
-  // Initialize OMask to full coverage (in case alpha to mask is disabled).
-  // gl_SampleMask is an array, so we need to access element [0].
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(0));
   spv::Id sample_mask_element = builder_->createAccessChain(
       spv::StorageClassOutput, output_fragment_sample_mask_, id_vector_temp_);
-  spv::Id full_coverage = builder_->makeIntConstant(-1);  // All bits set
+  spv::Id full_coverage = builder_->makeIntConstant(-1);
   builder_->createStore(full_coverage, sample_mask_element);
 
-  // Load alpha_to_mask constant and check if enabled.
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantAlphaToMask));
   spv::Id alpha_to_mask_constant =
@@ -3644,58 +3271,44 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
 
   builder_->setBuildPoint(&block_alpha_to_mask_enabled);
 
-  // Extract dithering threshold offset from fragment position.
-  // offset_index = (Y & 1) | ((X & 1) << 1)
-  // offset = (alpha_to_mask >> (offset_index * 2)) & 0b11
   spv::Id frag_coord = builder_->createLoad(input_fragment_coordinates_, spv::NoPrecision);
 
-  // Extract X and Y as floats first, then convert to uint
   spv::Id frag_x_float = builder_->createCompositeExtract(frag_coord, type_float_, 0);
   spv::Id frag_y_float = builder_->createCompositeExtract(frag_coord, type_float_, 1);
 
   spv::Id frag_x = builder_->createUnaryOp(spv::OpConvertFToU, type_uint_, frag_x_float);
   spv::Id frag_y = builder_->createUnaryOp(spv::OpConvertFToU, type_uint_, frag_y_float);
 
-  // Y & 1
   spv::Id y_bit =
       builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, frag_y, builder_->makeUintConstant(1));
 
-  // (X & 1) << 1
   spv::Id x_bit =
       builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, frag_x, builder_->makeUintConstant(1));
   spv::Id x_bit_shifted = builder_->createBinOp(spv::OpShiftLeftLogical, type_uint_, x_bit,
                                                 builder_->makeUintConstant(1));
 
-  // offset_index = y_bit | x_bit_shifted
   spv::Id offset_index = builder_->createBinOp(spv::OpBitwiseOr, type_uint_, y_bit, x_bit_shifted);
 
-  // bit_position = offset_index * 2
   spv::Id bit_position = builder_->createBinOp(spv::OpShiftLeftLogical, type_uint_, offset_index,
                                                builder_->makeUintConstant(1));
 
-  // Extract 2-bit offset: (alpha_to_mask >> bit_position) & 0b11
   spv::Id offset_shifted = builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
                                                  alpha_to_mask_constant, bit_position);
   spv::Id threshold_offset_uint = builder_->createBinOp(
       spv::OpBitwiseAnd, type_uint_, offset_shifted, builder_->makeUintConstant(0b11));
 
-  // Convert offset to float (0.0, 1.0, 2.0, 3.0)
   spv::Id threshold_offset =
       builder_->createUnaryOp(spv::OpConvertUToF, type_float_, threshold_offset_uint);
 
-  // Load alpha from RT0.w (oC0.w) once for all samples (optimization)
   id_vector_temp_.clear();
-  id_vector_temp_.push_back(builder_->makeIntConstant(3));  // W component
+  id_vector_temp_.push_back(builder_->makeIntConstant(3));
   spv::Id alpha = builder_->createLoad(
       builder_->createAccessChain(spv::StorageClassFunction, output_or_var_fragment_data_[0],
                                   id_vector_temp_),
       spv::NoPrecision);
 
-  // Load MSAA sample count to determine which mode to use.
-  // 0 = 1x, 1 = 2x, 2 = 4x
   spv::Id msaa_samples = LoadMsaaSamplesFromFlags();
 
-  // Check if MSAA is enabled (msaa_samples != 0)
   spv::Id msaa_enabled = builder_->createBinOp(spv::OpINotEqual, type_bool_, msaa_samples,
                                                builder_->makeUintConstant(0));
 
@@ -3707,10 +3320,8 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   builder_->createSelectionMerge(&block_msaa_merge, spv::SelectionControlDontFlattenMask);
   builder_->createConditionalBranch(msaa_enabled, &block_msaa_enabled, &block_msaa_disabled);
 
-  // MSAA enabled - check if 4x or 2x
   builder_->setBuildPoint(&block_msaa_enabled);
 
-  // msaa_samples: 1 = 2x, 2 = 4x
   spv::Id is_4x_msaa =
       builder_->createBinOp(spv::OpIEqual, type_bool_, msaa_samples, builder_->makeUintConstant(2));
 
@@ -3721,7 +3332,6 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   builder_->createSelectionMerge(&block_msaa_mode_merge, spv::SelectionControlDontFlattenMask);
   builder_->createConditionalBranch(is_4x_msaa, &block_4x_msaa, &block_2x_msaa);
 
-  // 4x MSAA
   builder_->setBuildPoint(&block_4x_msaa);
   spv::Id coverage_4x = spv::NoResult;
   FSI_AlphaToMaskSample(true, 0, 0.75f, threshold_offset, 1.0f / 16.0f, alpha, coverage_4x);
@@ -3730,28 +3340,17 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   FSI_AlphaToMaskSample(false, 3, 1.0f, threshold_offset, 1.0f / 16.0f, alpha, coverage_4x);
   builder_->createBranch(&block_msaa_mode_merge);
 
-  // 2x MSAA
   builder_->setBuildPoint(&block_2x_msaa);
   spv::Id coverage_2x = spv::NoResult;
-  // FSI mode uses guest sample indices (0 and 1).
-  // FBO mode sample mapping depends on whether native 2x MSAA is supported:
-  // - Native 2x: host samples 1, 0 (reversed from guest order)
-  // - 2x as 4x: host samples 0, 3
+
   if (edram_fragment_shader_interlock_) {
-    // FSI: Use guest indices 0, 1.
     FSI_AlphaToMaskSample(true, 0, 0.5f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
     FSI_AlphaToMaskSample(false, 1, 1.0f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
   } else {
-    // FBO: Account for native 2x vs 2x-as-4x sample mapping. This epilogue only
-    // runs when there is a color attachment (sample mask output), so the native
-    // 2x decision must use the with-attachments capability, matching the host
-    // pipeline's native-vs-emulated 2x choice.
     if (native_2x_msaa_with_attachments_) {
-      // Native 2x: D3D10.1+ standard - top is 1, bottom is 0.
       FSI_AlphaToMaskSample(true, 1, 0.5f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
       FSI_AlphaToMaskSample(false, 0, 1.0f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
     } else {
-      // 2x as 4x: Use samples 0 and 3.
       FSI_AlphaToMaskSample(true, 0, 0.5f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
       FSI_AlphaToMaskSample(false, 3, 1.0f, threshold_offset, 1.0f / 8.0f, alpha, coverage_2x);
     }
@@ -3759,7 +3358,7 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   builder_->createBranch(&block_msaa_mode_merge);
 
   builder_->setBuildPoint(&block_msaa_mode_merge);
-  // Merge coverage from 4x and 2x MSAA paths using PHI.
+
   id_vector_temp_.clear();
   id_vector_temp_.reserve(2 * 2);
   id_vector_temp_.push_back(coverage_4x);
@@ -3769,14 +3368,13 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   spv::Id coverage_msaa_enabled = builder_->createOp(spv::OpPhi, type_uint_, id_vector_temp_);
   builder_->createBranch(&block_msaa_merge);
 
-  // MSAA disabled - single sample
   builder_->setBuildPoint(&block_msaa_disabled);
   spv::Id coverage_1x = spv::NoResult;
   FSI_AlphaToMaskSample(true, 0, 1.0f, threshold_offset, 1.0f / 4.0f, alpha, coverage_1x);
   builder_->createBranch(&block_msaa_merge);
 
   builder_->setBuildPoint(&block_msaa_merge);
-  // Merge coverage from MSAA enabled and disabled paths using PHI.
+
   id_vector_temp_.clear();
   id_vector_temp_.reserve(2 * 2);
   id_vector_temp_.push_back(coverage_msaa_enabled);
@@ -3785,9 +3383,7 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   id_vector_temp_.push_back(block_msaa_disabled.getId());
   spv::Id coverage_final = builder_->createOp(spv::OpPhi, type_uint_, id_vector_temp_);
 
-  // Write coverage to gl_SampleMask and discard if zero (FBO mode only).
   if (!edram_fragment_shader_interlock_) {
-    // Write to gl_SampleMask[0].
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(0));
     spv::Id sample_mask_element = builder_->createAccessChain(
@@ -3795,13 +3391,12 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
     spv::Id coverage_int = builder_->createUnaryOp(spv::OpBitcast, type_int_, coverage_final);
     builder_->createStore(coverage_int, sample_mask_element);
 
-    // Discard fragment if coverage is zero.
     spv::Id coverage_zero = builder_->createBinOp(spv::OpIEqual, type_bool_, coverage_final,
                                                   builder_->makeUintConstant(0));
     SpirvBuilder::IfBuilder coverage_discard_if(coverage_zero, spv::SelectionControlDontFlattenMask,
                                                 *builder_);
     builder_->createNoResultOp(spv::OpKill);
-    // OpKill terminates the block, so makeEndIf with false to not branch.
+
     coverage_discard_if.makeEndIf(false);
   }
 
@@ -3809,8 +3404,6 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   builder_->setBuildPoint(&block_alpha_to_mask_merge);
 
   if (!edram_fragment_shader_interlock_ && var_main_zpd_coverage_ != spv::NoResult) {
-    // Samples dropped by alpha-to-coverage never reach the depth/stencil test,
-    // so they shouldn't be included in the ZPD Total counter either.
     id_vector_temp_.clear();
     id_vector_temp_.push_back(const_int_0_);
     spv::Id sample_mask_element = builder_->createAccessChain(
@@ -3825,4 +3418,4 @@ void SpirvShaderTranslator::FSI_AlphaToMask() {
   }
 }
 
-}  // namespace rex::graphics
+}

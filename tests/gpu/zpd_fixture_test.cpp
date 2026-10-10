@@ -28,26 +28,20 @@ namespace xenos = rex::graphics::xenos;
 using rex::testing::GpuFixture;
 using namespace rex::testing::guest_draw;  // NOLINT
 
-// D3D's pending marker, written big-endian to ZPass_A of the END report
-// before the event and polled until the GPU overwrites it.
 constexpr uint32_t kPendingSentinel = 0xFFFFFEED;
 constexpr uint32_t kZPassAOffset = 16;
 
 std::unique_ptr<GpuFixture> CreateFixture(std::string* error, const char* mode) {
-  // Otherwise draws are dropped while their pipelines compile.
   return GpuFixture::Create(error,
                             {{"occlusion_query", mode}, {"async_shader_compilation", "false"}});
 }
 
-// One sample counter report, as D3D reserves it.
 uint32_t AllocReport(GpuFixture& fixture) {
   uint32_t report = fixture.AllocPhysical(0x100, 0x100);
   fixture.WriteDwords(report, std::vector<uint32_t>(8, 0));
   return report;
 }
 
-// EVENT_WRITE_ZPD at report. D3D marks the report it will wait on (the END of
-// a conventional query) with the pending sentinel first.
 void WriteZPD(GpuFixture& fixture, uint32_t report, bool awaited) {
   if (awaited) {
     fixture.WriteDwords(report + kZPassAOffset, {kPendingSentinel});
@@ -80,8 +74,6 @@ uint32_t StencilFail(GpuFixture& fixture, uint32_t report) {
   return uint32_t(counts.StencilFail_A) + uint32_t(counts.StencilFail_B);
 }
 
-// The ROV render target path, where the pixel shaders count samples. WARP's
-// ROV draws don't complete, and some adapters have no ROVs, so those skip.
 std::unique_ptr<GpuFixture> CreateRovFixture(std::string* error, bool full_counters) {
   auto fixture = GpuFixture::Create(
       error, {{"occlusion_query", "strict"},
@@ -96,8 +88,6 @@ std::unique_ptr<GpuFixture> CreateRovFixture(std::string* error, bool full_count
   return fixture;
 }
 
-// Waits for the command processor to write the awaited report back. Reports
-// retire in stream order, so every earlier one is final too.
 bool AwaitReport(GpuFixture& fixture, uint32_t report) {
   if (!fixture.Flush()) {
     return false;
@@ -112,12 +102,11 @@ bool AwaitReport(GpuFixture& fixture, uint32_t report) {
   return true;
 }
 
-// The guest's END - BEGIN, in 32-bit arithmetic as D3D does it.
 uint32_t Delta(uint32_t end, uint32_t begin) {
   return end - begin;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Conventional BEGIN/END query counts the samples drawn in between", "[gpu][zpd]") {
   std::string error;
@@ -126,7 +115,7 @@ TEST_CASE("Conventional BEGIN/END query counts the samples drawn in between", "[
     SKIP("GPU fixture host unavailable: " << error);
   }
   SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32);
-  // Drawn outside any query; must not be counted.
+
   DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
   uint32_t begin = AllocReport(*fixture);
   uint32_t end = AllocReport(*fixture);
@@ -137,7 +126,7 @@ TEST_CASE("Conventional BEGIN/END query counts the samples drawn in between", "[
   INFO(fixture->Metadata());
 
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 16u * 8u);
-  // Host queries count ZPass only: Total is ZPass and nothing fails.
+
   CHECK(Delta(Total(*fixture, end), Total(*fixture, begin)) == 16u * 8u);
   CHECK(Delta(ZFail(*fixture, end), ZFail(*fixture, begin)) == 0u);
 }
@@ -154,8 +143,7 @@ TEST_CASE("QueryBatch snapshots give per-interval counts, including empty interv
   for (uint32_t& slot : slots) {
     slot = AllocReport(*fixture);
   }
-  // Issue, draw, Issue, Issue, draw, draw, Issue: N intervals from N + 1
-  // snapshots of one running counter.
+
   WriteZPD(*fixture, slots[0], false);
   DrawRect(*fixture, 0, 0, 16, 16, 0xFFFFFFFF);
   WriteZPD(*fixture, slots[1], false);
@@ -178,7 +166,7 @@ TEST_CASE("Depth-tested draws count only the samples that pass", "[gpu][zpd]") {
   }
   Surface surface = {xenos::MsaaSamples::k1X, 64};
   DrawOptions options;
-  // Color after the depth buffer in EDRAM rather than aliasing it.
+
   options.color_base_tiles = 16;
   options.depth_control.z_enable = 1;
   options.depth_control.z_write_enable = 1;
@@ -193,12 +181,12 @@ TEST_CASE("Depth-tested draws count only the samples that pass", "[gpu][zpd]") {
   }
   options.depth_control.zfunc = xenos::CompareFunction::kLess;
   WriteZPD(*fixture, reports[0], false);
-  // Behind the depth buffer everywhere: fully occluded.
+
   options.z = 0.75f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
   WriteZPD(*fixture, reports[1], false);
-  // In front, over a quarter of the target.
+
   options.z = 0.25f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
@@ -221,8 +209,7 @@ TEST_CASE("A query spanning command list submissions accumulates every segment",
   uint32_t end = AllocReport(*fixture);
   WriteZPD(*fixture, begin, false);
   DrawRect(*fixture, 0, 0, 8, 8, 0xFFFFFFFF);
-  // The command processor goes idle and submits, closing the host query; the
-  // next draw opens a new segment for the same report.
+
   REQUIRE(fixture->Flush());
   DrawRect(*fixture, 16, 16, 24, 24, 0xFFFFFFFF);
   REQUIRE(fixture->Flush());
@@ -240,8 +227,7 @@ TEST_CASE("Reused report memory and recycled host queries stay exact", "[gpu][zp
     SKIP("GPU fixture host unavailable: " << error);
   }
   SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32);
-  // The same two reports for every query, as titles reuse query objects; the
-  // host slots of each round are released and handed out again in the next.
+
   uint32_t begin = AllocReport(*fixture);
   uint32_t end = AllocReport(*fixture);
   for (uint32_t round = 0; round < 3; ++round) {
@@ -262,8 +248,7 @@ TEST_CASE("A draw without a pixel shader or writes is still counted", "[gpu][zpd
   if (!fixture) {
     SKIP("GPU fixture host unavailable: " << error);
   }
-  // No color writes and no depth/stencil writes: the draw has no pixel shader
-  // and writes nothing, as occlusion-only proxies do (4541096E, 5553083B).
+
   DrawOptions options;
   options.color_mask = 0;
   SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32, options);
@@ -293,7 +278,6 @@ TEST_CASE("MSAA queries count covered samples", "[gpu][zpd]") {
   REQUIRE(AwaitReport(*fixture, end));
   INFO(fixture->Metadata());
 
-  // Host samples, as Canary reports them; not verified against a console.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 8u * 4u * 4u);
 }
 
@@ -310,12 +294,10 @@ TEST_CASE("Fast mode writes a visible guess, then the real count", "[gpu][zpd]")
   DrawRect(*fixture, 0, 0, 16, 8, 0xFFFFFFFF);
   WriteZPD(*fixture, end, true);
   REQUIRE(fixture->Flush());
-  // Written at the event without waiting: never the sentinel, never occluded.
+
   CHECK(fixture->ReadDword(end + kZPassAOffset) != kPendingSentinel);
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) >= 1u);
 
-  // Later submissions retire the report and write the real count over the
-  // guess. Draws after the last event don't belong to the measured interval.
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
   while (Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) != 16u * 8u &&
          std::chrono::steady_clock::now() < deadline) {
@@ -340,7 +322,6 @@ TEST_CASE("Fake mode reports the configured count for every interval", "[gpu][zp
   WriteZPD(*fixture, end, true);
   REQUIRE(AwaitReport(*fixture, end));
 
-  // query_occlusion_fake_sample_count, whatever was drawn.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 1000u);
 }
 
@@ -360,7 +341,6 @@ TEST_CASE("ROV BEGIN/END query counts the samples drawn in between", "[gpu][zpd]
   REQUIRE(AwaitReport(*fixture, end));
   INFO(fixture->Metadata());
 
-  // Before RG-GDK-010a, ROV reported query_occlusion_fake_sample_count here.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 16u * 8u);
   CHECK(Delta(Total(*fixture, end), Total(*fixture, begin)) == 16u * 8u);
   CHECK(Delta(ZFail(*fixture, end), ZFail(*fixture, begin)) == 0u);
@@ -401,7 +381,7 @@ TEST_CASE("ROV depth-tested draws count only the samples that pass", "[gpu][zpd]
 
   CHECK(Delta(ZPass(*fixture, reports[1]), ZPass(*fixture, reports[0])) == 0u);
   CHECK(Delta(ZPass(*fixture, reports[2]), ZPass(*fixture, reports[1])) == 8u * 32u);
-  // Without full counters the failures are not counted.
+
   CHECK(Delta(ZFail(*fixture, reports[1]), ZFail(*fixture, reports[0])) == 0u);
 }
 
@@ -428,13 +408,12 @@ TEST_CASE("ROV full counters split depth and stencil failures", "[gpu][zpd][rov]
   options.depth_control.z_write_enable = 0;
   options.depth_control.zfunc = xenos::CompareFunction::kLess;
   WriteZPD(*fixture, reports[0], false);
-  // Behind everywhere: every sample fails depth.
+
   options.z = 0.75f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
   WriteZPD(*fixture, reports[1], false);
-  // Behind as well, and the stencil test never passes: a sample failing both
-  // counts once, as a stencil failure.
+
   DrawOptions stencil = options;
   stencil.z = 0.75f;
   stencil.depth_control.stencil_enable = 1;
@@ -442,7 +421,7 @@ TEST_CASE("ROV full counters split depth and stencil failures", "[gpu][zpd][rov]
   SetupDraw(*fixture, surface, 32, 32, stencil);
   DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
   WriteZPD(*fixture, reports[2], false);
-  // In front, no stencil: passes.
+
   options.z = 0.25f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 4, 32, 0xFFFF0000);
@@ -484,7 +463,7 @@ TEST_CASE("ROV counter slots are cleared when a query reuses them", "[gpu][zpd][
   SetupDraw(*fixture, {xenos::MsaaSamples::k1X, 64}, 32, 32);
   uint32_t begin = AllocReport(*fixture);
   uint32_t end = AllocReport(*fixture);
-  // Each query releases its slot at resolve, and the next one takes it back.
+
   for (uint32_t width = 1; width <= 32; ++width) {
     WriteZPD(*fixture, begin, false);
     DrawRect(*fixture, 0, 0, width, 2, 0xFFFFFFFF);
@@ -510,15 +489,11 @@ TEST_CASE("ROV MSAA queries count covered samples", "[gpu][zpd][rov]") {
   REQUIRE(AwaitReport(*fixture, end));
   INFO(fixture->Metadata());
 
-  // The same host sample count as the host render target path.
   CHECK(Delta(ZPass(*fixture, end), ZPass(*fixture, begin)) == 8u * 4u * 4u);
 }
 
 namespace {
 
-// Host render targets with occlusion_query_full_counters: queries around depth
-// or stencil tested draws without depth writes are hybrid, with ZPass from the
-// D3D12 query and Total counted in the pixel shaders (xenia-canary PR #1218).
 std::unique_ptr<GpuFixture> CreateHybridFixture(std::string* error) {
   return GpuFixture::Create(error, {{"occlusion_query", "strict"},
                                     {"async_shader_compilation", "false"},
@@ -537,8 +512,6 @@ Interval Between(GpuFixture& fixture, uint32_t begin, uint32_t end) {
           Delta(Total(fixture, end), Total(fixture, begin))};
 }
 
-// A 32x32 depth buffer at z 0.5, and options for tested draws without depth
-// writes.
 DrawOptions PrimeDepth(GpuFixture& fixture, const Surface& surface) {
   DrawOptions options;
   options.color_base_tiles = 16;
@@ -553,7 +526,7 @@ DrawOptions PrimeDepth(GpuFixture& fixture, const Surface& surface) {
   return options;
 }
 
-}  // namespace
+}
 
 TEST_CASE("RTV full counters count rejected samples in Total", "[gpu][zpd][hybrid]") {
   std::string error;
@@ -569,20 +542,19 @@ TEST_CASE("RTV full counters count rejected samples in Total", "[gpu][zpd][hybri
     report = AllocReport(*fixture);
   }
   WriteZPD(*fixture, reports[0], false);
-  // Behind everywhere: every sample fails depth.
+
   options.z = 0.75f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 32, 32, 0xFF0000FF);
   WriteZPD(*fixture, reports[1], false);
-  // Behind, and the stencil test never passes. Host render targets can't
-  // tell stencil from depth failures, so both are ZFail.
+
   DrawOptions stencil = options;
   stencil.depth_control.stencil_enable = 1;
   stencil.depth_control.stencilfunc = xenos::CompareFunction::kNever;
   SetupDraw(*fixture, surface, 32, 32, stencil);
   DrawRect(*fixture, 0, 0, 8, 32, 0xFF00FF00);
   WriteZPD(*fixture, reports[2], false);
-  // In front: passes.
+
   options.z = 0.25f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 4, 32, 0xFFFF0000);
@@ -614,8 +586,7 @@ TEST_CASE("RTV full counters count a draw without a pixel shader", "[gpu][zpd][h
   }
   Surface surface = {xenos::MsaaSamples::k1X, 64};
   DrawOptions options = PrimeDepth(*fixture, surface);
-  // No color writes: an occlusion-only proxy drawn without a pixel shader, so
-  // the counting depth-only shader stands in for it.
+
   options.color_mask = 0;
   uint32_t begin = AllocReport(*fixture);
   uint32_t end = AllocReport(*fixture);
@@ -647,14 +618,13 @@ TEST_CASE("RTV full counters leave depth-writing draws to the native query", "[g
   uint32_t begin = AllocReport(*fixture);
   uint32_t end = AllocReport(*fixture);
   WriteZPD(*fixture, begin, false);
-  // A depth-writing draw keeps early depth rejection and only counts ZPass:
-  // half of it is in front.
+
   DrawOptions writing = options;
   writing.depth_control.z_write_enable = 1;
   writing.z = 0.25f;
   SetupDraw(*fixture, surface, 32, 32, writing);
   DrawRect(*fixture, 0, 0, 16, 32, 0xFF00FF00);
-  // Then, in the same interval, a hybrid draw behind the untouched half.
+
   options.z = 0.75f;
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 16, 0, 32, 32, 0xFF0000FF);

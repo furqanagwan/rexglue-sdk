@@ -40,29 +40,28 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
   uint32_t output_max_vertices = 0;
   switch (type) {
     case BuiltinGeometryShaderType::kPointList:
-      // Point to a strip of 2 triangles.
+
       input_primitive_execution_mode = spv::ExecutionModeInputPoints;
       input_primitive_vertex_count = 1;
       output_primitive_execution_mode = spv::ExecutionModeOutputTriangleStrip;
       output_max_vertices = 4;
       break;
     case BuiltinGeometryShaderType::kRectangleList:
-      // Triangle to a strip of 2 triangles.
+
       input_primitive_execution_mode = spv::ExecutionModeTriangles;
       input_primitive_vertex_count = 3;
       output_primitive_execution_mode = spv::ExecutionModeOutputTriangleStrip;
       output_max_vertices = 4;
       break;
     case BuiltinGeometryShaderType::kQuadList:
-      // 4 vertices passed via a line list with adjacency to a strip of 2
-      // triangles.
+
       input_primitive_execution_mode = spv::ExecutionModeInputLinesAdjacency;
       input_primitive_vertex_count = 4;
       output_primitive_execution_mode = spv::ExecutionModeOutputTriangleStrip;
       output_max_vertices = 4;
       break;
     case BuiltinGeometryShaderType::kLineList:
-      // Line (of a list or a strip) to a strip of 2 triangles.
+
       input_primitive_execution_mode = spv::ExecutionModeInputLines;
       input_primitive_vertex_count = 2;
       output_primitive_execution_mode = spv::ExecutionModeOutputTriangleStrip;
@@ -94,10 +93,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
   builder.setMemoryModel(spv::AddressingModelLogical, spv::MemoryModelGLSL450);
   builder.setSource(spv::SourceLanguageUnknown, 0);
 
-  // Match the vertex and pixel shaders' float controls. NaN preservation most
-  // importantly keeps the NaN-position primitive discard below (used for the
-  // vertex kill "or" operator and degenerate rectangles) from being folded
-  // away. The execution modes are added once the entry point exists.
   if (spirv_version < spv::Spv_1_4 &&
       (denorm_flush_to_zero_float32 || signed_zero_inf_nan_preserve_float32 ||
        rounding_mode_rte_float32)) {
@@ -131,11 +126,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
           ? builder.makeArrayType(type_float, builder.makeUintConstant(cull_distance_count), 0)
           : spv::NoType;
 
-  // System constants.
-  // For points (lines only need point_screen_diameter_to_ndc_radius, as the
-  // NDC size of a guest pixel):
-  // - float2 point_constant_diameter
-  // - float2 point_screen_diameter_to_ndc_radius
   enum PointConstant : uint32_t {
     kPointConstantConstantDiameter,
     kPointConstantScreenDiameterToNdcRadius,
@@ -170,27 +160,21 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                           int(SpirvShaderTranslator::kDescriptorSetConstants));
     builder.addDecoration(uniform_system_constants, spv::DecorationBinding,
                           int(SpirvShaderTranslator::kConstantBufferSystem));
-    // SPIR-V 1.4+ lists every global the entry point references in its
-    // interface, not just inputs and outputs.
+
     if (spirv_version >= spv::Spv_1_4) {
       main_interface.push_back(uniform_system_constants);
     }
   }
 
-  // Inputs and outputs - matching glslang order, in gl_PerVertex gl_in[],
-  // user-defined outputs, user-defined inputs, out gl_PerVertex.
-
   spv::Id const_input_primitive_vertex_count =
       builder.makeUintConstant(input_primitive_vertex_count);
 
-  // in gl_PerVertex gl_in[].
-  // gl_Position.
   id_vector_temp.clear();
   uint32_t member_in_gl_per_vertex_position = uint32_t(id_vector_temp.size());
   id_vector_temp.push_back(type_float4);
   spv::Id const_member_in_gl_per_vertex_position =
       builder.makeIntConstant(int32_t(member_in_gl_per_vertex_position));
-  // gl_ClipDistance.
+
   uint32_t member_in_gl_per_vertex_clip_distance = UINT32_MAX;
   spv::Id const_member_in_gl_per_vertex_clip_distance = spv::NoResult;
   if (clip_distance_count) {
@@ -199,13 +183,13 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     const_member_in_gl_per_vertex_clip_distance =
         builder.makeIntConstant(int32_t(member_in_gl_per_vertex_clip_distance));
   }
-  // gl_CullDistance.
+
   uint32_t member_in_gl_per_vertex_cull_distance = UINT32_MAX;
   if (cull_distance_count) {
     member_in_gl_per_vertex_cull_distance = uint32_t(id_vector_temp.size());
     id_vector_temp.push_back(type_cull_distances);
   }
-  // Structure and array.
+
   spv::Id type_struct_in_gl_per_vertex = builder.makeStructType(id_vector_temp, "gl_PerVertex");
   builder.addMemberName(type_struct_in_gl_per_vertex, member_in_gl_per_vertex_position,
                         "gl_Position");
@@ -234,7 +218,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
   uint32_t output_location = 0;
 
-  // Interpolators outputs.
   std::array<spv::Id, xenos::kMaxInterpolators> out_interpolators;
   for (uint32_t i = 0; i < interpolator_count; ++i) {
     spv::Id out_interpolator =
@@ -247,7 +230,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     ++output_location;
   }
 
-  // Point coordinate output.
   spv::Id out_point_coordinates = spv::NoResult;
   if (has_point_coordinates) {
     out_point_coordinates = builder.createVariable(spv::NoPrecision, spv::StorageClassOutput,
@@ -260,7 +242,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
   uint32_t input_location = 0;
 
-  // Interpolator inputs.
   std::array<spv::Id, xenos::kMaxInterpolators> in_interpolators;
   for (uint32_t i = 0; i < interpolator_count; ++i) {
     spv::Id in_interpolator = builder.createVariable(
@@ -273,7 +254,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     ++input_location;
   }
 
-  // Point size input.
   spv::Id in_point_size = spv::NoResult;
   if (has_point_size) {
     in_point_size = builder.createVariable(
@@ -285,14 +265,12 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     ++input_location;
   }
 
-  // out gl_PerVertex.
-  // gl_Position.
   id_vector_temp.clear();
   uint32_t member_out_gl_per_vertex_position = uint32_t(id_vector_temp.size());
   id_vector_temp.push_back(type_float4);
   spv::Id const_member_out_gl_per_vertex_position =
       builder.makeIntConstant(int32_t(member_out_gl_per_vertex_position));
-  // gl_ClipDistance.
+
   uint32_t member_out_gl_per_vertex_clip_distance = UINT32_MAX;
   spv::Id const_member_out_gl_per_vertex_clip_distance = spv::NoResult;
   if (clip_distance_count) {
@@ -301,7 +279,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     const_member_out_gl_per_vertex_clip_distance =
         builder.makeIntConstant(int32_t(member_out_gl_per_vertex_clip_distance));
   }
-  // Structure.
+
   spv::Id type_struct_out_gl_per_vertex = builder.makeStructType(id_vector_temp, "gl_PerVertex");
   builder.addMemberName(type_struct_out_gl_per_vertex, member_out_gl_per_vertex_position,
                         "gl_Position");
@@ -320,7 +298,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
   builder.addDecoration(out_gl_per_vertex, spv::DecorationInvariant);
   main_interface.push_back(out_gl_per_vertex);
 
-  // Begin the main function.
   std::vector<spv::Id> main_param_types;
   std::vector<std::vector<spv::Decoration>> main_precisions;
   spv::Block* main_entry;
@@ -346,10 +323,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     builder.addExecutionMode(main_function, spv::ExecutionModeRoundingModeRTE, 32);
   }
 
-  // Note that after every OpEmitVertex, all output variables are undefined.
-
-  // Discard the whole primitive if any vertex has a NaN position (may also be
-  // set to NaN for emulation of vertex killing with the OR operator).
   for (uint32_t i = 0; i < input_primitive_vertex_count; ++i) {
     id_vector_temp.clear();
     id_vector_temp.push_back(builder.makeIntConstant(int32_t(i)));
@@ -381,9 +354,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
     builder.createNoResultOp(spv::OpReturn);
     builder.setBuildPoint(&discard_merge_block);
   }
-
-  // Cull the whole primitive if any cull distance for all vertices in the
-  // primitive is < 0.
 
   if (cull_distance_count) {
     spv::Id const_member_in_gl_per_vertex_cull_distance =
@@ -434,13 +404,10 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
   switch (type) {
     case BuiltinGeometryShaderType::kPointList: {
-      // Expand the point sprite, with left-to-right, top-to-bottom UVs.
-
       spv::Id const_int_0 = builder.makeIntConstant(0);
       spv::Id const_int_1 = builder.makeIntConstant(1);
       spv::Id const_float_0 = builder.makeFloatConstant(0.0f);
 
-      // Load the point diameter in guest pixels.
       id_vector_temp.clear();
       id_vector_temp.push_back(builder.makeIntConstant(int32_t(kPointConstantConstantDiameter)));
       id_vector_temp.push_back(const_int_0);
@@ -454,13 +421,8 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                                        uniform_system_constants, id_vector_temp),
                              spv::NoPrecision);
       if (has_point_size) {
-        // The vertex shader's header writes -1.0 to point_size by default, so
-        // any non-negative value means that it was overwritten by the
-        // translated vertex shader, and needs to be used instead of the
-        // constant size. The per-vertex diameter is already clamped in the
-        // vertex shader (combined with making it non-negative).
         id_vector_temp.clear();
-        // 0 is the input primitive vertex index.
+
         id_vector_temp.push_back(const_int_0);
         spv::Id point_vertex_diameter = builder.createLoad(
             builder.createAccessChain(spv::StorageClassInput, in_point_size, id_vector_temp),
@@ -475,9 +437,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                 point_vertex_diameter, point_guest_diameter_y);
       }
 
-      // 4D5307F1 has zero-size snowflakes, drop them quicker, and also drop
-      // points with a constant size of zero since point lists may also be used
-      // as just "compute" with memexport.
       spv::Id point_size_not_zero =
           builder.createBinOp(spv::OpLogicalAnd, type_bool,
                               builder.createBinOp(spv::OpFOrdGreaterThan, type_bool,
@@ -505,9 +464,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       builder.createNoResultOp(spv::OpReturn);
       builder.setBuildPoint(&point_size_zero_merge_block);
 
-      // Transform the diameter in the guest screen coordinates to radius in the
-      // normalized device coordinates, and then to the clip space by
-      // multiplying by W.
       id_vector_temp.clear();
       id_vector_temp.push_back(
           builder.makeIntConstant(int32_t(kPointConstantScreenDiameterToNdcRadius)));
@@ -524,7 +480,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                                        uniform_system_constants, id_vector_temp),
                              spv::NoPrecision));
       id_vector_temp.clear();
-      // 0 is the input primitive vertex index.
+
       id_vector_temp.push_back(const_int_0);
       id_vector_temp.push_back(const_member_in_gl_per_vertex_position);
       spv::Id point_position = builder.createLoad(
@@ -536,18 +492,16 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       point_radius_y =
           builder.createNoContractionBinOp(spv::OpFMul, type_float, point_radius_y, point_w);
 
-      // Load the inputs for the guest point.
-      // Interpolators.
       std::array<spv::Id, xenos::kMaxInterpolators> point_interpolators;
       id_vector_temp.clear();
-      // 0 is the input primitive vertex index.
+
       id_vector_temp.push_back(const_int_0);
       for (uint32_t i = 0; i < interpolator_count; ++i) {
         point_interpolators[i] = builder.createLoad(
             builder.createAccessChain(spv::StorageClassInput, in_interpolators[i], id_vector_temp),
             spv::NoPrecision);
       }
-      // Positions.
+
       spv::Id point_x = builder.createCompositeExtract(point_position, type_float, 0);
       spv::Id point_y = builder.createCompositeExtract(point_position, type_float, 1);
       std::array<spv::Id, 2> point_edge_x, point_edge_y;
@@ -559,11 +513,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                                            point_radius_y);
       };
       spv::Id point_z = builder.createCompositeExtract(point_position, type_float, 2);
-      // Clip distances.
+
       spv::Id point_clip_distances = spv::NoResult;
       if (clip_distance_count) {
         id_vector_temp.clear();
-        // 0 is the input primitive vertex index.
+
         id_vector_temp.push_back(const_int_0);
         id_vector_temp.push_back(const_member_in_gl_per_vertex_clip_distance);
         point_clip_distances = builder.createLoad(
@@ -572,17 +526,13 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       }
 
       for (uint32_t i = 0; i < 4; ++i) {
-        // Same interpolators for the entire sprite.
         for (uint32_t j = 0; j < interpolator_count; ++j) {
           builder.createStore(point_interpolators[j], out_interpolators[j]);
         }
-        // Top-left, bottom-left, top-right, bottom-right order (chosen
-        // arbitrarily, simply based on counterclockwise meaning front with
-        // frontFace = VkFrontFace(0), but faceness is ignored for non-polygon
-        // primitive types).
+
         uint32_t point_vertex_x = i >> 1;
         uint32_t point_vertex_y = i & 1;
-        // Point coordinates.
+
         if (has_point_coordinates) {
           id_vector_temp.clear();
           id_vector_temp.push_back(builder.makeFloatConstant(float(point_vertex_x)));
@@ -590,7 +540,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
           builder.createStore(builder.makeCompositeConstant(type_float2, id_vector_temp),
                               out_point_coordinates);
         }
-        // Position.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(point_edge_x[point_vertex_x]);
         id_vector_temp.push_back(point_edge_y[point_vertex_y]);
@@ -603,7 +553,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         builder.createStore(
             point_vertex_position,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
-        // Clip distances.
 
         if (clip_distance_count) {
           id_vector_temp.clear();
@@ -612,43 +561,18 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                               builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex,
                                                         id_vector_temp));
         }
-        // Emit the vertex.
+
         builder.createNoResultOp(spv::OpEmitVertex);
       }
       builder.createNoResultOp(spv::OpEndPrimitive);
     } break;
 
     case BuiltinGeometryShaderType::kRectangleList: {
-      // Construct a strip with the fourth vertex generated by mirroring a
-      // vertex across the longest edge (the diagonal).
-      //
-      // Possible options:
-      //
-      // 0---1
-      // |  /|
-      // | / |  - 12 is the longest edge, strip 0123 (most commonly used)
-      // |/  |    v3 = v0 + (v1 - v0) + (v2 - v0), or v3 = -v0 + v1 + v2
-      // 2--[3]
-      //
-      // 1---2
-      // |  /|
-      // | / |  - 20 is the longest edge, strip 1203
-      // |/  |
-      // 0--[3]
-      //
-      // 2---0
-      // |  /|
-      // | / |  - 01 is the longest edge, strip 2013
-      // |/  |
-      // 1--[3]
-
       spv::Id const_int_0 = builder.makeIntConstant(0);
       spv::Id const_int_1 = builder.makeIntConstant(1);
       spv::Id const_int_2 = builder.makeIntConstant(2);
       spv::Id const_int_3 = builder.makeIntConstant(3);
 
-      // Get squares of edge lengths to choose the longest edge.
-      // [0] - 12, [1] - 20, [2] - 01.
       spv::Id edge_lengths[3];
       id_vector_temp.resize(3);
       id_vector_temp[1] = const_member_in_gl_per_vertex_position;
@@ -678,12 +602,8 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
             builder.createBinOp(spv::OpFMul, type_float, edge_y, edge_y));
       }
 
-      // Choose the index of the first vertex in the strip based on which edge
-      // is the longest, and calculate the indices of the other vertices.
       spv::Id vertex_indices[3];
-      // If 12 > 20 && 12 > 01, then 12 is the longest edge, and the strip is
-      // 0123. Otherwise, if 20 > 01, then 20 is the longest, and the strip is
-      // 1203, but if not, 01 is the longest, and the strip is 2013.
+
       vertex_indices[0] = builder.createTriOp(
           spv::OpSelect, type_int,
           builder.createBinOp(spv::OpLogicalAnd, type_bool,
@@ -697,7 +617,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                                   edge_lengths[1], edge_lengths[2]),
                               const_int_1, const_int_2));
       for (uint32_t i = 1; i < 3; ++i) {
-        // vertex_indices[i] = (vertex_indices[0] + i) % 3
         spv::Id vertex_index_without_wrapping = builder.createBinOp(
             spv::OpIAdd, type_int, vertex_indices[0], builder.makeIntConstant(int32_t(i)));
         vertex_indices[i] = builder.createTriOp(
@@ -708,8 +627,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
             builder.createBinOp(spv::OpISub, type_int, vertex_index_without_wrapping, const_int_3));
       }
 
-      // Initialize the point coordinates output for safety if this shader type
-      // is used with has_point_coordinates for some reason.
       spv::Id const_point_coordinates_zero = spv::NoResult;
       if (has_point_coordinates) {
         spv::Id const_float_0 = builder.makeFloatConstant(0.0f);
@@ -719,10 +636,9 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         const_point_coordinates_zero = builder.makeCompositeConstant(type_float2, id_vector_temp);
       }
 
-      // Emit the triangle in the strip that consists of the original vertices.
       for (uint32_t i = 0; i < 3; ++i) {
         spv::Id vertex_index = vertex_indices[i];
-        // Interpolators.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(vertex_index);
         for (uint32_t j = 0; j < interpolator_count; ++j) {
@@ -732,11 +648,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                  spv::NoPrecision),
               out_interpolators[j]);
         }
-        // Point coordinates.
+
         if (has_point_coordinates) {
           builder.createStore(const_point_coordinates_zero, out_point_coordinates);
         }
-        // Position.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(vertex_index);
         id_vector_temp.push_back(const_member_in_gl_per_vertex_position);
@@ -748,7 +664,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         builder.createStore(
             vertex_position,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
-        // Clip distances.
+
         if (clip_distance_count) {
           id_vector_temp.clear();
           id_vector_temp.push_back(vertex_index);
@@ -762,12 +678,10 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                               builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex,
                                                         id_vector_temp));
         }
-        // Emit the vertex.
+
         builder.createNoResultOp(spv::OpEmitVertex);
       }
 
-      // Construct the fourth vertex.
-      // Interpolators.
       for (uint32_t i = 0; i < interpolator_count; ++i) {
         spv::Id in_interpolator = in_interpolators[i];
         id_vector_temp.clear();
@@ -790,11 +704,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                 spv::NoPrecision));
         builder.createStore(vertex_interpolator_v3, out_interpolators[i]);
       }
-      // Point coordinates.
+
       if (has_point_coordinates) {
         builder.createStore(const_point_coordinates_zero, out_point_coordinates);
       }
-      // Position.
+
       id_vector_temp.clear();
       id_vector_temp.push_back(vertex_indices[0]);
       id_vector_temp.push_back(const_member_in_gl_per_vertex_position);
@@ -819,7 +733,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       builder.createStore(
           vertex_position_v3,
           builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
-      // Clip distances.
+
       for (uint32_t i = 0; i < clip_distance_count; ++i) {
         spv::Id const_int_i = builder.makeIntConstant(int32_t(i));
         id_vector_temp.clear();
@@ -849,14 +763,12 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
             vertex_clip_distance_v3,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
       }
-      // Emit the vertex.
+
       builder.createNoResultOp(spv::OpEmitVertex);
       builder.createNoResultOp(spv::OpEndPrimitive);
     } break;
 
     case BuiltinGeometryShaderType::kQuadList: {
-      // Initialize the point coordinates output for safety if this shader type
-      // is used with has_point_coordinates for some reason.
       spv::Id const_point_coordinates_zero = spv::NoResult;
       if (has_point_coordinates) {
         spv::Id const_float_0 = builder.makeFloatConstant(0.0f);
@@ -866,12 +778,9 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         const_point_coordinates_zero = builder.makeCompositeConstant(type_float2, id_vector_temp);
       }
 
-      // Build the triangle strip from the original quad vertices in the
-      // 0, 1, 3, 2 order (like specified for GL_QUAD_STRIP).
-
       for (uint32_t i = 0; i < 4; ++i) {
         spv::Id const_vertex_index = builder.makeIntConstant(int32_t(i ^ (i >> 1)));
-        // Interpolators.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(const_vertex_index);
         for (uint32_t j = 0; j < interpolator_count; ++j) {
@@ -881,11 +790,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                  spv::NoPrecision),
               out_interpolators[j]);
         }
-        // Point coordinates.
+
         if (has_point_coordinates) {
           builder.createStore(const_point_coordinates_zero, out_point_coordinates);
         }
-        // Position.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(const_vertex_index);
         id_vector_temp.push_back(const_member_in_gl_per_vertex_position);
@@ -897,7 +806,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         builder.createStore(
             vertex_position,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
-        // Clip distances.
+
         if (clip_distance_count) {
           id_vector_temp.clear();
           id_vector_temp.push_back(const_vertex_index);
@@ -911,25 +820,18 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                               builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex,
                                                         id_vector_temp));
         }
-        // Emit the vertex.
+
         builder.createNoResultOp(spv::OpEmitVertex);
       }
       builder.createNoResultOp(spv::OpEndPrimitive);
     } break;
 
     case BuiltinGeometryShaderType::kLineList: {
-      // Host lines are rasterized 1 host pixel wide, but a guest line covers 1
-      // guest pixel, which is draw_resolution_scale host pixels. Expand the
-      // segment into a quad 1 guest pixel wide centered on the line, each end
-      // keeping its own attributes.
-
       spv::Id const_int_0 = builder.makeIntConstant(0);
       spv::Id const_int_1 = builder.makeIntConstant(1);
       spv::Id const_float_0 = builder.makeFloatConstant(0.0f);
       spv::Id const_float_1 = builder.makeFloatConstant(1.0f);
 
-      // Half of a guest pixel in the NDC along each axis - the constant is the
-      // NDC radius of a 1 guest pixel diameter.
       id_vector_temp.clear();
       id_vector_temp.push_back(
           builder.makeIntConstant(int32_t(kPointConstantScreenDiameterToNdcRadius)));
@@ -944,9 +846,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                                        uniform_system_constants, id_vector_temp),
                              spv::NoPrecision);
 
-      // Load the positions, and get the vertices in half guest pixel units
-      // (NDC divided by the NDC size of half a guest pixel) so the direction
-      // is measured in screen space regardless of the viewport aspect.
       std::array<spv::Id, 2> line_vertex_x, line_vertex_y, line_vertex_z, line_vertex_w,
           line_vertex_pixels_x, line_vertex_pixels_y;
       for (uint32_t i = 0; i < 2; ++i) {
@@ -972,7 +871,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
             half_pixel_ndc_y);
       }
 
-      // Direction of the line in screen space.
       spv::Id line_direction_x = builder.createBinOp(
           spv::OpFSub, type_float, line_vertex_pixels_x[1], line_vertex_pixels_x[0]);
       spv::Id line_direction_y = builder.createBinOp(
@@ -984,8 +882,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
               builder.createBinOp(spv::OpFMul, type_float, line_direction_x, line_direction_x),
               builder.createBinOp(spv::OpFMul, type_float, line_direction_y, line_direction_y)));
 
-      // Drop zero-length lines (also NaN-safe), there's nothing to expand and
-      // the normal would be undefined.
       spv::Id line_length_positive =
           builder.createBinOp(spv::OpFOrdGreaterThan, type_bool, line_length, const_float_0);
       spv::Block& line_degenerate_predecessor = *builder.getBuildPoint();
@@ -1009,8 +905,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       builder.createNoResultOp(spv::OpReturn);
       builder.setBuildPoint(&line_degenerate_merge_block);
 
-      // Unit normal in screen space, then half a guest pixel along it in the
-      // NDC (back to the per-axis NDC size of half a guest pixel).
       spv::Id line_inv_length =
           builder.createBinOp(spv::OpFDiv, type_float, const_float_1, line_length);
       spv::Id line_offset_ndc_x = builder.createBinOp(
@@ -1024,8 +918,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
           builder.createBinOp(spv::OpFMul, type_float, line_direction_x, line_inv_length),
           half_pixel_ndc_y);
 
-      // Initialize the point coordinates output for safety if this shader type
-      // is used with has_point_coordinates for some reason.
       spv::Id const_point_coordinates_zero = spv::NoResult;
       if (has_point_coordinates) {
         id_vector_temp.clear();
@@ -1034,12 +926,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         const_point_coordinates_zero = builder.makeCompositeConstant(type_float2, id_vector_temp);
       }
 
-      // Emit the strip: both sides of the first vertex, then of the second.
       for (uint32_t i = 0; i < 4; ++i) {
         uint32_t line_vertex_index = i >> 1;
         spv::Id const_line_vertex_index = builder.makeIntConstant(int32_t(line_vertex_index));
         spv::Op line_offset_add_op = (i & 1) ? spv::OpFAdd : spv::OpFSub;
-        // Interpolators.
+
         id_vector_temp.clear();
         id_vector_temp.push_back(const_line_vertex_index);
         for (uint32_t j = 0; j < interpolator_count; ++j) {
@@ -1049,12 +940,11 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                                  spv::NoPrecision),
               out_interpolators[j]);
         }
-        // Point coordinates.
+
         if (has_point_coordinates) {
           builder.createStore(const_point_coordinates_zero, out_point_coordinates);
         }
-        // Position - the NDC offset is transformed to the clip space by
-        // multiplying by W.
+
         spv::Id line_vertex_w_value = line_vertex_w[line_vertex_index];
         id_vector_temp.clear();
         id_vector_temp.push_back(builder.createNoContractionBinOp(
@@ -1072,7 +962,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
         builder.createStore(
             line_quad_vertex_position,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
-        // Clip distances.
+
         if (clip_distance_count) {
           id_vector_temp.clear();
           id_vector_temp.push_back(const_line_vertex_index);
@@ -1086,7 +976,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
                               builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex,
                                                         id_vector_temp));
         }
-        // Emit the vertex.
+
         builder.createNoResultOp(spv::OpEmitVertex);
       }
       builder.createNoResultOp(spv::OpEndPrimitive);
@@ -1096,14 +986,12 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
       assert_unhandled_case(type);
   }
 
-  // End the main function.
   builder.leaveFunction();
 
-  // Serialize the shader code.
   std::vector<unsigned int> shader_code;
   builder.dump(shader_code);
 
   return shader_code;
 }
 
-}  // namespace rex::graphics
+}

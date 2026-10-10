@@ -47,9 +47,6 @@ struct RestoreCvars {
   }
 };
 
-// Draws a white horizontal line at guest y over black, resolves it at the
-// guest's size (each texel the average of its host pixels) and returns the
-// red coverage summed down column 16, in 255ths of a guest pixel.
 bool LineCoverage(const char* path, uint32_t scale, float y, uint32_t& coverage_out,
                   std::string& error) {
   const std::string scale_text = std::to_string(scale);
@@ -105,11 +102,11 @@ bool LineCoverage(const char* path, uint32_t scale, float y, uint32_t& coverage_
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Resolution-scaled lines cover one guest pixel", "[gpu][line-scale]") {
   const char* path = GENERATE("rtv", "rov");
-  // On a guest pixel's center and across a guest pixel boundary.
+
   const float y = GENERATE(16.5f, 16.0f, 16.3f);
   INFO("render_target_path_d3d12 " << path << ", line at y " << y);
   RestoreCvars restore;
@@ -120,8 +117,7 @@ TEST_CASE("Resolution-scaled lines cover one guest pixel", "[gpu][line-scale]") 
   }
   REQUIRE(LineCoverage(path, 2, y, scaled, error));
   INFO("coverage down a column: 1x " << native << ", 2x " << scaled);
-  // One guest pixel of white either way; a 1-host-pixel line at 2x gives half
-  // (128).
+
   CHECK(native == 255);
   CHECK(scaled >= 250);
   CHECK(scaled <= 260);

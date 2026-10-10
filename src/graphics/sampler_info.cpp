@@ -49,4 +49,4 @@ uint64_t SamplerInfo::hash() const {
   return XXH3_64bits(this, sizeof(SamplerInfo));
 }
 
-}  // namespace rex::graphics
+}

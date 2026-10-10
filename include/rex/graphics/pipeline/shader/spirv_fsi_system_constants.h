@@ -21,20 +21,6 @@
 
 namespace rex::graphics {
 
-// Fills the fragment shader interlock (EDRAM ROP) subset of the SPIR-V system
-// constants from the register file: the FSI-specific flag bits, the EDRAM tile
-// pitch / render target / depth base / stencil / blend / polygon offset
-// constants and the ZPD counter index. Shared by the Vulkan and the D3D12
-// (Mesa spirv_to_dxil) command processors so the single EDRAM ROP encoding is
-// not duplicated. Only call when the render target cache is in its pixel shader
-// interlock path.
-//
-// flags is the in-progress system constant flags word. The FSI flag bits are
-// OR'd into it (the caller owns the base bits and the final assignment). dirty
-// is OR'd with true when any written constant changed, for the Vulkan caller's
-// constant buffer invalidation. The D3D12 caller ignores it.
-// zpd_fsi_counter_index is computed per backend (UINT32_MAX to disable) and
-// passed in.
 void WriteFragmentShaderInterlockSystemConstants(
     SpirvShaderTranslator::SystemConstants& system_constants, uint32_t& flags, bool& dirty,
     const RegisterFile& regs, bool primitive_polygonal,
@@ -42,6 +28,6 @@ void WriteFragmentShaderInterlockSystemConstants(
     uint32_t draw_resolution_scale_x, uint32_t draw_resolution_scale_y,
     uint32_t zpd_fsi_counter_index);
 
-}  // namespace rex::graphics
+}
 
-#endif  // REX_GRAPHICS_PIPELINE_SHADER_SPIRV_FSI_SYSTEM_CONSTANTS_H_
+#endif

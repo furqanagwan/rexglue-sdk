@@ -30,7 +30,7 @@ std::unique_ptr<GpuFixture> CreateFixture() {
   return fixture;
 }
 
-}  // namespace
+}
 
 TEST_CASE("PM4 MEM_WRITE stores dwords with the requested swap", "[gpu][pm4]") {
   auto fixture = CreateFixture();
@@ -43,7 +43,7 @@ TEST_CASE("PM4 MEM_WRITE stores dwords with the requested swap", "[gpu][pm4]") {
   REQUIRE(fixture->Flush());
   CHECK(fixture->ReadDword(dest) == 0x11223344);
   CHECK(fixture->ReadDword(dest + 4) == 0xAABBCCDD);
-  // Without a swap the host-order store lands byte-reversed for the guest.
+
   CHECK(fixture->ReadDword(dest + 8) == 0x44332211);
 }
 
@@ -69,7 +69,7 @@ TEST_CASE("PM4 INDIRECT_BUFFER executes the nested buffer in order", "[gpu][pm4]
   std::vector<uint32_t> nested = GpuFixture::MemWrite(dest, {1, 2}, Endian::k8in32);
   fixture->WriteDwords(indirect, nested);
   fixture->Submit(GpuFixture::IndirectBuffer(indirect, uint32_t(nested.size())));
-  // Overwrites the nested buffer's second dword only if it ran first.
+
   fixture->Submit(GpuFixture::MemWrite(dest + 4, {3}, Endian::k8in32));
   REQUIRE(fixture->Flush());
   CHECK(fixture->ReadDword(dest) == 1);

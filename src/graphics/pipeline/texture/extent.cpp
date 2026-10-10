@@ -34,8 +34,6 @@ static TextureExtent CalculateExtent(const FormatInfo* format_info, uint32_t pit
   extent.depth = depth;
 
   if (is_guest) {
-    // Texture dimensions must be a multiple of tile
-    // dimensions (32x32 blocks).
     extent.block_pitch_h = rex::round_up(extent.block_pitch_h, 32);
     extent.block_pitch_v = rex::round_up(extent.block_pitch_v, 32);
 
@@ -46,13 +44,11 @@ static TextureExtent CalculateExtent(const FormatInfo* format_info, uint32_t pit
     uint32_t byte_pitch = extent.block_pitch_h * bytes_per_block;
 
     if (!is_tiled) {
-      // Each row must be a multiple of 256 bytes in linear textures.
       byte_pitch = rex::round_up(byte_pitch, 256);
       extent.block_pitch_h = byte_pitch / bytes_per_block;
       extent.pitch = extent.block_pitch_h * format_info->block_width;
     }
 
-    // Is depth special?
     extent.depth = extent.depth;
   } else {
     extent.pitch = extent.block_pitch_h * format_info->block_width;
@@ -74,4 +70,4 @@ TextureExtent TextureExtent::Calculate(const TextureInfo* info, bool is_guest) {
                          info->is_tiled, is_guest);
 }
 
-}  // namespace rex::graphics
+}

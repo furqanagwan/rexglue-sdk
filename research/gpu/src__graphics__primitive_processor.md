@@ -1,0 +1,1978 @@
+# Primitive processor: graphics source notes
+
+This record preserves technical and API notes moved from `src/graphics/primitive_processor.cpp`.
+Names and executable tokens are unchanged; licence and attribution headers
+remain in the source. Historical explanations are retained as source evidence,
+not newly validated hardware claims. Unanswered task notes are tracked by
+[#229](https://github.com/furqanagwan/rexglue-sdk/issues/229) and its topic issues.
+
+Part of [#230](https://github.com/furqanagwan/rexglue-sdk/issues/230).
+Source pin: `bf367e7`.
+
+## Source note 1, line 43
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L43)
+
+```text
+// All these overrides are always safe to use as all backends are expected to
+```
+
+## Source note 2, line 44
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L44)
+
+```text
+// support triangle lists and line strips.
+```
+
+## Source note 3, line 45
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L45)
+
+```text
+// DEFINE_bool(
+```
+
+## Source note 4, line 46
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L46)
+
+```text
+//     force_convert_triangle_fans_to_lists, false,
+```
+
+## Source note 5, line 47
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L47)
+
+```text
+//     "For host graphics API downlevel support testing only, force CPU "
+```
+
+## Source note 6, line 48
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L48)
+
+```text
+//     "conversion of triangle fans to triangle lists even if the host supports "
+```
+
+## Source note 7, line 49
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L49)
+
+```text
+//     "triangle fan primitives natively.",
+```
+
+## Source note 8, line 50
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L50)
+
+```text
+//     "GPU");
+```
+
+## Source note 9, line 51
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L51)
+
+```text
+// DEFINE_bool(
+```
+
+## Source note 10, line 52
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L52)
+
+```text
+//     force_convert_line_loops_to_strips, false,
+```
+
+## Source note 11, line 53
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L53)
+
+```text
+//     "For host graphics API downlevel support testing only, force CPU "
+```
+
+## Source note 12, line 54
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L54)
+
+```text
+//     "conversion of line loops to line strips even if the host supports line "
+```
+
+## Source note 13, line 55
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L55)
+
+```text
+//     "loop primitives natively.",
+```
+
+## Source note 14, line 56
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L56)
+
+```text
+//     "GPU");
+```
+
+## Source note 15, line 57
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L57)
+
+```text
+// DEFINE_bool(
+```
+
+## Source note 16, line 58
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L58)
+
+```text
+//     force_convert_quad_lists_to_triangle_lists, false,
+```
+
+## Source note 17, line 59
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L59)
+
+```text
+//     "For host graphics API downlevel support testing only, force CPU "
+```
+
+## Source note 18, line 60
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L60)
+
+```text
+//     "conversion of quad lists to quad strips even if the host supports quad "
+```
+
+## Source note 19, line 61
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L61)
+
+```text
+//     "list primitives natively or via geometry shader emulation.\n"
+```
+
+## Source note 20, line 62
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L62)
+
+```text
+//     "May also be useful for graphics debugging when the debugger doesn't "
+```
+
+## Source note 21, line 63
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L63)
+
+```text
+//     "display the geometry generated by geometry shaders properly.",
+```
+
+## Source note 22, line 64
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L64)
+
+```text
+//     "GPU");
+```
+
+## Source note 23, line 65
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L65)
+
+```text
+// DEFINE_bool(
+```
+
+## Source note 24, line 66
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L66)
+
+```text
+//     ignore_32bit_vertex_index_support, false,
+```
+
+## Source note 25, line 67
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L67)
+
+```text
+//     "For host graphics API downlevel testing only (useful only for Qualcomm "
+```
+
+## Source note 26, line 68
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L68)
+
+```text
+//     "Adreno 4xx-level host GPU testing), force indirection or pre-masking and "
+```
+
+## Source note 27, line 69
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L69)
+
+```text
+//     "pre-swapping of 32-bit vertex indices as if the host only supports 24-bit "
+```
+
+## Source note 28, line 70
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L70)
+
+```text
+//     "indices.",
+```
+
+## Source note 29, line 71
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L71)
+
+```text
+//     "GPU");
+```
+
+## Source note 30, line 75
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L75)
+
+```text
+// SIMD processing here assumes that alignment is not required (neither AVX nor
+```
+
+## Source note 31, line 76
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L76)
+
+```text
+// Neon requires it) and there's no punishment for using an unaligned access
+```
+
+## Source note 32, line 77
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L77)
+
+```text
+// instruction when the data is actually aligned (AVX has separate aligned /
+```
+
+## Source note 33, line 78
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L78)
+
+```text
+// unaligned movs, but they have the same performance nowadays; Neon dropped the
+```
+
+## Source note 34, line 79
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L79)
+
+```text
+// alignment specifier in AArch64), but truly unaligned access may result in two
+```
+
+## Source note 35, line 80
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L80)
+
+```text
+// hardware memory operations if some boundary that is >= vector size is
+```
+
+## Source note 36, line 81
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L81)
+
+```text
+// crossed.
+```
+
+## Source note 37, line 83
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L83)
+
+```text
+// Therefore, to minimize unaligned access (primarily reads - since we depend on
+```
+
+## Source note 38, line 84
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L84)
+
+```text
+// the data immediately), SIMD usage here is performed according to the
+```
+
+## Source note 39, line 85
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L85)
+
+```text
+// following pattern (though we try to co-align the destination and the source
+```
+
+## Source note 40, line 86
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L86)
+
+```text
+// prior to calling, but still doing all the operations for more code
+```
+
+## Source note 41, line 87
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L87)
+
+```text
+// correctness and fewer unobvious conditions):
+```
+
+## Source note 42, line 88
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L88)
+
+```text
+// - Until the source pointer is vector-aligned, process the first indices
+```
+
+## Source note 43, line 89
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L89)
+
+```text
+//   without SIMD.
+```
+
+## Source note 44, line 90
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L90)
+
+```text
+//   - The best possible outcome of this is that both the source and the
+```
+
+## Source note 45, line 91
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L91)
+
+```text
+//     destination will be vector-aligned (if they were co-aligned prior to the
+```
+
+## Source note 46, line 92
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L92)
+
+```text
+//     call), in this case, neither load nor store instructions will be crossing
+```
+
+## Source note 47, line 93
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L93)
+
+```text
+//     cache lines.
+```
+
+## Source note 48, line 94
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L94)
+
+```text
+//   - The other possible outcome is that the source will be aligned (1 memory
+```
+
+## Source note 49, line 95
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L95)
+
+```text
+//     read per load), while the destination will be unaligned (1-2 memory
+```
+
+## Source note 50, line 96
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L96)
+
+```text
+//     writes per store).
+```
+
+## Source note 51, line 97
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L97)
+
+```text
+// - Process whole vectors with SIMD.
+```
+
+## Source note 52, line 98
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L98)
+
+```text
+// - If there are less elements than a vector can hold remaining, process them
+```
+
+## Source note 53, line 99
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L99)
+
+```text
+//   without SIMD.
+```
+
+## Source note 54, line 101
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L101)
+
+```text
+// We assume that indices are at least aligned to their natural alignment (2 or
+```
+
+## Source note 55, line 102
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L102)
+
+```text
+// 4 bytes depending on the format) - the R6xx documentation says that in
+```
+
+## Source note 56, line 103
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L103)
+
+```text
+// DRAW_INDEX, INDEX_BASE_LO is word-aligned, and that's required by host
+```
+
+## Source note 57, line 104
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L104)
+
+```text
+// graphics APIs.
+```
+
+## Source note 58, line 122
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L122)
+
+```text
+// No override cvars as hosts are not required to support the fallback paths
+```
+
+## Source note 59, line 123
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L123)
+
+```text
+// since they require different vertex shader structure (for the fallback
+```
+
+## Source note 60, line 124
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L124)
+
+```text
+// HostVertexShaderTypes).
+```
+
+## Source note 61, line 128
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L128)
+
+```text
+// Initialize the index buffer for conversion of auto-indexed primitive types.
+```
+
+## Source note 62, line 130
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L130)
+
+```text
+// 32-bit, before 16-bit due to alignment (for primitive expansion - when the
+```
+
+## Source note 63, line 131
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L131)
+
+```text
+// indices encode not only the guest vertex index, but also a part needed for
+```
+
+## Source note 64, line 132
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L132)
+
+```text
+// host expansion, thus may contain values above UINT16_MAX, such as up to
+```
+
+## Source note 65, line 133
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L133)
+
+```text
+// (UINT16_MAX - 1) * 4 + 3 for point sprites).
+```
+
+## Source note 66, line 134
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L134)
+
+```text
+// Using an index buffer for point sprite and rectangle list expansion instead
+```
+
+## Source note 67, line 135
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L135)
+
+```text
+// of instancing as how instancing is implemented may vary wildly between
+```
+
+## Source note 68, line 136
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L136)
+
+```text
+// GPUs, potentially slowly (like no different instances in the same
+```
+
+## Source note 69, line 137
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L137)
+
+```text
+// wavefront) with small vertex counts per instance. Also using triangle
+```
+
+## Source note 70, line 138
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L138)
+
+```text
+// strips with primitive restart, not triangle lists, so the vertex shader may
+```
+
+## Source note 71, line 139
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L139)
+
+```text
+// be invoked once for the inner edge vertices, which is important for memory
+```
+
+## Source note 72, line 140
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L140)
+
+```text
+// export in guest shaders, not to write to the same location from two
+```
+
+## Source note 73, line 141
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L141)
+
+```text
+// invocations.
+```
+
+## Source note 74, line 158
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L158)
+
+```text
+// 16-bit (for indirection on top of single auto-indexed vertices) - enough
+```
+
+## Source note 75, line 159
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L159)
+
+```text
+// even if the backend has primitive reset enabled all the time (Metal) as
+```
+
+## Source note 76, line 160
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L160)
+
+```text
+// auto-indexed draws are limited to UINT16_MAX vertices, not UINT16_MAX + 1.
+```
+
+## Source note 77, line 178
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L178)
+
+```text
+// Two-triangle strips.
+```
+
+## Source note 78, line 183
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L183)
+
+```text
+// Primitive restart.
+```
+
+## Source note 79, line 186
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L186)
+
+```text
+// Host vertex index within the pair in the lower 2 bits,
+```
+
+## Source note 80, line 187
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L187)
+
+```text
+// guest primitive index in the rest.
+```
+
+## Source note 81, line 196
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L196)
+
+```text
+// Triangle fans as triangle lists.
+```
+
+## Source note 82, line 197
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L197)
+
+```text
+// Ordered as (v1, v2, v0), (v2, v3, v0) in Direct3D.
+```
+
+## Source note 83, line 198
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L198)
+
+```text
+// https://docs.microsoft.com/en-us/windows/desktop/direct3d9/triangle-fans
+```
+
+## Source note 84, line 218
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L218)
+
+```text
+// v0, v2, v3.
+```
+
+## Source note 85, line 235
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L235)
+
+```text
+// Clear the cache if it has ever been used and unregister the invalidation
+```
+
+## Source note 86, line 236
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L236)
+
+```text
+// callback.
+```
+
+## Source note 87, line 252
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L252)
+
+```text
+// Only do clearing if cache has ever been used.
+```
+
+## Source note 88, line 271
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L271)
+
+```text
+// Parse the primitive type and the tessellation state (VGT_OUTPUT_PATH_CNTL
+```
+
+## Source note 89, line 272
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L272)
+
+```text
+// is only used in the explicit major mode) - there are cases in games when
+```
+
+## Source note 90, line 273
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L273)
+
+```text
+// this register is left over after usage of tessellation in draws that don't
+```
+
+## Source note 91, line 274
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L274)
+
+```text
+// need it.
+```
+
+## Source note 92, line 284
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L284)
+
+```text
+// Currently only supporting tessellation in known cases for safety, and not
+```
+
+## Source note 93, line 285
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L285)
+
+```text
+// yet converting patch strips / fans to patch lists until games using them
+```
+
+## Source note 94, line 286
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L286)
+
+```text
+// are found for easier debugging when it actually happens.
+```
+
+## Source note 95, line 291
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L291)
+
+```text
+// Also supported by triangle strips and fans according to:
+```
+
+## Source note 96, line 292
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L292)
+
+```text
+// https://www.khronos.org/registry/OpenGL/extensions/AMD/AMD_vertex_shader_tessellator.txt
+```
+
+## Source note 97, line 293
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L293)
+
+```text
+// Would need to convert those to triangle lists, but haven't seen any
+```
+
+## Source note 98, line 294
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L294)
+
+```text
+// games using tessellated strips / fans so far.
+```
+
+## Source note 99, line 297
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L297)
+
+```text
+// - 415607E1 - nets above barrels in the beginning of the first
+```
+
+## Source note 100, line 298
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L298)
+
+```text
+//   mission (turn right after the end of the intro) -
+```
+
+## Source note 101, line 299
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L299)
+
+```text
+//   kTriangleList.
+```
+
+## Source note 102, line 303
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L303)
+
+```text
+// - 4D5307F2 - tree building with a beehive in the beginning
+```
+
+## Source note 103, line 304
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L304)
+
+```text
+//   (visible on the start screen behind the logo), waterfall in the
+```
+
+## Source note 104, line 305
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L305)
+
+```text
+//   beginning - kTriangleList.
+```
+
+## Source note 105, line 314
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L314)
+
+```text
+// Also supported by quad strips according to:
+```
+
+## Source note 106, line 315
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L315)
+
+```text
+// https://www.khronos.org/registry/OpenGL/extensions/AMD/AMD_vertex_shader_tessellator.txt
+```
+
+## Source note 107, line 316
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L316)
+
+```text
+// Would need to convert those to quad lists, but haven't seen any
+```
+
+## Source note 108, line 317
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L317)
+
+```text
+// games using tessellated strips so far.
+```
+
+## Source note 109, line 319
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L319)
+
+```text
+// Not seen in games so far.
+```
+
+## Source note 110, line 323
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L323)
+
+```text
+// - 58410823 - retro screen and beams in the main menu - kQuadList.
+```
+
+## Source note 111, line 331
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L331)
+
+```text
+// - 4D5307E6 - water - adaptive.
+```
+
+## Source note 112, line 332
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L332)
+
+```text
+// - 4D5307ED - water - adaptive.
+```
+
+## Source note 113, line 336
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L336)
+
+```text
+// - 4D5307F1 - ground - continuous.
+```
+
+## Source note 114, line 337
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L337)
+
+```text
+// - 4D5307F2 - garden ground - adaptive.
+```
+
+## Source note 115, line 365
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L365)
+
+```text
+// Supported natively on all backends.
+```
+
+## Source note 116, line 398
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L398)
+
+```text
+// Process the indices.
+```
+
+## Source note 117, line 419
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L419)
+
+```text
+// As two-triangle strips, with guest indices being either autogenerated or
+```
+
+## Source note 118, line 420
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L420)
+
+```text
+// fetched via DMA.
+```
+
+## Source note 119, line 434
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L434)
+
+```text
+// There is an index buffer.
+```
+
+## Source note 120, line 444
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L444)
+
+```text
+// Normalize the endian.
+```
+
+## Source note 121, line 462
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L462)
+
+```text
+// Get the index buffer memory range.
+```
+
+## Source note 122, line 464
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L464)
+
+```text
+// The base should already be aligned, but aligning here too for safety.
+```
+
+## Source note 123, line 478
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L478)
+
+```text
+// Auto-indexed - use a remapping index buffer if needed to change the
+```
+
+## Source note 124, line 479
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L479)
+
+```text
+// primitive type.
+```
+
+## Source note 125, line 503
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L503)
+
+```text
+// Plus 1 element (if there's anything to draw) in the strip, still
+```
+
+## Source note 126, line 504
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L504)
+
+```text
+// auto-indexed, but the added excess index should be treated as 0 by
+```
+
+## Source note 127, line 505
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L505)
+
+```text
+// the vertex shaders.
+```
+
+## Source note 128, line 527
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L527)
+
+```text
+// There is an index buffer.
+```
+
+## Source note 129, line 538
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L538)
+
+```text
+// Normalize the endian and the reset index.
+```
+
+## Source note 130, line 557
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L557)
+
+```text
+// Adaptive tessellation uses the index buffer not for indices, but for
+```
+
+## Source note 131, line 558
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L558)
+
+```text
+// 32-bit floating-point edge factors - no primitive reset.
+```
+
+## Source note 132, line 580
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L580)
+
+```text
+// - VGT, what does the guest say about its primitive reset index?
+```
+
+## Source note 133, line 581
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L581)
+
+```text
+// - It's over 0xFFFF!!!
+```
+
+## Source note 134, line 582
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L582)
+
+```text
+// - What!? 0xFFFF!? There's no way that can be stored in 16 bits!
+```
+
+## Source note 135, line 589
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L589)
+
+```text
+// Vulkan explicitly disallows primitive restart index for "list"
+```
+
+## Source note 136, line 590
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L590)
+
+```text
+// topologies. In Direct3D 12, it's valid for non-strips, but has
+```
+
+## Source note 137, line 591
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L591)
+
+```text
+// implementation-defined behavior. Make backend usage simpler by
+```
+
+## Source note 138, line 592
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L592)
+
+```text
+// explicitly filtering lists out, and hope the guest never uses
+```
+
+## Source note 139, line 593
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L593)
+
+```text
+// primitive reset for lists.
+```
+
+## Source note 140, line 599
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L599)
+
+```text
+// Get the index buffer memory range.
+```
+
+## Source note 141, line 601
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L601)
+
+```text
+// The base should already be aligned, but aligning here too for safety.
+```
+
+## Source note 142, line 621
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L621)
+
+```text
+// Already converting to a different index type - primitive reset is
+```
+
+## Source note 143, line 622
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L622)
+
+```text
+// performed during conversion here. Also doing the endian swap here for
+```
+
+## Source note 144, line 623
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L623)
+
+```text
+// hosts not supporting 32-bit indices because indirection is only used
+```
+
+## Source note 145, line 624
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L624)
+
+```text
+// for the shared memory buffer.
+```
+
+## Source note 146, line 651
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L651)
+
+```text
+// 16-bit indices - just convert the primitive (or multiple
+```
+
+## Source note 147, line 652
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L652)
+
+```text
+// primitives) to the host topology.
+```
+
+## Source note 148, line 658
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L658)
+
+```text
+// Multiple primitives in the index buffer - gather all single
+```
+
+## Source note 149, line 659
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L659)
+
+```text
+// primitives.
+```
+
+## Source note 150, line 679
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L679)
+
+```text
+// 32-bit indices - may need to pre-swap and pre-mask also if the host
+```
+
+## Source note 151, line 680
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L680)
+
+```text
+// doesn't support full 32-bit vertex indices.
+```
+
+## Source note 152, line 685
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L685)
+
+```text
+// Multiple primitives in the index buffer - gather all single
+```
+
+## Source note 153, line 686
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L686)
+
+```text
+// primitives.
+```
+
+## Source note 154, line 745
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L745)
+
+```text
+// Using the same indices on the host as on the guest, either directly or
+```
+
+## Source note 155, line 746
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L746)
+
+```text
+// (for backends not supporting full 32-bit indices, thus unable to
+```
+
+## Source note 156, line 747
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L747)
+
+```text
+// endian-swap, or even to safely drop the upper 8 bits if no swap is even
+```
+
+## Source note 157, line 748
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L748)
+
+```text
+// needed) indirectly.
+```
+
+## Source note 158, line 754
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L754)
+
+```text
+// The whole 16-bit index is compared to the primitive reset index.
+```
+
+## Source note 159, line 755
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L755)
+
+```text
+// Does not need indirection on backends not supporting full 32-bit
+```
+
+## Source note 160, line 756
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L756)
+
+```text
+// indices.
+```
+
+## Source note 161, line 758
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L758)
+
+```text
+// If primitive reset with a non-0xFFFF index is used, replace with
+```
+
+## Source note 162, line 759
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L759)
+
+```text
+// 0xFFFF if 0xFFFF is not used as a real index, or with 0xFFFFFFFF
+```
+
+## Source note 163, line 760
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L760)
+
+```text
+// if it is.
+```
+
+## Source note 164, line 761
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L761)
+
+```text
+// Example of 16-bit reset index replacement: 415607D4.
+```
+
+## Source note 165, line 762
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L762)
+
+```text
+// Not specifying the primitive type in the cache key because not
+```
+
+## Source note 166, line 763
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L763)
+
+```text
+// replacing it, only the reset index in a type-independent way.
+```
+
+## Source note 167, line 800
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L800)
+
+```text
+// Low 24 bits of the guest index are compared to the primitive reset
+```
+
+## Source note 168, line 801
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L801)
+
+```text
+// index. If the backend doesn't support full 32-bit indices, for
+```
+
+## Source note 169, line 802
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L802)
+
+```text
+// ProcessedIndexBufferType::kGuestDMA, the host needs to read the
+```
+
+## Source note 170, line 803
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L803)
+
+```text
+// buffer indirectly in the vertex shaders and swap, and for
+```
+
+## Source note 171, line 804
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L804)
+
+```text
+// ProcessedIndexBufferType::kHostConverted (if primitive reset is
+```
+
+## Source note 172, line 805
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L805)
+
+```text
+// actually used, thus exactly 0xFFFFFFFF must be sent to the host for
+```
+
+## Source note 173, line 806
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L806)
+
+```text
+// it in a true index buffer), no indirection is done, but
+```
+
+## Source note 174, line 807
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L807)
+
+```text
+// pre-swapping and pre-masking is done here.
+```
+
+## Source note 175, line 808
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L808)
+
+```text
+// Not specifying the primitive type in the cache key because not
+```
+
+## Source note 176, line 809
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L809)
+
+```text
+// replacing it, only the reset index in a type-independent way.
+```
+
+## Source note 177, line 856
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L856)
+
+```text
+// For host vertex shader types that don't support manually reading 32-bit
+```
+
+## Source note 178, line 857
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L857)
+
+```text
+// guest DMA indices in the shader path on some backends (notably Vulkan
+```
+
+## Source note 179, line 858
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L858)
+
+```text
+// without fullDrawIndexUint32), pre-convert to host-endian 24-bit indices.
+```
+
+## Source note 180, line 862
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L862)
+
+```text
+// No primitive-type conversion, just index normalization.
+```
+
+## Source note 181, line 890
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L890)
+
+```text
+// Request the indices in the shared memory if they need to be accessed from
+```
+
+## Source note 182, line 891
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L891)
+
+```text
+// there on the GPU.
+```
+
+## Source note 183, line 894
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L894)
+
+```text
+// Request the index buffer memory.
+```
+
+## Source note 184, line 965
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L965)
+
+```text
+// Optimized for the more common case (reset index not used at all), therefore
+```
+
+## Source note 185, line 966
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L966)
+
+```text
+// not doing early-outs if both conditions are true for a simpler loop body.
+```
+
+## Source note 186, line 967
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L967)
+
+```text
+// Using the index 0xFFFF is likely not that common in general.
+```
+
+## Source note 187, line 1045
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1045)
+
+```text
+// The Xbox 360's GPU only uses the low 24 bits of the index - masking before
+```
+
+## Source note 188, line 1046
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1046)
+
+```text
+// comparing.
+```
+
+## Source note 189, line 1102
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1102)
+
+```text
+// Comparison produces 0 or 0xFFFF on AVX and Neon - we need 0xFFFF as the
+```
+
+## Source note 190, line 1103
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1103)
+
+```text
+// result for the primitive reset indices, so the result is
+```
+
+## Source note 191, line 1104
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1104)
+
+```text
+// `index | (index == reset_index)`.
+```
+
+## Source note 192, line 1143
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1143)
+
+```text
+// 1) Compare to the reset index as uint16, getting 0 or 0xFFFF.
+```
+
+## Source note 193, line 1144
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1144)
+
+```text
+// 2) For primitive reset indices, replace the lower 16 bits with 0xFFFF
+```
+
+## Source note 194, line 1145
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1145)
+
+```text
+//    via OR with the comparison result.
+```
+
+## Source note 195, line 1146
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1146)
+
+```text
+// 3) Expand to 32-bit, putting 0xFFFF in the upper 16 bits where
+```
+
+## Source note 196, line 1147
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1147)
+
+```text
+//    the comparison has passed, creating 0xFFFFFFFF for primitive reset
+```
+
+## Source note 197, line 1148
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1148)
+
+```text
+//    or 0x0000#### for non-primitive-reset indices (including
+```
+
+## Source note 198, line 1149
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1149)
+
+```text
+//    0x0000FFFF if the original index buffer had 0xFFFF, but the
+```
+
+## Source note 199, line 1150
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1150)
+
+```text
+//    primitive reset index is different).
+```
+
+## Source note 200, line 1151
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1151)
+
+```text
+// 4) Store.
+```
+
+## Source note 201, line 1156
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1156)
+
+```text
+// Expecting kSimdVectorU16Elements / 2 to be in the immediate offset
+```
+
+## Source note 202, line 1157
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1157)
+
+```text
+// part of the address.
+```
+
+## Source note 203, line 1161
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1161)
+
+```text
+// Interleaving the indices and 0 / 0xFFFF via st2.
+```
+
+## Source note 204, line 1224
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1224)
+
+```text
+// To match GetLineLoopStripIndexCount.
+```
+
+## Source note 205, line 1234
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1234)
+
+```text
+// To match GetLineLoopStripIndexCount.
+```
+
+## Source note 206, line 1255
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1255)
+
+```text
+// Reset encountered or end of the index buffer - add the range.
+```
+
+## Source note 207, line 1265
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1265)
+
+```text
+// End of the index buffer.
+```
+
+## Source note 208, line 1268
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1268)
+
+```text
+// Reset index encountered - skip.
+```
+
+## Source note 209, line 1288
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1288)
+
+```text
+// Reset encountered or end of the index buffer - add the range.
+```
+
+## Source note 210, line 1298
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1298)
+
+```text
+// End of the index buffer.
+```
+
+## Source note 211, line 1301
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1301)
+
+```text
+// Reset index encountered - skip.
+```
+
+## Source note 212, line 1312
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1312)
+
+```text
+// Don't cache if the vertex count is too small.
+```
+
+## Source note 213, line 1328
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1328)
+
+```text
+// Inhibit writing the new result if the range happens to be modified
+```
+
+## Source note 214, line 1329
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1329)
+
+```text
+// during the processing outside the lock.
+```
+
+## Source note 215, line 1335
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1335)
+
+```text
+// Enable the invalidation callback before reading the indices.
+```
+
+## Source note 216, line 1336
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1336)
+
+```text
+// Also, only enable invalidation callbacks if anything needed processing at
+```
+
+## Source note 217, line 1337
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1337)
+
+```text
+// all - don't waste time in the access violation handler doing nothing if
+```
+
+## Source note 218, line 1338
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1338)
+
+```text
+// the guest doesn't use anything requiring host conversion.
+```
+
+## Source note 219, line 1355
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1355)
+
+```text
+// A write callback clears the size when conversion may have read stale indices.
+```
+
+## Source note 220, line 1372
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1372)
+
+```text
+// Put the entry in 1 or 2 buckets.
+```
+
+## Source note 221, line 1382
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1382)
+
+```text
+// There is at least one entry already in the bucket - link to the
+```
+
+## Source note 222, line 1383
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1383)
+
+```text
+// first.
+```
+
+## Source note 223, line 1386
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1386)
+
+```text
+// If the start ([0]) bucket of bucket_first_entry is bucket_index,
+```
+
+## Source note 224, line 1387
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1387)
+
+```text
+// update its link [0]. Otherwise, since a cache entry may belong only
+```
+
+## Source note 225, line 1388
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1388)
+
+```text
+// to at most 2 buckets, bucket_index must be its [1] bucket.
+```
+
+## Source note 226, line 1415
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1415)
+
+```text
+// Invalidate entire buckets if this is an access callback rather than
+```
+
+## Source note 227, line 1416
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1416)
+
+```text
+// something like a file read to disable access violation handling for a
+```
+
+## Source note 228, line 1417
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1417)
+
+```text
+// bigger range for higher performance.
+```
+
+## Source note 229, line 1445
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1445)
+
+```text
+// Not caching L2 bits because they may be modified by unlinking.
+```
+
+## Source note 230, line 1446
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1446)
+
+```text
+// Loop until any bits in the 64-bit portion of the L2 bit set are left.
+```
+
+## Source note 231, line 1463
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1463)
+
+```text
+// Not caching L1 bits because they may be modified by unlinking.
+```
+
+## Source note 232, line 1464
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1464)
+
+```text
+// Loop over buckets until any bits in the 64-bit portion of the L1 bit
+```
+
+## Source note 233, line 1465
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1465)
+
+```text
+// set are left.
+```
+
+## Source note 234, line 1475
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1475)
+
+```text
+// Invalidate the entries in the bucket, fully or partially.
+```
+
+## Source note 235, line 1480
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1480)
+
+```text
+// If the start ([0]) bucket of the entry is bucket_index, the link
+```
+
+## Source note 236, line 1481
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1481)
+
+```text
+// within this bucket is its link [0]. Otherwise, since a cache entry
+```
+
+## Source note 237, line 1482
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1482)
+
+```text
+// may belong only to at most 2 buckets, bucket_index must be its [1]
+```
+
+## Source note 238, line 1483
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1483)
+
+```text
+// bucket.
+```
+
+## Source note 239, line 1488
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1488)
+
+```text
+// For exact_range, don't invalidate bucket entries that are outside
+```
+
+## Source note 240, line 1489
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1489)
+
+```text
+// the specified range.
+```
+
+## Source note 241, line 1493
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1493)
+
+```text
+// Invalidate the entry.
+```
+
+## Source note 242, line 1495
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1495)
+
+```text
+// Remove the entry from the cache map.
+```
+
+## Source note 243, line 1501
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1501)
+
+```text
+// Unlink the entry from the bucket's list.
+```
+
+## Source note 244, line 1520
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1520)
+
+```text
+// The only entry that was remaining in the bucket - it's
+```
+
+## Source note 245, line 1521
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1521)
+
+```text
+// empty now.
+```
+
+## Source note 246, line 1534
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/src/graphics/primitive_processor.cpp#L1534)
+
+```text
+// Make the entry free for reuse.
+```

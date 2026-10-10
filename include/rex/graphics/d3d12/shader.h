@@ -34,15 +34,9 @@ class D3D12Shader : public DxbcShader {
   D3D12Shader(xenos::ShaderType shader_type, uint64_t ucode_data_hash, const uint32_t* ucode_dwords,
               size_t ucode_dword_count, std::endian ucode_source_endian = std::endian::big);
 
-  // For owning subsystem like the pipeline cache, accessors for unique
-  // identifiers (used instead of hashes to make sure collisions can't happen)
-  // of binding layouts used by the shader, for invalidation if a shader with an
-  // incompatible layout was bound.
   size_t GetTextureBindingLayoutUserUID() const { return texture_binding_layout_user_uid_; }
   size_t GetSamplerBindingLayoutUserUID() const { return sampler_binding_layout_user_uid_; }
-  // Modifications of the same shader can be translated on different threads.
-  // The "set" function must only be called if "enter" returned true - these are
-  // set up only once.
+
   bool EnterBindingLayoutUserUIDSetup() { return !binding_layout_user_uids_set_up_.test_and_set(); }
   void SetTextureBindingLayoutUserUID(size_t uid) { texture_binding_layout_user_uid_ = uid; }
   void SetSamplerBindingLayoutUserUID(size_t uid) { sampler_binding_layout_user_uid_ = uid; }
@@ -56,4 +50,4 @@ class D3D12Shader : public DxbcShader {
   size_t sampler_binding_layout_user_uid_ = 0;
 };
 
-}  // namespace rex::graphics::d3d12
+}

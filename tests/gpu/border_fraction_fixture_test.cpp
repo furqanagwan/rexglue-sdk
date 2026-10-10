@@ -1,4 +1,4 @@
-// Synthetic getBCF readbacks. No title microcode or texture assets are used.
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -34,13 +34,13 @@ std::vector<uint32_t> PixelShader(xenos::FetchOpDimension dimension, bool linear
   std::vector<uint32_t> code;
   PackCf(code, Alloc(ucode::AllocType::kPsColors), Exec(1, 3, 4, true));
   auto coordinates = AluExport(1, kAluMax, 0, 0, 0, 0, false, false, false);
-  coordinates[0] &= ~(1u << 15);  // Write r1 rather than an export register.
+  coordinates[0] &= ~(1u << 15);
   code.insert(code.end(), coordinates.begin(), coordinates.end());
   const uint32_t filter =
       uint32_t(linear ? xenos::TextureFilter::kLinear : xenos::TextureFilter::kPoint);
   const auto opcode = ordinary_fetch ? ucode::FetchOpcode::kTextureFetch
                                      : ucode::FetchOpcode::kGetTextureBorderColorFrac;
-  // tf1, r1.xyz -> r2.xyzw; explicit LOD, no anisotropy or offsets.
+
   code.insert(code.end(), {uint32_t(opcode) | (1u << 5) | (2u << 12) | (1u << 20) | (0x24u << 26),
                            0x688u | (filter << 12) | (filter << 14) |
                                (uint32_t(xenos::TextureFilter::kPoint) << 16),
@@ -54,8 +54,6 @@ xenos::xe_gpu_texture_fetch_t Texture(
     GpuFixture& fixture, bool linear, bool is_signed, xenos::ClampMode clamp,
     xenos::DataDimension dimension = xenos::DataDimension::k2DOrStacked, bool stacked = false,
     bool mip = false) {
-  // Uniform data throughout padded tiles and mip storage makes the expected
-  // border weight independent of data layout, while exercising real texture loads.
   const uint32_t address = fixture.AllocPhysical(0x20000);
   fixture.WriteDwords(address, std::vector<uint32_t>(0x20000 / 4, 0x40404040));
   xenos::xe_gpu_texture_fetch_t fetch = {};
@@ -83,7 +81,7 @@ xenos::xe_gpu_texture_fetch_t Texture(
   fetch.mag_filter = fetch.min_filter =
       linear ? xenos::TextureFilter::kLinear : xenos::TextureFilter::kPoint;
   fetch.mip_filter = xenos::TextureFilter::kPoint;
-  // Deliberately neither forced border color. getBCF must ignore it.
+
   fetch.border_color = xenos::BorderColor::k_ACBYCR_Black;
   if (mip) {
     fetch.mip_address = address >> 12;
@@ -115,9 +113,9 @@ uint32_t Sample(GpuFixture& fixture, xenos::FetchOpDimension dimension, bool lin
 void CheckFraction(uint32_t color, float expected) {
   INFO("readback 0x" << std::hex << color << ", expected fraction " << expected);
   CHECK(std::abs(int(color & 255) - int(std::lround(expected * 255.0f))) <= 2);
-  CHECK((color & 0xFFFFFF00) == 0);  // getBCF's YZW are zero.
+  CHECK((color & 0xFFFFFF00) == 0);
 }
-}  // namespace
+}
 
 TEST_CASE("getBCF measures point and linear borders without changing ordinary fetches",
           "[gpu][border-fraction]") {
@@ -146,7 +144,7 @@ TEST_CASE("getBCF measures point and linear borders without changing ordinary fe
                 linear ? 0.75f : 0.0f);
   const uint32_t interior =
       Sample(*fixture, xenos::FetchOpDimension::k2D, linear, 0.5f, 0.5f, 0.5f, true);
-  CHECK((interior & 255) > 32);  // Same fetch constant still returns actual texels.
+  CHECK((interior & 255) > 32);
   Texture(*fixture, linear, is_signed, xenos::ClampMode::kClampToEdge);
   CheckFraction(Sample(*fixture, xenos::FetchOpDimension::k2D, linear, -1.0f, 0.5f), 0.0f);
 }
