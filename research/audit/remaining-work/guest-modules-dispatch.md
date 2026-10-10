@@ -186,7 +186,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
     // 2.
 ```
 
-## Note 17: src/system/xmodule.cpp:94
+## Note 17: src/system/kernel_module_object.cpp:94
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xmodule.cpp#L94)
 

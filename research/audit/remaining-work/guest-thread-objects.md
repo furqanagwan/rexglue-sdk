@@ -61,7 +61,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
   // (but not a failure code)
 ```
 
-## Note 5: src/system/xmutant.cpp:46
+## Note 5: src/system/kernel_mutant.cpp:46
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xmutant.cpp#L46)
 
@@ -71,7 +71,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): abandoning.
 ```
 
-## Note 6: src/system/xobject.cpp:20
+## Note 6: src/system/kernel_object.cpp:20
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L20)
 
@@ -81,7 +81,7 @@ Disposition: retired reminder. Unused JIT-only include; static dispatch replaces
 // #include <rex/kernel/xboxkrnl/private.h>  // TODO: JIT only
 ```
 
-## Note 7: src/system/xobject.cpp:50
+## Note 7: src/system/kernel_object.cpp:50
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L50)
 
@@ -91,7 +91,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO: Assert kernel_state != nullptr in this constructor.
 ```
 
-## Note 8: src/system/xobject.cpp:57
+## Note 8: src/system/kernel_object.cpp:57
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L57)
 
@@ -103,7 +103,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
   // assert_zero(pointer_ref_count_);
 ```
 
-## Note 9: src/system/xobject.cpp:93
+## Note 9: src/system/kernel_object.cpp:93
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L93)
 
@@ -113,7 +113,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // FIXME: Return true when handle is actually released.
 ```
 
-## Note 10: src/system/xobject.cpp:400
+## Note 10: src/system/kernel_object.cpp:400
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L400)
 
@@ -123,7 +123,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // FIXME: This assumes the object has a dispatch header (some don't!)
 ```
 
-## Note 11: src/system/xobject.cpp:430
+## Note 11: src/system/kernel_object.cpp:430
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L430)
 
@@ -133,7 +133,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO: assert if the type of the object != as_type
 ```
 
-## Note 12: src/system/xobject.cpp:490
+## Note 12: src/system/kernel_object.cpp:490
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xobject.cpp#L490)
 
@@ -143,7 +143,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // FIXME: This assumes the object contains a dispatch header (some don't!)
 ```
 
-## Note 13: src/system/xsymboliclink.cpp:28
+## Note 13: src/system/kernel_symbolic_link.cpp:28
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xsymboliclink.cpp#L28)
 
@@ -153,7 +153,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(gibbed): kernel_state_->RegisterSymbolicLink(this);
 ```
 
-## Note 14: src/system/xthread.cpp:109
+## Note 14: src/system/kernel_thread.cpp:109
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L109)
 
@@ -163,7 +163,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): platform kill
 ```
 
-## Note 15: src/system/xthread.cpp:194
+## Note 15: src/system/kernel_thread.cpp:194
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L194)
 
@@ -177,7 +177,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
     //  threads will stay on the same hardware thread as the parent."
 ```
 
-## Note 16: src/system/xthread.cpp:465
+## Note 16: src/system/kernel_thread.cpp:465
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L465)
 
@@ -187,7 +187,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): translate error?
 ```
 
-## Note 17: src/system/xthread.cpp:483
+## Note 17: src/system/kernel_thread.cpp:483
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L483)
 
@@ -197,7 +197,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(tomc): do we need thread notifications (related to processor thread management)?
 ```
 
-## Note 18: src/system/xthread.cpp:505
+## Note 18: src/system/kernel_thread.cpp:505
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L505)
 
@@ -207,7 +207,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): dispatch events? waiters? etc?
 ```
 
-## Note 19: src/system/xthread.cpp:526
+## Note 19: src/system/kernel_thread.cpp:526
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L526)
 
@@ -217,7 +217,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(tomc): do we need thread notifications (related to processor thread management)?
 ```
 
-## Note 20: src/system/xthread.cpp:547
+## Note 20: src/system/kernel_thread.cpp:547
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L547)
 
@@ -227,7 +227,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(benvanik): inform the profiler that this thread is exiting.
 ```
 
-## Note 21: src/system/xthread.cpp:554
+## Note 21: src/system/kernel_thread.cpp:554
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L554)
 
@@ -237,7 +237,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
 // TODO(tomc): do we need thread notifications (related to processor thread management)?
 ```
 
-## Note 22: src/system/xthread.cpp:1271
+## Note 22: src/system/kernel_thread.cpp:1271
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L1271)
 
@@ -249,7 +249,7 @@ Disposition: retained investigation; not yet reproduced or resolved.
     //             single xex
 ```
 
-## Note 23: src/system/xthread.cpp:1383
+## Note 23: src/system/kernel_thread.cpp:1383
 
 [Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/7ec3b080f65e9e94eacbf3b1dbd8f999f3ae216e/src/system/xthread.cpp#L1383)
 
