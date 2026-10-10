@@ -32,8 +32,6 @@ class D3D12UploadBufferPool : public GraphicsUploadBufferPool {
 
  private:
   struct D3D12Page : public Page {
-    // Creates a reference to the buffer. It must not be unmapped until this
-    // D3D12Page is deleted.
     D3D12Page(ID3D12Resource* buffer, void* mapping);
     Microsoft::WRL::ComPtr<ID3D12Resource> buffer_;
     void* mapping_;
@@ -43,4 +41,4 @@ class D3D12UploadBufferPool : public GraphicsUploadBufferPool {
   const D3D12Provider& provider_;
 };
 
-}  // namespace rex::ui::d3d12
+}

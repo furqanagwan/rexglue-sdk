@@ -51,18 +51,13 @@ class D3D12Presenter final : public Presenter {
 
   static constexpr DXGI_FORMAT kGuestOutputIntermediateFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 
-  // The format used internally by Windows composition.
   static constexpr DXGI_FORMAT kSwapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
 
-  // The callback must use the main direct queue of the provider.
   class D3D12GuestOutputRefreshContext final : public GuestOutputRefreshContext {
    public:
     D3D12GuestOutputRefreshContext(bool& is_8bpc_out_ref, ID3D12Resource* resource)
         : GuestOutputRefreshContext(is_8bpc_out_ref), resource_(resource) {}
 
-    // kGuestOutputFormat, supports UAV. The initial state in the callback is
-    // kGuestOutputInternalState, and the callback must also transition it back
-    // to kGuestOutputInternalState before finishing.
     ID3D12Resource* resource_uav_capable() const { return resource_.Get(); }
 
    private:
@@ -175,78 +170,49 @@ class D3D12Presenter final : public Presenter {
     static constexpr uint32_t kSwapChainBufferCount = 3;
 
     enum RTVIndex : UINT {
-      // Swap chain buffers - updated when creating the swap chain
-      // (connection-specific).
+
       kRTVIndexSwapChainBuffer0,
 
-      // Intermediate textures - the last usage is
-      // guest_output_intermediate_texture_paint_last_usage_.
       kRTVIndexGuestOutputIntermediate0 = kRTVIndexSwapChainBuffer0 + kSwapChainBufferCount,
 
       kRTVCount = kRTVIndexGuestOutputIntermediate0 + kGuestOutputMailboxSize - 1,
     };
 
     enum ViewIndex : UINT {
-      // Guest output textures - indices are the same as in
-      // guest_output_resource_paint_refs, and the last usage is tied to them.
+
       kViewIndexGuestOutput0Srv,
 
-      // Intermediate textures - the last usage is
-      // guest_output_intermediate_texture_paint_last_usage_.
       kViewIndexGuestOutputIntermediate0Srv = kViewIndexGuestOutput0Srv + kGuestOutputMailboxSize,
 
       kViewCount = kViewIndexGuestOutputIntermediate0Srv + kMaxGuestOutputPaintEffects - 1,
     };
 
     void AwaitSwapChainUsageCompletion() {
-      // Presentation engine usage.
       present_submission_tracker.AwaitAllSubmissionsCompletion();
-      // Paint (render target) usage. While the presentation fence is signaled
-      // on the same queue, and presentation happens after painting, awaiting
-      // anyway for safety just to make less assumptions in the architecture.
+
       paint_submission_tracker.AwaitAllSubmissionsCompletion();
     }
 
     void DestroySwapChain();
 
-    // Connection-independent.
-
-    // Signaled before presenting.
     D3D12SubmissionTracker paint_submission_tracker;
-    // Signaled after presenting.
+
     D3D12SubmissionTracker present_submission_tracker;
 
     std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, kSwapChainBufferCount>
         command_allocators;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
 
-    // Descriptor heaps for views of the current resources related to the guest
-    // output and to painting, updated either during painting or during
-    // connection lifetime management if outdated after awaiting usage
-    // completion.
-    // RTV heap.
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
-    // Shader-visible CBV/SRV/UAV heap.
+
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> view_heap;
 
-    // Refreshed and cleaned up during guest output painting. The first is the
-    // paint submission index in which the guest output texture (and its
-    // descriptors) was last used, the second is the reference to the texture,
-    // which may be null. The indices are not mailbox indices here, rather, if
-    // the reference is not in this array yet, the most outdated reference, if
-    // needed, is replaced with the new one, awaiting the completion of the last
-    // paint usage.
     std::array<std::pair<UINT64, Microsoft::WRL::ComPtr<ID3D12Resource>>, kGuestOutputMailboxSize>
         guest_output_resource_paint_refs;
 
-    // Current intermediate textures for guest output painting, refreshed when
-    // painting guest output. While not in use, they are in
-    // D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE.
     std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, kMaxGuestOutputPaintEffects - 1>
         guest_output_intermediate_textures;
     UINT64 guest_output_intermediate_texture_last_usage = 0;
-
-    // Connection-specific.
 
     uint32_t swap_chain_width = 0;
     uint32_t swap_chain_height = 0;
@@ -275,14 +241,8 @@ class D3D12Presenter final : public Presenter {
 
   const D3D12Provider& provider_;
 
-  // Whether DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING is supported by DXGI (depends in
-  // particular on the Windows 10 version and hardware support), primarily for
-  // variable refresh rate support.
   bool dxgi_supports_tearing_ = false;
 
-  // Static objects for guest output presentation, used only when painting the
-  // main target (can be destroyed only after awaiting main target usage
-  // completion).
   std::array<Microsoft::WRL::ComPtr<ID3D12RootSignature>, kGuestOutputPaintRootSignatureCount>
       guest_output_paint_root_signatures_;
   std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, size_t(GuestOutputPaintEffect::kCount)>
@@ -290,26 +250,13 @@ class D3D12Presenter final : public Presenter {
   std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, size_t(GuestOutputPaintEffect::kCount)>
       guest_output_paint_final_pipelines_;
 
-  // The first is the refresher submission tracker fence value at which the
-  // guest output texture was last refreshed, the second is the reference to the
-  // texture, which may be null. The indices are the mailbox indices.
   std::array<std::pair<UINT64, Microsoft::WRL::ComPtr<ID3D12Resource>>, kGuestOutputMailboxSize>
       guest_output_resources_;
-  // The guest output resources are protected by two submission trackers - the
-  // refresher ones (for writing to them via the guest_output_resources_
-  // references) and the paint one (for presenting it via the
-  // paint_context_.guest_output_resource_paint_refs references taken from
-  // guest_output_resources_).
+
   D3D12SubmissionTracker guest_output_resource_refresher_submission_tracker_;
 
-  // UI submission tracker with the submission index that can be given to UI
-  // drawers (accessible from the UI thread only, at any time).
   D3D12SubmissionTracker ui_submission_tracker_;
 
-  // Accessible only by painting and by surface connection lifetime management
-  // (ConnectOrReconnectPaintingToSurfaceFromUIThread,
-  // DisconnectPaintingFromSurfaceFromUIThreadImpl) by the thread doing it, as
-  // well as by presenter initialization and shutdown.
   PaintContext paint_context_;
 
 #if defined(REX_HAS_FIDELITYFX_RUNTIME) && REX_HAS_FIDELITYFX_RUNTIME
@@ -322,4 +269,4 @@ class D3D12Presenter final : public Presenter {
 #endif
 };
 
-}  // namespace rex::ui::d3d12
+}

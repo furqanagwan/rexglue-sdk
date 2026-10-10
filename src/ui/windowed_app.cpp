@@ -18,10 +18,9 @@ namespace rex {
 namespace ui {
 
 #if XE_UI_WINDOWED_APPS_IN_LIBRARY
-// A zero-initialized pointer to remove dependence on the initialization order
-// of the map relatively to the app creator proxies.
-std::unordered_map<std::string, WindowedApp::Creator>* WindowedApp::creators_;
-#endif  // XE_UI_WINDOWED_APPS_IN_LIBRARY
 
-}  // namespace ui
-}  // namespace rex
+std::unordered_map<std::string, WindowedApp::Creator>* WindowedApp::creators_;
+#endif
+
+}
+}

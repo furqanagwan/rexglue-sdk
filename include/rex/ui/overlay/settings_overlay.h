@@ -18,7 +18,6 @@ namespace rex::ui {
 
 class SettingsDialog : public ImGuiDialog {
  public:
-  // config_path: where "Save to config" writes (e.g. exe_dir / "app.toml")
   SettingsDialog(ImGuiDrawer* imgui_drawer, std::filesystem::path config_path);
   ~SettingsDialog();
 
@@ -32,4 +31,4 @@ class SettingsDialog : public ImGuiDialog {
   std::string capturing_bind_name_;
 };
 
-}  // namespace rex::ui
+}

@@ -22,17 +22,17 @@ const std::vector<DisplayMode> kModes = {
     {1920, 1080, 144, 32}, {2560, 1440, 144, 32}, {1920, 1080, 60, 16}, {640, 480, 60, 32},
 };
 
-}  // namespace
+}
 
 TEST_CASE("Fullscreen takes the exact size at the desktop refresh rate", "[ui][display_mode]") {
   CHECK(ChooseFullscreenMode(kModes, 1920, 1080, 120) == DisplayMode{1920, 1080, 120, 32});
-  // Without the desktop rate at that size, the fastest.
+
   CHECK(ChooseFullscreenMode(kModes, 1280, 720, 120) == DisplayMode{1280, 720, 144, 32});
 }
 
 TEST_CASE("Fullscreen falls back to the smallest mode covering the size", "[ui][display_mode]") {
   CHECK(ChooseFullscreenMode(kModes, 1600, 900, 60) == DisplayMode{1920, 1080, 60, 32});
-  // Larger than every mode: the largest.
+
   CHECK(ChooseFullscreenMode(kModes, 3840, 2160, 60) == DisplayMode{2560, 1440, 144, 32});
 }
 

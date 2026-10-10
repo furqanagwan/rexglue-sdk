@@ -27,15 +27,8 @@
 namespace rex {
 namespace ui {
 
-// Interface between the platform's entry points (in the main, UI, thread that
-// also runs the message loop) and the app that implements it.
 class WindowedApp {
  public:
-  // WindowedApps are expected to provide a static creation function, for
-  // creating an instance of the class (which may be called before
-  // initialization of platform-specific parts, should preferably be as simple
-  // as possible).
-
   using Creator =
       std::unique_ptr<rex::ui::WindowedApp> (*)(rex::ui::WindowedAppContext& app_context);
 
@@ -45,19 +38,14 @@ class WindowedApp {
 
   WindowedAppContext& app_context() const { return app_context_; }
 
-  // Same as the executable (project), xenia-library-app.
   const std::string& GetName() const { return name_; }
   const std::string& GetPositionalOptionsUsage() const { return positional_options_usage_; }
   const std::vector<std::string>& GetPositionalOptions() const { return positional_options_; }
 
-  // TEMP: Replace with CVAR system
-  // Called by entry point after construction, before OnInitialize()
   void SetParsedArguments(std::map<std::string, std::string> args) {
     parsed_args_ = std::move(args);
   }
 
-  // TEMP: Replace with CVAR system
-  // Retrieve a parsed argument by name
   std::optional<std::string> GetArgument(const std::string& name) const {
     auto it = parsed_args_.find(name);
     if (it != parsed_args_.end()) {
@@ -66,47 +54,24 @@ class WindowedApp {
     return std::nullopt;
   }
 
-  // Called once before receiving other lifecycle callback invocations. Cvars
-  // will be initialized with the launch arguments. Returns whether the app has
-  // been initialized successfully (otherwise platform-specific code must call
-  // OnDestroy and refuse to continue running the app).
   virtual bool OnInitialize() = 0;
-  // See OnDestroy for more info.
+
   void InvokeOnDestroy() {
-    // For safety and convenience of referencing objects owned by the app in
-    // pending functions queued in or after OnInitialize, make sure they are
-    // executed before telling the app that destruction needs to happen.
     app_context().ExecutePendingFunctionsFromUIThread();
     OnDestroy();
   }
 
  protected:
-  // Positional options should be initialized in the constructor if needed.
-  // Cvars will not have been initialized with the arguments at the moment of
-  // construction (as the result depends on construction).
   explicit WindowedApp(WindowedAppContext& app_context, const std::string_view name,
                        const std::string_view positional_options_usage = std::string_view())
       : app_context_(app_context),
         name_(name),
         positional_options_usage_(positional_options_usage) {}
 
-  // For calling from the constructor.
   void AddPositionalOption(const std::string_view option) {
     positional_options_.emplace_back(option);
   }
 
-  // OnDestroy entry point may be called (through InvokeOnDestroy) by the
-  // platform-specific lifecycle interface at request of either the app itself
-  // or the OS - thus should be possible for the lifecycle interface to call at
-  // any moment (not from inside other lifecycle callbacks though). The app will
-  // also be destroyed when that happens, so the destructor will also be called
-  // (but this is more safe with respect to exceptions). This is only guaranteed
-  // to be called if OnInitialize has already happened (successfully or not) -
-  // in case of an error before initialization, the destructor may be called
-  // alone as well. Context's pending functions will be executed before the
-  // call, so it's safe to destroy dependencies of them here (though it may
-  // still be possible to add more pending functions here depending on whether
-  // the context was explicitly shut down before this is invoked).
   virtual void OnDestroy() {}
 
  private:
@@ -115,7 +80,7 @@ class WindowedApp {
   std::string name_;
   std::string positional_options_usage_;
   std::vector<std::string> positional_options_;
-  // TEMP: Replace with CVAR system
+
   std::map<std::string, std::string> parsed_args_;
 
 #if XE_UI_WINDOWED_APPS_IN_LIBRARY
@@ -124,8 +89,6 @@ class WindowedApp {
    public:
     CreatorRegistration(const std::string_view identifier, Creator creator) {
       if (!creators_) {
-        // Will be deleted by the last creator registration's destructor, no
-        // need for a library destructor.
         creators_ = new std::unordered_map<std::string, WindowedApp::Creator>;
       }
       iterator_inserted_ = creators_->emplace(identifier, creator);
@@ -155,11 +118,11 @@ class WindowedApp {
 
  private:
   static std::unordered_map<std::string, Creator>* creators_;
-#endif  // XE_UI_WINDOWED_APPS_IN_LIBRARY
+#endif
 };
 
 #if XE_UI_WINDOWED_APPS_IN_LIBRARY
-// Multiple apps in a single library.
+
 #define REX_DEFINE_APP(identifier, creator)                                   \
   namespace rex {                                                             \
   namespace ui {                                                              \
@@ -169,16 +132,15 @@ class WindowedApp {
   }                                                                           \
   }
 #else
-// Separate executables for each app.
+
 std::unique_ptr<WindowedApp> (*GetWindowedAppCreator())(WindowedAppContext& app_context);
 #define REX_DEFINE_APP(identifier, creator)                        \
   rex::ui::WindowedApp::Creator rex::ui::GetWindowedAppCreator() { \
     return creator;                                                \
   }
-#endif  // XE_UI_WINDOWED_APPS_IN_LIBRARY
+#endif
 
-// Deprecated: use REX_DEFINE_APP
 #define XE_DEFINE_WINDOWED_APP(identifier, creator) REX_DEFINE_APP(identifier, creator)
 
-}  // namespace ui
-}  // namespace rex
+}
+}

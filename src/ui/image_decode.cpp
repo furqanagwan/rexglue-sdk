@@ -26,8 +26,8 @@ std::vector<uint8_t> DecodeImageRGBA(const uint8_t* data, size_t size, int& out_
     return {};
   }
   int channels = 0;
-  stbi_uc* pixels = stbi_load_from_memory(data, static_cast<int>(size), &out_width, &out_height,
-                                          &channels, 4 /* force RGBA */);
+  stbi_uc* pixels =
+      stbi_load_from_memory(data, static_cast<int>(size), &out_width, &out_height, &channels, 4);
   if (!pixels) {
     out_width = 0;
     out_height = 0;
@@ -39,4 +39,4 @@ std::vector<uint8_t> DecodeImageRGBA(const uint8_t* data, size_t size, int& out_
   return result;
 }
 
-}  // namespace rex::ui
+}

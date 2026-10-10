@@ -21,7 +21,7 @@
 
 namespace rex {
 class Runtime;
-}  // namespace rex
+}
 
 namespace rex::ui {
 
@@ -32,12 +32,6 @@ class AchievementIconCache {
  public:
   AchievementIconCache(ImmediateDrawer* immediate_drawer, rex::Runtime* runtime);
 
-  // Loads the achievement icon in priority order:
-  // 1. explicit metadata icon_path
-  // 2. embedded metadata icon_path
-  // 3. metadata icons/<image_id>.png
-  // 4. embedded metadata icons/<image_id>.png
-  // 5. title XDBF image <image_id> embedded in the loaded XEX
   ImmediateTexture* GetIcon(const rex::system::AchievementInfo& achievement);
 
  private:
@@ -50,4 +44,4 @@ class AchievementIconCache {
   std::unordered_map<std::string, std::unique_ptr<ImmediateTexture>> cache_;
 };
 
-}  // namespace rex::ui
+}

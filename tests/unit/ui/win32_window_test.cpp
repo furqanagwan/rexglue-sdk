@@ -27,7 +27,6 @@ using namespace rex::ui;  // NOLINT
 
 namespace {
 
-// Records what the window reports to its listeners.
 struct Recorder : WindowListener, WindowInputListener {
   bool allow_close = true;
   int close_requests = 0;
@@ -50,7 +49,6 @@ struct Recorder : WindowListener, WindowInputListener {
   void OnKeyChar(KeyEvent& e) override { chars.push_back(uint32_t(e.virtual_key())); }
 };
 
-// Dispatches everything queued for this thread, as the main loop would.
 void Pump() {
   MSG message;
   while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
@@ -84,7 +82,7 @@ struct Harness {
   Recorder recorder;
 };
 
-}  // namespace
+}
 
 TEST_CASE("A Win32 app context creates a native Win32 window", "[ui][win32]") {
   Harness h;
@@ -96,13 +94,13 @@ TEST_CASE("A Win32 app context creates a native Win32 window", "[ui][win32]") {
   REQUIRE(GetClientRect(h.hwnd(), &client));
   CHECK(h.window->GetActualPhysicalWidth() == uint32_t(client.right));
   CHECK(h.window->GetActualPhysicalHeight() == uint32_t(client.bottom));
-  // The requested logical size, scaled to the window's DPI.
+
   CHECK(h.window->GetActualPhysicalWidth() == h.window->SizeToPhysical(640));
 }
 
 TEST_CASE("The Win32 window shows the full title and a title icon", "[ui][win32]") {
   Harness h;
-  // A title's XDBF name is UTF-8 and may leave ASCII ("Légendes").
+
   h.window->SetTitle("Quantum of Solace L\xC3\xA9gendes");
   Pump();
   wchar_t text[64] = {};
@@ -110,7 +108,6 @@ TEST_CASE("The Win32 window shows the full title and a title icon", "[ui][win32]
   CHECK(std::wstring(text) == L"Quantum of Solace Légendes");
   CHECK(SendMessageW(h.hwnd(), WM_GETTEXTLENGTH, 0, 0) == 26);
 
-  // XDBF title icons are PNG; a 4x4 red one.
   static const uint8_t kPng[] = {
       0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
       0x52, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x08, 0x06, 0x00, 0x00, 0x00, 0xA9,
@@ -241,7 +238,6 @@ TEST_CASE("Win32 window takes a new size without a restart", "[ui][win32]") {
   CHECK(h.window->GetActualPhysicalWidth() == h.window->SizeToPhysical(800));
   CHECK(h.window->GetActualPhysicalHeight() == h.window->SizeToPhysical(450));
 
-  // While fullscreen the monitor keeps the window; the size applies on leaving.
   h.window->SetFullscreen(true);
   Pump();
   h.window->SetDesiredLogicalSize(720, 400);
@@ -261,7 +257,7 @@ TEST_CASE("Refreshing Win32 fullscreen leaves the window where it is", "[ui][win
   Harness h;
   RECT before;
   REQUIRE(GetWindowRect(h.hwnd(), &before));
-  // Windowed: nothing to refresh, and the saved placement is not reapplied.
+
   h.window->RefreshFullscreen();
   Pump();
   RECT after;
@@ -269,8 +265,6 @@ TEST_CASE("Refreshing Win32 fullscreen leaves the window where it is", "[ui][win
   CHECK(after.left == before.left);
   CHECK(after.right - after.left == before.right - before.left);
 
-  // Fullscreen, refreshed (a resolution or fullscreen_exclusive change), then
-  // left: the window comes back as it was, not at the fullscreen rectangle.
   h.window->SetFullscreen(true);
   Pump();
   h.window->RefreshFullscreen();
@@ -285,11 +279,11 @@ TEST_CASE("Refreshing Win32 fullscreen leaves the window where it is", "[ui][win
 
 TEST_CASE("Win32 window moves to another monitor without a restart", "[ui][win32]") {
   Harness h;
-  h.window->SetMonitor(1);  // The primary display.
+  h.window->SetMonitor(1);
   Pump();
   HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
   CHECK(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONULL) == primary);
-  // Past the displays present: logged, and the window stays.
+
   RECT before;
   REQUIRE(GetWindowRect(h.hwnd(), &before));
   h.window->SetMonitor(16);
@@ -305,8 +299,7 @@ TEST_CASE("Win32 window reports its display's desktop size", "[ui][win32]") {
   uint32_t width = 0;
   uint32_t height = 0;
   REQUIRE(h.window->GetDisplayPixelSize(width, height));
-  // The process is per-monitor DPI aware, so the monitor rectangle is in
-  // physical pixels, as the desktop mode is.
+
   MONITORINFO monitor = {};
   monitor.cbSize = sizeof(monitor);
   REQUIRE(GetMonitorInfoW(MonitorFromWindow(h.hwnd(), MONITOR_DEFAULTTONEAREST), &monitor));
@@ -315,6 +308,5 @@ TEST_CASE("Win32 window reports its display's desktop size", "[ui][win32]") {
 }
 
 TEST_CASE("The Win32 window is the default", "[ui][win32]") {
-  // Owner decision, 2026-09-28: native backends by default.
   CHECK(REXCVAR_GET(ui_backend) == "win32");
 }

@@ -28,13 +28,9 @@ class ImGuiDialog {
  public:
   virtual ~ImGuiDialog();
 
-  // Shows a simple message box containing a text message.
-  // Callers can want for the dialog to close with Wait().
-  // Dialogs retain themselves and will delete themselves when closed.
   static ImGuiDialog* ShowMessageBox(ImGuiDrawer* imgui_drawer, std::string title,
                                      std::string body);
 
-  // A fence to signal when the dialog is closed.
   void Then(rex::thread::Fence* fence);
 
   void Draw();
@@ -45,7 +41,6 @@ class ImGuiDialog {
   ImGuiDrawer* imgui_drawer() const { return imgui_drawer_; }
   ImGuiIO& GetIO();
 
-  // Closes the dialog and returns to any waiters.
   void Close();
 
   virtual void OnShow() {}
@@ -58,7 +53,7 @@ class ImGuiDialog {
   std::vector<rex::thread::Fence*> waiting_fences_;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}
 
-#endif  // REX_UI_IMGUI_DIALOG_H_
+#endif

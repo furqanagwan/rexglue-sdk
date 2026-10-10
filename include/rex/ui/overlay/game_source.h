@@ -24,7 +24,7 @@ using GameSourceVisualsProvider = std::function<std::optional<GameSourceVisuals>
 class GameSourceConsoleBox;
 class GameSourceGuidePage;
 class GameSourceConsoleDownloads;
-// Self-owned first-run dialog. An empty completion path means Leave Game.
+
 class GameSourceDialog : public ImGuiDialog {
  public:
   GameSourceDialog(ImGuiDrawer* drawer, system::GameSourceIdentity expected,
@@ -53,22 +53,22 @@ class GameSourceDialog : public ImGuiDialog {
     kSaveFailed,
     kCopied
   };
-  // The Guide's own file browser over drives, folders and ISO images.
+
   void Browse(bool folder);
-  // Windows' file dialog, for the host fallback without Guide assets.
+
   void BrowseNative(bool folder);
   void ShowBrowseScreen();
   void ShowConsolePage(ConsoleScreen screen, std::string title,
                        std::vector<guide::GuideListRow> rows, size_t initial = 0,
                        std::string legend_b = "Back", std::string empty_details = {});
-  // One row per choice, each with `body` in the details pane.
+
   void ShowConsoleScreen(ConsoleScreen screen, std::string title, std::string body,
                          std::vector<std::string> choices, size_t initial = 0);
   void ShowSourceScreen();
   void ShowDriveScreen();
   void HandleConsoleInput(const LaunchPadState& pad);
   void HandleConsoleCancel();
-  // Back to the screen a source check started from.
+
   void ReturnFromCheck();
   void BeginSourceCheck(std::filesystem::path path);
   void HandleConsoleChoice(size_t choice);
@@ -104,7 +104,7 @@ class GameSourceDialog : public ImGuiDialog {
   ConsoleScreen console_screen_ = ConsoleScreen::kSource;
   ConsoleScreen check_origin_ = ConsoleScreen::kSource;
   std::vector<std::string> console_choices_;
-  // The screen to show once the Guide has loaded.
+
   bool console_waiting_for_guide_ = false;
   std::string console_title_;
   std::vector<guide::GuideListRow> console_rows_;
@@ -140,4 +140,4 @@ class GameMediaRecoveryDialog : public ImGuiDialog {
   GameSourceVisualsProvider visuals_;
   std::unique_ptr<GameSourceConsoleBox> console_box_;
 };
-}  // namespace rex::ui
+}

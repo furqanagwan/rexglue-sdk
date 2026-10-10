@@ -84,5 +84,5 @@ void CreateBufferTypedUAV(ID3D12Device* device, D3D12_CPU_DESCRIPTOR_HANDLE hand
                           ID3D12Resource* buffer, DXGI_FORMAT format, uint32_t num_elements,
                           uint64_t first_element = 0);
 
-}  // namespace util
-}  // namespace rex::ui::d3d12
+}
+}

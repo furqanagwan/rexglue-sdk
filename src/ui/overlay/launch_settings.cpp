@@ -40,8 +40,7 @@ LaunchPadState PollLaunchPad(ImGuiIO& io, const LaunchPadSource& source, bool fo
     return {};
   const auto pad = source();
   const auto state = pad.value_or(LaunchPadState{});
-  // ImGui ignores activation while its navigation cursor is hidden. Make the
-  // first A press usable without requiring a directional input beforehand.
+
   if (forward_to_imgui &&
       (state.activate || state.cancel || std::abs(state.x) > 0.25f || std::abs(state.y) > 0.25f))
     ImGui::SetNavCursorVisible(true);
@@ -134,8 +133,7 @@ void LaunchSettingsDialog::OnDraw(ImGuiIO& io) {
       constexpr const char* filtering[] = {"Game default", "Off", "1x", "2x", "4x", "8x", "16x"};
       constexpr const char* filtering_values[] = {"-1", "0", "1", "2", "3", "4", "5"};
       Choice("Texture filtering", "anisotropic_override", filtering, filtering_values, 7);
-      // The runtime creates the command processor/texture cache after this
-      // dialog. Keep both axes together, including titles with custom defaults.
+
       if (cvar::GetFlagInfo("draw_resolution_scale_x") &&
           cvar::GetFlagInfo("draw_resolution_scale_y")) {
         const auto scale = cvar::GetFlagByName("resolution_scale");
@@ -237,4 +235,4 @@ void LaunchSettingsDialog::OnClose() {
     completed_(play_);
 }
 
-}  // namespace rex::ui
+}

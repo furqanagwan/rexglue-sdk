@@ -16,9 +16,6 @@
 
 namespace rex::ui::d3d12 {
 
-// Align to D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT not to waste any space if
-// it's smaller (the size of the heap backing the buffer will be aligned to
-// D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT anyway).
 D3D12UploadBufferPool::D3D12UploadBufferPool(const D3D12Provider& provider, size_t page_size)
     : GraphicsUploadBufferPool(
           rex::align(page_size, size_t(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT))),
@@ -89,7 +86,7 @@ GraphicsUploadBufferPool::Page* D3D12UploadBufferPool::CreatePageImplementation(
     buffer->Release();
     return nullptr;
   }
-  // Unmapping will be done implicitly when the resource is destroyed.
+
   return new D3D12Page(buffer.Get(), mapping);
 }
 
@@ -98,4 +95,4 @@ D3D12UploadBufferPool::D3D12Page::D3D12Page(ID3D12Resource* buffer, void* mappin
   gpu_address_ = buffer_->GetGPUVirtualAddress();
 }
 
-}  // namespace rex::ui::d3d12
+}

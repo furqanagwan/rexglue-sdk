@@ -13,7 +13,6 @@
 
 #include <rex/cvar.h>
 
-// Presenter
 REXCVAR_DECLARE(bool, present_render_pass_clear);
 REXCVAR_DECLARE(bool, present_letterbox);
 REXCVAR_DECLARE(int32_t, present_safe_area_x);
@@ -33,7 +32,6 @@ REXCVAR_DECLARE(bool, fullscreen_exclusive);
 REXCVAR_DECLARE(int32_t, monitor);
 REXCVAR_DECLARE(std::string, ui_backend);
 
-// Display (guest video mode; defined in src/ui/window.cpp)
 REXCVAR_DECLARE(int32_t, video_mode_width);
 REXCVAR_DECLARE(int32_t, video_mode_height);
 REXCVAR_DECLARE(double, video_mode_refresh_rate);

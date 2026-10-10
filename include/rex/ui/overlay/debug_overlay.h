@@ -44,4 +44,4 @@ class DebugOverlayDialog : public ImGuiDialog {
 #endif
 };
 
-}  // namespace rex::ui
+}

@@ -17,24 +17,17 @@
 namespace rex {
 namespace ui {
 
-// Represents a surface that presenting can be performed to.
-// Surface methods can be called only from the UI thread.
-
 class Surface {
  public:
   enum TypeIndex {
-    // Within one platform, the more preferable surface types are earlier in
-    // this enumeration, so rex::bit_scan_forward can be used to try creating
-    // surfaces of all types supported by both the graphics provider and the
-    // window.
-    // Android.
+
     kTypeIndex_AndroidNativeWindow,
-    // GNU/Linux. Wayland first: xcb is only reachable through XWayland there.
+
     kTypeIndex_WaylandSurface,
     kTypeIndex_XcbWindow,
-    // Windows.
+
     kTypeIndex_Win32Hwnd,
-    // macOS — CAMetalLayer presented via MoltenVK (VK_EXT_metal_surface).
+
     kTypeIndex_CAMetalLayer,
   };
   using TypeFlags = uint32_t;
@@ -52,16 +45,7 @@ class Surface {
 
   virtual TypeIndex GetType() const = 0;
 
-  // Returns the up-to-date size (and true), or zeros (and false) if not ready
-  // to open a presentation connection yet. The size preferably should be
-  // exactly the dimensions of the surface in physical pixels of the display
-  // (without stretching performed by the platform's composition), but even if
-  // stretching happens, it is required that surface pixels have 1:1 aspect
-  // ratio relatively to the physical display.
   bool GetSize(uint32_t& width_out, uint32_t& height_out) {
-    // If any dimension is 0 (like, resized completely to zero in one direction,
-    // but not in another), the surface is zero-area - don't try to present to
-    // it.
     uint32_t width, height;
     if (!GetSizeImpl(width, height) || !width || !height) {
       width_out = 0;
@@ -76,10 +60,8 @@ class Surface {
  protected:
   Surface() = default;
 
-  // Returns the up-to-date size in physical pixels (and true), or zeros (and
-  // optionally false) if not ready to open a presentation connection yet.
   virtual bool GetSizeImpl(uint32_t& width_out, uint32_t& height_out) const = 0;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}

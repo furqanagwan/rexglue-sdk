@@ -133,7 +133,6 @@ bool D3D12Provider::EnableIncreaseBasePriorityPrivilege() {
 }
 
 bool D3D12Provider::Initialize() {
-  // PIX's capturer must be in the process before D3D12.dll is.
   if (REXCVAR_GET(pix_gpu_capturer)) {
     wchar_t program_files[MAX_PATH] = {};
     GetEnvironmentVariableW(L"ProgramFiles", program_files, MAX_PATH);
@@ -153,7 +152,6 @@ bool D3D12Provider::Initialize() {
     }
   }
 
-  // Load the core libraries.
   library_dxgi_ = LoadLibraryW(L"dxgi.dll");
   library_d3d12_ = LoadLibraryW(L"D3D12.dll");
   if (!library_dxgi_ || !library_d3d12_) {
@@ -177,7 +175,6 @@ bool D3D12Provider::Initialize() {
     return false;
   }
 
-  // Load optional D3DCompiler_47.dll.
   pfn_d3d_disassemble_ = nullptr;
   library_d3dcompiler_ = LoadLibraryW(L"D3DCompiler_47.dll");
   if (library_d3dcompiler_) {
@@ -193,7 +190,6 @@ bool D3D12Provider::Initialize() {
         "will be unavailable");
   }
 
-  // Load optional dxilconv.dll.
   pfn_dxilconv_dxc_create_instance_ = nullptr;
   library_dxilconv_ = LoadLibraryW(L"dxilconv.dll");
   if (library_dxilconv_) {
@@ -210,7 +206,6 @@ bool D3D12Provider::Initialize() {
         "will be unavailable - DXIL may be unsupported by your OS version");
   }
 
-  // Load optional dxcompiler.dll.
   pfn_dxcompiler_dxc_create_instance_ = nullptr;
   library_dxcompiler_ = LoadLibraryW(L"dxcompiler.dll");
   if (library_dxcompiler_) {
@@ -230,7 +225,6 @@ bool D3D12Provider::Initialize() {
         "the DLL in the Xenia directory");
   }
 
-  // Configure the DXGI debug info queue.
   if (REXCVAR_GET(d3d12_break_on_error) || REXCVAR_GET(d3d12_break_on_warning)) {
     IDXGIInfoQueue* dxgi_info_queue;
     if (SUCCEEDED(pfn_dxgi_get_debug_interface1_(0, IID_PPV_ARGS(&dxgi_info_queue)))) {
@@ -248,7 +242,6 @@ bool D3D12Provider::Initialize() {
     }
   }
 
-  // Enable the debug layer.
   bool debug = REXCVAR_GET(d3d12_debug);
   if (debug) {
     ID3D12Debug* debug_interface;
@@ -261,9 +254,6 @@ bool D3D12Provider::Initialize() {
     }
   }
 
-  // Enable DRED (Device Removed Extended Data) for diagnosing GPU crashes. It
-  // doesn't need the debug layer, so it can be enabled on its own for runs that
-  // shouldn't pay the debug layer's cost.
   dred_enabled_ = false;
   if (debug || REXCVAR_GET(d3d12_dred)) {
     Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred_settings;
@@ -278,7 +268,6 @@ bool D3D12Provider::Initialize() {
     }
   }
 
-  // Create the DXGI factory.
   IDXGIFactory2* dxgi_factory;
   if (FAILED(pfn_create_dxgi_factory2_(debug ? DXGI_CREATE_FACTORY_DEBUG : 0,
                                        IID_PPV_ARGS(&dxgi_factory)))) {
@@ -286,7 +275,6 @@ bool D3D12Provider::Initialize() {
     return false;
   }
 
-  // Choose the adapter.
   uint32_t adapter_index = 0;
   IDXGIAdapter1* adapter = nullptr;
   bool adapter_is_software = false;
@@ -347,8 +335,7 @@ bool D3D12Provider::Initialize() {
                   adapter_desc.VendorId, adapter_desc.DeviceId);
     }
   }
-  // Record enough to reproduce a GPU result: the exact adapter and user-mode
-  // driver, not only the vendor.
+
   LARGE_INTEGER umd_version;
   std::string driver_version = "unknown";
   if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd_version))) {
@@ -364,7 +351,6 @@ bool D3D12Provider::Initialize() {
   driver_version_ = driver_version;
   adapter_is_software_ = adapter_is_software;
 
-  // Create the Direct3D 12 device.
   ID3D12Device* device;
   if (FAILED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)))) {
     REXLOG_ERROR("Failed to create a Direct3D 12 feature level 11_0 device");
@@ -374,27 +360,21 @@ bool D3D12Provider::Initialize() {
   }
   adapter->Release();
 
-  // Configure the Direct3D 12 debug info queue.
   ID3D12InfoQueue* d3d12_info_queue;
   if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&d3d12_info_queue)))) {
     D3D12_MESSAGE_SEVERITY d3d12_info_queue_denied_severities[] = {
         D3D12_MESSAGE_SEVERITY_INFO,
     };
     D3D12_MESSAGE_ID d3d12_info_queue_denied_messages[] = {
-        // Xbox 360 vertex fetch is explicit in shaders.
+
         D3D12_MESSAGE_ID_CREATEINPUTLAYOUT_EMPTY_LAYOUT,
-        // Bug in the debug layer (fixed in some version of Windows) - gaps in
-        // render target bindings must be represented with a fully typed RTV
-        // descriptor and DXGI_FORMAT_UNKNOWN in the pipeline state, but older
-        // debug layer versions give a format mismatch error in this case.
+
         D3D12_MESSAGE_ID_RENDER_TARGET_FORMAT_MISMATCH_PIPELINE_STATE,
-        // Render targets and shader exports don't have to match on the Xbox
-        // 360.
+
         D3D12_MESSAGE_ID_CREATEGRAPHICSPIPELINESTATE_RENDERTARGETVIEW_NOT_SET,
-        // Arbitrary scissor can be specified by the guest, also it can be
-        // explicitly used to disable drawing.
+
         D3D12_MESSAGE_ID_DRAW_EMPTY_SCISSOR_RECTANGLE,
-        // Arbitrary clear values can be specified by the guest.
+
         D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
         D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,
     };
@@ -415,7 +395,6 @@ bool D3D12Provider::Initialize() {
     d3d12_info_queue->Release();
   }
 
-  // Create the command queue for graphics.
   D3D12_COMMAND_QUEUE_DESC queue_desc;
   queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
   if (REXCVAR_GET(d3d12_queue_priority) >= 2) {
@@ -458,14 +437,10 @@ bool D3D12Provider::Initialize() {
   device_ = device;
   direct_queue_ = direct_queue;
 
-  // Get descriptor sizes for each type.
   for (uint32_t i = 0; i < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++i) {
     descriptor_sizes_[i] = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE(i));
   }
 
-  // Check if optional features are supported.
-  // D3D12_HEAP_FLAG_CREATE_NOT_ZEROED requires Windows 10 2004 (indicated by
-  // the availability of ID3D12Device8 or D3D12_FEATURE_D3D12_OPTIONS7).
   heap_flag_create_not_zeroed_ = D3D12_HEAP_FLAG_NONE;
   D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7;
   if (SUCCEEDED(
@@ -507,8 +482,7 @@ bool D3D12Provider::Initialize() {
                                          sizeof(feature_levels)))) {
     feature_levels.MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0;
   }
-  // The runtime rejects a shader model newer than it knows with E_INVALIDARG,
-  // so step down until the query succeeds.
+
   D3D12_FEATURE_DATA_SHADER_MODEL shader_model = {D3D_SHADER_MODEL_5_1};
   for (uint32_t candidate = uint32_t(D3D_HIGHEST_SHADER_MODEL);
        candidate >= uint32_t(D3D_SHADER_MODEL_6_0); --candidate) {
@@ -553,8 +527,6 @@ bool D3D12Provider::Initialize() {
       rasterizer_ordered_views_supported_ ? "yes" : "no", uint32_t(resource_binding_tier_),
       uint32_t(tiled_resources_tier_), unaligned_block_textures_supported_ ? "yes" : "no");
 
-  // Get the graphics analysis interface, will silently fail if PIX is not
-  // attached.
   pfn_dxgi_get_debug_interface1_(0, IID_PPV_ARGS(&graphics_analysis_));
 
   return true;
@@ -569,4 +541,4 @@ std::unique_ptr<ImmediateDrawer> D3D12Provider::CreateImmediateDrawer() {
   return D3D12ImmediateDrawer::Create(*this);
 }
 
-}  // namespace rex::ui::d3d12
+}

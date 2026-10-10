@@ -43,5 +43,5 @@ class Win32HwndSurface final : public Surface {
 };
 #endif
 
-}  // namespace ui
-}  // namespace rex
+}
+}

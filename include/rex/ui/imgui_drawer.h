@@ -42,18 +42,14 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   ImGuiIO& GetIO();
   float PixelsPerPoint() const;
 
-  // Per-overlay styling, patched by the consumer in OnConfigureStyle.
   Style& style() { return style_; }
   const Style& style() const { return style_; }
 
   void AddDialog(ImGuiDialog* dialog);
   void RemoveDialog(ImGuiDialog* dialog);
 
-  // Whether Draw would render anything, so a caller that has to marshal to the
-  // UI thread can skip the round trip entirely.
   bool HasDialogs() const { return !dialogs_.empty(); }
 
-  // SetPresenter may be called from the destructor.
   void SetPresenter(Presenter* new_presenter);
   void SetImmediateDrawer(ImmediateDrawer* new_immediate_drawer);
   void SetPresenterAndImmediateDrawer(Presenter* new_presenter,
@@ -73,7 +69,6 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   void OnMouseUp(MouseEvent& e) override;
   void OnMouseWheel(MouseEvent& e) override;
   void OnTouchEvent(TouchEvent& e) override;
-  // For now, no need for OnDpiChanged because redrawing is done continuously.
 
  private:
   void Initialize();
@@ -100,45 +95,31 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   ImGuiContext* internal_state_ = nullptr;
 
-  // All currently-attached dialogs that get drawn.
   std::vector<ImGuiDialog*> dialogs_;
-  // Using an index, not an iterator, because after the erasure, the adjustment
-  // must be done for the vector element indices that would be in the iterator
-  // range that would be invalidated.
-  // SIZE_MAX if not currently in the dialog loop.
+
   size_t dialog_loop_next_index_ = SIZE_MAX;
 
   Presenter* presenter_ = nullptr;
 
   ImmediateDrawer* immediate_drawer_ = nullptr;
-  // Resources specific to an immediate drawer - must be destroyed before
-  // detaching the presenter.
+
   std::unique_ptr<ImmediateTexture> font_texture_;
 
-  // If there's an active pointer, the ImGui mouse is controlled by this touch.
-  // If it's TouchEvent::kPointerIDNone, the ImGui mouse is controlled by the
-  // mouse.
   uint32_t touch_pointer_id_ = TouchEvent::kPointerIDNone;
-  // Whether after the next frame (since the mouse up event needs to be handled
-  // with the correct mouse position still), the ImGui mouse position should be
-  // reset (for instance, after releasing a touch), so it's not hovering over
-  // anything.
+
   bool reset_mouse_position_after_next_frame_ = false;
 
   double frame_time_tick_frequency_;
   uint64_t last_frame_time_ticks_;
 
-  // ImGui's IME hook, called from EndFrame with the frame being ended.
-  // ImGuiIO::WantTextInput would be a frame behind.
   static void PlatformSetImeData(ImGuiContext* context, ImGuiViewport* viewport,
                                  ImGuiPlatformImeData* data);
   void SetWindowTextInputActive(bool active);
 
-  // Last value handed to the window, so detaching can clear it without a frame.
   bool text_input_active_ = false;
 };
 
-}  // namespace ui
-}  // namespace rex
+}
+}
 
-#endif  // REX_UI_IMGUI_DRAWER_H_
+#endif

@@ -116,4 +116,4 @@ std::unique_ptr<ImmediateTexture> AchievementIconCache::LoadXdbfTexture(uint32_t
   return CreateTextureFromBytes(block.buffer, block.size);
 }
 
-}  // namespace rex::ui
+}

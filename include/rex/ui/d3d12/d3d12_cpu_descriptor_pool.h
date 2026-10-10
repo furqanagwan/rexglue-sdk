@@ -21,19 +21,15 @@
 
 namespace rex::ui::d3d12 {
 
-// Single-descriptor pool with reference counting and unique ownership of
-// allocations, safe to use in environments where the order of releasing of the
-// descriptor heap and of allocated descriptors is undefined.
 class D3D12CpuDescriptorPool : public std::enable_shared_from_this<D3D12CpuDescriptorPool> {
  public:
   class Descriptor {
    public:
     Descriptor() = default;
-    // shared_ptr to ensure correct release order with between render targets
-    // and descriptor pools.
+
     Descriptor(std::shared_ptr<D3D12CpuDescriptorPool> pool, size_t index)
         : pool_(pool), index_(index) {}
-    // Owns a descriptor in the pool exclusively.
+
     Descriptor(const Descriptor& descriptor) = delete;
     Descriptor& operator=(const Descriptor& descriptor) = delete;
     Descriptor(Descriptor&& descriptor) {
@@ -42,7 +38,6 @@ class D3D12CpuDescriptorPool : public std::enable_shared_from_this<D3D12CpuDescr
     }
     Descriptor& operator=(Descriptor&& descriptor) {
       if (IsValid() && pool_ == descriptor.pool_ && index_ == descriptor.index_) {
-        // If moving to self, don't free.
         return *this;
       }
       Free();
@@ -77,7 +72,7 @@ class D3D12CpuDescriptorPool : public std::enable_shared_from_this<D3D12CpuDescr
   }
   D3D12CpuDescriptorPool(const D3D12CpuDescriptorPool& pool) = delete;
   D3D12CpuDescriptorPool& operator=(const D3D12CpuDescriptorPool& pool) = delete;
-  // No point in moving, created only via make_shared.
+
   D3D12CpuDescriptorPool(D3D12CpuDescriptorPool&& pool) = delete;
   D3D12CpuDescriptorPool& operator=(D3D12CpuDescriptorPool&& pool) = delete;
   ~D3D12CpuDescriptorPool() {
@@ -106,4 +101,4 @@ class D3D12CpuDescriptorPool : public std::enable_shared_from_this<D3D12CpuDescr
   uint32_t last_heap_allocated_ = 0;
 };
 
-}  // namespace rex::ui::d3d12
+}

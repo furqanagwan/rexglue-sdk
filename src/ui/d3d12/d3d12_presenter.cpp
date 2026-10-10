@@ -35,7 +35,6 @@ REXCVAR_DEFINE_BOOL(d3d12_allow_variable_refresh_rate_and_tearing, true, "UI/D3D
 
 namespace rex::ui::d3d12 {
 
-// Generated with `xb buildshaders`.
 namespace shaders {
 #include "ui/shaders/bytecode/d3d12_5_1/guest_output_bilinear_dither_ps.h"
 #include "ui/shaders/bytecode/d3d12_5_1/guest_output_bilinear_ps.h"
@@ -49,12 +48,9 @@ namespace shaders {
 #include "ui/shaders/bytecode/d3d12_5_1/guest_output_ffx_fsr_rcas_ps.h"
 #endif
 #include "ui/shaders/bytecode/d3d12_5_1/guest_output_triangle_strip_rect_vs.h"
-}  // namespace shaders
+}
 
 D3D12Presenter::~D3D12Presenter() {
-  // Await completion of the usage of everything before destroying anything.
-  // From most likely the latest to most likely the earliest to be signaled, so
-  // just one sleep will likely be needed.
   paint_context_.AwaitSwapChainUsageCompletion();
   guest_output_resource_refresher_submission_tracker_.Shutdown();
   ui_submission_tracker_.Shutdown();
@@ -174,8 +170,7 @@ bool D3D12Presenter::DispatchTemporalUpscaler(ID3D12GraphicsCommandList* command
   dispatch_desc.upscaleSize.height = output_height;
   dispatch_desc.enableSharpening = true;
   dispatch_desc.sharpness = std::clamp(1.0f - config.GetFsrSharpnessReduction() * 0.5f, 0.0f, 1.0f);
-  // The presenter path doesn't currently provide accurate temporal inputs,
-  // so run in reset mode each frame to avoid history artifacts.
+
   dispatch_desc.reset = true;
   dispatch_desc.frameTimeDelta = 16.666f;
   dispatch_desc.preExposure = 1.0f;
@@ -211,8 +206,6 @@ bool D3D12Presenter::CaptureGuestOutput(RawImage& image_out) {
     if (guest_output_mailbox_index != UINT32_MAX) {
       guest_output_resource = guest_output_resources_[guest_output_mailbox_index].second;
     }
-    // Incremented the reference count of the guest output resource - safe to
-    // leave the consumer critical section now.
   }
   if (!guest_output_resource) {
     return false;
@@ -229,7 +222,7 @@ bool D3D12Presenter::CaptureGuestOutput(RawImage& image_out) {
   D3D12_RESOURCE_DESC buffer_desc;
   util::FillBufferResourceDesc(buffer_desc, copy_dest_size, D3D12_RESOURCE_FLAG_NONE);
   Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
-  // Create zeroed not to leak data in the row padding.
+
   if (FAILED(device->CreateCommittedResource(&util::kHeapPropertiesReadback, D3D12_HEAP_FLAG_NONE,
                                              &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                              IID_PPV_ARGS(&buffer)))) {
@@ -285,11 +278,6 @@ bool D3D12Presenter::CaptureGuestOutput(RawImage& image_out) {
 
     ID3D12CommandQueue* direct_queue = provider_.GetDirectQueue();
 
-    // Make sure that if any work is submitted, any `return` will cause an await
-    // before releasing the command allocator / list and the resource the RAII
-    // way in the destruction of the submission tracker - so create after the
-    // objects referenced in the submission - but don't submit anything if
-    // failed to initialize the fence.
     D3D12SubmissionTracker submission_tracker;
     if (!submission_tracker.Initialize(device, direct_queue)) {
       return false;
@@ -328,8 +316,7 @@ bool D3D12Presenter::CaptureGuestOutput(RawImage& image_out) {
       dest_row[x] = Packed10bpcRGBTo8bpcBytes(source_row[x]);
     }
   }
-  // Unmapping will be done implicitly when the resource goes out of scope and
-  // gets destroyed.
+
   return true;
 }
 
@@ -344,9 +331,6 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
   uint32_t new_swap_chain_height =
       std::min(new_surface_height, uint32_t(D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION));
 
-  // ConnectOrReconnectPaintingToSurfaceFromUIThread may be called only for the
-  // surface of the current swap chain or when the old swap chain has already
-  // been destroyed, if the surface is the same, try resizing.
   if (paint_context_.swap_chain) {
     if (was_paintable && paint_context_.swap_chain_width == new_swap_chain_width &&
         paint_context_.swap_chain_height == new_swap_chain_height) {
@@ -354,9 +338,7 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
       return SurfacePaintConnectResult::kSuccessUnchanged;
     }
     paint_context_.AwaitSwapChainUsageCompletion();
-    // Using the current swap_chain_allows_tearing_ value that's consistent with
-    // the creation of the swap chain because ResizeBuffers can't toggle the
-    // tearing flag.
+
     for (Microsoft::WRL::ComPtr<ID3D12Resource>& swap_chain_buffer_ref :
          paint_context_.swap_chain_buffers) {
       swap_chain_buffer_ref.Reset();
@@ -379,13 +361,12 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
     }
     if (!swap_chain_resized) {
       REXLOG_ERROR("D3D12Presenter: Failed to resize a swap chain");
-      // Failed to resize, retry creating from scratch.
+
       paint_context_.DestroySwapChain();
     }
   }
 
   if (!paint_context_.swap_chain) {
-    // Create a new swap chain.
     Surface::TypeIndex surface_type = new_surface.GetType();
     DXGI_SWAP_CHAIN_DESC1 swap_chain_desc;
     swap_chain_desc.Width = UINT(new_swap_chain_width);
@@ -396,11 +377,7 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
     swap_chain_desc.SampleDesc.Quality = 0;
     swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swap_chain_desc.BufferCount = UINT(PaintContext::kSwapChainBufferCount);
-    // DXGI_SCALING_STRETCH may cause the content to "shake" while resizing,
-    // with relayout done for the guest output twice visually rather than once,
-    // and the UI becoming stretched and then jumping to normal. If it's
-    // possible to cover the entire surface without stretching, don't stretch.
-    // After resizing, the presenter repaints as soon as possible anyway, so
+
     swap_chain_desc.Scaling =
         (new_swap_chain_width == new_surface_width && new_swap_chain_height == new_surface_height)
             ? DXGI_SCALING_NONE
@@ -409,8 +386,6 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
     swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swap_chain_desc.Flags = 0;
     if (REXCVAR_GET(d3d12_allow_variable_refresh_rate_and_tearing) && dxgi_supports_tearing_) {
-      // Allow tearing in borderless fullscreen to support variable refresh
-      // rate.
       swap_chain_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
     IDXGIFactory2* dxgi_factory = provider_.GetDXGIFactory();
@@ -425,9 +400,7 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
           REXLOG_ERROR("D3D12Presenter: Failed to create a swap chain for the HWND");
           return SurfacePaintConnectResult::kFailure;
         }
-        // Disable automatic Alt+Enter handling - DXGI fullscreen doesn't
-        // support ALLOW_TEARING, and the window implementation provides
-        // borderless fullscreen anyway with better state tracking.
+
         dxgi_factory->MakeWindowAssociation(surface_hwnd, DXGI_MWA_NO_ALT_ENTER);
       } break;
 #endif
@@ -444,8 +417,7 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
           "interface");
       return SurfacePaintConnectResult::kFailure;
     }
-    // From now on, in case of any failure, DestroySwapChain must be called
-    // before returning.
+
     paint_context_.swap_chain_width = new_swap_chain_width;
     paint_context_.swap_chain_height = new_swap_chain_height;
     paint_context_.swap_chain_allows_tearing =
@@ -463,7 +435,6 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
 
   ID3D12Device* device = provider_.GetDevice();
 
-  // Create the RTV descriptors.
   D3D12_CPU_DESCRIPTOR_HANDLE rtv_heap_start =
       paint_context_.rtv_heap->GetCPUDescriptorHandleForHeapStart();
   D3D12_RENDER_TARGET_VIEW_DESC rtv_desc;
@@ -498,8 +469,6 @@ bool D3D12Presenter::RefreshGuestOutputImpl(
         guest_output_resource_ref.second->GetDesc();
     if (guest_output_resource_current_desc.Width != frontbuffer_width ||
         guest_output_resource_current_desc.Height != frontbuffer_height) {
-      // Main target painting has its own reference to the textures for reading
-      // in its own submission tracker timeline, safe to release here.
       guest_output_resource_refresher_submission_tracker_.AwaitSubmissionCompletion(
           guest_output_resource_ref.first);
       guest_output_resource_ref.second.Reset();
@@ -530,10 +499,7 @@ bool D3D12Presenter::RefreshGuestOutputImpl(
   }
   D3D12GuestOutputRefreshContext context(is_8bpc_out_ref, guest_output_resource_ref.second.Get());
   bool refresher_succeeded = refresher(context);
-  // Even if the refresher has returned false, it still might have submitted
-  // some commands referencing the resource. It's better to put an excessive
-  // signal and wait slightly longer, for nothing important, while shutting down
-  // than to destroy the resource while it's still in use.
+
   guest_output_resource_ref.first =
       guest_output_resource_refresher_submission_tracker_.GetCurrentSubmission();
   guest_output_resource_refresher_submission_tracker_.NextSubmission();
@@ -555,8 +521,6 @@ void D3D12Presenter::PaintContext::DestroySwapChain() {
 }
 
 Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawers) {
-  // Begin the command list with the command allocator not currently potentially
-  // used on the GPU.
   UINT64 current_paint_submission = paint_context_.paint_submission_tracker.GetCurrentSubmission();
   UINT64 command_allocator_count = UINT64(paint_context_.command_allocators.size());
   if (current_paint_submission >= command_allocator_count) {
@@ -571,7 +535,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
 
   ID3D12Device* device = provider_.GetDevice();
 
-  // Obtain the RTV heap and the back buffer.
   D3D12_CPU_DESCRIPTOR_HANDLE rtv_heap_start =
       paint_context_.rtv_heap->GetCPUDescriptorHandleForHeapStart();
   UINT back_buffer_index = paint_context_.swap_chain->GetCurrentBackBufferIndex();
@@ -583,8 +546,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
   bool back_buffer_clear_needed = true;
   const float kBackBufferClearColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
 
-  // Draw the guest output.
-
   GuestOutputProperties guest_output_properties;
   GuestOutputPaintConfig guest_output_paint_config;
   Microsoft::WRL::ComPtr<ID3D12Resource> guest_output_resource;
@@ -595,10 +556,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     if (guest_output_mailbox_index != UINT32_MAX) {
       guest_output_resource = guest_output_resources_[guest_output_mailbox_index].second;
     }
-    // Incremented the reference count of the guest output resource - safe to
-    // leave the consumer critical section now as everything here either will be
-    // using the new reference or is exclusively owned by main target painting
-    // (and multiple threads can't paint the main target at the same time).
   }
 
   if (guest_output_resource) {
@@ -607,8 +564,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
         D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION, D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
         guest_output_paint_config);
 
-    // Check if all guest output paint effects are supported by the
-    // implementation.
     if (guest_output_flow.effect_count) {
       if (!guest_output_paint_final_pipelines_[size_t(
               guest_output_flow.effects[guest_output_flow.effect_count - 1])]) {
@@ -627,13 +582,9 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
       D3D12_CPU_DESCRIPTOR_HANDLE view_heap_cpu_start =
           view_heap->GetCPUDescriptorHandleForHeapStart();
 
-      // Store the main target reference to the guest output texture so it's not
-      // destroyed while it's still potentially in use by main target painting
-      // queued on the GPU.
       size_t guest_output_resource_paint_ref_index = SIZE_MAX;
       size_t guest_output_resource_paint_ref_new_index = SIZE_MAX;
-      // Try to find the existing reference to the same texture, or an already
-      // released (or a taken, but never actually used) slot.
+
       for (size_t i = 0; i < paint_context_.guest_output_resource_paint_refs.size(); ++i) {
         const std::pair<UINT64, Microsoft::WRL::ComPtr<ID3D12Resource>>&
             guest_output_resource_paint_ref = paint_context_.guest_output_resource_paint_refs[i];
@@ -647,9 +598,7 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
         }
       }
       if (guest_output_resource_paint_ref_index == SIZE_MAX) {
-        // New texture - store the reference and create the descriptors.
         if (guest_output_resource_paint_ref_new_index == SIZE_MAX) {
-          // Replace the earliest used reference.
           guest_output_resource_paint_ref_new_index = 0;
           for (size_t i = 1; i < paint_context_.guest_output_resource_paint_refs.size(); ++i) {
             if (paint_context_.guest_output_resource_paint_refs[i].first <
@@ -659,19 +608,17 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
               guest_output_resource_paint_ref_new_index = i;
             }
           }
-          // Await the completion of the usage of the old guest output
-          // resource and its SRV descriptors.
+
           paint_context_.paint_submission_tracker.AwaitSubmissionCompletion(
               paint_context_
                   .guest_output_resource_paint_refs[guest_output_resource_paint_ref_new_index]
                   .first);
         }
         guest_output_resource_paint_ref_index = guest_output_resource_paint_ref_new_index;
-        // The actual submission index will be set if the texture is actually
-        // used, not dropped due to some error.
+
         paint_context_.guest_output_resource_paint_refs[guest_output_resource_paint_ref_index] =
             std::make_pair(UINT64(0), guest_output_resource);
-        // Create the SRV descriptor of the new texture.
+
         D3D12_SHADER_RESOURCE_VIEW_DESC guest_output_resource_srv_desc;
         guest_output_resource_srv_desc.Format = kGuestOutputFormat;
         guest_output_resource_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -688,8 +635,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
                                                uint32_t(guest_output_resource_paint_ref_index)));
       }
 
-      // Make sure intermediate textures of the needed size are available, and
-      // unneeded intermediate textures are destroyed.
       for (size_t i = 0; i < kMaxGuestOutputPaintEffects - 1; ++i) {
         std::pair<uint32_t, uint32_t> intermediate_needed_size(0, 0);
         if (i + 1 < guest_output_flow.effect_count) {
@@ -705,14 +650,12 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
         }
         if (intermediate_current_size != intermediate_needed_size) {
           if (intermediate_needed_size.first && intermediate_needed_size.second) {
-            // Need to replace immediately as a new texture with the requested
-            // size is needed.
             if (intermediate_texture_ptr_ref) {
               paint_context_.paint_submission_tracker.AwaitSubmissionCompletion(
                   paint_context_.guest_output_intermediate_texture_last_usage);
               intermediate_texture_ptr_ref.Reset();
             }
-            // Resource.
+
             D3D12_RESOURCE_DESC intermediate_desc;
             intermediate_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
             intermediate_desc.Alignment = 0;
@@ -733,13 +676,12 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
               REXLOG_ERROR(
                   "D3D12Presenter: Failed to create a guest output "
                   "presentation intermediate texture");
-              // Don't display the guest output, and don't try to create more
-              // intermediate textures (only destroy them).
+
               guest_output_flow.effect_count = 0;
               continue;
             }
             ID3D12Resource* intermediate_texture = intermediate_texture_ptr_ref.Get();
-            // SRV.
+
             D3D12_SHADER_RESOURCE_VIEW_DESC intermediate_srv_desc;
             intermediate_srv_desc.Format = kGuestOutputIntermediateFormat;
             intermediate_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -754,7 +696,7 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
                 provider_.OffsetViewDescriptor(
                     view_heap_cpu_start,
                     uint32_t(PaintContext::kViewIndexGuestOutputIntermediate0Srv + i)));
-            // RTV.
+
             D3D12_RENDER_TARGET_VIEW_DESC intermediate_rtv_desc;
             intermediate_rtv_desc.Format = kGuestOutputIntermediateFormat;
             intermediate_rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
@@ -765,7 +707,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
                 provider_.OffsetRTVDescriptor(
                     rtv_heap_start, uint32_t(PaintContext::kRTVIndexGuestOutputIntermediate0 + i)));
           } else {
-            // Was previously needed, but not anymore - destroy when possible.
             if (intermediate_texture_ptr_ref &&
                 paint_context_.paint_submission_tracker.GetCompletedSubmission() >=
                     paint_context_.guest_output_intermediate_texture_last_usage) {
@@ -785,8 +726,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
         command_list->SetDescriptorHeaps(1, &view_heap);
       }
 
-      // This effect loop must not be aborted so the states of the resources
-      // involved are consistent.
       D3D12_GPU_DESCRIPTOR_HANDLE view_heap_gpu_start =
           view_heap->GetGPUDescriptorHandleForHeapStart();
       bool temporal_effect_selected = false;
@@ -836,8 +775,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
         } else {
           effect_dest_resource = paint_context_.guest_output_intermediate_textures[i].Get();
           if (!i) {
-            // If this is not the first effect, the transition has been done at
-            // the end of the previous effect in a single command.
             D3D12_RESOURCE_BARRIER barrier_srv_to_write;
             barrier_srv_to_write.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
             barrier_srv_to_write.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -935,7 +872,7 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
           float effect_x_to_ndc = 2.0f / viewport.Width;
           float effect_y_to_ndc = 2.0f / viewport.Height;
           effect_rect_constants.x = -1.0f + float(effect_rect_x) * effect_x_to_ndc;
-          // +Y is -V.
+
           effect_rect_constants.y = 1.0f - float(effect_rect_y) * effect_y_to_ndc;
           effect_rect_constants.width =
               float(guest_output_flow.effect_output_sizes[i].first) * effect_x_to_ndc;
@@ -996,8 +933,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
 
         if (is_final_effect) {
           if (drew_graphics_effect) {
-            // Clear the letterbox around the guest output if the guest output
-            // doesn't cover the entire back buffer.
             if (guest_output_flow.letterbox_clear_rectangle_count) {
               D3D12_RECT
               letterbox_clear_d3d12_rectangles[GuestOutputPaintFlow::kMaxClearRectangles];
@@ -1025,8 +960,7 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
           D3D12_RESOURCE_STATES effect_write_state = drew_graphics_effect
                                                          ? D3D12_RESOURCE_STATE_RENDER_TARGET
                                                          : D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-          // Transition the newly written intermediate image to SRV for use as
-          // the source in the next effect.
+
           {
             assert_true(barrier_count < rex::countof(barriers));
             D3D12_RESOURCE_BARRIER& barrier_write_to_srv = barriers[barrier_count++];
@@ -1037,11 +971,8 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
             barrier_write_to_srv.Transition.StateBefore = effect_write_state;
             barrier_write_to_srv.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
           }
-          // Merge the current destination > next source transition with the
-          // acquisition of the destination for the next effect.
+
           if (i + 2 < guest_output_flow.effect_count) {
-            // The next effect won't be the last - transition the next
-            // intermediate destination to its write state.
             D3D12_RESOURCE_STATES next_write_state = is_temporal_easu_effect(i + 1)
                                                          ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS
                                                          : D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -1056,8 +987,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
             barrier_srv_to_write.Transition.StateAfter = next_write_state;
           } else {
-            // The next effect draws to the back buffer - merge into one
-            // ResourceBarrier command.
             if (!back_buffer_acquired) {
               assert_true(barrier_count < rex::countof(barriers));
               D3D12_RESOURCE_BARRIER& barrier_present_to_rtv = barriers[barrier_count++];
@@ -1079,10 +1008,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     }
   }
 
-  // Release main target guest output texture references that aren't needed
-  // anymore (this is done after various potential guest-output-related main
-  // target submission tracker waits so the completed submission value is the
-  // most actual).
   UINT64 completed_paint_submission =
       paint_context_.paint_submission_tracker.GetCompletedSubmission();
   for (std::pair<UINT64, Microsoft::WRL::ComPtr<ID3D12Resource>>& guest_output_resource_paint_ref :
@@ -1096,9 +1021,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     }
   }
 
-  // If no guest output has been drawn, the transitioned of the back buffer to
-  // RTV hasn't been done yet, and it's needed to clear it, and optionally to
-  // draw the UI.
   if (!back_buffer_acquired) {
     D3D12_RESOURCE_BARRIER barrier_present_to_rtv;
     barrier_present_to_rtv.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -1117,7 +1039,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
   }
 
   if (execute_ui_drawers) {
-    // Draw the UI.
     if (!back_buffer_bound) {
       command_list->OMSetRenderTargets(1, &back_buffer_rtv, TRUE, nullptr);
       back_buffer_bound = true;
@@ -1129,7 +1050,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     ExecuteUIDrawersFromUIThread(ui_draw_context);
   }
 
-  // End drawing to the back buffer.
   D3D12_RESOURCE_BARRIER barrier_rtv_to_present;
   barrier_rtv_to_present.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
   barrier_rtv_to_present.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -1139,7 +1059,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
   barrier_rtv_to_present.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
   command_list->ResourceBarrier(1, &barrier_rtv_to_present);
 
-  // Execute and present.
   command_list->Close();
   ID3D12CommandList* execute_command_list = command_list;
   provider_.GetDirectQueue()->ExecuteCommandLists(1, &execute_command_list);
@@ -1147,20 +1066,11 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     ui_submission_tracker_.NextSubmission();
   }
   paint_context_.paint_submission_tracker.NextSubmission();
-  // Present as soon as possible, without waiting for vsync (the host refresh
-  // rate may be something like 144 Hz, which is not a multiple of the common
-  // 30 Hz or 60 Hz guest refresh rate), and allowing dropping outdated queued
-  // frames for lower latency. Also, if possible, allowing tearing to use
-  // variable refresh rate in borderless fullscreen (note that if DXGI
-  // fullscreen is ever used in, the allow tearing flag must not be passed in
-  // fullscreen, but DXGI fullscreen is largely unneeded with the flip
-  // presentation model used in Direct3D 12).
+
   HRESULT present_result = paint_context_.swap_chain->Present(
       0, DXGI_PRESENT_RESTART |
              (paint_context_.swap_chain_allows_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0));
-  // Even if presentation has failed, work might have been enqueued anyway
-  // internally before the failure according to Jesse Natalie from the DirectX
-  // Discord server.
+
   paint_context_.present_submission_tracker.NextSubmission();
   switch (present_result) {
     case DXGI_ERROR_DEVICE_REMOVED:
@@ -1173,7 +1083,6 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
 }
 
 bool D3D12Presenter::InitializeSurfaceIndependent() {
-  // Check if DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING is supported.
   {
     Microsoft::WRL::ComPtr<IDXGIFactory5> dxgi_factory_5;
     if (SUCCEEDED(provider_.GetDXGIFactory()->QueryInterface(IID_PPV_ARGS(&dxgi_factory_5)))) {
@@ -1187,14 +1096,9 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
 
   ID3D12Device* device = provider_.GetDevice();
 
-  // Initialize static guest output painting objects.
-
-  // Guest output painting root signatures.
-  // One (texture) for bilinear, two (texture and constants) for AMD FidelityFX
-  // CAS and FSR.
   D3D12_ROOT_PARAMETER
   guest_output_paint_root_parameters[UINT(GuestOutputPaintRootParameter::kCount)];
-  // Source texture.
+
   D3D12_DESCRIPTOR_RANGE guest_output_paint_root_descriptor_range_source;
   guest_output_paint_root_descriptor_range_source.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
   guest_output_paint_root_descriptor_range_source.NumDescriptors = 1;
@@ -1211,7 +1115,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
         &guest_output_paint_root_descriptor_range_source;
     guest_output_paint_root_parameter_source.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
   }
-  // Rectangle.
+
   {
     D3D12_ROOT_PARAMETER& guest_output_paint_root_parameter_rect =
         guest_output_paint_root_parameters[UINT(GuestOutputPaintRootParameter::kRectangle)];
@@ -1223,7 +1127,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
         sizeof(GuestOutputPaintRectangleConstants) / sizeof(uint32_t);
     guest_output_paint_root_parameter_rect.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
   }
-  // Pixel shader constants.
+
   D3D12_ROOT_PARAMETER& guest_output_paint_root_parameter_effect_constants =
       guest_output_paint_root_parameters[UINT(GuestOutputPaintRootParameter::kEffectConstants)];
   guest_output_paint_root_parameter_effect_constants.ParameterType =
@@ -1232,7 +1136,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
   guest_output_paint_root_parameter_effect_constants.Constants.RegisterSpace = 0;
   guest_output_paint_root_parameter_effect_constants.ShaderVisibility =
       D3D12_SHADER_VISIBILITY_PIXEL;
-  // Bilinear sampler.
+
   D3D12_STATIC_SAMPLER_DESC guest_output_paint_root_sampler;
   guest_output_paint_root_sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
   guest_output_paint_root_sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -1254,7 +1158,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
   guest_output_paint_root_signature_desc.NumStaticSamplers = 1;
   guest_output_paint_root_signature_desc.pStaticSamplers = &guest_output_paint_root_sampler;
   guest_output_paint_root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-  // Bilinear filtering (needs the sampler).
+
   guest_output_paint_root_parameter_effect_constants.Constants.Num32BitValues =
       sizeof(BilinearConstants) / sizeof(uint32_t);
   {
@@ -1270,7 +1174,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
           .ReleaseAndGetAddressOf()) = guest_output_paint_root_signature;
   }
 #if defined(REX_HAS_FIDELITYFX_SDK)
-  // EASU (needs the sampler).
+
   guest_output_paint_root_parameter_effect_constants.Constants.Num32BitValues =
       sizeof(FsrEasuConstants) / sizeof(uint32_t);
   {
@@ -1285,9 +1189,9 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     *(guest_output_paint_root_signatures_[kGuestOutputPaintRootSignatureIndexFsrEasu]
           .ReleaseAndGetAddressOf()) = guest_output_paint_root_signature;
   }
-  // RCAS and CAS don't need the sampler.
+
   guest_output_paint_root_signature_desc.NumStaticSamplers = 0;
-  // RCAS.
+
   guest_output_paint_root_parameter_effect_constants.Constants.Num32BitValues =
       sizeof(FsrRcasConstants) / sizeof(uint32_t);
   {
@@ -1302,7 +1206,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     *(guest_output_paint_root_signatures_[kGuestOutputPaintRootSignatureIndexFsrRcas]
           .ReleaseAndGetAddressOf()) = guest_output_paint_root_signature;
   }
-  // CAS, sharpening only.
+
   guest_output_paint_root_parameter_effect_constants.Constants.Num32BitValues =
       sizeof(CasSharpenConstants) / sizeof(uint32_t);
   {
@@ -1317,7 +1221,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     *(guest_output_paint_root_signatures_[kGuestOutputPaintRootSignatureIndexCasSharpen]
           .ReleaseAndGetAddressOf()) = guest_output_paint_root_signature;
   }
-  // CAS, resampling.
+
   guest_output_paint_root_parameter_effect_constants.Constants.Num32BitValues =
       sizeof(CasResampleConstants) / sizeof(uint32_t);
   {
@@ -1332,9 +1236,8 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     *(guest_output_paint_root_signatures_[kGuestOutputPaintRootSignatureIndexCasResample]
           .ReleaseAndGetAddressOf()) = guest_output_paint_root_signature;
   }
-#endif  // defined(REX_HAS_FIDELITYFX_SDK)
+#endif
 
-  // Guest output painting pipelines.
   D3D12_GRAPHICS_PIPELINE_STATE_DESC guest_output_paint_pipeline_desc = {};
   guest_output_paint_pipeline_desc.VS.pShaderBytecode =
       shaders::guest_output_triangle_strip_rect_vs;
@@ -1406,7 +1309,7 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
         break;
 #endif
       default:
-        // Not supported by this implementation.
+
         continue;
     }
     guest_output_paint_pipeline_desc.pRootSignature =
@@ -1439,17 +1342,13 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     }
   }
 
-  // Initialize connection-independent parts of the painting context.
-
   ID3D12CommandQueue* direct_queue = provider_.GetDirectQueue();
 
-  // Paint submission trackers.
   if (!paint_context_.paint_submission_tracker.Initialize(device, direct_queue) ||
       !paint_context_.present_submission_tracker.Initialize(device, direct_queue)) {
     return false;
   }
 
-  // Paint command allocators and command list.
   for (Microsoft::WRL::ComPtr<ID3D12CommandAllocator>& paint_command_allocator_ref :
        paint_context_.command_allocators) {
     if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -1468,10 +1367,9 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
         "swap chain");
     return false;
   }
-  // Command lists are created in an open state.
+
   paint_context_.command_list->Close();
 
-  // RTV descriptor heap.
   D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc;
   rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
   rtv_heap_desc.NumDescriptors = PaintContext::kRTVCount;
@@ -1486,7 +1384,6 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
     return false;
   }
 
-  // CBV/SRV/UAV descriptor heap.
   D3D12_DESCRIPTOR_HEAP_DESC view_heap_desc;
   view_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
   view_heap_desc.NumDescriptors = PaintContext::kViewCount;
@@ -1512,4 +1409,4 @@ bool D3D12Presenter::InitializeSurfaceIndependent() {
   return InitializeCommonSurfaceIndependent();
 }
 
-}  // namespace rex::ui::d3d12
+}

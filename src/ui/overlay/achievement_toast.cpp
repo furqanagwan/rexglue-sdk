@@ -71,7 +71,7 @@ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                            ImGuiWindowFlags_NoInputs;
-  // Colors carry the fade envelope; the style holds them at full opacity.
+
   auto faded = [alpha](ImVec4 c) { return ImVec4(c.x, c.y, c.z, c.w * alpha); };
 
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, s.rounding);
@@ -97,4 +97,4 @@ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
   ImGui::PopStyleVar();
 }
 
-}  // namespace rex::ui
+}

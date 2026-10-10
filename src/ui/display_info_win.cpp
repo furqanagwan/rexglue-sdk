@@ -154,7 +154,7 @@ std::vector<HMONITOR> MonitorsInSettingOrder() {
   return monitors;
 }
 
-}  // namespace
+}
 
 std::vector<DisplayResolution> NotableResolutions(const std::vector<DisplayResolution>& modes,
                                                   uint32_t native_width, uint32_t native_height) {
@@ -264,4 +264,4 @@ std::vector<DisplayInfo> ListDisplays(void* game_window) {
   return displays;
 }
 
-}  // namespace rex::ui
+}

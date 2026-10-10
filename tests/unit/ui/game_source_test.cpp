@@ -13,10 +13,7 @@
 #include <rex/ui/windowed_app_context_win.h>
 
 namespace {
-// Local only: the owner's private Guide assets. REXGLUE_GUIDE_BUNDLE names a
-// title build's embedded Xbox 360 bundle (rexglue_guide/<name>_xbox_guide.bin);
-// otherwise REXGLUE_SYSTEM_UPDATE, or REXGLUE_GUIDE_FLASH for the BC Guide.
-// Null with an empty error when none is set.
+
 std::shared_ptr<const rex::ui::guide::GuideAssets> LoadLocalGuide(bool original_xbox,
                                                                   std::string* error) {
   const auto presentation = original_xbox ? rex::ui::guide::GuidePresentation::OriginalXbox
@@ -81,7 +78,7 @@ struct SourceHarness {
     std::filesystem::remove(root / "settings.toml", ec);
     std::filesystem::remove(root / "source.iso", ec);
     const auto extracted = root / "extracted";
-    // This child belongs to this newly created fixture; resolve before deletion.
+
     if (!std::filesystem::is_symlink(extracted, ec) &&
         std::filesystem::weakly_canonical(extracted, ec).parent_path() ==
             std::filesystem::weakly_canonical(root, ec))
@@ -133,7 +130,7 @@ struct SourceHarness {
   std::filesystem::path root, selected;
   int completed = 0;
 };
-}  // namespace
+}
 
 TEST_CASE("First-run source UI validates before saving and completing", "[ui][game_source]") {
   SourceHarness h;
@@ -396,7 +393,7 @@ TEST_CASE("Source and recovery dialogs use the private console message-box contr
     auto* window = ImGui::FindWindowByName("Game source unavailable");
     REQUIRE(window);
     const auto seed = window->GetID("Console choices");
-    CHECK(GImGui->NavId == ImHashStr("Button1", 0, seed));  // safe initial Leave choice
+    CHECK(GImGui->NavId == ImHashStr("Button1", 0, seed));
     ImGui::ActivateItemByID(ImHashStr("Button0", 0, seed));
     h.Frame(dialog);
     CHECK(retried);
@@ -446,7 +443,7 @@ TEST_CASE("Xbox 360 Guide source picker is a Guide page driven by the controller
     SourceHarness h;
     rex::ui::LaunchPadState pad;
     h.Show([&] { return std::optional(pad); }, visuals, true);
-    // Disc Drive, the last source: down twice, held down stays on it.
+
     for (int i = 0; i < 3; ++i) {
       pad.y = -1;
       h.Frame();
@@ -455,7 +452,7 @@ TEST_CASE("Xbox 360 Guide source picker is a Guide page driven by the controller
     }
     press(h, pad.activate);
     CHECK(h.completed == 0);
-    // Disc drive page or "no optical drive"; either way B returns.
+
     press(h, pad.cancel);
     CHECK(h.completed == 0);
     press(h, pad.cancel);
@@ -467,13 +464,13 @@ TEST_CASE("Xbox 360 Guide source picker is a Guide page driven by the controller
     SourceHarness h;
     rex::ui::LaunchPadState pad;
     h.Show([&] { return std::optional(pad); }, visuals, true);
-    press(h, pad.activate);  // Disc Image (ISO): the drives
+    press(h, pad.activate);
     CHECK(GImGui->OpenPopupStack.empty());
     CHECK(h.completed == 0);
-    press(h, pad.activate);  // into the first drive
+    press(h, pad.activate);
     CHECK(h.completed == 0);
-    press(h, pad.cancel);  // back to the drives
-    press(h, pad.cancel);  // back to the sources
+    press(h, pad.cancel);
+    press(h, pad.cancel);
     CHECK(h.completed == 0);
     press(h, pad.cancel);
     CHECK(h.completed == 1);

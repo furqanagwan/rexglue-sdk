@@ -20,16 +20,11 @@ std::unique_ptr<RenderDocAPI> RenderDocAPI::CreateIfConnected() {
 
   pRENDERDOC_GetAPI get_api = nullptr;
 
-  // Try to load the RenderDoc library. If RenderDoc is attached, the library
-  // should already be loaded into the process and this will increment the
-  // reference count. If not attached, the load will fail and we return nullptr.
   if (!renderdoc_api->library_.Load(platform::lib_names::kRenderDoc)) {
     return nullptr;
   }
   get_api = renderdoc_api->library_.GetSymbol<pRENDERDOC_GetAPI>("RENDERDOC_GetAPI");
 
-  // get_api will be null if RenderDoc is not connected, or the API isn't
-  // available on this platform, or there was an error.
   if (!get_api || !get_api(eRENDERDOC_API_Version_1_0_0, (void**)&renderdoc_api->api_1_0_0_) ||
       !renderdoc_api->api_1_0_0_) {
     return nullptr;
@@ -44,5 +39,5 @@ RenderDocAPI::~RenderDocAPI() {
   library_.Close();
 }
 
-}  // namespace ui
-}  // namespace rex
+}
+}

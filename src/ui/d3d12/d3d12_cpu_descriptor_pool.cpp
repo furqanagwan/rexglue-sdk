@@ -46,4 +46,4 @@ D3D12CpuDescriptorPool::Descriptor D3D12CpuDescriptorPool::AllocateDescriptor() 
   return Descriptor(shared_from_this(), (heaps_.size() - 1) * heap_size);
 }
 
-}  // namespace rex::ui::d3d12
+}

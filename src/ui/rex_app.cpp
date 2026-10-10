@@ -103,7 +103,6 @@ namespace rex {
 
 namespace {
 
-// Physical controllers only; this reader ends with its host dialog.
 ui::LaunchPadSource CreateHostPadSource() {
   auto physical_input = rex::input::CreatePhysicalInputSystem();
   physical_input->Setup();
@@ -148,8 +147,6 @@ ui::LaunchPadSource CreateHostPadSource() {
   };
 }
 
-// The height in pixels of the display the window is on, in its current
-// mode (not scaled by the desktop's DPI setting); 0 when unknown.
 int DisplayHeight(ui::Window* window) {
   auto* win32 = static_cast<ui::Win32Window*>(window);
   HMONITOR monitor = MonitorFromWindow(win32 ? win32->hwnd() : nullptr, MONITOR_DEFAULTTOPRIMARY);
@@ -164,16 +161,10 @@ int DisplayHeight(ui::Window* window) {
   return int(mode.dmPelsHeight);
 }
 
-// The draw resolution scale that fills the display: titles draw at 720p,
-// so 3 for 2160p, 2 for 1440p and 1080p, 1 below.
 int DisplayScale(int display_height) {
   return std::clamp((display_height + 360) / 720, 1, 3);
 }
 
-// Shows the title as the console would: its name from the XDBF string table,
-// in the user's language when it has one, and its dashboard icon. Leaves the
-// window as it is when the executable has no XDBF resource.
-// The title's own XDBF name, in the user's language when it has one.
 std::string TitleName(const system::KernelState& kernel_state) {
   const system::util::XdbfGameData db = kernel_state.title_xdbf();
   if (!db.is_valid()) {
@@ -204,9 +195,7 @@ void ApplyTitleIdentity(ui::Window& window, const system::KernelState& kernel_st
   }
 }
 
-}  // namespace
-
-// --- ReXApp ---
+}
 
 ReXApp::~ReXApp() {
   StopGuide();
@@ -233,8 +222,7 @@ std::unique_ptr<ui::AchievementNotificationDialog> ReXApp::CreateAchievementNoti
   if (!REXCVAR_GET(xbox_guide)) {
     return toast;
   }
-  // The console's own popup (xam notify.xur) from the system update, with the
-  // SDK toast when there is none.
+
   using Notification = ui::guide::GuideNotificationDialog;
   auto source = [this]() {
     Notification::Media media;
@@ -258,8 +246,6 @@ std::unique_ptr<ui::AchievementNotificationDialog> ReXApp::CreateAchievementNoti
 
 namespace {
 
-// This process's arguments after argv[0], without the title update ones: a
-// restart must take the saved choice, and only a hand-over is marked.
 std::wstring ForwardedArguments() {
   const std::wstring line = GetCommandLineW();
   std::vector<std::wstring> tokens;
@@ -294,8 +280,6 @@ std::wstring ForwardedArguments() {
   return out;
 }
 
-// Starts `executable` with this process's arguments. A hand-over is marked so
-// the new one never hands back.
 bool StartHandOff(const std::filesystem::path& executable, bool hand_off = true) {
   std::wstring command_line = L"\"" + executable.wstring() + L"\"" + ForwardedArguments();
   if (hand_off) {
@@ -313,7 +297,7 @@ bool StartHandOff(const std::filesystem::path& executable, bool hand_off = true)
   return true;
 }
 
-}  // namespace
+}
 
 system::AchievementManager& ReXApp::achievements() const {
   assert_not_null(runtime_);
@@ -334,8 +318,6 @@ bool ReXApp::OnInitialize() {
 
   auto paths = OnFinalizePaths(resolved_defaults_, MakeResumeCallback());
   if (!paths) {
-    // Async: consumer will invoke resume when ready. OnInitialize returns
-    // true so the event loop keeps pumping (wizard dialogs render).
     return true;
   }
 
@@ -393,14 +375,12 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
     return false;
   }
   if (REXCVAR_GET(launch_menu) && imgui_drawer_) {
-    // This reader is for the host menu, with no synthetic guest controllers.
-    // Its lifetime ends with the dialog, before runtime input is constructed.
     auto pad_source = CreateHostPadSource();
     launch_settings_ = new ui::LaunchSettingsDialog(
         imgui_drawer_.get(), std::string(GetName()), config_path_,
         [this, paths = std::move(paths)](bool play) mutable {
           launch_settings_ = nullptr;
-          // Leave the current ImGui draw before constructing the guest runtime.
+
           app_context().CallInUIThreadDeferred([this, play, paths = std::move(paths)]() mutable {
             if (shutting_down_.load(std::memory_order_acquire))
               return;
@@ -430,18 +410,16 @@ void ReXApp::ConfigureGameUpdates() {
   ui::guide::ConfigureAppUpdate({version, REXCVAR_GET(update_repository), REXCVAR_GET(update_asset),
                                  local_dir_, executable.parent_path(), executable});
   if (REXCVAR_GET(check_for_updates)) {
-    ui::guide::CheckForAppUpdate(/*force=*/false);
+    ui::guide::CheckForAppUpdate(false);
   }
 }
 
 bool ReXApp::SetupEnvironment() {
   auto exe_dir = rex::filesystem::GetExecutableFolder();
-  // Where an Xbox PC game keeps its files (docs/data-locations.md): saves
-  // under Saved Games, caches, logs and settings under local app data.
+
   const auto locations = rex::filesystem::DefaultTitleDataLocations(
       rex::filesystem::GetSavedGamesFolder(), rex::filesystem::GetLocalAppDataFolder(), GetName());
 
-  // Game data: cvar override, or the game files beside the executable
   std::filesystem::path game_dir;
   std::string game_data_cvar = REXCVAR_GET(game_data_root);
   if (!game_data_cvar.empty()) {
@@ -450,7 +428,6 @@ bool ReXApp::SetupEnvironment() {
     game_dir = rex::filesystem::FindGameDataRoot(exe_dir);
   }
 
-  // User data: cvar override, or Saved Games\<name>
   std::filesystem::path user_dir;
   std::string user_data_cvar = REXCVAR_GET(user_data_root);
   if (!user_data_cvar.empty()) {
@@ -459,15 +436,12 @@ bool ReXApp::SetupEnvironment() {
     user_dir = locations.user_data;
   }
 
-  // Update data: cvar override, or empty (opt-in)
   std::filesystem::path update_dir;
   std::string update_data_cvar = REXCVAR_GET(update_data_root);
   if (!update_data_cvar.empty()) {
     update_dir = update_data_cvar;
   }
 
-  // Cache: cvar override, or local app data. With an explicit user data
-  // folder and no cache override, the cache stays inside it as before.
   std::filesystem::path cache_dir;
   std::string cache_root_cvar = REXCVAR_GET(cache_root);
   if (!cache_root_cvar.empty()) {
@@ -484,8 +458,6 @@ bool ReXApp::SetupEnvironment() {
     metadata_dir = metadata_root_cvar;
   }
 
-  // Settings: a <name>.toml beside the executable still wins (development
-  // builds and existing projects); otherwise the per-user one.
   auto config_path = exe_dir / (std::string(GetName()) + ".toml");
   if (!std::filesystem::exists(config_path)) {
     config_path = locations.config;
@@ -501,8 +473,6 @@ bool ReXApp::SetupEnvironment() {
   config_path_ = path_config.config_path;
   resolved_defaults_ = std::move(path_config);
 
-  // The title's own defaults (rexglue_configure_target CVAR_DEFAULTS,
-  // "name=value|..."), under the config file and command line.
 #ifdef REXGLUE_TITLE_CVAR_DEFAULTS
   for (const auto item : std::views::split(std::string_view(REXGLUE_TITLE_CVAR_DEFAULTS), '|')) {
     const std::string_view pair(item.begin(), item.end());
@@ -514,7 +484,6 @@ bool ReXApp::SetupEnvironment() {
   }
 #endif
 
-  // Load config FIRST so log cvars have final values
   if (std::filesystem::exists(config_path_))
     rex::cvar::LoadConfig(config_path_);
 
@@ -526,9 +495,7 @@ bool ReXApp::SetupEnvironment() {
       rex::BuildLogConfig(log_level_str, rex::ParseCategoryLevelsFromConfig(config_path_));
   log_config.app_name = std::string(GetName());
   log_config.log_dir = locations.logs;
-  // Each run is one file now (no rotation), so the directory is bounded
-  // instead: the 100 MiB the old 5 MiB x 20 rotation allowed. Titles can
-  // change it, or turn it off with 0, in OnConfigureLogging.
+
   log_config.dir_budget_bytes = uint64_t(100) << 20;
   OnConfigureLogging(log_config);
   rex::ApplyLogCvarOverrides(log_config);
@@ -545,9 +512,7 @@ bool ReXApp::SetupEnvironment() {
 
   local_dir_ = locations.local;
   ConfigureGameUpdates();
-  // Title updates are optional (docs/title-updates.md): the player's choice in
-  // the guide (title_update) picks the executable, and the original is always
-  // the fallback. An update build given --update_data_root runs as asked.
+
   if (!(ppc_info_.title_update && !update_data_cvar.empty())) {
     const auto choice = ui::guide::ChooseLaunch(
         ppc_info_.title_update, uint32_t(std::max(0, REXCVAR_GET(title_update))),
@@ -577,7 +542,6 @@ bool ReXApp::SetupEnvironment() {
     }
   }
 
-  // Earlier builds kept user data in Documents\<name>, which OneDrive syncs.
   if (user_data_cvar.empty() && user_data_root_ == locations.user_data) {
     const auto legacy = rex::filesystem::GetUserFolder() / GetName();
     const auto move = rex::filesystem::MoveLegacyUserData(legacy, user_data_root_, cache_root_);
@@ -596,7 +560,7 @@ bool ReXApp::SetupEnvironment() {
   }
 
   REXLOG_INFO("{} starting, {}", GetName(), REXGLUE_BUILD_TITLE);
-  // Already raised by the entry point; asking again reports it for the log.
+
   REXLOG_DEBUG("  Timer resolution: {:.1f} ms",
                double(rex::thread::RequestHighTimerResolution()) / 10000.0);
   if (!game_data_root_.empty()) {
@@ -674,8 +638,6 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
                                      paths.update_data_root, paths.cache_root, paths.metadata_root);
   runtime_->set_app_context(&app_context());
 
-  // Window and ImGui drawer already exist from SetupPresentation; publish them
-  // to the runtime before Setup so hooks and native rendering see them.
   if (window_) {
     runtime_->set_display_window(window_.get());
   }
@@ -683,9 +645,6 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     runtime_->set_imgui_drawer(imgui_drawer_.get());
   }
 
-  // Draw at the display's resolution unless the player chose one in the
-  // guide (Preferences > Resolution) or on the command line. Not saved: it
-  // follows the display from run to run.
   if (REXCVAR_GET(resolution_match_display) &&
       rex::cvar::GetFlagSource("resolution_scale") < rex::cvar::Source::kCommandLine) {
     const int scale = DisplayScale(DisplayHeight(window_.get()));
@@ -723,7 +682,6 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
                                                                : "default.xex");
   OnLoadXexImage(xex_image);
 
-  // Mirrors the game:\ / d:\ -> game_data_root mapping in Runtime::SetupVfs.
   {
     constexpr std::string_view kGameDevice = "game:\\";
     constexpr std::string_view kDDevice = "d:\\";
@@ -760,8 +718,6 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
     }
   }
 
-  // A title update build runs that update's code, so it loads the executable
-  // patched by the same update (update_data_root, mounted at update:).
   runtime_->kernel_state()->set_title_update_version(ppc_info_.title_update);
   if (ppc_info_.title_update) {
     std::error_code ec;
@@ -789,7 +745,7 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
   if (ppc_info_.code_patches && *ppc_info_.code_patches) {
     REXLOG_INFO("Guest code patches compiled in: {}", ppc_info_.code_patches);
   }
-  // Patches the player can switch in the guide: as they left them.
+
   ui::guide::ApplySavedCodePatches(ppc_info_.switchable_patches);
   for (const PPCSwitchablePatch* p = ppc_info_.switchable_patches; p && p->name; ++p) {
     REXLOG_INFO("Switchable {} \"{}\": {}", p->category, p->name, *p->active ? "on" : "off");
@@ -865,8 +821,7 @@ void ReXApp::InstallMediaRecovery(std::string executable) {
       ppc_info_.source_title_id,
       ppc_info_.source_executable_checksum ? ppc_info_.source_executable_checksum : "",
       ppc_info_.source_title_name ? ppc_info_.source_title_name : ""};
-  // Legacy/custom hosts without a pinned source fingerprint retain ordinary
-  // read errors; they cannot certify replacement media is the same disc.
+
   if (!expected.title_id || expected.executable_checksum.empty())
     return;
   media_recovery_ = std::make_shared<system::GameMediaRecovery>(
@@ -892,7 +847,7 @@ void ReXApp::InstallMediaRecovery(std::string executable) {
                   if (input)
                     input->AddUIInputBlocker();
                   kernel::xam::xeXamAddSystemUI();
-                  runtime_->kernel_state()->BroadcastNotification(0x00000009, 1);  // XN_SYS_UI
+                  runtime_->kernel_state()->BroadcastNotification(0x00000009, 1);
                   media_system_ui_ = true;
                   media_recovery_dialog_ = new ui::GameMediaRecoveryDialog(
                       imgui_drawer_.get(), optical, std::move(error),
@@ -923,7 +878,7 @@ void ReXApp::ReleaseMediaRecoveryUi() {
     if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system()))
       input->RemoveUIInputBlocker();
     if (runtime_->kernel_state())
-      runtime_->kernel_state()->BroadcastNotification(0x00000009, 0);  // XN_SYS_UI
+      runtime_->kernel_state()->BroadcastNotification(0x00000009, 0);
   }
 }
 
@@ -942,7 +897,6 @@ bool ReXApp::SetupPresentation() {
   if (!config_.graphics && !config_.gpu_plugin.empty()) {
     config_.graphics = rex::system::LoadGpuPlugin(config_.gpu_plugin);
     if (!config_.graphics) {
-      // Fatal by design: no silent headless fallback.
       auto msg =
           fmt::format("Failed to load GPU plugin '{}'. See log for details.", config_.gpu_plugin);
       REXLOG_ERROR("{}", msg);
@@ -959,15 +913,12 @@ bool ReXApp::SetupPresentation() {
     }
   }
 
-  // Create window
   window_ = rex::ui::Window::Create(app_context(), GetName());
   if (!window_) {
     REXLOG_ERROR("Failed to create window");
     return false;
   }
 
-  // The project name until the title's own name and icon are known at launch.
-  // The SDK build stamp is in the log and the debug overlay.
   window_->SetTitle(GetName());
 
   window_->AddListener(this);
@@ -1014,7 +965,6 @@ bool ReXApp::SetupPresentation() {
 
   auto* graphics_system = config_.graphics.get();
   if (graphics_system && graphics_system->presenter()) {
-    // SDK mode: the emulated-Xenos presenter drives the overlays.
     auto* presenter = graphics_system->presenter();
     auto* provider = graphics_system->provider();
     if (provider) {
@@ -1026,13 +976,9 @@ bool ReXApp::SetupPresentation() {
     }
     window_->SetPresenter(presenter);
   } else if (!graphics_system) {
-    // Detached mode: the app brings its own renderer and drives its own paint
-    // loop. ReXApp owns the returned drawer via immediate_drawer_.
     immediate_drawer_ = OnCreateImmediateDrawer();
     if (immediate_drawer_) {
-      SetupOverlays(/*presenter=*/nullptr, immediate_drawer_.get());
-      // No window_->SetPresenter, no drawer SetPresenter: the app owns the
-      // surface and the present cadence.
+      SetupOverlays(nullptr, immediate_drawer_.get());
     }
   }
 
@@ -1054,9 +1000,7 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
       [this](ImGuiStyle& imgui_style, rex::ui::Style& ui_style) {
         OnConfigureStyle(imgui_style, ui_style);
       });
-  // presenter is nullptr in detached mode; ImGuiDrawer tolerates that and the
-  // gated eager font upload in SetImmediateDrawer is skipped (font uploads
-  // lazily on the first Draw instead).
+
   imgui_drawer_->SetPresenterAndImmediateDrawer(presenter, drawer);
   rex::ui::RegisterBind("bind_debug_overlay", "F3", "Toggle debug overlay", [this] {
     if (debug_overlay_) {
@@ -1093,15 +1037,11 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
 }
 
 void ReXApp::LaunchModule() {
-  // Consume buttons held while selecting a source or using a host menu.
   if (auto* input = dynamic_cast<input::InputSystem*>(runtime_->input_system())) {
     input->AddUIInputBlocker();
     input->RemoveUIInputBlocker();
   }
   app_context().CallInUIThreadDeferred([this]() {
-    // Register the achievement notification callback now that the runtime and
-    // KernelState are guaranteed to exist. Done here (not OnCreateDialogs)
-    // because KernelState is null during SetupPresentation.
     if (!achievement_notification_) {
       achievement_notification_ =
           std::shared_ptr<ui::AchievementNotificationDialog>(CreateAchievementNotificationDialog());
@@ -1182,10 +1122,7 @@ void ReXApp::OnClosing(ui::UIEvent& e) {
   if (runtime_ && runtime_->kernel_state()) {
     runtime_->kernel_state()->TerminateTitle();
   }
-  // Hard-exit rather than run subsystem teardown, which can deadlock on a host
-  // lock still held by a straggler TerminateTitle left running. Flush (not
-  // ShutdownLogging, which frees loggers a straggler may still use); the OS
-  // reclaims the rest.
+
   REXLOG_INFO("Title terminated; hard-exiting process.");
   rex::FlushLogging();
   std::_Exit(0);
@@ -1246,18 +1183,16 @@ void ReXApp::OnDestroy() {
   if (media_recovery_)
     media_recovery_->Cancel();
   ReleaseMediaRecoveryUi();
-  // Notify subclass before cleanup
+
   OnShutdown();
 
   StopGuide();
 
-  // Unregister overlay keybinds before destroying dialogs
   rex::ui::UnregisterBind("bind_debug_overlay");
   rex::ui::UnregisterBind("bind_console");
   rex::ui::UnregisterBind("bind_settings");
   rex::ui::UnregisterBind("bind_achievements");
 
-  // ImGui cleanup (reverse of setup)
   if (achievement_notification_listener_ != 0) {
     if (runtime_ && runtime_->kernel_state()) {
       achievements().UnregisterCallback(achievement_notification_listener_);
@@ -1279,10 +1214,7 @@ void ReXApp::OnDestroy() {
     imgui_drawer_->SetPresenterAndImmediateDrawer(nullptr, nullptr);
     imgui_drawer_.reset();
   }
-  // immediate_drawer_ was already unlinked from imgui_drawer_ above. Detach it
-  // from its presenter so SDK mode runs OnLeavePresenter() before disposal; in
-  // detached mode the drawer never had a presenter, so SetPresenter(nullptr) is
-  // a no-op.
+
   if (immediate_drawer_) {
     immediate_drawer_->SetPresenter(nullptr);
     immediate_drawer_.reset();
@@ -1291,7 +1223,7 @@ void ReXApp::OnDestroy() {
     runtime_->set_display_window(nullptr);
     runtime_->set_imgui_drawer(nullptr);
   }
-  // Window/runtime cleanup
+
   if (window_) {
     window_->SetPresenter(nullptr);
   }
@@ -1304,12 +1236,10 @@ void ReXApp::OnDestroy() {
   }
   window_.reset();
   runtime_.reset();
-  // Last: the guest runtime's audio, input and GPU services are gone.
+
   gaming_runtime_.reset();
   if (restart_on_exit_) {
-    // The guide changed the title update choice; the new process picks the
-    // executable for it.
-    StartHandOff(rex::filesystem::GetExecutablePath(), /*hand_off=*/false);
+    StartHandOff(rex::filesystem::GetExecutablePath(), false);
   }
 }
 
@@ -1320,16 +1250,13 @@ void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provi
   }
 }
 
-// --- Xbox guide (RG-GDK-041) ---
-
 void ReXApp::SetupGuide() {
   if (!REXCVAR_GET(xbox_guide) || guide_loader_.joinable()) {
     return;
   }
   rex::ui::RegisterBind("bind_xbox_guide", "Home", "Open or close the Xbox guide",
                         [this] { ToggleGuide(); });
-  // XamShowKeyboardUI shows the console's own keyboard from the same files
-  // (RG-GDK-059); the ImGui dialog while they load or without them.
+
   kernel::xam::xeXamSetKeyboardProvider([this](const kernel::xam::KeyboardRequest& request,
                                                kernel::xam::KeyboardDone done) -> ui::ImGuiDialog* {
     if (!REXCVAR_GET(xbox_guide) || !imgui_drawer_ || shutting_down_.load() || !runtime_) {
@@ -1357,7 +1284,7 @@ void ReXApp::SetupGuide() {
         {request.title, request.description, request.default_text, request.max_length},
         std::move(done));
   });
-  // Reading the system update decompresses XAM; keep it off the UI thread.
+
   guide_loader_ = std::thread([this] {
 #if defined(REXGLUE_GUIDE_ORIGINAL_XBOX)
     constexpr auto presentation = ui::guide::GuidePresentation::OriginalXbox;
@@ -1365,8 +1292,7 @@ void ReXApp::SetupGuide() {
     constexpr auto presentation = ui::guide::GuidePresentation::Xbox360;
 #endif
     std::string errors;
-    // The guide the title build embedded comes first, unless a system update
-    // was named explicitly.
+
     if (const auto bundle = ui::guide::EmbeddedGuide();
         !bundle.empty() && REXCVAR_GET(xbox_guide_system_update).empty()) {
       std::string error;
@@ -1420,7 +1346,7 @@ void ReXApp::StartGuidePoller() {
       const auto connected = input->GetConnectedUsers();
       for (uint32_t user = 0; user < chords.size(); ++user) {
         uint16_t buttons = 0;
-        // Polling a missing XInput pad is slow; only read connected users.
+
         if (connected.test(user) || (user == 0 && connected.none())) {
           rex::input::X_INPUT_STATE state = {};
           if (input->GetStateForUI(user, &state) == X_ERROR_SUCCESS) {
@@ -1445,7 +1371,7 @@ void ReXApp::StopGuide() {
     guide_loader_.join();
   }
   if (guide_) {
-    delete guide_;  // detaches from the ImGui drawer and releases guest input
+    delete guide_;
     guide_ = nullptr;
   }
   kernel::xam::xeXamSetKeyboardProvider(nullptr);
@@ -1472,7 +1398,6 @@ void ReXApp::ToggleGuide() {
     error = guide_error_;
   }
   if (!assets) {
-    // Still loading, or no system update: say which, once.
     if (!error.empty() && !guide_unavailable_shown_) {
       guide_unavailable_shown_ = true;
       ui::ImGuiDialog::ShowMessageBox(imgui_drawer_.get(), "Xbox Guide", error);
@@ -1533,4 +1458,4 @@ void ReXApp::ToggleGuide() {
                                     {guide_font_regular_, guide_font_bold_}, std::move(host), held);
 }
 
-}  // namespace rex
+}

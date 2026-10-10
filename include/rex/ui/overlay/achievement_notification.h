@@ -19,11 +19,10 @@ class AchievementNotificationDialog : public ImGuiDialog {
  public:
   ~AchievementNotificationDialog() override = default;
 
-  // Thread-safe implementations may receive events from guest threads.
   virtual void Push(const rex::system::AchievementEvent& event) = 0;
 
  protected:
   explicit AchievementNotificationDialog(ImGuiDrawer* drawer) : ImGuiDialog(drawer) {}
 };
 
-}  // namespace rex::ui
+}
