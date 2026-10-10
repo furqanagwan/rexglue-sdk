@@ -116,15 +116,13 @@ std::unique_ptr<Entry> HostPathEntry::CreateEntryInternal(const std::string_view
 
 bool HostPathEntry::DeleteEntryInternal(Entry* entry) {
   auto full_path = host_path_ / rex::to_path(entry->name());
-  std::error_code ec;  // avoid exception on remove/remove_all failure
+  std::error_code ec;
   if (entry->attributes() & kFileAttributeDirectory) {
-    // Delete entire directory and contents.
     auto removed = std::filesystem::remove_all(full_path, ec);
     if (removed < 1 || removed == static_cast<std::uintmax_t>(-1)) {
       return false;
     }
   } else {
-    // Delete file.
     if (std::filesystem::is_directory(full_path, ec) || !std::filesystem::remove(full_path, ec)) {
       return false;
     }
@@ -193,4 +191,4 @@ bool HostPathEntry::SetWriteTimestamp(uint64_t timestamp) {
   return true;
 }
 
-}  // namespace rex::filesystem
+}

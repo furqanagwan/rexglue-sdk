@@ -77,7 +77,7 @@ class AlignedDiscReader : public FileHandle {
   void* buffer_ = nullptr;
   std::mutex mutex_;
 };
-}  // namespace
+}
 bool IsOpticalDiscPath(const std::filesystem::path& path) {
   const auto& text = path.native();
   return text.size() == 6 && text.starts_with(L"\\\\.\\") && text[5] == L':' &&

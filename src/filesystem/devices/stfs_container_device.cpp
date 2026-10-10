@@ -68,7 +68,6 @@ std::unique_ptr<StfsHeader> StfsContainerDevice::ReadPackageHeader(
 }
 
 bool StfsContainerDevice::Initialize() {
-  // Resolve a valid STFS file if a directory is given.
   if (std::filesystem::is_directory(host_path_) && !ResolveFromFolder(host_path_)) {
     REXFS_ERROR("Could not resolve an STFS container given path {}", rex::path_to_utf8(host_path_));
     return false;
@@ -79,7 +78,6 @@ bool StfsContainerDevice::Initialize() {
     return false;
   }
 
-  // Open the data file(s)
   auto open_result = OpenFiles();
   if (open_result != Error::kSuccess) {
     REXFS_ERROR("Failed to open STFS container: {}", static_cast<int>(open_result));
@@ -100,7 +98,6 @@ bool StfsContainerDevice::Initialize() {
 }
 
 StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
-  // Map the file containing the STFS Header and read it.
   REXFS_INFO("Loading STFS header file: {}", rex::path_to_utf8(host_path_));
 
   auto header_file = rex::filesystem::OpenFile(host_path_, "rb");
@@ -117,12 +114,6 @@ StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
     return header_result;
   }
 
-  // If the STFS package is a single file, the header is self contained and
-  // we don't need to map any extra files.
-  // NOTE: data_file_count is 0 for STFS and 1 for SVOD
-  // The metadata records how much data the package holds; an incomplete copy
-  // or download is refused here, named, instead of failing later mid-read
-  // (xenia-canary #1226). Some packages leave the field at zero.
   if (header_.metadata.volume_type == XContentVolumeType::kStfs &&
       header_.metadata.data_file_count == 0) {
     const uint64_t data_offset = rex::round_up(header_.header.header_size.get(), kBlockSize);
@@ -146,8 +137,6 @@ StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
     return Error::kSuccess;
   }
 
-  // If the STFS package is multi-file, it is an SVOD system. We need to map
-  // the files in the .data folder and can discard the header.
   auto data_fragment_path = host_path_;
   data_fragment_path += ".data";
   if (!std::filesystem::exists(data_fragment_path)) {
@@ -156,7 +145,6 @@ StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
     return Error::kErrorFileMismatch;
   }
 
-  // Ensure data fragment files are sorted
   auto fragment_files = filesystem::ListFiles(data_fragment_path);
   std::sort(fragment_files.begin(), fragment_files.end(),
             [](filesystem::FileInfo& left, filesystem::FileInfo& right) {
@@ -181,7 +169,7 @@ StfsContainerDevice::Error StfsContainerDevice::OpenFiles() {
 
     rex::filesystem::Seek(file, 0L, SEEK_END);
     files_total_size_ += rex::filesystem::Tell(file);
-    // no need to seek back, any reads from this file will seek first anyway
+
     files_.emplace(std::make_pair(i, file));
   }
   REXFS_INFO("SVOD successfully mapped {} files.", fragment_files.size());
@@ -202,15 +190,11 @@ void StfsContainerDevice::Dump(string::StringBuffer* string_buffer) {
 }
 
 Entry* StfsContainerDevice::ResolvePath(const std::string_view path) {
-  // The filesystem will have stripped our prefix off already, so the path will
-  // be in the form:
-  // some\PATH.foo
   REXFS_DEBUG("StfsContainerDevice::ResolvePath({})", path);
   return root_entry_->ResolvePath(path);
 }
 
 StfsContainerDevice::Error StfsContainerDevice::ReadHeaderAndVerify(FILE* header_file) {
-  // Check size of the file is enough to store an STFS header
   rex::filesystem::Seek(header_file, 0L, SEEK_END);
   files_total_size_ = rex::filesystem::Tell(header_file);
   rex::filesystem::Seek(header_file, 0L, SEEK_SET);
@@ -219,17 +203,14 @@ StfsContainerDevice::Error StfsContainerDevice::ReadHeaderAndVerify(FILE* header
     return Error::kErrorTooSmall;
   }
 
-  // Read header & check signature
   if (fread(&header_, sizeof(StfsHeader), 1, header_file) != 1) {
     return Error::kErrorReadError;
   }
 
   if (!header_.header.is_magic_valid()) {
-    // Unexpected format.
     return Error::kErrorFileMismatch;
   }
 
-  // Pre-calculate some values used in block number calculations
   if (header_.metadata.volume_type == XContentVolumeType::kStfs) {
     blocks_per_hash_table_ =
         header_.metadata.volume_descriptor.stfs.flags.bits.read_only_format ? 1 : 2;
@@ -243,21 +224,13 @@ StfsContainerDevice::Error StfsContainerDevice::ReadHeaderAndVerify(FILE* header
 }
 
 StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
-  // SVOD Systems can have different layouts. The root block is
-  // denoted by the magic "MICROSOFT*XBOX*MEDIA" and is always in
-  // the first "actual" data fragment of the system.
   auto& svod_header = files_.at(0);
   const char* MEDIA_MAGIC = "MICROSOFT*XBOX*MEDIA";
 
   uint8_t magic_buf[20];
   size_t magic_offset;
 
-  // Check for EDGF layout
   if (header_.metadata.volume_descriptor.svod.features.bits.enhanced_gdf_layout) {
-    // The STFS header has specified that this SVOD system uses the EGDF layout.
-    // We can expect the magic block to be located immediately after the hash
-    // blocks. We also offset block address calculation by 0x1000 by shifting
-    // block indices by +0x2.
     rex::filesystem::Seek(svod_header, 0x2000, SEEK_SET);
     if (fread(magic_buf, 1, countof(magic_buf), svod_header) != countof(magic_buf)) {
       REXFS_ERROR("ReadSVOD failed to read SVOD magic at 0x2000");
@@ -280,14 +253,9 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
       return Error::kErrorReadError;
     }
     if (std::memcmp(magic_buf, MEDIA_MAGIC, 20) == 0) {
-      // If the SVOD's magic block is at 0x12000, it is likely using an XSF
-      // layout. This is usually due to converting the game using a third-party
-      // tool, as most of them use a nulled XSF as a template.
-
       svod_base_offset_ = 0x10000;
       magic_offset = 0x12000;
 
-      // Check for XSF Header
       const char* XSF_MAGIC = "XSF";
       rex::filesystem::Seek(svod_header, 0x2000, SEEK_SET);
       if (fread(magic_buf, 1, 3, svod_header) != 3) {
@@ -310,15 +278,9 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
         return Error::kErrorReadError;
       }
       if (std::memcmp(magic_buf, MEDIA_MAGIC, 20) == 0) {
-        // If the SVOD's magic block is at 0xD000, it most likely means that it
-        // is a single-file system. The STFS Header is 0xB000 bytes , and the
-        // remaining 0x2000 is from hash tables. In most cases, these will be
-        // STFS, not SVOD.
-
         svod_base_offset_ = 0xB000;
         magic_offset = 0xD000;
 
-        // Check for single file system
         if (header_.metadata.data_file_count == 1) {
           svod_layout_ = SvodLayoutType::kSingleFile;
           REXFS_INFO("SVOD is a single file. Magic block present at 0xD000.");
@@ -335,7 +297,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
     }
   }
 
-  // Parse the root directory
   rex::filesystem::Seek(svod_header, magic_offset + 0x14, SEEK_SET);
 
   struct {
@@ -361,7 +322,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
   root_entry->write_timestamp_ = root_creation_timestamp;
   root_entry_ = std::unique_ptr<Entry>(root_entry);
 
-  // Traverse all child entries
   svod_visited_nodes_.clear();
   return ReadEntrySVOD(root_data.block, 0, root_entry);
 }
@@ -369,7 +329,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSVOD() {
 StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, uint32_t ordinal,
                                                               StfsContainerEntry* parent,
                                                               uint32_t depth) {
-  // The tree comes from the package; a cycle or an absurd depth is damage.
   constexpr uint32_t kMaxSvodDepth = 1024;
   if (depth > kMaxSvodDepth ||
       !svod_visited_nodes_.insert((uint64_t(block) << 32) | ordinal).second) {
@@ -377,18 +336,14 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
     return Error::kErrorReadError;
   }
 
-  // For games with a large amount of files, the ordinal offset can overrun
-  // the current block and potentially hit a hash block.
   size_t ordinal_offset = ordinal * 0x4;
   size_t block_offset = ordinal_offset / 0x800;
   size_t true_ordinal_offset = ordinal_offset % 0x800;
 
-  // Calculate the file & address of the block
   size_t entry_address, entry_file;
   BlockToOffsetSVOD(block + block_offset, &entry_address, &entry_file);
   entry_address += true_ordinal_offset;
 
-  // Read directory entry
   if (entry_file >= files_.size()) {
     REXFS_ERROR("SVOD directory node {}:{} is in data file {}, but only {} exist", block, ordinal,
                 entry_file, files_.size());
@@ -422,7 +377,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
   auto name = std::string(name_buffer.get(), dir_entry.name_length);
 
-  // Read the left node
   if (dir_entry.node_l) {
     auto node_result = ReadEntrySVOD(block, dir_entry.node_l, parent, depth + 1);
     if (node_result != Error::kSuccess) {
@@ -430,17 +384,11 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
     }
   }
 
-  // Read file & address of block's data
   size_t data_address, data_file;
   BlockToOffsetSVOD(dir_entry.data_block, &data_address, &data_file);
 
-  // Create the entry
-  // NOTE: SVOD entries don't have timestamps for individual files, which can
-  //       cause issues when decrypting games. Using the root entry's timestamp
-  //       solves this issues.
   auto entry = StfsContainerEntry::Create(this, parent, name, &files_);
   if (dir_entry.attributes & kFileAttributeDirectory) {
-    // Entry is a directory
     entry->attributes_ = kFileAttributeDirectory | kFileAttributeReadOnly;
     entry->data_offset_ = 0;
     entry->data_size_ = 0;
@@ -450,14 +398,12 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
     entry->write_timestamp_ = root_entry_->create_timestamp();
 
     if (dir_entry.length) {
-      // If length is greater than 0, traverse the directory's children
       auto directory_result = ReadEntrySVOD(dir_entry.data_block, 0, entry.get(), depth + 1);
       if (directory_result != Error::kSuccess) {
         return directory_result;
       }
     }
   } else {
-    // Entry is a file
     entry->attributes_ = kFileAttributeNormal | kFileAttributeReadOnly;
     entry->size_ = dir_entry.length;
     entry->allocation_size_ = rex::round_up(dir_entry.length, kBlockSize);
@@ -468,7 +414,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
     entry->create_timestamp_ = root_entry_->create_timestamp();
     entry->write_timestamp_ = root_entry_->create_timestamp();
 
-    // Fill in all block records, sector by sector.
     if (entry->attributes() & system::X_FILE_ATTRIBUTE_NORMAL) {
       uint32_t block_index = dir_entry.data_block;
       size_t remaining_size = rex::round_up(dir_entry.length, 0x800);
@@ -485,7 +430,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
         remaining_size -= BLOCK_SIZE;
 
         if (offset - last_offset == 0x800) {
-          // Consecutive, so append to last entry.
           entry->block_list_[last_record].length += BLOCK_SIZE;
           last_offset = offset;
           continue;
@@ -500,7 +444,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
   parent->children_.emplace_back(std::move(entry));
 
-  // Read the right node.
   if (dir_entry.node_r) {
     auto node_result = ReadEntrySVOD(block, dir_entry.node_r, parent, depth + 1);
     if (node_result != Error::kSuccess) {
@@ -513,19 +456,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
 
 void StfsContainerDevice::BlockToOffsetSVOD(size_t block, size_t* out_address,
                                             size_t* out_file_index) {
-  // SVOD Systems use hash blocks for integrity checks. These hash blocks
-  // cause blocks to be discontinuous in memory, and must be accounted for.
-  //  - Each data block is 0x800 bytes in length
-  //  - Every group of 0x198 data blocks is preceded a Level0 hash table.
-  //    Level0 tables contain 0xCC hashes, each representing two data blocks.
-  //    The total size of each Level0 hash table is 0x1000 bytes in length.
-  //  - Every 0xA1C4 Level0 hash tables is preceded by a Level1 hash table.
-  //    Level1 tables contain 0xCB hashes, each representing two Level0 hashes.
-  //    The total size of each Level1 hash table is 0x1000 bytes in length.
-  //  - Files are split into fragments of 0xA290000 bytes in length,
-  //    consisting of 0x14388 data blocks, 0xCB Level0 hash tables, and 0x1
-  //    Level1 hash table.
-
   const size_t BLOCK_SIZE = 0x800;
   const size_t HASH_BLOCK_SIZE = 0x1000;
   const size_t BLOCKS_PER_L0_HASH = 0x198;
@@ -534,10 +464,8 @@ void StfsContainerDevice::BlockToOffsetSVOD(size_t block, size_t* out_address,
   const size_t MAX_FILE_SIZE = 0xA290000;
   const size_t BLOCK_OFFSET = header_.metadata.volume_descriptor.svod.start_data_block();
 
-  // Resolve the true block address and file index
   size_t true_block = block - (BLOCK_OFFSET * 2);
   if (svod_layout_ == SvodLayoutType::kEnhancedGDF) {
-    // EGDF has an 0x1000 byte offset, which is two blocks
     true_block += 0x2;
   }
 
@@ -545,22 +473,18 @@ void StfsContainerDevice::BlockToOffsetSVOD(size_t block, size_t* out_address,
   size_t file_index = true_block / BLOCKS_PER_FILE;
   size_t offset = 0;
 
-  // Calculate offset caused by Level0 Hash Tables
   size_t level0_table_count = (file_block / BLOCKS_PER_L0_HASH) + 1;
   offset += level0_table_count * HASH_BLOCK_SIZE;
 
-  // Calculate offset caused by Level1 Hash Tables
   size_t level1_table_count = (level0_table_count / HASHES_PER_L1_HASH) + 1;
   offset += level1_table_count * HASH_BLOCK_SIZE;
 
-  // For single-file SVOD layouts, include the size of the header in the offset.
   if (svod_layout_ == SvodLayoutType::kSingleFile) {
     offset += svod_base_offset_;
   }
 
   size_t block_address = (file_block * BLOCK_SIZE) + offset;
 
-  // If the offset causes the block address to overrun the file, round it.
   if (block_address >= MAX_FILE_SIZE) {
     file_index += 1;
     block_address %= MAX_FILE_SIZE;
@@ -580,7 +504,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
 
   std::vector<StfsContainerEntry*> all_entries;
 
-  // Load all listings.
   StfsDirectoryBlock directory;
 
   auto& descriptor = header_.metadata.volume_descriptor.stfs;
@@ -599,7 +522,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
       auto& dir_entry = directory.entries[m];
 
       if (dir_entry.name[0] == 0) {
-        // Done.
         break;
       }
 
@@ -610,8 +532,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
                  (all_entries[dir_entry.directory_index]->attributes() & kFileAttributeDirectory)) {
         parent_entry = all_entries[dir_entry.directory_index];
       } else {
-        // An index from the package itself; a damaged table must not read
-        // past the entries seen so far.
         REXFS_ERROR("STFS entry {} names parent {}, which is not a directory entry ({} read)",
                     all_entries.size(), dir_entry.directory_index.get(), all_entries.size());
         return Error::kErrorReadError;
@@ -638,15 +558,10 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
 
       all_entries.push_back(entry.get());
 
-      // Fill in all block records.
-      // It's easier to do this now and just look them up later, at the cost
-      // of some memory. Nasty chain walk.
-
       if (entry->attributes() & system::X_FILE_ATTRIBUTE_NORMAL) {
         uint32_t block_index = dir_entry.start_block_number();
         size_t remaining_size = dir_entry.length;
-        // Each step consumes a block of the entry's length, so even a looping
-        // chain ends.
+
         while (remaining_size && block_index != kEndOfChain) {
           size_t block_size = std::min(static_cast<size_t>(kBlockSize), remaining_size);
           size_t offset = BlockToOffsetSTFS(block_index);
@@ -654,15 +569,12 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
           remaining_size -= block_size;
           auto block_hash = GetBlockHash(block_index);
           if (!block_hash) {
-            // The hash table this block needs is not in the file (a truncated
-            // package); keep what was found (xenia-canary #1226).
             REXFS_ERROR("STFS block chain of {} leaves the package at block {}", name, block_index);
             break;
           }
           block_index = block_hash->level0_next_block();
         }
 
-        // Malformed packages are reported, not asserted: they are input.
         if (remaining_size) {
           REXFS_WARN(
               "STFS file {} only found {} bytes for file, expected {} ({} "
@@ -671,8 +583,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
               remaining_size);
         }
 
-        // Check that the number of blocks retrieved from hash entries matches
-        // the block count read from the file entry
         if (entry->block_list_.size() != dir_entry.allocated_data_blocks()) {
           REXFS_WARN(
               "STFS failed to read correct block-chain for entry {}, read {} "
@@ -704,11 +614,6 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
 }
 
 size_t StfsContainerDevice::BlockToOffsetSTFS(uint64_t block_index) const {
-  // For every level there is a hash table
-  // Level 0: hash table of next 170 blocks
-  // Level 1: hash table of next 170 hash tables
-  // Level 2: hash table of next 170 level 1 hash tables
-  // And so on...
   uint64_t base = kBlocksPerHashLevel[0];
   uint64_t block = block_index;
   for (uint32_t i = 0; i < 3; i++) {
@@ -750,7 +655,6 @@ uint32_t StfsContainerDevice::BlockToHashBlockNumberSTFS(uint32_t block_index,
     return block + blocks_per_hash_table_;
   }
 
-  // Level 2 is always at blockStep1
   return block_step[1];
 }
 
@@ -765,25 +669,17 @@ const StfsHashEntry* StfsContainerDevice::GetBlockHash(uint32_t block_index) {
 
   auto& descriptor = header_.metadata.volume_descriptor.stfs;
 
-  // Offset for selecting the secondary hash block, in packages that have them
   uint32_t secondary_table_offset = descriptor.flags.bits.root_active_index ? kBlockSize : 0;
 
   auto hash_offset_lv0 = BlockToHashBlockOffsetSTFS(block_index, 0);
   if (!cached_hash_tables_.count(hash_offset_lv0)) {
-    // If this is read_only_format then it doesn't contain secondary blocks, no
-    // need to check upper hash levels
     if (descriptor.flags.bits.read_only_format) {
       secondary_table_offset = 0;
     } else {
-      // Not a read-only package, need to check each levels active index flag to
-      // see if we need to use secondary block or not
-
-      // Check level1 table if package has it
       if (descriptor.total_block_count > kBlocksPerHashLevel[0]) {
         auto hash_offset_lv1 = BlockToHashBlockOffsetSTFS(block_index, 1);
 
         if (!cached_hash_tables_.count(hash_offset_lv1)) {
-          // Check level2 table if package has it
           if (descriptor.total_block_count > kBlocksPerHashLevel[1]) {
             auto hash_offset_lv2 = BlockToHashBlockOffsetSTFS(block_index, 2);
 
@@ -839,7 +735,6 @@ const StfsHashEntry* StfsContainerDevice::GetBlockHash(uint32_t block_index) {
 }
 
 XContentPackageType StfsContainerDevice::ReadMagic(const std::filesystem::path& path) {
-  // Files shorter than the magic, or unreadable, are simply not packages.
   std::error_code ec;
   if (std::filesystem::file_size(path, ec) < sizeof(uint32_t) || ec) {
     return XContentPackageType(0);
@@ -852,7 +747,6 @@ XContentPackageType StfsContainerDevice::ReadMagic(const std::filesystem::path& 
 }
 
 bool StfsContainerDevice::ResolveFromFolder(const std::filesystem::path& path) {
-  // Scan through folders until a file with magic is found
   std::queue<filesystem::FileInfo> queue;
 
   filesystem::FileInfo folder;
@@ -870,7 +764,6 @@ bool StfsContainerDevice::ResolveFromFolder(const std::filesystem::path& path) {
         queue.push(file);
       }
     } else {
-      // Try to read the file's magic
       auto path = current_file.path / current_file.name;
       auto magic = ReadMagic(path);
 
@@ -884,10 +777,9 @@ bool StfsContainerDevice::ResolveFromFolder(const std::filesystem::path& path) {
   }
 
   if (host_path_ == path) {
-    // Could not find a suitable container file
     return false;
   }
   return true;
 }
 
-}  // namespace rex::filesystem
+}

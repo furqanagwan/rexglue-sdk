@@ -26,14 +26,13 @@
 namespace rex::system {
 class KernelState;
 class XFile;
-}  // namespace rex::system
+}
 
 namespace rex::filesystem {
 
 class Device;
 class File;
 
-// Matches https://source.winehq.org/source/include/winternl.h#1591.
 enum class FileAction {
   kSuperseded = 0,
   kOpened = 1,
@@ -44,21 +43,20 @@ enum class FileAction {
 };
 
 enum class FileDisposition {
-  // If exist replace, else create.
+
   kSuperscede = 0,
-  // If exist open, else error.
+
   kOpen = 1,
-  // If exist error, else create.
+
   kCreate = 2,
-  // If exist open, else create.
+
   kOpenIf = 3,
-  // If exist open and overwrite, else error.
+
   kOverwrite = 4,
-  // If exist open and overwrite, else create.
+
   kOverwriteIf = 5,
 };
 
-// Reuse rex::filesystem definition.
 using FileAccess = rex::filesystem::FileAccess;
 
 enum FileAttributeFlags : uint32_t {
@@ -103,9 +101,7 @@ class Entry {
   bool is_read_only() const;
 
   Entry* GetChild(const std::string_view name);
-  /// Walks @p path component-by-component starting from this entry.
-  /// Returns this entry when @p path is empty (i.e. zero path components),
-  /// nullptr if any intermediate component does not exist.
+
   Entry* ResolvePath(const std::string_view path);
 
   const std::vector<std::unique_ptr<Entry>>& children() const { return children_; }
@@ -119,8 +115,6 @@ class Entry {
   X_STATUS Rename(const std::filesystem::path& file_path);
   void Touch();
 
-  // If successful, out_file points to a new file. When finished, call
-  // file->Destroy()
   virtual X_STATUS Open(uint32_t desired_access, File** out_file) = 0;
 
   virtual bool can_map() const { return false; }
@@ -157,7 +151,7 @@ class Entry {
   std::string path_;
   std::string absolute_path_;
   std::string name_;
-  uint32_t attributes_;  // FileAttributeFlags
+  uint32_t attributes_;
   size_t size_;
   size_t allocation_size_;
   uint64_t create_timestamp_;
@@ -167,4 +161,4 @@ class Entry {
   bool delete_on_close_ = false;
 };
 
-}  // namespace rex::filesystem
+}

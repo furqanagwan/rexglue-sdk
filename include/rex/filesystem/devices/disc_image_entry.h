@@ -47,4 +47,4 @@ class DiscImageEntry : public Entry {
   size_t data_size_;
 };
 
-}  // namespace rex::filesystem
+}

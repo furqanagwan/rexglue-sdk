@@ -17,4 +17,4 @@ namespace rex::filesystem {
 Device::Device(const std::string_view mount_path) : mount_path_(mount_path) {}
 Device::~Device() = default;
 
-}  // namespace rex::filesystem
+}

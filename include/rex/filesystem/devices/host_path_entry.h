@@ -55,4 +55,4 @@ class HostPathEntry : public Entry {
   std::filesystem::path host_path_;
 };
 
-}  // namespace rex::filesystem
+}

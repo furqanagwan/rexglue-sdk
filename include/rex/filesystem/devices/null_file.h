@@ -34,4 +34,4 @@ class NullFile : public File {
   X_STATUS SetLength(size_t length) override;
 };
 
-}  // namespace rex::filesystem
+}

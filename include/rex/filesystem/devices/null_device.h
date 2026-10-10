@@ -37,11 +37,8 @@ class NullDevice : public Device {
   uint32_t total_allocation_units() const override { return 0x10; }
   uint32_t available_allocation_units() const override { return 0x10; }
 
-  // STFC/cache code seems to require the product of the next two to equal
-  // 0x10000
   uint32_t sectors_per_allocation_unit() const override { return 0x80; }
 
-  // STFC requires <= 0x1000
   uint32_t bytes_per_sector() const override { return 0x200; }
 
  private:
@@ -50,4 +47,4 @@ class NullDevice : public Device {
   std::vector<std::string> null_paths_;
 };
 
-}  // namespace rex::filesystem
+}

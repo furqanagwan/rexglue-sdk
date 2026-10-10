@@ -25,8 +25,6 @@ namespace rex::filesystem {
 VirtualFileSystem::VirtualFileSystem() {}
 
 VirtualFileSystem::~VirtualFileSystem() {
-  // Delete all devices.
-  // This will explode if anyone is still using data from them.
   devices_.clear();
   symlinks_.clear();
 }
@@ -93,7 +91,7 @@ bool VirtualFileSystem::ResolveSymbolicLink(const std::string_view path, std::st
     if (it == symlinks_.cend()) {
       break;
     }
-    // Found symlink!
+
     auto target_path = (*it).second;
     auto relative_path = result.substr((*it).first.size());
     result = target_path + relative_path;
@@ -105,24 +103,20 @@ bool VirtualFileSystem::ResolveSymbolicLink(const std::string_view path, std::st
 Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   auto global_lock = global_critical_region_.Acquire();
 
-  // Resolve relative paths
   auto normalized_path(rex::string::utf8_canonicalize_guest_path(path));
 
-  // Resolve symlinks.
   std::string resolved_path;
   bool had_symlink = ResolveSymbolicLink(normalized_path, resolved_path);
   if (had_symlink) {
     normalized_path = resolved_path;
   }
 
-  // Find the device.
   auto it = std::find_if(devices_.cbegin(), devices_.cend(), [&](const auto& d) {
     return rex::string::utf8_starts_with_case(normalized_path, d->mount_path());
   });
   if (it == devices_.cend()) {
     REXFS_WARN("VFS: '{}' -> [no device]", path);
-    // Supress logging the error for ShaderDumpxe:\CompareBackEnds as this is
-    // not an actual problem nor something we care about.
+
     if (path != "ShaderDumpxe:\\CompareBackEnds") {
       REXFS_ERROR("ResolvePath({}) failed - device not found", path);
     }
@@ -154,7 +148,6 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
 }
 
 Entry* VirtualFileSystem::CreatePath(const std::string_view path, uint32_t attributes) {
-  // Create all required directories recursively.
   auto path_parts = rex::string::utf8_split_path(path);
   if (path_parts.empty()) {
     return nullptr;
@@ -186,7 +179,6 @@ bool VirtualFileSystem::DeletePath(const std::string_view path) {
   }
   auto parent = entry->parent();
   if (!parent) {
-    // Can't delete root.
     return false;
   }
   return parent->Delete(entry);
@@ -196,7 +188,6 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
                                      FileDisposition creation_disposition, uint32_t desired_access,
                                      bool is_directory, bool is_non_directory, File** out_file,
                                      FileAction* out_action) {
-  // Cleanup access.
   if (desired_access & FileAccess::kGenericRead) {
     desired_access |= FileAccess::kFileReadData;
   }
@@ -207,8 +198,6 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
     desired_access |= FileAccess::kFileReadData | FileAccess::kFileWriteData;
   }
 
-  // Lookup host device/parent path.
-  // If no device or parent, fail.
   Entry* parent_entry = nullptr;
   Entry* entry = nullptr;
 
@@ -231,7 +220,6 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
       return X_STATUS_FILE_IS_A_DIRECTORY;
     }
 
-    // If the cached entry does not exist on host anymore, invalidate it.
     if (parent_entry) {
       const auto* host_path_entry = dynamic_cast<const HostPathEntry*>(parent_entry);
       if (host_path_entry) {
@@ -244,48 +232,43 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
     }
   }
 
-  // Check if exists (if we need it to), or that it doesn't (if it shouldn't).
   switch (creation_disposition) {
     case FileDisposition::kOpen:
     case FileDisposition::kOverwrite:
-      // Must exist.
+
       if (!entry) {
         *out_action = FileAction::kDoesNotExist;
         return X_STATUS_NO_SUCH_FILE;
       }
       break;
     case FileDisposition::kCreate:
-      // Must not exist.
+
       if (entry) {
         *out_action = FileAction::kExists;
         return X_STATUS_OBJECT_NAME_COLLISION;
       }
       break;
     default:
-      // Either way, ok.
+
       break;
   }
 
-  // Verify permissions.
   bool wants_write =
       desired_access & FileAccess::kFileWriteData || desired_access & FileAccess::kFileAppendData;
   if (wants_write &&
       ((parent_entry && parent_entry->is_read_only()) || (entry && entry->is_read_only()))) {
-    // Match Xenia behavior: downgrade to read access instead of failing.
     REXFS_WARN("Attempted to open read-only file/dir for write: {}", path);
     desired_access = FileAccess::kGenericRead | FileAccess::kFileReadData;
   }
 
   bool created = false;
   if (!entry) {
-    // Remember that we are creating this new, instead of replacing.
     created = true;
     *out_action = FileAction::kCreated;
   } else {
-    // May need to delete, if it exists.
     switch (creation_disposition) {
       case FileDisposition::kCreate:
-        // Shouldn't be possible to hit this.
+
         assert_always();
         return X_STATUS_ACCESS_DENIED;
       case FileDisposition::kSuperscede:
@@ -299,7 +282,7 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
         break;
       case FileDisposition::kOpen:
       case FileDisposition::kOpenIf:
-        // Normal open.
+
         *out_action = FileAction::kOpened;
         break;
       case FileDisposition::kOverwrite:
@@ -315,14 +298,12 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
     }
   }
   if (!entry) {
-    // Create if needed (either new or as a replacement).
     entry = CreatePath(path, !is_directory ? kFileAttributeNormal : kFileAttributeDirectory);
     if (!entry) {
       return X_STATUS_ACCESS_DENIED;
     }
   }
 
-  // Open.
   auto result = entry->Open(desired_access, out_file);
   if (XFAILED(result)) {
     *out_action = FileAction::kDoesNotExist;
@@ -330,4 +311,4 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
   return result;
 }
 
-}  // namespace rex::filesystem
+}

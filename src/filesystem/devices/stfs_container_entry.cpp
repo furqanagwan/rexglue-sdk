@@ -38,4 +38,4 @@ X_STATUS StfsContainerEntry::Open(uint32_t desired_access, File** out_file) {
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::filesystem
+}

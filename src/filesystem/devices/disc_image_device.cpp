@@ -27,7 +27,7 @@ constexpr size_t kSector = 2048;
 constexpr size_t kMaxDirectory = 32 * 1024 * 1024;
 constexpr size_t kMaxMetadata = 256 * 1024 * 1024;
 constexpr std::string_view kMagic = "MICROSOFT*XBOX*MEDIA";
-}  // namespace
+}
 
 DiscImageDevice::DiscImageDevice(std::string_view mount_path,
                                  const std::filesystem::path& host_path)
@@ -56,7 +56,7 @@ bool DiscImageDevice::ReadBytes(size_t offset, std::span<uint8_t> bytes) {
   if (!handler || (allowed && !allowed()))
     return false;
   std::lock_guard recovery_lock(recovery_mutex_);
-  // Another guest I/O thread may already have repaired this source.
+
   if (ReadBytesOnce(offset, bytes))
     return true;
   while (handler()) {
@@ -86,8 +86,7 @@ bool DiscImageDevice::ReadBytesOnce(size_t offset, std::span<uint8_t> bytes) {
   std::lock_guard lock(reader_mutex_);
   if (!reader_ || offset > disc_info_.host_size || bytes.size() > disc_info_.host_size - offset)
     return false;
-  // FileHandle's Windows implementation uses DWORD read lengths. Bounded
-  // chunks also prevent a single request from consuming enormous buffers.
+
   while (!bytes.empty()) {
     const size_t count = std::min(bytes.size(), size_t(1024 * 1024));
     size_t read = 0;
@@ -117,7 +116,7 @@ bool DiscImageDevice::Initialize() {
     if (!reader_)
       return false;
   }
-  // Preserve the existing supported game-partition offsets.
+
   constexpr size_t offsets[] = {0, 0xFB20, 0x20600, 0x2080000, 0xFD90000};
   std::array<uint8_t, kSector> header{};
   bool found = false;
@@ -175,8 +174,7 @@ bool DiscImageDevice::ReadDirectory(size_t offset, size_t size, DiscImageEntry* 
     return false;
   media_signature_ = hash_bytes(
       media_signature_ + std::string(reinterpret_cast<const char*>(data.data()), data.size()));
-  // Iterative in-order traversal preserves directory enumeration order without
-  // recursing down a malicious, unbalanced directory-entry tree.
+
   struct Visit {
     uint16_t ordinal;
     bool emit;
@@ -236,4 +234,4 @@ bool DiscImageDevice::ReadDirectory(size_t offset, size_t size, DiscImageEntry* 
   }
   return true;
 }
-}  // namespace rex::filesystem
+}

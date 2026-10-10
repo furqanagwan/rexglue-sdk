@@ -35,4 +35,4 @@ class NullEntry : public Entry {
   friend class NullDevice;
 };
 
-}  // namespace rex::filesystem
+}
