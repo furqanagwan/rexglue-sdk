@@ -28,6 +28,9 @@ REXCVAR_DEFINE_INT32(audio_volume, 100, "Audio",
                      "Master volume of the title's audio output, 0-100 (the title's own "
                      "volume settings still apply first)")
     .range(0, 100);
+REXCVAR_DEFINE_STRING(audio_output_device, "", "Audio",
+                      "Windows audio output the game plays through, by endpoint ID; empty "
+                      "follows the Windows default output");
 
 namespace rex::audio {
 
