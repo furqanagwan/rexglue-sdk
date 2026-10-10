@@ -29,4 +29,4 @@ class NopAudioSystem : public AudioSystem {
   void DestroyDriver(AudioDriver* driver) override;
 };
 
-}  // namespace rex::audio::nop
+}

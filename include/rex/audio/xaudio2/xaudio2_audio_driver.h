@@ -40,26 +40,22 @@ namespace rex::audio::xaudio2 {
 
 class XAudio2AudioDriver : public AudioDriver {
  public:
-  // Guest frames: 6 channels (fl fr fc lf bl br) of 256 big-endian float
-  // samples each, one channel after another, at 48 kHz.
   static constexpr uint32_t kFrameFrequency = 48000;
   static constexpr uint32_t kFrameChannels = 6;
   static constexpr uint32_t kChannelSamples = 256;
   static constexpr uint32_t kFrameSamples = kFrameChannels * kChannelSamples;
-  // AudioSystem queues at most this many frames per client.
+
   static constexpr uint32_t kFrameSlots = 64;
   static constexpr std::chrono::nanoseconds kFramePeriod{
       std::chrono::nanoseconds(std::chrono::seconds(1)) * kChannelSamples / kFrameFrequency};
 
   struct Options {
-    // Every engine creation fails, as on a machine with no audio endpoint.
     bool simulate_no_device = false;
-    // How often to try again for a device while there is none.
+
     std::chrono::milliseconds retry_interval{2000};
-    // Buffers queued with no OnBufferEnd for this long mean the device is gone
-    // even if XAudio2 never reported it.
+
     std::chrono::milliseconds stall_timeout{1000};
-    // The Windows endpoint ID to play through; empty follows the default.
+
     std::string output_device;
   };
 
@@ -67,39 +63,30 @@ class XAudio2AudioDriver : public AudioDriver {
   XAudio2AudioDriver(memory::Memory* memory, rex::thread::Semaphore* semaphore, Options options);
   ~XAudio2AudioDriver() override;
 
-  // Starts the service thread and tries for a device. Succeeds without one
-  // (frames are then paced by the clock); fails only if COM cannot start.
   bool Initialize();
   void SubmitFrame(uint32_t frame_ptr) override;
-  // SubmitFrame on a host pointer to a guest-format frame.
+
   void SubmitGuestFrame(const float* frame);
-  // Stops the service thread and releases the engine. Frames still queued are
-  // not released: the client is going away.
+
   void Shutdown();
 
-  // A device is open and taking frames.
   bool has_device() const;
-  // Channels submitted to the device: 2 (stereo fold) or 6 (5.1).
+
   uint32_t output_channels() const;
-  // Moves the output to another Windows endpoint (empty: the default); the
-  // service thread reopens the engine on it.
+
   void SetOutputDevice(std::string device_id);
-  // The endpoint the open engine plays through: empty for the default, and
-  // for a chosen endpoint that could not be opened.
+
   std::string opened_device() const;
-  // Engines opened so far.
+
   uint32_t engine_opens() const { return engine_opens_.load(); }
-  // Device losses handled so far (critical errors and stalls).
+
   uint32_t device_losses() const { return device_losses_.load(); }
-  // Semaphore releases so far.
+
   uint64_t frames_released() const { return frames_released_.load(); }
 
-  // Test hooks: take the device-loss path as if XAudio2 reported a critical
-  // error, and switch simulated device absence on or off.
   void SimulateDeviceLoss();
   void SetSimulateNoDevice(bool no_device);
-  // Stops the source voice without telling the driver, so buffers stop
-  // finishing and only the stall watchdog notices.
+
   void SimulateStall();
 
  private:
@@ -119,10 +106,10 @@ class XAudio2AudioDriver : public AudioDriver {
   void DestroyEngine();
   void OnBufferEnd(uint32_t slot, uint32_t generation);
   void OnCriticalError(long hr);
-  // With mutex_ held.
+
   void PaceLocked(uint32_t slot, Clock::time_point now);
   void ReleaseSlotLocked(uint32_t slot);
-  // A null reason is an orderly teardown: nothing is logged.
+
   void MarkEngineLostLocked(const char* reason);
 
   rex::thread::Semaphore* semaphore_;
@@ -146,8 +133,6 @@ class XAudio2AudioDriver : public AudioDriver {
   std::string opened_device_;
   bool device_switch_requested_ = false;
 
-  // Owned by the service thread; used by SubmitGuestFrame only while
-  // engine_live_ is set, under mutex_.
   IXAudio2* xaudio2_ = nullptr;
   IXAudio2MasteringVoice* mastering_voice_ = nullptr;
   IXAudio2SourceVoice* source_voice_ = nullptr;
@@ -164,4 +149,4 @@ class XAudio2AudioDriver : public AudioDriver {
   std::atomic<uint64_t> frames_released_ = 0;
 };
 
-}  // namespace rex::audio::xaudio2
+}

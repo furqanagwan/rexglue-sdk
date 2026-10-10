@@ -31,4 +31,4 @@ class AudioDriver {
   memory::Memory* memory_ = nullptr;
 };
 
-}  // namespace rex::audio
+}

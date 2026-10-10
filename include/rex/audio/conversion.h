@@ -25,8 +25,6 @@ namespace rex::audio::conversion {
 inline void sequential_6_BE_to_interleaved_6_LE(float* output, const float* input,
                                                 size_t ch_sample_count, const SurroundMix& mix,
                                                 float gain) {
-  // The gain pass below walks the output four floats at a time, and its weight
-  // table assumes 6 channels divide evenly into those windows.
   assert_true(ch_sample_count % 2 == 0);
 
   const uint32_t* in = reinterpret_cast<const uint32_t*>(input);
@@ -47,13 +45,6 @@ inline void sequential_6_BE_to_interleaved_6_LE(float* output, const float* inpu
     out[sample * 6 + 5] = sample2;
   }
 
-  // Second pass rather than fusing into the shuffle above, which stores as integers.
-  // 6 KB per 5.33 ms frame, so skipping it at unity gain is not worth the asymmetry.
-  //
-  // Six interleaved channels across four-float windows repeat every 12 floats,
-  // so three weight vectors cover every alignment the loop ever sees. The
-  // assert above makes the sample count even, which makes the float count a
-  // multiple of 12, so the cycle closes with no tail to handle.
   const float c = mix.center * gain;
   const float s = mix.surround * gain;
   const float l = mix.lfe * gain;
@@ -83,14 +74,13 @@ inline void sequential_6_BE_to_interleaved_2_LE(float* output, const float* inpu
   const __m128 hi = _mm_set1_ps(1.0f);
 
   for (size_t sample = 0; sample < ch_sample_count; sample += 4) {
-    // load 4 samples from 6 channels each
     __m128 fl = _mm_loadu_ps(&input[0 * ch_sample_count + sample]);
     __m128 fr = _mm_loadu_ps(&input[1 * ch_sample_count + sample]);
     __m128 fc = _mm_loadu_ps(&input[2 * ch_sample_count + sample]);
     __m128 lf = _mm_loadu_ps(&input[3 * ch_sample_count + sample]);
     __m128 bl = _mm_loadu_ps(&input[4 * ch_sample_count + sample]);
     __m128 br = _mm_loadu_ps(&input[5 * ch_sample_count + sample]);
-    // byte swap
+
     fl = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(fl), byte_swap_shuffle));
     fr = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(fr), byte_swap_shuffle));
     fc = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(fc), byte_swap_shuffle));
@@ -98,7 +88,6 @@ inline void sequential_6_BE_to_interleaved_2_LE(float* output, const float* inpu
     bl = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(bl), byte_swap_shuffle));
     br = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(br), byte_swap_shuffle));
 
-    // Center and LFE land on both sides.
     const __m128 mid = _mm_add_ps(_mm_mul_ps(fc, center), _mm_mul_ps(lf, lfe));
     __m128 left = _mm_mul_ps(_mm_add_ps(_mm_add_ps(fl, mid), _mm_mul_ps(bl, surround)), scale);
     __m128 right = _mm_mul_ps(_mm_add_ps(_mm_add_ps(fr, mid), _mm_mul_ps(br, surround)), scale);
@@ -126,8 +115,6 @@ inline void sequential_6_BE_to_interleaved_6_LE(float* output, const float* inpu
 inline void sequential_6_BE_to_interleaved_2_LE(float* output, const float* input,
                                                 size_t ch_sample_count, const StereoFold& fold,
                                                 float gain) {
-  // Default 5.1 channel mapping is fl, fr, fc, lf, bl, br
-  // https://docs.microsoft.com/en-us/windows/win32/xaudio2/xaudio2-default-channel-mapping
   const float scale = fold.scale * gain;
   for (size_t sample = 0; sample < ch_sample_count; sample++) {
     const float fl = rex::byte_swap(input[0 * ch_sample_count + sample]);
@@ -136,7 +123,7 @@ inline void sequential_6_BE_to_interleaved_2_LE(float* output, const float* inpu
     const float lf = rex::byte_swap(input[3 * ch_sample_count + sample]);
     const float bl = rex::byte_swap(input[4 * ch_sample_count + sample]);
     const float br = rex::byte_swap(input[5 * ch_sample_count + sample]);
-    // Center and LFE land on both sides.
+
     const float mid = fc * fold.center + lf * fold.lfe;
     output[sample * 2] = std::clamp((fl + mid + bl * fold.surround) * scale, -1.0f, 1.0f);
     output[sample * 2 + 1] = std::clamp((fr + mid + br * fold.surround) * scale, -1.0f, 1.0f);
@@ -144,4 +131,4 @@ inline void sequential_6_BE_to_interleaved_2_LE(float* output, const float* inpu
 }
 #endif
 
-}  // namespace rex::audio::conversion
+}

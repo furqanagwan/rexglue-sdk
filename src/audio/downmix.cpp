@@ -18,15 +18,12 @@
 namespace rex::audio {
 namespace {
 
-// One output device exists, so the mix parameters are process state. The
-// reader is the SDL device callback, which runs every 5.33 ms, so a plain
-// mutex costs nothing and avoids a torn read across the four weights.
 std::mutex g_mutex;
 StereoFold g_fold = {};
 SurroundMix g_mix = {};
 float g_gain = 1.0f;
 
-}  // namespace
+}
 
 void SetStereoFold(const StereoFold& fold) {
   std::lock_guard<std::mutex> lock(g_mutex);
@@ -65,7 +62,7 @@ float MasterOutputGain() {
 
 namespace {
 std::atomic<bool> g_constrained = false;
-}  // namespace
+}
 
 void SetAppConstrained(bool constrained) {
   g_constrained.store(constrained, std::memory_order_relaxed);
@@ -79,4 +76,4 @@ bool OutputSilenced() {
   return REXCVAR_GET(audio_mute) || (AppConstrained() && REXCVAR_GET(audio_mute_minimized));
 }
 
-}  // namespace rex::audio
+}

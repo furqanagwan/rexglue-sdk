@@ -28,7 +28,6 @@
 namespace rex::audio {
 namespace {
 
-// Enough for a guide's overlapping focus, select and blade sounds.
 constexpr size_t kMaxVoices = 16;
 
 IXAudio2MasteringVoice* OpenOutput(IXAudio2* xaudio2, const std::string& device_id) {
@@ -106,7 +105,7 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
  private:
   struct Active {
     IXAudio2SourceVoice* voice;
-    std::shared_ptr<const PcmSound> sound;  // the voice reads these samples
+    std::shared_ptr<const PcmSound> sound;
   };
 
   void FollowOutputDevice(std::string device) {
@@ -141,7 +140,7 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
   std::vector<Active> active_;
 };
 
-}  // namespace
+}
 
 std::unique_ptr<UiSoundPlayer> UiSoundPlayer::Create() {
   IXAudio2* xaudio2 = nullptr;
@@ -159,4 +158,4 @@ std::unique_ptr<UiSoundPlayer> UiSoundPlayer::Create() {
   return std::make_unique<XAudio2UiSoundPlayer>(xaudio2, mastering, device);
 }
 
-}  // namespace rex::audio
+}

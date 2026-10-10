@@ -43,17 +43,16 @@ void Chunk(std::vector<uint8_t>& out, const char* id, const std::vector<uint8_t>
   }
 }
 
-// An XMA1 file (XMAWAVEFORMAT with one stream) around `packets`.
 std::vector<uint8_t> XmaFile(const std::vector<uint8_t>& packets, uint8_t channels,
                              uint16_t streams = 1) {
   std::vector<uint8_t> fmt;
-  Le16(fmt, 0x0165);  // WAVE_FORMAT_XMA
+  Le16(fmt, 0x0165);
   Le16(fmt, 16);
-  Le16(fmt, 0x10D6);  // encode options, as the console's files
+  Le16(fmt, 0x10D6);
   Le16(fmt, 0);
   Le16(fmt, streams);
-  fmt.push_back(0);  // loop count
-  fmt.push_back(2);  // version
+  fmt.push_back(0);
+  fmt.push_back(2);
   for (uint16_t s = 0; s < streams; ++s) {
     Le32(fmt, 0);
     Le32(fmt, 44100);
@@ -72,12 +71,10 @@ std::vector<uint8_t> XmaFile(const std::vector<uint8_t>& packets, uint8_t channe
   return out;
 }
 
-}  // namespace
+}
 
 TEST_CASE("XMA UI sounds decode every frame across packets", "[audio][ui_sound]") {
-  // Six frames spill into the second packet.
-  const Stream stream = BuildStream(SilentFrames({3000, 3000, 3000, 3000, 3000, 3000}), 2,
-                                    /*xma2=*/false);
+  const Stream stream = BuildStream(SilentFrames({3000, 3000, 3000, 3000, 3000, 3000}), 2, false);
   std::string error;
   auto sound = rex::audio::DecodeXmaFile(XmaFile(stream.bytes, 1), &error);
   INFO(error);
@@ -91,7 +88,7 @@ TEST_CASE("XMA UI sounds decode every frame across packets", "[audio][ui_sound]"
 }
 
 TEST_CASE("XMA UI sounds decode stereo frames interleaved", "[audio][ui_sound]") {
-  const Stream stream = BuildStream(SilentFrames({1500, 1500}, /*stereo=*/true), 1, false);
+  const Stream stream = BuildStream(SilentFrames({1500, 1500}, true), 1, false);
   std::string error;
   auto sound = rex::audio::DecodeXmaFile(XmaFile(stream.bytes, 2), &error);
   INFO(error);
@@ -101,7 +98,6 @@ TEST_CASE("XMA UI sounds decode stereo frames interleaved", "[audio][ui_sound]")
 }
 
 TEST_CASE("XMA UI sound decoding stops at the frame that ends the stream", "[audio][ui_sound]") {
-  // The second frame's trailer says no frame follows; the third is not read.
   std::vector<Bits> frames = {SilentFrame(1000, false, true), SilentFrame(1000, false, false),
                               SilentFrame(1000, false, false)};
   const Stream stream = BuildStream(frames, 1, false);
@@ -115,14 +111,13 @@ TEST_CASE("XMA UI sound decoding rejects what it cannot play", "[audio][ui_sound
   std::string error;
   CHECK_FALSE(rex::audio::DecodeXmaFile(std::vector<uint8_t>{'R', 'I', 'F', 'F'}, &error));
   const Stream stream = BuildStream(SilentFrames({1000}), 1, false);
-  CHECK_FALSE(rex::audio::DecodeXmaFile(XmaFile(stream.bytes, 1, /*streams=*/2), &error));
+  CHECK_FALSE(rex::audio::DecodeXmaFile(XmaFile(stream.bytes, 1, 2), &error));
   CHECK(error.find("single-stream") != std::string::npos);
-  // No complete packet.
+
   CHECK_FALSE(rex::audio::DecodeXmaFile(
       XmaFile(std::vector<uint8_t>(stream.bytes.begin(), stream.bytes.begin() + 100), 1), &error));
 }
 
-// Local only (REXGLUE_SYSTEM_UPDATE): every sound the guide's packages hold.
 TEST_CASE("The console's guide sounds decode", "[audio][ui_sound][local]") {
   const char* path = std::getenv("REXGLUE_SYSTEM_UPDATE");
   if (!path || !*path) {
@@ -143,7 +138,7 @@ TEST_CASE("The console's guide sounds decode", "[audio][ui_sound][local]") {
       INFO(error);
       REQUIRE(sound);
       CHECK(sound->samples.size() >= 512);
-      // Audible, not decoded silence.
+
       int peak = 0;
       for (int16_t sample : sound->samples) {
         peak = std::max(peak, std::abs(int(sample)));

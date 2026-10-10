@@ -33,11 +33,9 @@ namespace rex::audio::xaudio2 {
 
 namespace {
 
-// KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, spelled out so no GUID library is needed.
 constexpr GUID kSubtypeIeeeFloat = {
     0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
 
-// Guest channel order fl fr fc lf bl br is the 5.1 speaker mask's bit order.
 constexpr DWORD kMask51 = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER |
                           SPEAKER_LOW_FREQUENCY | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
 constexpr DWORD kMaskStereo = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
@@ -46,7 +44,7 @@ void* EncodeContext(uint32_t slot, uint32_t generation) {
   return reinterpret_cast<void*>((uintptr_t(generation) << 8) | slot);
 }
 
-}  // namespace
+}
 
 class XAudio2AudioDriver::EngineCallback final : public IXAudio2EngineCallback {
  public:
@@ -105,9 +103,6 @@ bool XAudio2AudioDriver::Initialize() {
   engine_callback_ = new EngineCallback(this);
   voice_callback_ = new VoiceCallback(this);
 
-  // XAudio2 needs COM in the MTA. The service thread holds an MTA scope for
-  // the driver's lifetime, which also makes guest threads that submit frames
-  // implicitly MTA (https://devblogs.microsoft.com/oldnewthing/?p=4613).
   service_thread_ = std::thread(&XAudio2AudioDriver::ServiceThread, this);
   std::unique_lock<std::mutex> lock(mutex_);
   wake_.wait(lock, [this] { return service_started_; });
@@ -145,8 +140,6 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (free_slots_.empty()) {
-      // More frames in flight than AudioSystem ever queues. Keep the one
-      // release per frame so the client cannot stall.
       REXAPU_WARN("XAudio2: no free frame slot, frame dropped");
       ++frames_released_;
       semaphore_->Release(1, nullptr);
@@ -159,7 +152,6 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
     channels = output_channels_;
   }
 
-  // Same conversion and mix controls as the SDL output, applied per frame.
   float* out = slots_[slot].samples.data();
   if (OutputSilenced()) {
     std::memset(out, 0, sizeof(float) * channels * kChannelSamples);
@@ -174,8 +166,7 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
   std::lock_guard<std::mutex> lock(mutex_);
   const Clock::time_point now = Clock::now();
   slots_[slot].generation = generation;
-  // The device may have changed while this frame was converted; a frame mixed
-  // for another channel count is paced instead of played.
+
   if (engine_live_ && generation == generation_) {
     XAUDIO2_BUFFER buffer = {};
     buffer.AudioBytes = uint32_t(sizeof(float) * channels * kChannelSamples);
@@ -185,7 +176,6 @@ void XAudio2AudioDriver::SubmitGuestFrame(const float* frame) {
     if (SUCCEEDED(hr)) {
       slots_[slot].state = SlotState::kEngine;
       if (engine_frames_++ == 0) {
-        // Start the stall watchdog's clock.
         engine_progress_ = now;
         wake_.notify_all();
       }
@@ -247,7 +237,7 @@ void XAudio2AudioDriver::SetSimulateNoDevice(bool no_device) {
 
 void XAudio2AudioDriver::OnBufferEnd(uint32_t slot, uint32_t generation) {
   std::lock_guard<std::mutex> lock(mutex_);
-  // Buffers of a torn-down engine were already moved to the paced queue.
+
   if (!engine_live_ || generation != generation_ || slot >= kFrameSlots ||
       slots_[slot].state != SlotState::kEngine) {
     return;
@@ -294,7 +284,7 @@ void XAudio2AudioDriver::MarkEngineLostLocked(const char* reason) {
   engine_lost_ = true;
   ++generation_;
   ++device_losses_;
-  // A dead voice never ends its buffers; release them on the clock instead.
+
   const Clock::time_point now = Clock::now();
   for (uint32_t i = 0; i < kFrameSlots; ++i) {
     if (slots_[i].state == SlotState::kEngine) {
@@ -349,10 +339,7 @@ bool XAudio2AudioDriver::CreateEngine() {
   if (FAILED(hr)) {
     return fail("RegisterForCallbacks", hr);
   }
-  // Default device, channels and rate: the default device ID selects the
-  // virtual audio client, which follows default-device changes itself, and
-  // not forcing a rate lets it switch to a 44.1 kHz endpoint. A chosen
-  // endpoint that is gone falls back to the default.
+
   std::string opened_device = wanted_device;
   if (!wanted_device.empty()) {
     const std::u16string id = string::to_utf16(wanted_device);
@@ -377,8 +364,7 @@ bool XAudio2AudioDriver::CreateEngine() {
   mastering->GetVoiceDetails(&details);
   DWORD device_mask = 0;
   mastering->GetChannelMask(&device_mask);
-  // A mono or stereo endpoint gets the stereo fold; anything
-  // wider gets 5.1 and XAudio2 maps it onto the endpoint's layout.
+
   const uint32_t channels = details.InputChannels > 2 ? 6 : 2;
 
   WAVEFORMATEXTENSIBLE format = {};
@@ -429,7 +415,6 @@ void XAudio2AudioDriver::DestroyEngine() {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (engine_live_) {
-      // An orderly teardown, not a loss: same bookkeeping without counting it.
       MarkEngineLostLocked(nullptr);
       --device_losses_;
     }
@@ -441,9 +426,7 @@ void XAudio2AudioDriver::DestroyEngine() {
     mastering_voice_ = nullptr;
     source_voice_ = nullptr;
   }
-  // Callbacks may still be running; they take mutex_, so none of this may
-  // happen under it. Stopping the engine first ends in-flight callbacks before
-  // the voices go (xenia-edge 9371e73d9).
+
   if (xaudio2) {
     xaudio2->StopEngine();
   }
@@ -467,8 +450,6 @@ void XAudio2AudioDriver::ServiceThread() {
     REXAPU_ERROR("XAudio2: CoInitializeEx failed with 0x{:08X}", static_cast<uint32_t>(com_hr));
   }
   if (com_ok) {
-    // Initialize() reports once the first device attempt is done, so a caller
-    // sees has_device() settled.
     CreateEngine();
   }
   {
@@ -503,8 +484,6 @@ void XAudio2AudioDriver::ServiceThread() {
       continue;
     }
     if (engine_lost_) {
-      // Recreate straight away: the loss is often a device switch the virtual
-      // client could not follow, and the new default is already there.
       lock.unlock();
       DestroyEngine();
       CreateEngine();
@@ -530,7 +509,7 @@ void XAudio2AudioDriver::ServiceThread() {
       wake_at = std::min(wake_at,
                          engine_progress_ + options_.stall_timeout + std::chrono::milliseconds(1));
     }
-    // Never spin: a deadline already past still yields the lock for a moment.
+
     wake_.wait_until(lock, std::max(wake_at, now + std::chrono::milliseconds(1)));
   }
   lock.unlock();
@@ -539,4 +518,4 @@ void XAudio2AudioDriver::ServiceThread() {
   CoUninitialize();
 }
 
-}  // namespace rex::audio::xaudio2
+}

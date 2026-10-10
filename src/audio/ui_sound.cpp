@@ -47,7 +47,7 @@ struct CodecDeleter {
   void operator()(AVPacket* p) const { av_packet_free(&p); }
 };
 
-}  // namespace
+}
 
 std::optional<PcmSound> DecodeXmaFile(std::span<const uint8_t> riff, std::string* error) {
   auto fail = [&](std::string message) -> std::optional<PcmSound> {
@@ -71,7 +71,6 @@ std::optional<PcmSound> DecodeXmaFile(std::span<const uint8_t> riff, std::string
     if (std::memcmp(riff.data() + at, "fmt ", 4) == 0 && chunk.size() >= 2) {
       const uint16_t tag = Le16(chunk, 0);
       if (tag == kFormatXma1) {
-        // XMAWAVEFORMAT, then one XMASTREAMFORMAT per stream.
         if (chunk.size() < 12 + 20 || Le16(chunk, 8) != 1) {
           return fail("only single-stream XMA files are supported");
         }
@@ -98,13 +97,12 @@ std::optional<PcmSound> DecodeXmaFile(std::span<const uint8_t> riff, std::string
     return fail("XMA file has no complete packet");
   }
 
-  // One stream: the packets' payloads join into one bitstream.
   std::vector<uint8_t> payload;
   for (size_t p = 0; p + kPacketBytes <= data.size(); p += kPacketBytes) {
     payload.insert(payload.end(), data.begin() + p + kPacketHeaderBytes,
                    data.begin() + p + kPacketBytes);
   }
-  payload.resize(payload.size() + 8, 0);  // room for the bit reader's lookahead
+  payload.resize(payload.size() + 8, 0);
   stream::BitStream bits(payload.data(), (payload.size() - 8) * 8);
   bits.SetOffset(xma::GetPacketFrameOffset(data.data()) - kPacketHeaderBytes * 8);
 
@@ -134,12 +132,11 @@ std::optional<PcmSound> DecodeXmaFile(std::span<const uint8_t> riff, std::string
     }
     frame_bytes.fill(0);
     const uint32_t padding = uint32_t(bits.Copy(frame_bytes.data() + 1, frame_bits));
-    // First byte: leading and trailing padding bit counts, as the decoder
-    // takes a bit-aligned frame in whole bytes.
+
     const uint32_t size = 1 + (padding + frame_bits + 7) / 8;
     const uint32_t padding_end = size * 8 - (8 + padding + frame_bits);
     frame_bytes[0] = uint8_t(((padding & 7) << 5) | ((padding_end & 7) << 2));
-    // The frame's last bit says whether another frame follows.
+
     bits.SetOffset(bits.offset_bits() - 1);
     const bool more = bits.Read(1) != 0;
 
@@ -168,4 +165,4 @@ std::optional<PcmSound> DecodeXmaFile(std::span<const uint8_t> riff, std::string
   return sound;
 }
 
-}  // namespace rex::audio
+}

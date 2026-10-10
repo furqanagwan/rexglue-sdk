@@ -40,4 +40,4 @@ std::vector<AudioOutput> ListAudioOutputs();
 
 std::string SpeakerLayoutName(uint32_t channels, uint32_t channel_mask);
 
-}  // namespace rex::audio
+}

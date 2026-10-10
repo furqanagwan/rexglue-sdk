@@ -21,7 +21,7 @@ namespace {
 
 constexpr std::string_view kOutputDeviceFlag = "audio_output_device";
 
-}  // namespace
+}
 
 std::unique_ptr<AudioSystem> XAudio2AudioSystem::Create(
     runtime::FunctionDispatcher* function_dispatcher) {
@@ -76,4 +76,4 @@ void XAudio2AudioSystem::DestroyDriver(AudioDriver* driver) {
   delete xaudio2_driver;
 }
 
-}  // namespace rex::audio::xaudio2
+}

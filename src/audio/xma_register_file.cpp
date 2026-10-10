@@ -36,4 +36,4 @@ const XmaRegisterInfo* XmaRegisterFile::GetRegisterInfo(uint32_t index) {
   }
 }
 
-}  //  namespace rex::audio
+}

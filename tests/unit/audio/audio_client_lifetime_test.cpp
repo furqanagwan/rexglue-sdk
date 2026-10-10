@@ -59,7 +59,6 @@ class TestAudioSystem : public rex::audio::AudioSystem {
 
   using AudioSystem::DispatchClientCallback;
 
-  // Runs in place of the guest callback.
   std::function<void(uint32_t callback_arg)> callback;
 
   FakeDriver* driver(size_t i) { return drivers_.at(i); }
@@ -68,8 +67,6 @@ class TestAudioSystem : public rex::audio::AudioSystem {
  protected:
   X_STATUS CreateDriver(size_t, rex::thread::Semaphore*,
                         rex::audio::AudioDriver** out_driver) override {
-    // Drivers are kept (marked destroyed) so late use is observable rather
-    // than a crash.
     auto* driver = new FakeDriver(memory());
     drivers_.push_back(driver);
     *out_driver = driver;
@@ -104,7 +101,7 @@ size_t Register(TestAudioSystem& audio, uint32_t callback_arg = 0x1234) {
   return index;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Unregister waits for an in-flight client callback before destroying its driver",
           "[audio][lifetime]") {
@@ -118,8 +115,7 @@ TEST_CASE("Unregister waits for an in-flight client callback before destroying i
   f.audio.callback = [&](uint32_t) {
     entered.set_value();
     released.wait();
-    // The callback re-enters through SubmitFrame, which takes the global lock
-    // UnregisterClient held while clearing the slot (xenia-canary#1214).
+
     f.audio.SubmitFrame(index, 0);
   };
 
@@ -153,11 +149,10 @@ TEST_CASE("A cleared audio client is not dispatched and drops late frames", "[au
   f.audio.UnregisterClient(index);
   CHECK_FALSE(f.audio.DispatchClientCallback(index));
   CHECK(calls == 1);
-  f.audio.SubmitFrame(index, 0);  // no driver: dropped, not dereferenced
+  f.audio.SubmitFrame(index, 0);
   CHECK(driver->frames == 1);
   CHECK(driver->use_after_destroy == 0);
 
-  // A second unregister and an out-of-range one are rejected.
   f.audio.UnregisterClient(index);
   f.audio.UnregisterClient(99);
   f.audio.SubmitFrame(99, 0);
@@ -178,7 +173,6 @@ TEST_CASE("A client can unregister itself from inside its callback", "[audio][li
   CHECK(driver->destroyed);
   CHECK(driver->use_after_destroy == 0);
 
-  // The slot is free again.
   CHECK(Register(f.audio) == index);
   f.audio.UnregisterClient(index);
 }
@@ -197,7 +191,6 @@ TEST_CASE("Repeated register, dispatch and unregister never reach a destroyed dr
     }
   };
 
-  // Stands in for the worker, pumping whatever slot is current.
   std::thread worker([&] {
     while (!stop) {
       size_t index = live_index;
@@ -213,9 +206,7 @@ TEST_CASE("Repeated register, dispatch and unregister never reach a destroyed dr
     const int before = callbacks;
     live_index = index;
     std::this_thread::yield();
-    // Every tenth client waits until the worker has dispatched to it, so the
-    // unregister below races a worker that is really running, however the
-    // scheduler places the threads. The rest unregister as soon as possible.
+
     if (i % 10 == 0) {
       const auto deadline = std::chrono::steady_clock::now() + 5s;
       while (callbacks == before && std::chrono::steady_clock::now() < deadline) {
@@ -235,5 +226,5 @@ TEST_CASE("Repeated register, dispatch and unregister never reach a destroyed dr
     late += f.audio.driver(i)->use_after_destroy;
   }
   CHECK(late == 0);
-  CHECK(callbacks >= 30);  // at least the waited-for clients were dispatched
+  CHECK(callbacks >= 30);
 }

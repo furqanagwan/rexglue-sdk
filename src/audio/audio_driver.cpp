@@ -17,4 +17,4 @@ AudioDriver::AudioDriver(memory::Memory* memory) : memory_(memory) {}
 
 AudioDriver::~AudioDriver() = default;
 
-}  // namespace rex::audio
+}
