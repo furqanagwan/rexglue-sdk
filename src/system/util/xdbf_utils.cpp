@@ -11,6 +11,8 @@
 
 #include <rex/system/util/xdbf_utils.h>
 
+#include <algorithm>
+
 namespace rex {
 namespace system {
 namespace util {
@@ -40,6 +42,13 @@ XdbfWrapper::XdbfWrapper(const uint8_t* data, size_t data_size)
     return;
   }
 
+  const size_t table_size = sizeof(XbdfEntry) * size_t(header_->entry_count) +
+                            sizeof(XbdfFileLoc) * size_t(header_->free_count);
+  if (header_->entry_used > header_->entry_count || table_size > data_size - sizeof(XbdfHeader)) {
+    data_ = nullptr;
+    return;
+  }
+
   entries_ = reinterpret_cast<const XbdfEntry*>(ptr);
   ptr += sizeof(XbdfEntry) * header_->entry_count;
 
@@ -50,9 +59,16 @@ XdbfWrapper::XdbfWrapper(const uint8_t* data, size_t data_size)
 }
 
 XdbfBlock XdbfWrapper::GetEntry(XdbfSection section, uint64_t id) const {
+  if (!data_) {
+    return {};
+  }
+  const size_t content_size = data_size_ - (content_offset_ - data_);
   for (uint32_t i = 0; i < header_->entry_used; ++i) {
     auto& entry = entries_[i];
     if (entry.section == static_cast<uint16_t>(section) && entry.id == id) {
+      if (entry.offset > content_size || entry.size > content_size - entry.offset) {
+        return {};
+      }
       XdbfBlock block;
       block.buffer = content_offset_ + entry.offset;
       block.size = entry.size;
@@ -64,7 +80,7 @@ XdbfBlock XdbfWrapper::GetEntry(XdbfSection section, uint64_t id) const {
 
 std::string XdbfWrapper::GetStringTableEntry(XLanguage language, uint16_t string_id) const {
   auto language_block = GetEntry(XdbfSection::kStringTable, static_cast<uint64_t>(language));
-  if (!language_block) {
+  if (!language_block || language_block.size < sizeof(XdbfSectionHeader)) {
     return "";
   }
 
@@ -73,9 +89,16 @@ std::string XdbfWrapper::GetStringTableEntry(XLanguage language, uint16_t string
   assert_true(xstr_head->version == 1);
 
   const uint8_t* ptr = language_block.buffer + sizeof(XdbfSectionHeader);
+  const uint8_t* end = language_block.buffer + language_block.size;
   for (uint16_t i = 0; i < xstr_head->count; ++i) {
+    if (size_t(end - ptr) < sizeof(XdbfStringTableEntry)) {
+      break;
+    }
     auto entry = reinterpret_cast<const XdbfStringTableEntry*>(ptr);
     ptr += sizeof(XdbfStringTableEntry);
+    if (entry->string_length > size_t(end - ptr)) {
+      break;
+    }
     if (entry->id == string_id) {
       return std::string(reinterpret_cast<const char*>(ptr), entry->string_length);
     }
@@ -88,7 +111,7 @@ std::vector<XdbfAchievementTableEntry> XdbfWrapper::GetAchievements() const {
   std::vector<XdbfAchievementTableEntry> achievements;
 
   auto achievement_table = GetEntry(XdbfSection::kMetadata, kXdbfIdXach);
-  if (!achievement_table) {
+  if (!achievement_table || achievement_table.size < sizeof(XdbfSectionHeader)) {
     return achievements;
   }
 
@@ -97,7 +120,10 @@ std::vector<XdbfAchievementTableEntry> XdbfWrapper::GetAchievements() const {
   assert_true(xach_head->version == 1);
 
   const uint8_t* ptr = achievement_table.buffer + sizeof(XdbfSectionHeader);
-  for (uint16_t i = 0; i < xach_head->count; ++i) {
+  const size_t entry_count =
+      std::min<size_t>(xach_head->count, (achievement_table.size - sizeof(XdbfSectionHeader)) /
+                                             sizeof(XdbfAchievementTableEntry));
+  for (size_t i = 0; i < entry_count; ++i) {
     auto entry = reinterpret_cast<const XdbfAchievementTableEntry*>(ptr);
     ptr += sizeof(XdbfAchievementTableEntry);
     achievements.push_back(*entry);
@@ -115,7 +141,7 @@ XdbfBlock XdbfGameData::icon() const {
 
 XLanguage XdbfGameData::default_language() const {
   auto block = GetEntry(XdbfSection::kMetadata, kXdbfIdXstc);
-  if (!block.buffer) {
+  if (!block.buffer || block.size < sizeof(XdbfXstc)) {
     return XLanguage::kEnglish;
   }
   auto xstc = reinterpret_cast<const XdbfXstc*>(block.buffer);

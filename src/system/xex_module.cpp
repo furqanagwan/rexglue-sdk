@@ -44,7 +44,7 @@ void aes_decrypt_buffer(const uint8_t* session_key, const uint8_t* input_buffer,
   int32_t Nr = rijndaelKeySetupDec(rk, session_key, 128);
   const uint8_t* ct = input_buffer;
   uint8_t* pt = output_buffer;
-  for (size_t n = 0; n < input_size; n += 16, ct += 16, pt += 16) {
+  for (size_t n = 0; n + 16 <= std::min(input_size, output_size); n += 16, ct += 16, pt += 16) {
     rijndaelDecrypt(rk, Nr, ct, pt);
     for (size_t i = 0; i < 16; i++) {
       pt[i] ^= ivec[i];
@@ -57,6 +57,73 @@ void aes_decrypt_buffer(const uint8_t* session_key, const uint8_t* input_buffer,
 namespace rex::runtime {
 
 using rex::system::KernelState;
+
+namespace {
+
+constexpr size_t kXexFixedHeaderSize = sizeof(xex2_header) - sizeof(xex2_opt_header);
+
+template <typename SecurityInfo>
+bool SecurityInfoFits(const uint8_t* header, uint32_t header_size, uint32_t security_offset) {
+  constexpr size_t kFixedSize = sizeof(SecurityInfo) - sizeof(xex2_page_descriptor);
+  if (security_offset > header_size || header_size - security_offset < kFixedSize) {
+    return false;
+  }
+  const auto* info = reinterpret_cast<const SecurityInfo*>(header + security_offset);
+  return info->page_descriptor_count <=
+         (header_size - security_offset - kFixedSize) / sizeof(xex2_page_descriptor);
+}
+
+bool IsXexHeaderWellFormed(const void* data, size_t length, bool xex1) {
+  if (length < kXexFixedHeaderSize) {
+    return false;
+  }
+  const auto* bytes = static_cast<const uint8_t*>(data);
+  const auto* header = static_cast<const xex2_header*>(data);
+  const uint32_t header_size = header->header_size;
+  if (header_size < kXexFixedHeaderSize || header_size > length) {
+    return false;
+  }
+  if (header->header_count > (header_size - kXexFixedHeaderSize) / sizeof(xex2_opt_header)) {
+    return false;
+  }
+  const bool security_fits =
+      xex1 ? SecurityInfoFits<xex1_security_info>(bytes, header_size, header->security_offset)
+           : SecurityInfoFits<xex2_security_info>(bytes, header_size, header->security_offset);
+  if (!security_fits) {
+    return false;
+  }
+  for (uint32_t i = 0; i < header->header_count; i++) {
+    const xex2_opt_header& opt_header = header->headers[i];
+    const uint32_t size_in_words = opt_header.key & 0xFF;
+    if (size_in_words <= 1) {
+      continue;
+    }
+    const uint32_t offset = opt_header.offset;
+    if (offset > header_size || header_size - offset < sizeof(uint32_t)) {
+      return false;
+    }
+    const uint32_t size = size_in_words == 0xFF
+                              ? uint32_t(*reinterpret_cast<const be<uint32_t>*>(bytes + offset))
+                              : size_in_words * 4;
+    if (size > header_size - offset) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}
+
+bool XexModule::IsHeaderWellFormed(const void* xex_addr, size_t xex_length) {
+  if (xex_length < sizeof(uint32_t)) {
+    return false;
+  }
+  const uint32_t magic = static_cast<const xex2_header*>(xex_addr)->magic;
+  if (magic != kXEX1Signature && magic != kXEX2Signature) {
+    return false;
+  }
+  return IsXexHeaderWellFormed(xex_addr, xex_length, magic == kXEX1Signature);
+}
 
 XexModule::XexModule(FunctionDispatcher* function_dispatcher, KernelState* kernel_state)
     : Module(function_dispatcher), kernel_state_(kernel_state) {}
@@ -416,7 +483,11 @@ int XexModule::ReadImage(const void* xex_addr, size_t xex_length, bool use_dev_k
     return 0;
   }
 
-  memory()->LookupHeap(base_address_)->Reset();
+  auto* heap = memory()->LookupHeap(base_address_);
+  if (!heap) {
+    return 1;
+  }
+  heap->Reset();
 
   aes_decrypt_buffer(use_dev_key ? xe_xex2_devkit_key : xe_xex2_retail_key,
                      reinterpret_cast<const uint8_t*>(xex_security_info()->aes_key), 16,
@@ -498,6 +569,9 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
 
   auto* file_info = opt_file_format_info();
   auto& comp_info = file_info->compression_info.basic;
+  if (file_info->info_size < 8) {
+    return 1;
+  }
 
   uint32_t block_count = (file_info->info_size - 8) / 8;
   for (uint32_t n = 0; n < block_count; n++) {
@@ -535,18 +609,20 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
   for (size_t n = 0; n < block_count; n++) {
     const uint32_t data_size = comp_info.blocks[n].data_size;
     const uint32_t zero_size = comp_info.blocks[n].zero_size;
+    const size_t output_left = total_size - (d - buffer);
+    if (data_size > exe_length - (p - source_buffer) || data_size > output_left ||
+        zero_size > output_left - data_size) {
+      return 1;
+    }
 
     switch (opt_file_format_info()->encryption_type) {
       case XEX_ENCRYPTION_NONE:
-        if (data_size > uncompressed_size - (d - buffer)) {
-          return 1;
-        }
         memcpy(d, p, data_size);
         break;
       case XEX_ENCRYPTION_NORMAL: {
         const uint8_t* ct = p;
         uint8_t* pt = d;
-        for (size_t m = 0; m < data_size; m += 16, ct += 16, pt += 16) {
+        for (size_t m = 0; m + 16 <= data_size; m += 16, ct += 16, pt += 16) {
           rijndaelDecrypt(rk, Nr, ct, pt);
           for (size_t i = 0; i < 16; i++) {
             pt[i] ^= ivec[i];
@@ -575,6 +651,10 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
   const uint8_t* p = NULL;
   uint8_t* d = NULL;
   sha1::SHA1 s;
+
+  if (opt_file_format_info()->info_size < sizeof(xex2_opt_file_format_info)) {
+    return 1;
+  }
 
   bool free_input = false;
   const uint8_t* input_buffer = exe_buffer;
@@ -605,8 +685,14 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
 
   int result_code = 0;
 
+  const uint8_t* input_end = input_buffer + input_size;
   uint8_t block_calced_digest[0x14];
-  while (cur_block->block_size) {
+  while (!result_code && cur_block->block_size) {
+    if (cur_block->block_size < sizeof(xex2_compressed_block_info) ||
+        cur_block->block_size > size_t(input_end - p)) {
+      result_code = 4;
+      break;
+    }
     const uint8_t* pnext = p + cur_block->block_size;
     const auto* next_block = (const xex2_compressed_block_info*)p;
 
@@ -622,9 +708,17 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
     p += 20;
 
     while (true) {
+      if (pnext - p < 2) {
+        result_code = 4;
+        break;
+      }
       const size_t chunk_size = (p[0] << 8) | p[1];
       p += 2;
       if (!chunk_size) {
+        break;
+      }
+      if (chunk_size > size_t(pnext - p)) {
+        result_code = 4;
         break;
       }
 
@@ -768,15 +862,11 @@ void XexModule::ReadSecurityInfo() {
 
 bool XexModule::Load(const std::string_view name, const std::string_view path, const void* xex_addr,
                      size_t xex_length) {
-  auto src_header = reinterpret_cast<const xex2_header*>(xex_addr);
-
-  if (src_header->magic == kXEX1Signature) {
-    xex_format_ = kFormatXex1;
-  } else if (src_header->magic == kXEX2Signature) {
-    xex_format_ = kFormatXex2;
-  } else {
+  if (!IsHeaderWellFormed(xex_addr, xex_length)) {
     return false;
   }
+  auto src_header = reinterpret_cast<const xex2_header*>(xex_addr);
+  xex_format_ = src_header->magic == kXEX1Signature ? kFormatXex1 : kFormatXex2;
 
   assert_false(loaded_);
   loaded_ = true;

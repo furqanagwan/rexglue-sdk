@@ -18,6 +18,7 @@
 
 #include <rex/logging.h>
 #include <rex/math.h>
+#include <rex/string/utf8.h>
 #include <rex/system/xio.h>
 
 namespace rex::filesystem {
@@ -376,6 +377,9 @@ StfsContainerDevice::Error StfsContainerDevice::ReadEntrySVOD(uint32_t block, ui
   }
 
   auto name = std::string(name_buffer.get(), dir_entry.name_length);
+  if (!string::utf8_is_valid(name)) {
+    return Error::kErrorReadError;
+  }
 
   if (dir_entry.node_l) {
     auto node_result = ReadEntrySVOD(block, dir_entry.node_l, parent, depth + 1);
@@ -539,6 +543,10 @@ StfsContainerDevice::Error StfsContainerDevice::ReadSTFS() {
 
       std::string name(reinterpret_cast<const char*>(dir_entry.name),
                        std::min<size_t>(dir_entry.flags.name_length, sizeof(dir_entry.name)));
+      if (!string::utf8_is_valid(name)) {
+        REXFS_ERROR("STFS entry {} has a name that is not UTF-8", all_entries.size());
+        return Error::kErrorReadError;
+      }
       auto entry = StfsContainerEntry::Create(this, parent_entry, name, &files_);
 
       if (dir_entry.flags.directory) {

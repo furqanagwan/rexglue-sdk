@@ -118,6 +118,7 @@ class XexModule : public Module {
   }
 
   static const void* GetSecurityInfo(const xex2_header* header);
+  static bool IsHeaderWellFormed(const void* xex_addr, size_t xex_length);
 
   const PESection* GetPESection(const char* name);
 

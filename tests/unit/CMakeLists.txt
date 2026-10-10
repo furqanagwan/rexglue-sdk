@@ -39,6 +39,7 @@ add_executable(unit_tests
     system/title_display_name_test.cpp
     system/user_language_test.cpp
     system/game_source_test.cpp
+    system/parser_bounds_test.cpp
     system/file_read_statistics_test.cpp
     system/gpu_plugin_name_test.cpp
     system/release_update_test.cpp

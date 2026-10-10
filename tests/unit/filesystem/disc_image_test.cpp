@@ -152,6 +152,10 @@ TEST_CASE("XDVDFS rejects truncated headers and invalid directory trees", "[file
   SECTION("Embedded path separator") {
     bytes[kRoot + 15] = '\\';
   }
+  SECTION("Name is not UTF-8") {
+    bytes[kRoot + 14] = 0xC3;
+    bytes[kRoot + 15] = 0x28;
+  }
   SECTION("File range outside image") {
     Put32(bytes, kRoot + 8, UINT32_MAX);
   }
