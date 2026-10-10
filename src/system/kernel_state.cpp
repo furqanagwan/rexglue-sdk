@@ -114,12 +114,13 @@ KernelState::KernelState(Runtime* emulator)
   InitializeProcess(&globals->title_process, X_PROCTYPE_USER, 0, 0, 0);
 }
 
-void KernelState::InitializeProcess(X_KPROCESS* process, uint32_t process_type, uint8_t unk_18,
-                                    uint8_t unk_19, uint8_t unk_1A) {
-  process->unk_18 = unk_18;
-  process->unk_19 = unk_19;
-  process->unk_1A = unk_1A;
-  process->unk_1B = 0x06;
+void KernelState::InitializeProcess(X_KPROCESS* process, uint32_t process_type,
+                                    uint8_t process_priority_class, uint8_t default_thread_priority,
+                                    uint8_t max_dynamic_priority) {
+  process->process_priority_class = process_priority_class;
+  process->default_thread_priority = default_thread_priority;
+  process->max_dynamic_priority = max_dynamic_priority;
+  process->disable_quantum_decay = 0x06;
   process->quantum = 60;
   process->clrdataa_masked_ptr = 0;
   process->thread_count = 0;
@@ -566,9 +567,9 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
 
   auto globals = memory_->TranslateVirtual<KernelGuestGlobals*>(kernel_guest_globals_);
   auto* pib = &globals->title_process;
-  pib->unk_18 = 10;
-  pib->unk_19 = 13;
-  pib->unk_1A = 17;
+  pib->process_priority_class = 10;
+  pib->default_thread_priority = 13;
+  pib->max_dynamic_priority = 17;
 
   uint32_t default_stack_size = 0;
   executable_module_->GetOptHeader(XEX_HEADER_DEFAULT_STACK_SIZE, &default_stack_size);

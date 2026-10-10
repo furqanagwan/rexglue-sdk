@@ -72,9 +72,9 @@ X_HRESULT xeXMsgStartIORequestEx(uint32_t app, uint32_t message, uint32_t overla
 
 u32 XMsgStartIORequestEx_entry(u32 app, u32 message, ppc_ptr_t<XAM_OVERLAPPED> overlapped_ptr,
                                u32 buffer_ptr, u32 buffer_length,
-                               ppc_ptr_t<XMSGSTARTIOREQUEST_UNKNOWNARG> unknown_ptr) {
+                               ppc_ptr_t<XMSGSTARTIOREQUEST_UNKNOWNARG> xam_task_args_ptr) {
   return xeXMsgStartIORequestEx(app, message, overlapped_ptr.guest_address(), buffer_ptr,
-                                buffer_length, unknown_ptr);
+                                buffer_length, xam_task_args_ptr);
 }
 
 u32 XMsgStartIORequest_entry(u32 app, u32 message, ppc_ptr_t<XAM_OVERLAPPED> overlapped_ptr,
@@ -103,7 +103,7 @@ u32 XMsgCompleteIORequest_entry(ppc_ptr_t<XAM_OVERLAPPED> overlapped_ptr, u32 re
 }
 
 u32 XamGetOverlappedResult_entry(ppc_ptr_t<XAM_OVERLAPPED> overlapped_ptr, mapped_u32 length_ptr,
-                                 u32 unknown) {
+                                 u32 wait) {
   uint32_t result;
   if (overlapped_ptr->result != X_ERROR_IO_PENDING) {
     result = overlapped_ptr->result;

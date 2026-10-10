@@ -34,7 +34,7 @@ namespace kernel {
 namespace xam {
 using namespace rex::system;
 
-u32 XamFeatureEnabled_entry(u32 unk) {
+u32 XamFeatureEnabled_entry(u32 feature_bit) {
   return 0;
 }
 
@@ -251,8 +251,8 @@ void XamLoaderTerminateTitle_entry() {
   REX_KERNEL_STATE()->TerminateTitle();
 }
 
-u32 XamAlloc_entry(u32 unk, u32 size, mapped_u32 out_ptr) {
-  assert_true(unk == 0);
+u32 XamAlloc_entry(u32 flags, u32 size, mapped_u32 out_ptr) {
+  assert_true(flags == 0);
 
   uint32_t ptr = REX_KERNEL_MEMORY()->SystemHeapAlloc(size);
   *out_ptr = ptr;

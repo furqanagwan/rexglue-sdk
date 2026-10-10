@@ -36,7 +36,7 @@ void XamNuiGetDeviceStatus_entry(ppc_ptr_t<X_NUI_DEVICE_STATUS> status_ptr) {
   status_ptr->status = 0;
 }
 
-u32 XamShowNuiTroubleshooterUI_entry(u32 unk1, u32 unk2, u32 unk3) {
+u32 XamShowNuiTroubleshooterUI_entry(u32 user_index, u32 tracking_id, u32 flags) {
   if (REXCVAR_GET(headless)) {
     return 0;
   }

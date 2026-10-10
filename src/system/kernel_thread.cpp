@@ -197,8 +197,8 @@ void XThread::InitializeGuestObject() {
   guest_thread->header.type = 6;
   guest_thread->suspend_count = (creation_params_.creation_flags & X_CREATE_SUSPENDED) ? 1 : 0;
 
-  guest_thread->unk_10 = guest_ptr + 0x010;
-  guest_thread->unk_14 = guest_ptr + 0x010;
+  guest_thread->mutants_list.flink_ptr = guest_ptr + 0x010;
+  guest_thread->mutants_list.blink_ptr = guest_ptr + 0x010;
 
   guest_thread->wait_timeout_block.wait_list_entry.flink_ptr = guest_ptr + 0x20;
   guest_thread->wait_timeout_block.wait_list_entry.blink_ptr = guest_ptr + 0x20;
@@ -259,7 +259,7 @@ void XThread::InitializeGuestObject() {
 
   guest_thread->last_error = 0;
   guest_thread->creation_flags = creation_params_.creation_flags;
-  guest_thread->unk_17C = 1;
+  guest_thread->vscr = 1;
 }
 
 bool XThread::AllocateStack(uint32_t size) {

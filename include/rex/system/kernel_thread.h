@@ -209,8 +209,7 @@ struct X_KPCR {
 
 struct X_KTHREAD {
   X_DISPATCH_HEADER header;
-  rex::be<uint32_t> unk_10;
-  rex::be<uint32_t> unk_14;
+  X_LIST_ENTRY mutants_list;
   X_KTIMER wait_timeout_timer;
   X_KWAIT_BLOCK wait_timeout_block;
   uint8_t unk_58[0x4];
@@ -238,12 +237,16 @@ struct X_KTHREAD {
   rex::be<uint32_t> msr_mask;
   rex::be<X_STATUS> wait_result;
   uint8_t wait_irql;
-  uint8_t unk_A5[0xB];
+  uint8_t processor_mode;
+  uint8_t wait_next;
+  uint8_t wait_reason;
+  TypedGuestPointer<X_KWAIT_BLOCK> wait_blocks;
+  uint8_t unk_AC[4];
   int32_t apc_disable_count;
   rex::be<int32_t> quantum;
-  uint8_t unk_B8;
-  uint8_t unk_B9;
-  uint8_t unk_BA;
+  uint8_t saturation_increment;
+  uint8_t base_priority;
+  uint8_t priority_decrement;
   uint8_t boost_disabled;
   uint8_t suspend_count;
   uint8_t was_preempted;
@@ -251,9 +254,9 @@ struct X_KTHREAD {
   uint8_t current_cpu;
   TypedGuestPointer<X_KPRCB> a_prcb_ptr;
   TypedGuestPointer<X_KPRCB> another_prcb_ptr;
-  uint8_t unk_C8;
-  uint8_t unk_C9;
-  uint8_t unk_CA;
+  uint8_t process_priority_class;
+  uint8_t base_priority_copy;
+  uint8_t max_dynamic_priority;
   uint8_t unk_CB;
   X_KSPINLOCK timer_list_lock;
   rex::be<uint32_t> stack_alloc_base;
@@ -277,9 +280,12 @@ struct X_KTHREAD {
   rex::be<uint32_t> fiber_ptr;
   uint8_t unk_168[0x4];
   rex::be<uint32_t> creation_flags;
-  uint8_t unk_170[0xC];
-  rex::be<uint32_t> unk_17C;
-  uint8_t unk_180[0x930];
+  uint8_t vscr_upper[0xC];
+  rex::be<uint32_t> vscr;
+  uint8_t vmx_context[0x800];
+  rex::be<double> fpscr;
+  rex::be<double> fpu_context[32];
+  uint8_t unk_A88[0x28];
 };
 static_assert_size(X_KTHREAD, 0xAB0);
 

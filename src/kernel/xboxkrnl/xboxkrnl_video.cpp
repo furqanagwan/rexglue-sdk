@@ -224,7 +224,7 @@ u32 VdSetDisplayMode_entry(u32 flags) {
   return 0;
 }
 
-u32 VdSetDisplayModeOverride_entry(u32 unk0, u32 unk1, f64 refresh_rate, u32 unk3, u32 unk4) {
+u32 VdSetDisplayModeOverride_entry(u32 width, u32 height, f64 refresh_rate, u32 unk3, u32 unk4) {
   return 0;
 }
 
