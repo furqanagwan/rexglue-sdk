@@ -18,3 +18,4 @@ Accepted destination/policy decisions. Each ADR's status line records how far it
 - [Checked game sources and media recovery](ADR-014-game-source-and-media-recovery.md)
 - [Guide presentation by title host](ADR-015-guide-presentation-by-title.md)
 - [Required PC GDK and future Helix validation](ADR-016-required-pc-gdk.md)
+- [DirectX 12 Ultimate as an optional tier](ADR-017-directx-12-ultimate-tier.md)
