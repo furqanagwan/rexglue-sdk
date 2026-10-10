@@ -14,17 +14,12 @@
 
 #include <rex/platform.h>
 
-// Mesa is only built where a backend consumes DXIL: D3D12 on Windows, and the
-// Metal Shader Converter path on macOS (see third_party/CMakeLists.txt).
-#if REX_PLATFORM_WIN32 || XE_PLATFORM_MAC
-
 #include <cstring>
 #include <string>
 
 #include "thirdparty/dxbc/DXBCChecksum.h"
 #include <rex/logging.h>
 
-#if REX_PLATFORM_WIN32
 // Windows, wrl/client.h and the DXC validator interfaces (IDxcValidator,
 // IDxcVersionInfo) used to sign the converted DXIL.
 #include <windows.h>
@@ -36,7 +31,6 @@
 
 #include <dxcapi.h>
 #include <rex/filesystem.h>
-#endif
 
 // Mesa C ABI. The header carries its own extern "C" guards.
 #include "spirv_to_dxil.h"
@@ -105,8 +99,6 @@ dxil_spirv_runtime_conf MakeRuntimeConf(bool lower_to_bindless, bool keep_io_var
   conf.input_clip_size = input_clip_size;
   return conf;
 }
-
-#if REX_PLATFORM_WIN32
 
 // The SPIR-V to DXIL conversion itself is thread safe: Mesa's glsl_type cache
 // (its only shared global) locks internally, so conversions run in parallel
@@ -241,34 +233,6 @@ bool SignDxil(std::vector<uint8_t>& dxil, const char* stage) {
   return true;
 }
 
-#else
-
-// Offset of the 16-byte container digest, right after the DXBC magic.
-constexpr size_t kDxilContainerHashOffset = 4;
-
-// DXIL.dll is Windows only, so there is no validator to stamp a version from.
-// Mesa falls back to the newest version it can emit.
-bool AcquireValidatorVersion(enum dxil_validator_version* out_version) {
-  *out_version = NO_DXIL_VALIDATION;
-  return true;
-}
-
-// Stamps the container digest that spirv_to_dxil leaves zeroed. This is the
-// same MD5 variant over everything past the digest that DXC's validator writes
-// as its retail hash, and that Xenia's DXBC translator already uses for its own
-// containers.
-bool SignDxil(std::vector<uint8_t>& dxil, const char* stage) {
-  if (dxil.size() <= kDxilContainerHashOffset + sizeof(uint32_t) * 4) {
-    REXGPU_ERROR("spirv_to_dxil: {} shader container is too small to sign", stage);
-    return false;
-  }
-  unsigned int hash[4];
-  CalculateDXBCChecksum(dxil.data(), static_cast<unsigned int>(dxil.size()), hash);
-  std::memcpy(dxil.data() + kDxilContainerHashOffset, hash, sizeof(hash));
-  return true;
-}
-
-#endif  // REX_PLATFORM_WIN32
 }  // namespace
 
 uint64_t SpirvToDxilCompiler::version() {
@@ -368,5 +332,3 @@ std::vector<std::vector<uint8_t>> SpirvToDxilCompiler::TranslateLinked(
 }
 
 }  // namespace rex::graphics
-
-#endif  // REX_PLATFORM_WIN32 || XE_PLATFORM_MAC

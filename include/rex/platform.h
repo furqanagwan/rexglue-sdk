@@ -11,41 +11,8 @@
 
 #pragma once
 
-// This file contains the main platform switches used by rex as well as any
-// fixups required to normalize the environment. Everything in here should be
-// largely portable.
-// Platform-specific headers, like platform_win.h, are used to house any
-// super platform-specific stuff that implies code is not platform-agnostic.
-//
-// NOTE: ordering matters here as sometimes multiple flags are defined on
-// certain platforms.
-//
-// Great resource on predefined macros:
-// https://sourceforge.net/p/predef/wiki/OperatingSystems/
-// Original link: https://predef.sourceforge.net/preos.html
-
-#if defined(WIN32) || defined(_WIN32)
-#define REX_PLATFORM_WIN32 1
-#else
+#if !defined(_WIN32)
 #error ReXGlue supports Windows only (RG-GDK-024).
-#endif
-
-// Ensure all platform macros are always defined (0 when inactive)
-// so they can be used in static_assert and regular expressions.
-#ifndef REX_PLATFORM_MAC
-#define REX_PLATFORM_MAC 0
-#endif
-#ifndef REX_PLATFORM_WIN32
-#define REX_PLATFORM_WIN32 0
-#endif
-#ifndef REX_PLATFORM_ANDROID
-#define REX_PLATFORM_ANDROID 0
-#endif
-#ifndef REX_PLATFORM_GNU_LINUX
-#define REX_PLATFORM_GNU_LINUX 0
-#endif
-#ifndef REX_PLATFORM_LINUX
-#define REX_PLATFORM_LINUX 0
 #endif
 
 #if defined(__clang__)
@@ -72,15 +39,7 @@
 #define REX_ARCH_PPC 1
 #endif
 
-#if REX_PLATFORM_WIN32
 #include <intrin.h>
-#elif REX_ARCH_AMD64
-#include <x86intrin.h>
-#endif  // REX_PLATFORM_WIN32
-
-#if REX_PLATFORM_MAC
-#include <libkern/OSByteOrder.h>
-#endif  // REX_PLATFORM_MAC
 
 #include <bit>
 #include <cstdint>
@@ -128,10 +87,6 @@
 
 namespace rex::platform {
 
-#if REX_PLATFORM_WIN32
 inline constexpr char kPathSeparator = '\\';
-#else
-inline constexpr char kPathSeparator = '/';
-#endif  // REX_PLATFORM_WIN32
 
 }  // namespace rex::platform

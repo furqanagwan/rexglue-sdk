@@ -9,8 +9,6 @@
 #include <rex/chrono/clock.h>
 #include <rex/platform.h>
 
-static_assert(REX_PLATFORM_WIN32, "This file is Windows-only");
-
 #include "platform_win.h"
 
 namespace rex::chrono {

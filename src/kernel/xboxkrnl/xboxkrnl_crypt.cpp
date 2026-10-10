@@ -23,11 +23,9 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/xtypes.h>
 
-#if REX_PLATFORM_WIN32
 #include <windows.h>
 
 #include <bcrypt.h>
-#endif
 
 #include "crypto/TinySHA1.hpp"
 #include "crypto/des/des.cpp"
@@ -255,13 +253,6 @@ static_assert_size(XECRYPT_RSA, 0x10);
 u32 XeCryptBnQwNeRsaPubCrypt_entry(ppc_ptr_t<uint64_t> qw_a, ppc_ptr_t<uint64_t> qw_b,
                                    ppc_ptr_t<XECRYPT_RSA> rsa) {
   // 0 indicates failure (but not a BOOL return value)
-#if !REX_PLATFORM_WIN32
-  REXKRNL_ERROR(
-      "XeCryptBnQwNeRsaPubCrypt called but no implementation available for "
-      "this platform!");
-  assert_always();
-  return 1;
-#else
   uint32_t modulus_size = rsa->size * 8;
 
   // Convert XECRYPT blob into BCrypt format
@@ -344,13 +335,7 @@ u32 XeCryptBnQwNeRsaPubCrypt_entry(ppc_ptr_t<uint64_t> qw_a, ppc_ptr_t<uint64_t>
   }
 
   return BCRYPT_SUCCESS(status) ? 1 : 0;
-#endif
 }
-#if REX_PLATFORM_WIN32
-
-#else
-
-#endif
 
 u32 XeCryptBnDwLePkcs1Verify_entry(mapped_void hash, mapped_void sig, u32 size) {
   // BOOL return value

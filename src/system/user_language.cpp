@@ -8,9 +8,7 @@
 #include <rex/system/flags.h>
 #include <rex/platform.h>
 
-#if REX_PLATFORM_WIN32
 #include <windows.h>
-#endif
 
 namespace rex::system {
 
@@ -61,7 +59,6 @@ XLanguage GetUserLanguage() {
     return static_cast<XLanguage>(language);
   }
   if (language == 0) {
-#if REX_PLATFORM_WIN32
     wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
     if (GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH)) {
       // Windows locale names contain ASCII language, script and region subtags.
@@ -73,7 +70,6 @@ XLanguage GetUserLanguage() {
       }
       return LanguageFromLocale(name);
     }
-#endif
   }
   return XLanguage::kEnglish;
 }

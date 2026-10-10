@@ -94,8 +94,6 @@ inline void initialize_seh() {
 // SEH Guard Scope and Macros
 //=============================================================================
 
-#if REX_PLATFORM_WIN32
-
 class SehGuard {
  public:
   SehGuard() = default;
@@ -114,38 +112,5 @@ class SehGuard {
 #define SEH_RETHROW ::rex::platform::seh_rethrow()
 
 #define SEH_END }
-
-#else  // !REX_PLATFORM_WIN32
-
-class SehGuard {
- public:
-  SehGuard() {
-    was_active_ = platform::seh_active();
-    platform::seh_active() = true;
-  }
-
-  ~SehGuard() { platform::seh_active() = was_active_; }
-
-  SehGuard(const SehGuard&) = delete;
-  SehGuard& operator=(const SehGuard&) = delete;
-
- private:
-  bool was_active_ = false;
-};
-
-#define SEH_TRY                  \
-  {                              \
-    ::rex::SehGuard __seh_guard; \
-    try
-
-#define SEH_CATCH catch (const ::rex::SehException&)
-
-#define SEH_CATCH_ALL catch (...)
-
-#define SEH_RETHROW throw
-
-#define SEH_END }
-
-#endif  // REX_PLATFORM_WIN32
 
 }  // namespace rex

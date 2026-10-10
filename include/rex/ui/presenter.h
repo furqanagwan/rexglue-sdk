@@ -34,7 +34,6 @@
 #include <rex/ui/surface.h>
 #include <rex/ui/ui_drawer.h>
 
-#if REX_PLATFORM_WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -45,7 +44,6 @@
 #include <windows.h>
 
 #include <wrl/client.h>
-#endif  // XE_PLATFORM
 
 namespace rex {
 namespace ui {
@@ -1002,7 +1000,6 @@ class Presenter {
   // presentation requests to prevent adding arbitrary amounts of latency to it.
   // On Android and GTK, this is not needed, the frame rate of draw events is
   // limited to the display refresh rate internally.
-#if REX_PLATFORM_WIN32
   static Microsoft::WRL::ComPtr<IDXGIOutput> GetDXGIOutputForMonitor(IDXGIFactory1* factory,
                                                                      HMONITOR monitor);
   bool AreDXGIUITicksWaitable(
@@ -1050,7 +1047,6 @@ class Presenter {
   std::condition_variable dxgi_ui_tick_signal_condition_;
 
   std::thread dxgi_ui_tick_thread_;
-#endif  // XE_PLATFORM
 };
 
 }  // namespace ui

@@ -183,8 +183,6 @@ void ImGuiDrawer::Initialize() {
   io.Fonts->AddFontFromMemoryCompressedBase85TTF(kProggyTinyCompressedDataBase85, 10.0f,
                                                  &font_config, font_glyph_ranges);
 
-#if REX_PLATFORM_WIN32
-  // TODO(benvanik): jp font on other platforms?
   // https://github.com/Koruri/kibitaki looks really good, but is 1.5MiB.
   const char* jp_font_path = "C:\\Windows\\Fonts\\msgothic.ttc";
   if (std::filesystem::exists(jp_font_path)) {
@@ -198,7 +196,6 @@ void ImGuiDrawer::Initialize() {
   } else {
     REXLOG_WARN("Unable to load Japanese font; JP characters will be boxes");
   }
-#endif
 
   if (font_setup_) {
     font_setup_(io.Fonts);
