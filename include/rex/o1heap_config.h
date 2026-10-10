@@ -6,11 +6,6 @@
  * @license     BSD 3-Clause License
  */
 
-// On Windows, unsigned long is 32 bits even on x64.  o1heap.c auto-selects
-// __builtin_clzl under clang-cl (because __clang__ is defined), but that
-// gives a 32-bit CLZ while o1heap needs 64-bit (size_t-width).  This causes
-// roundUpToPowerOf2() to produce astronomically large values, corrupting the
-// heap bin structure on first allocation.
 #pragma once
 
 #if defined(__clang__) || defined(__GNUC__)

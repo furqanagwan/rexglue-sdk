@@ -21,10 +21,6 @@
 
 namespace rex::stream {
 
-//=============================================================================
-// BitStream - Bit-level stream operations
-//=============================================================================
-
 class BitStream {
  public:
   BitStream(uint8_t* buffer, size_t size_in_bits);
@@ -39,7 +35,6 @@ class BitStream {
   void SetOffset(size_t offset_bits);
   size_t BitsRemaining();
 
-  // Note: num_bits MUST be in the range 0-57 (inclusive)
   uint64_t Peek(size_t num_bits);
   uint64_t Read(size_t num_bits);
   bool Write(uint64_t val, size_t num_bits);
@@ -52,10 +47,6 @@ class BitStream {
   size_t size_bits_ = 0;
 };
 
-//=============================================================================
-// ByteStream - Byte-level stream operations
-//=============================================================================
-
 class ByteStream {
  public:
   ByteStream(uint8_t* data, size_t data_length, size_t offset = 0);
@@ -65,7 +56,6 @@ class ByteStream {
   void Read(std::span<uint8_t> buf);
   void Write(std::span<const uint8_t> buf);
 
-  // Convenience overloads for void* (legacy compatibility)
   void Read(void* buf, size_t len) {
     return Read(std::span<uint8_t>(reinterpret_cast<uint8_t*>(buf), len));
   }
@@ -114,4 +104,4 @@ std::string ByteStream::Read();
 template <>
 std::u16string ByteStream::Read();
 
-}  // namespace rex::stream
+}

@@ -26,7 +26,7 @@ namespace rex {
   static_assert(sizeof(type) == size, "bad definition for " #type ": must be " #size " bytes")
 
 #ifdef NDEBUG
-// References expr in an unevaluated short-circuit so -Wunused doesn't fire.
+
 #define rex_assert(expr) ((void)(false && (expr)))
 #else
 #define rex_assert(expr) assert(expr)
@@ -40,11 +40,6 @@ namespace rex {
 #define __REX_MACRO_DISPATCH_(func, nargs) __REX_MACRO_DISPATCH__(func, nargs)
 #define __REX_MACRO_DISPATCH__(func, nargs) func##nargs
 
-/// Assert failure handler that logs the message before aborting
-/// @param file     Source file (__FILE__)
-/// @param line     Line number (__LINE__)
-/// @param expr     Expression that failed (stringified)
-/// @param message  User-provided message explaining the failure
 [[noreturn]] inline void rex_assert_fail(const char* file, int line, const char* expr,
                                          const char* message) {
   fprintf(stderr, "Assertion failed: %s\n  Expression: %s\n  Location: %s:%d\n", message, expr,
@@ -111,13 +106,9 @@ namespace rex {
 
 #define assert_unhandled_case(variable) assert_always("unhandled switch(" #variable ") case")
 
-/// Marks code as unreachable. Invokes undefined behavior if reached.
-/// Use in switch default cases and after exhaustive if-else chains.
 #define rex_unreachable() std::unreachable()
 
-// Fatal error that terminates the program with a message
 [[noreturn]] inline void FatalError(const char* message) {
-  // Print to stderr and terminate
   fprintf(stderr, "FATAL ERROR: %s\n", message);
   fflush(stderr);
   std::abort();
@@ -127,4 +118,4 @@ namespace rex {
   FatalError(message.c_str());
 }
 
-}  // namespace rex
+}

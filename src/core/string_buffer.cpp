@@ -103,4 +103,4 @@ std::vector<uint8_t> StringBuffer::to_bytes() const {
   return bytes;
 }
 
-}  // namespace rex::string
+}

@@ -26,14 +26,7 @@
 namespace rex {
 namespace memory {
 
-// For variable declarations (not return values or `this` pointer).
-// Not propagated.
 #define REX_RESTRICT_VAR __restrict
-
-// Aliasing-safe bit reinterpretation.
-// For more complex cases such as non-trivially-copyable types, write copying
-// code respecting the requirements for them externally instead of using these
-// functions.
 
 template <typename Dst, typename Src>
 void Reinterpret(Dst& REX_RESTRICT_VAR dst, const Src& REX_RESTRICT_VAR src) {
@@ -50,12 +43,8 @@ Dst Reinterpret(const Src& REX_RESTRICT_VAR src) {
   return dst;
 }
 
-// Returns the native page size of the system, in bytes.
-// This should be ~4KiB.
 size_t page_size();
 
-// Returns the allocation granularity of the system, in bytes.
-// This is likely 64KiB.
 size_t allocation_granularity();
 
 enum class PageAccess {
@@ -77,54 +66,30 @@ enum class DeallocationType {
   kDecommit = 1 << 1,
 };
 
-// Whether the host allows the pages to be allocated or mapped with
-// PageAccess::kExecuteReadWrite - if not, separate mappings backed by the same
-// memory-mapped file must be used to write to executable pages.
 bool IsWritableExecutableMemorySupported();
 
-// Whether PageAccess::kExecuteReadWrite is a supported and preferred way of
-// writing executable memory, useful for simulating how Xenia would work without
-// writable executable memory on a system with it.
 bool IsWritableExecutableMemoryPreferred();
 
-// Allocates a block of memory at the given page-aligned base address.
-// Fails if the memory is not available.
-// Specify nullptr for base_address to leave it up to the system.
 void* AllocFixed(void* base_address, size_t length, AllocationType allocation_type,
                  PageAccess access);
 
-// Deallocates and/or releases the given block of memory.
-// When releasing memory length must be zero, as all pages in the region are
-// released.
 bool DeallocFixed(void* base_address, size_t length, DeallocationType deallocation_type);
 
-// Sets the access rights for the given block of memory and returns the previous
-// access rights. Both base_address and length will be adjusted to page_size().
 bool Protect(void* base_address, size_t length, PageAccess access,
              PageAccess* out_old_access = nullptr);
 
-// Queries a region of pages to get the access rights. This will modify the
-// length parameter to the length of pages with the same consecutive access
-// rights. The length will start from the first byte of the first page of
-// the region.
 bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out);
 
-// Allocates a block of memory for a type with the given alignment.
-// The memory must be freed with AlignedFree.
 template <typename T>
 inline T* AlignedAlloc(size_t alignment) {
   return reinterpret_cast<T*>(_aligned_malloc(sizeof(T), alignment));
 }
 
-// Frees memory previously allocated with AlignedAlloc.
 template <typename T>
 void AlignedFree(T* ptr) {
   _aligned_free(ptr);
 }
 
-// Opaque file mapping handle.
-// On Windows this holds a HANDLE (void*), on POSIX a file descriptor (int).
-// We use intptr_t to hold either without platform guards.
 using FileMappingHandle = intptr_t;
 constexpr FileMappingHandle kFileMappingHandleInvalid = -1;
 
@@ -196,7 +161,6 @@ void copy_and_swap(T* dest, const T* src, size_t count) {
   }
 }
 
-/// Load a value of type T from arbitrary memory (handles unaligned access).
 template <typename T>
 inline T load(const void* mem) {
   static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
@@ -205,13 +169,11 @@ inline T load(const void* mem) {
   return result;
 }
 
-/// Load a value of type T from memory and byte-swap it.
 template <typename T>
 inline T load_and_swap(const void* mem) {
   return byte_swap(load<T>(mem));
 }
 
-// String specializations need custom logic
 template <>
 inline std::string load_and_swap<std::string>(const void* mem) {
   std::string value;
@@ -237,20 +199,17 @@ inline std::u16string load_and_swap<std::u16string>(const void* mem) {
   return value;
 }
 
-/// Store a value of type T to arbitrary memory (handles unaligned access).
 template <typename T>
 inline void store(void* mem, const T& value) {
   static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
   std::memcpy(mem, &value, sizeof(T));
 }
 
-/// Store a byte-swapped value of type T to memory.
 template <typename T>
 inline void store_and_swap(void* mem, const T& value) {
   store(mem, byte_swap(value));
 }
 
-// String specializations need custom logic
 template <>
 inline void store_and_swap<std::string_view>(void* mem, const std::string_view& value) {
   for (size_t i = 0; i < value.size(); ++i) {
@@ -274,16 +233,11 @@ inline void store_and_swap<std::u16string>(void* mem, const std::u16string& valu
 
 using fourcc_t = uint32_t;
 
-// Get FourCC in host byte order
-// make_fourcc('a', 'b', 'c', 'd') == 0x61626364
 constexpr inline fourcc_t make_fourcc(char a, char b, char c, char d) {
   return fourcc_t((static_cast<fourcc_t>(a) << 24) | (static_cast<fourcc_t>(b) << 16) |
                   (static_cast<fourcc_t>(c) << 8) | static_cast<fourcc_t>(d));
 }
 
-// Get FourCC in host byte order
-// This overload requires fourcc.length() == 4
-// make_fourcc("abcd") == 'abcd' == 0x61626364 for most compilers
 constexpr inline fourcc_t make_fourcc(const std::string_view fourcc) {
   if (fourcc.length() != 4) {
     throw std::runtime_error("Invalid fourcc length");
@@ -291,5 +245,5 @@ constexpr inline fourcc_t make_fourcc(const std::string_view fourcc) {
   return make_fourcc(fourcc[0], fourcc[1], fourcc[2], fourcc[3]);
 }
 
-}  // namespace memory
-}  // namespace rex
+}
+}

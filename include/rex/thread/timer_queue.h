@@ -16,9 +16,6 @@
 #include <functional>
 #include <memory>
 
-// This is a platform independent implementation of a timer queue similar to
-// Windows CreateTimerQueueTimer with WT_EXECUTEINTIMERTHREAD.
-
 namespace rex::thread {
 
 class TimerQueue;
@@ -35,31 +32,19 @@ struct TimerQueueWaitItem {
         interval_(interval),
         state_(State::kIdle) {}
 
-  // Cancel the pending wait item. No callbacks will be running after this call.
-  // The function blocks if a callback is running and returns only after the
-  // callback has finished (except when called from the corresponding callback
-  // itself, where it will mark the wait item for disarmament and return
-  // immediately). Deadlocks are possible when a lock is held during disamament
-  // and the corresponding callback is running concurrently, trying to acquire
-  // said lock.
   void Disarm();
 
   friend TimerQueue;
 
  private:
-  enum class State : uint_least8_t {
-    kIdle = 0,                // Waiting for the due time
-    kInCallback,              // Callback is being executed
-    kInCallbackSelfDisarmed,  // Callback is being executed and disarmed itself
-    kDisarmed                 // Disarmed, waiting for destruction
-  };
+  enum class State : uint_least8_t { kIdle = 0, kInCallback, kInCallbackSelfDisarmed, kDisarmed };
   static_assert(std::atomic<State>::is_always_lock_free);
 
   std::function<void(void*)> callback_;
   void* userdata_;
   TimerQueue* parent_queue_;
   clock::time_point due_;
-  clock::duration interval_;  // zero if not recurring
+  clock::duration interval_;
   std::atomic<State> state_;
 };
 
@@ -67,12 +52,9 @@ std::weak_ptr<TimerQueueWaitItem> QueueTimerOnce(std::function<void(void*)> call
                                                  void* userdata,
                                                  TimerQueueWaitItem::clock::time_point due);
 
-// Callback is first executed at due, then again repeatedly after interval
-// passes (unless interval == 0). The first callback will be scheduled at
-// `max(now() - interval, due)` to mitigate callback flooding.
 std::weak_ptr<TimerQueueWaitItem> QueueTimerRecurring(std::function<void(void*)> callback,
                                                       void* userdata,
                                                       TimerQueueWaitItem::clock::time_point due,
                                                       TimerQueueWaitItem::clock::duration interval);
 
-}  // namespace rex::thread
+}

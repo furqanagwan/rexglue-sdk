@@ -29,16 +29,8 @@
 
 namespace rex {
 
-//=============================================================================
-// SEH Exception Type
-//=============================================================================
-
-/**
- * @brief Exception thrown when hardware exception occurs in SEH-protected code
- */
 class SehException : public std::exception {
  public:
-  /// Exception codes matching Windows EXCEPTION_* values
   enum Code : u32 {
     ACCESS_VIOLATION = 0xC0000005,
     IN_PAGE_ERROR = 0xC0000006,
@@ -78,10 +70,6 @@ class SehException : public std::exception {
   uintptr_t address_;
 };
 
-//=============================================================================
-// Initialization
-//=============================================================================
-
 inline void initialize_seh_thread() {
   platform::seh_active() = false;
 }
@@ -89,10 +77,6 @@ inline void initialize_seh_thread() {
 inline void initialize_seh() {
   platform::seh_initialize();
 }
-
-//=============================================================================
-// SEH Guard Scope and Macros
-//=============================================================================
 
 class SehGuard {
  public:
@@ -113,4 +97,4 @@ class SehGuard {
 
 #define SEH_END }
 
-}  // namespace rex
+}

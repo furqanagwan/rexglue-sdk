@@ -39,12 +39,10 @@ size_t BitMap::Acquire() {
       entry = data_[i];
       uint8_t index = lzcnt(entry);
       if (index == kDataSizeBits) {
-        // None free.
         acquired_idx = -1;
         break;
       }
 
-      // Entry has a free bit. Acquire it.
       uint64_t bit = 1ull << (kDataSizeBits - index - 1);
       new_entry = entry & ~bit;
       assert_not_zero(entry & bit);
@@ -53,7 +51,6 @@ size_t BitMap::Acquire() {
     } while (!thread::atomic_cas(entry, new_entry, &data_[i]));
 
     if (acquired_idx != -1) {
-      // Acquired.
       return (i * kDataSizeBits) + acquired_idx;
     }
   }
@@ -82,7 +79,6 @@ void BitMap::Resize(size_t new_size_bits) {
   assert_true(new_size_bits % kDataSizeBits == 0);
   data_.resize(new_size_bits / kDataSizeBits);
 
-  // Initialize new entries.
   if (data_.size() > old_size) {
     for (size_t i = old_size; i < data_.size(); i++) {
       data_[i] = -1;
@@ -96,4 +92,4 @@ void BitMap::Reset() {
   }
 }
 
-}  // namespace rex::bit
+}

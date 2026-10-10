@@ -62,4 +62,4 @@ bool bit_scan_forward(uint64_t v, uint32_t* out_first_set_index) {
   return _BitScanForward64(reinterpret_cast<unsigned long*>(out_first_set_index), v) != 0;
 }
 
-}  // namespace rex
+}

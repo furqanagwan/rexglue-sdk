@@ -51,7 +51,6 @@ inline std::string trim_string(std::string_view sv, std::string_view chars = kWh
   return std::string(trim(sv, chars));
 }
 
-// Caller must free() the returned pointer.
 inline char* duplicate(const char* source) {
   return _strdup(source);
 }
@@ -88,8 +87,6 @@ inline size_t copy_and_swap_truncating(char16_t* dest, const std::u16string_view
   return chars_copied;
 }
 
-// No in-buffer NUL terminator. Caller must zero the buffer (or rely on
-// adjacent padding bytes) to terminate.
 inline size_t copy_unterminated(char* dest, const std::string_view source,
                                 size_t dest_buffer_count) {
   if (!dest_buffer_count) {
@@ -100,4 +97,4 @@ inline size_t copy_unterminated(char* dest, const std::string_view source,
   return chars_copied;
 }
 
-}  // namespace rex::string
+}

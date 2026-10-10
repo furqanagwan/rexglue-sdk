@@ -291,7 +291,6 @@ std::string_view::size_type utf8_find_first_of(const std::string_view haystack,
     auto end = it;
     for (size_t i = 0; i < needle_count; ++i) {
       if (end == haystack_end) {
-        // not enough room in target for search
         return std::string_view::npos;
       }
       ++end;
@@ -330,7 +329,6 @@ std::string_view::size_type utf8_find_first_of_case(const std::string_view hayst
     auto end = it;
     for (size_t i = 0; i < needle_count; ++i) {
       if (end == haystack_end) {
-        // not enough room in target for search
         return std::string_view::npos;
       }
       ++end;
@@ -368,7 +366,6 @@ bool utf8_starts_with(const std::string_view haystack, const std::string_view ne
   auto end = it;
   for (size_t i = 0; i < needle_count; ++i) {
     if (end == haystack_end) {
-      // not enough room in target for search
       return false;
     }
     ++end;
@@ -393,7 +390,6 @@ bool utf8_starts_with_case(const std::string_view haystack, const std::string_vi
   auto end = it;
   for (size_t i = 0; i < needle_count; ++i) {
     if (end == haystack_end) {
-      // not enough room in target for search
       return false;
     }
     ++end;
@@ -420,7 +416,6 @@ bool utf8_ends_with(const std::string_view haystack, const std::string_view need
 
   for (size_t i = 1; i < needle_count; ++i) {
     if (it == haystack_begin) {
-      // not enough room in target for search
       return false;
     }
     --it;
@@ -447,7 +442,6 @@ bool utf8_ends_with_case(const std::string_view haystack, const std::string_view
 
   for (size_t i = 0; i < needle_count; ++i) {
     if (it == haystack_begin) {
-      // not enough room in target for search
       return false;
     }
     --it;
@@ -509,7 +503,6 @@ std::string utf8_fix_path_separators(const std::string_view path, char32_t new_s
     return std::string();
   }
 
-  // Swap all separators to new_sep.
   const char32_t old_separator = new_separator == U'\\' ? U'/' : U'\\';
 
   auto [path_begin, path_end] = make_citer(path);
@@ -522,7 +515,6 @@ std::string utf8_fix_path_separators(const std::string_view path, char32_t new_s
     return c == uint32_t(old_separator) || c == uint32_t(new_separator);
   };
 
-  // Begins with a separator
   if (is_separator(*it)) {
     utfcpp::append(new_separator, result);
     ++it;
@@ -568,19 +560,15 @@ std::string utf8_find_name_from_path(const std::string_view path, char32_t separ
   auto it = end;
   --it;
 
-  // skip trailing separators at the end of the path
   while (*it == uint32_t(separator)) {
     if (it == begin) {
-      // path is all separators, name is empty
       return std::string();
     }
     --it;
   }
 
-  // update end so it is before any trailing separators
   end = std::next(it);
 
-  // skip non-separators
   while (*it != uint32_t(separator)) {
     if (it == begin) {
       break;
@@ -588,7 +576,6 @@ std::string utf8_find_name_from_path(const std::string_view path, char32_t separ
     --it;
   }
 
-  // if the iterator is on a separator, advance
   if (*it == uint32_t(separator)) {
     ++it;
   }
@@ -635,7 +622,6 @@ std::string utf8_find_base_path(const std::string_view path, char32_t separator)
   auto it = end;
   --it;
 
-  // skip trailing separators at the end of the path
   while (*it == uint32_t(separator)) {
     if (it == begin) {
       return std::string();
@@ -643,29 +629,22 @@ std::string utf8_find_base_path(const std::string_view path, char32_t separator)
     --it;
   }
 
-  // skip non-separators
   while (*it != uint32_t(separator)) {
     if (it == begin) {
-      // there are no separators, base path is empty
       return std::string();
     }
     --it;
   }
 
-  // Save position of the separator we just found
   auto sep_pos = it;
 
-  // skip trailing separators at the end of the base path
   while (*it == uint32_t(separator)) {
     if (it == begin) {
-      // base path is all separators, base path is empty
       return std::string();
     }
     --it;
   }
 
-  // If we stopped at a colon (drive letter like "D:"), include the root separator
-  // This ensures "D:\file.txt" returns "D:\" not "D:"
   if (*it == uint32_t(':')) {
     auto length = byte_length(begin, std::next(sep_pos));
     return std::string(path.substr(0, length));
@@ -686,10 +665,8 @@ std::string utf8_canonicalize_path(const std::string_view path, char32_t separat
   for (auto it = parts.begin(); it != parts.end();) {
     const auto& part = *it;
     if (part == ".") {
-      // Potential marker for current directory.
       it = parts.erase(it);
     } else if (part == "..") {
-      // Ensure we don't override the device name.
       if (it != parts.begin()) {
         auto prev = std::prev(it);
         if (!utf8_ends_with(*prev, ":")) {
@@ -706,4 +683,4 @@ std::string utf8_canonicalize_path(const std::string_view path, char32_t separat
                     : to_string(separator) + utf8_join_paths(parts, separator);
 }
 
-}  // namespace rex::string
+}

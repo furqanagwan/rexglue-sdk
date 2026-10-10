@@ -18,4 +18,4 @@ std::recursive_mutex& global_critical_region::mutex() {
   return global_mutex;
 }
 
-}  // namespace rex::thread
+}

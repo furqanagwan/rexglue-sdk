@@ -23,14 +23,11 @@
 #include <rex/assert.h>
 #include <rex/platform.h>
 
-// Check for mixed endian
 static_assert((std::endian::native == std::endian::big) ||
               (std::endian::native == std::endian::little));
 
 namespace rex {
 
-/// Byte-swap a value of any trivially copyable type (1, 2, 4, or 8 bytes).
-/// Uses std::bit_cast for safe type punning and std::byteswap for the swap.
 template <class T>
 constexpr T byte_swap(T value) noexcept {
   static_assert(sizeof(T) == 8 || sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1,
@@ -38,7 +35,6 @@ constexpr T byte_swap(T value) noexcept {
   if constexpr (sizeof(T) == 1) {
     return value;
   } else {
-    // Convert to unsigned integer of same size, byteswap, convert back
     using uint_t = std::conditional_t<sizeof(T) == 8, uint64_t,
                                       std::conditional_t<sizeof(T) == 4, uint32_t, uint16_t>>;
     return std::bit_cast<T>(std::byteswap(std::bit_cast<uint_t>(value)));
@@ -47,7 +43,7 @@ constexpr T byte_swap(T value) noexcept {
 
 template <typename T, std::endian E>
 struct endian_store {
-  using value_type = T;  // Type alias for value() in MappedPtr
+  using value_type = T;
 
   endian_store() = default;
   endian_store(const T& src) { set(src); }
@@ -80,19 +76,19 @@ struct endian_store {
   endian_store<T, E>& operator++() {
     *this += 1;
     return *this;
-  }  // ++a
+  }
   endian_store<T, E> operator++(int) {
     *this += 1;
     return (*this - 1);
-  }  // a++
+  }
   endian_store<T, E>& operator--() {
     *this -= 1;
     return *this;
-  }  // --a
+  }
   endian_store<T, E> operator--(int) {
     *this -= 1;
     return (*this + 1);
-  }  // a--
+  }
 
   T value;
 };
@@ -102,10 +98,6 @@ using be = endian_store<T, std::endian::big>;
 template <typename T>
 using le = endian_store<T, std::endian::little>;
 
-//=============================================================================
-// Big-Endian Type Detection
-//=============================================================================
-
 template <typename T>
 struct is_be_type : std::false_type {};
 
@@ -114,10 +106,6 @@ struct is_be_type<rex::be<T>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_be_type_v = is_be_type<T>::value;
-
-//=============================================================================
-// Basic Integer Types
-//=============================================================================
 
 using u8 = uint8_t;
 using u16 = uint16_t;
@@ -135,18 +123,10 @@ using f64 = double;
 static_assert(sizeof(f32) == 4, "float must be 4 bytes");
 static_assert(sizeof(f64) == 8, "double must be 8 bytes");
 
-//=============================================================================
-// Memory Address Types
-//=============================================================================
+using guest_addr_t = u32;
+using host_addr_t = uintptr_t;
 
-using guest_addr_t = u32;       // Xbox 360 guest address (32-bit)
-using host_addr_t = uintptr_t;  // Host native address (64-bit on x64)
-
-//=============================================================================
-// Big-Endian Type Aliases (using rex::be<T>)
-//=============================================================================
-
-using be_u8 = u8;  // No byte-swapping needed for single bytes
+using be_u8 = u8;
 using be_u16 = be<u16>;
 using be_u32 = be<u32>;
 using be_u64 = be<u64>;
@@ -158,10 +138,6 @@ using be_i64 = be<i64>;
 
 using be_f32 = be<f32>;
 using be_f64 = be<f64>;
-
-//=============================================================================
-// MappedPtr - Wraps host pointer with guest address tracking
-//=============================================================================
 
 template <typename T>
 class MappedPtr {
@@ -224,10 +200,6 @@ class MappedPtr {
   }
 };
 
-//=============================================================================
-// MappedPtr<void> Specialization
-//=============================================================================
-
 template <>
 class MappedPtr<void> {
   void* host_ptr_;
@@ -277,10 +249,6 @@ class MappedPtr<void> {
   }
 };
 
-//=============================================================================
-// MappedPtr<char> Specialization (strings)
-//=============================================================================
-
 template <>
 class MappedPtr<char> {
   char* host_ptr_;
@@ -318,10 +286,6 @@ class MappedPtr<char> {
     return reinterpret_cast<U>(host_ptr_);
   }
 };
-
-//=============================================================================
-// MappedPtr<char16_t> Specialization (wide strings)
-//=============================================================================
 
 template <>
 class MappedPtr<char16_t> {
@@ -361,10 +325,6 @@ class MappedPtr<char16_t> {
   }
 };
 
-//=============================================================================
-// MappedPtr Type Traits
-//=============================================================================
-
 template <typename T>
 struct is_mapped_ptr : std::false_type {};
 template <typename T>
@@ -379,11 +339,7 @@ struct mapped_ptr_inner_type<MappedPtr<T>> {
   using type = T;
 };
 
-}  // namespace rex
-
-//=============================================================================
-// Global Namespace Exports
-//=============================================================================
+}
 
 using u8 = rex::u8;
 using i8 = rex::i8;
@@ -415,6 +371,5 @@ using mapped_f64 = rex::MappedPtr<rex::be_f64>;
 using mapped_string = rex::MappedPtr<char>;
 using mapped_wstring = rex::MappedPtr<char16_t>;
 
-// Legacy compat alias for ppc_ptr_t<T>
 template <typename T>
 using ppc_ptr_t = rex::MappedPtr<T>;

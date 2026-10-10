@@ -20,7 +20,6 @@
 #include <rex/ppc/intrinsics.h>
 #include <rex/ppc/stack.h>
 
-// Consumer-facing using declarations
 using rex::ppc::FindPPCFuncByName;
 using rex::ppc::GetPPCFuncRegistry;
 using rex::ppc::GuestToHostFunction;

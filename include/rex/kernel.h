@@ -11,13 +11,10 @@
 
 #pragma once
 
-// Core system types (X_STATUS, X_RESULT, X_HRESULT, X_HANDLE)
 #include <rex/system/xtypes.h>
 
-// I/O types (file attributes, overlapped)
 #include <rex/system/xio.h>
 
-// Kernel objects
 #include <rex/system/xevent.h>
 #include <rex/system/xfile.h>
 #include <rex/system/xmutant.h>
@@ -26,8 +23,6 @@
 #include <rex/system/xthread.h>
 #include <rex/system/xtimer.h>
 
-// Memory (Xbox API wrappers - core Memory class is in rex/memory.h)
 #include <rex/system/xmemory.h>
 
-// System state
 #include <rex/system/kernel_state.h>

@@ -52,35 +52,17 @@ constexpr const char* kCounterNames[] = {
 };
 static_assert(std::size(kCounterNames) == kNumCounters, "kCounterNames must match CounterId enum");
 
-// Gauge counters are snapshotted but NOT zeroed each frame.
-// Accumulators (everything else) are zeroed after snapshot.
 constexpr bool kIsGauge[] = {
-    false,  // kFrameTimeUs       (set each frame)
-    false,  // kFps               (set each frame)
-    false,  // kDrawCalls
-    false,  // kCommandBufferStalls
-    false,  // kVerticesProcessed
-    false,  // kXmaFramesDecoded
-    false,  // kAudioFrameLatencyUs
-    false,  // kBufferQueueDepth  (set each frame)
-    false,  // kFunctionsDispatched
-    false,  // kInterruptDispatches
-    true,   // kActiveThreads     (inc/dec over lifetime)
-    false,  // kApcQueueDepth
-    true,   // kCriticalRegionContentions (running total)
-    false,  // kTextureCacheHits
-    false,  // kTextureCacheMisses
-    false,  // kPipelineCacheHits
-    false,  // kPipelineCacheMisses
+    false, false, false, false, false, false, false, false, false,
+    false, true,  false, true,  false, false, false, false,
 };
 static_assert(std::size(kIsGauge) == kNumCounters, "kIsGauge must match CounterId enum");
 
-// CSV state
 std::FILE* g_csv_file = nullptr;
 std::string g_csv_path;
 int g_csv_frame_count = 0;
 
-}  // anonymous namespace
+}
 
 const char* CounterName(CounterId id) {
   auto idx = static_cast<size_t>(id);
@@ -104,10 +86,8 @@ int64_t GetCounter(CounterId id) {
 void ResetFrameCounters() {
   for (size_t i = 0; i < kNumCounters; ++i) {
     if (kIsGauge[i]) {
-      // Gauges: snapshot the current value, don't zero
       g_snapshot[i].store(g_counters[i].load(std::memory_order_relaxed), std::memory_order_relaxed);
     } else {
-      // Accumulators: snapshot and zero for next frame
       g_snapshot[i].store(g_counters[i].exchange(0, std::memory_order_relaxed),
                           std::memory_order_relaxed);
     }
@@ -144,7 +124,6 @@ void SetCsvLogPath(const std::string& path) {
     return;
   }
 
-  // Write header
   for (size_t i = 0; i < kNumCounters; ++i) {
     if (i > 0)
       std::fputc(',', g_csv_file);
@@ -179,4 +158,4 @@ void FlushCsv() {
   g_csv_path.clear();
 }
 
-}  // namespace rex::perf
+}

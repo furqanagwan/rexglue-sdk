@@ -16,9 +16,8 @@ TEST_CASE("A 1 ms sleep lasts about 1 ms with the high timer resolution", "[core
   const uint32_t resolution = rex::thread::RequestHighTimerResolution();
   INFO("timer resolution " << resolution << " x 100 ns");
   REQUIRE(resolution != 0);
-  CHECK(resolution <= 10000);  // 1 ms or finer (Windows reports 0.5 ms)
+  CHECK(resolution <= 10000);
 
-  // Without it, each of these took 15.6 ms.
   constexpr int kSleeps = 20;
   auto start = std::chrono::steady_clock::now();
   for (int i = 0; i < kSleeps; ++i) {

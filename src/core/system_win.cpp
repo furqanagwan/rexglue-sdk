@@ -34,4 +34,4 @@ void ShowSimpleMessageBox(SimpleMessageBoxType type, std::string_view message) {
   ::MessageBoxW(nullptr, reinterpret_cast<const wchar_t*>(wide.c_str()), title, flags);
 }
 
-}  // namespace rex
+}

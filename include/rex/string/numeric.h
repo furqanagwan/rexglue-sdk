@@ -59,7 +59,7 @@ template <typename T>
 inline T from_string(const std::string_view value, bool force_hex = false) {
   (void)value;
   (void)force_hex;
-  // Missing implementation for converting type T from string
+
   throw;
 }
 
@@ -75,7 +75,6 @@ inline T make_negative(T value) {
   return value;
 }
 
-// integral_from_string
 template <typename T>
 inline T ifs(const std::string_view value, bool force_hex) {
   int base = 10;
@@ -110,7 +109,6 @@ inline T ifs(const std::string_view value, bool force_hex) {
   return result;
 }
 
-// floating_point_from_string
 template <typename T, typename PUN>
 inline T fpfs(const std::string_view value, bool force_hex) {
   static_assert(sizeof(T) == sizeof(PUN));
@@ -151,11 +149,8 @@ inline T fpfs(const std::string_view value, bool force_hex) {
   return result;
 }
 
-}  // namespace detail
+}
 
-// The single definition of what counts as a true boolean string. Config files,
-// the command line, cvar change callbacks and the settings UI all funnel
-// through here so a value accepted in one place can't be rejected in another.
 template <>
 inline bool from_string<bool>(const std::string_view value, bool force_hex) {
   (void)force_hex;
@@ -228,7 +223,6 @@ inline vec128_t from_string<vec128_t>(const std::string_view value, bool force_h
     is_hex = false;
     ++p;
   } else {
-    // Assume hex?
     is_hex = true;
   }
   if (p == end) {
@@ -271,4 +265,4 @@ inline vec128_t from_string<vec128_t>(const std::string_view value, bool force_h
   return v;
 }
 
-}  // namespace rex::string
+}

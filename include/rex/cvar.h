@@ -115,43 +115,21 @@
 
 namespace rex::cvar {
 
-//=============================================================================
-// Initialization API
-//=============================================================================
-
 std::vector<std::string> Init(int argc, char** argv);
 void LoadConfig(const std::filesystem::path& config_path);
 void ApplyEnvironment();
 void FinalizeInit();
 bool IsFinalized();
 void SaveConfig(const std::filesystem::path& config_path);
-// As SaveConfig, reporting a write/flush failure to interactive callers.
-bool TrySaveConfig(const std::filesystem::path& config_path);
 
-//=============================================================================
-// Flag Registry
-//=============================================================================
+bool TrySaveConfig(const std::filesystem::path& config_path);
 
 enum class FlagType { Boolean, Int32, Int64, Uint32, Uint64, Double, String, Command };
 
-// Lifecycle: when can this flag be modified?
-enum class Lifecycle {
-  kInitOnly,        // Can only be set during initialization (before FinalizeInit)
-  kHotReload,       // Can be changed at runtime with immediate effect
-  kRequiresRestart  // Can be changed, but only takes effect after restart
-};
+enum class Lifecycle { kInitOnly, kHotReload, kRequiresRestart };
 
-// Where a flag's current value came from, in ascending priority. A source
-// never overwrites a value a higher-priority source already set.
-enum class Source {
-  kDefault,      // Compiled-in default
-  kConfig,       // TOML config file
-  kEnvironment,  // REX_* environment variable
-  kCommandLine,  // --flag on the command line
-  kRuntime       // SetFlagByName from the console, settings UI, or code
-};
+enum class Source { kDefault, kConfig, kEnvironment, kCommandLine, kRuntime };
 
-// Validation constraints
 struct Constraints {
   std::optional<double> min;
   std::optional<double> max;
@@ -175,53 +153,28 @@ struct FlagEntry {
   std::string default_value;
   bool is_debug_only = false;
   Source source = Source::kDefault;
-  // What SaveConfig writes for this flag: the config file's value (even when a
-  // higher source overrides it for this run), replaced by a runtime change.
-  // Environment and command-line values are for one run and never saved.
+
   std::optional<std::string> persisted_value;
 };
 
 std::vector<FlagEntry>& GetRegistry();
 
-/**
- * Returns the registered entry's index, or nullopt if the name was already
- * registered (logged at ERROR).
- */
 std::optional<size_t> RegisterFlag(FlagEntry entry);
 
-/**
- * Removes a flag from the registry. Used by `FlagRegistrar`'s destructor so
- * that DLL unload tears down the lambdas captured in each FlagEntry.
- */
 void UnregisterFlag(std::string_view name);
 
 bool SetFlagByName(std::string_view name, std::string_view value);
 
-// A title's own default for a flag (rexglue_configure_target CVAR_DEFAULTS):
-// replaces the compiled-in default, so the config file, environment, command
-// line and runtime changes still win and SaveConfig does not write it. False
-// when the flag is unknown or the value is rejected.
 bool SetTitleDefault(std::string_view name, std::string_view value);
 
-// Applies a value parsed off the command line. Returns false only when the
-// value is rejected (unparseable, or outside the flag's constraints); a value
-// skipped because a higher-priority source already won returns true.
 bool SetFlagFromCommandLine(std::string_view name, std::string_view value);
 
 std::string GetFlagByName(std::string_view name);
 
-// Which source last wrote this flag. Returns Source::kDefault for unknown names.
 Source GetFlagSource(std::string_view name);
 
-// Invoke a registered command by name, passing the raw argument text.
-// Returns false if `name` is not registered or is not a FlagType::Command.
 bool InvokeCommand(std::string_view name, std::string_view args);
 
-// Typed registry query. Cross-DLL access path that does not require linking
-// the DLL where the cvar is defined. Slower than REXCVAR_GET (string parse +
-// hash lookup), so prefer REXCVAR_GET when the defining DLL is already on the
-// link line. Returns a value-initialized T when the cvar is missing or its
-// stored string fails to parse.
 template <typename T>
 T Query(std::string_view name);
 
@@ -253,24 +206,14 @@ std::vector<std::string> ListModifiedFlags();
 std::string SerializeToTOML();
 std::string SerializeToTOML(std::string_view category);
 
-/// Callback invoked when a CVAR value changes
-/// @param name The CVAR name
-/// @param new_value The new value as a string
 using ChangeCallback = std::function<void(std::string_view name, std::string_view new_value)>;
 
-/// Register a callback to be invoked when a specific CVAR changes
 void RegisterChangeCallback(std::string_view name, ChangeCallback callback);
 
-/// Unregister all callbacks for a specific CVAR
 void UnregisterChangeCallbacks(std::string_view name);
 
-/**
- * RAII handle for a registered flag. Destructor unregisters by name; on
- * duplicate-name registration `owned_name_` is empty so chain methods and
- * the destructor become no-ops and the original owner's entry is untouched.
- */
 struct FlagRegistrar {
-  std::string owned_name_;  // empty when registration was rejected
+  std::string owned_name_;
 
   explicit FlagRegistrar(FlagEntry e) {
     std::string name = e.name;
@@ -289,7 +232,6 @@ struct FlagRegistrar {
     }
   }
 
-  // Chain methods mutate the registered entry by name lookup.
   FlagRegistrar&& range(double min_val, double max_val) && {
     apply_([=](FlagEntry& entry) {
       entry.constraints.min = min_val;
@@ -321,7 +263,6 @@ struct FlagRegistrar {
     return std::move(*this);
   }
 
-  // Non-copyable (prevent double registration)
   FlagRegistrar(const FlagRegistrar&) = delete;
   FlagRegistrar& operator=(const FlagRegistrar&) = delete;
   FlagRegistrar& operator=(FlagRegistrar&&) = delete;
@@ -339,32 +280,16 @@ inline bool ParseDouble(std::string_view s, double& out) {
   return end != str.c_str() && *end == '\0';
 }
 
-}  // namespace rex::cvar
+}
 
-//=============================================================================
-// CVar Macros
-//=============================================================================
-
-// Declare a cvar (use in headers and TUs that need to read it).
-// The accessor function returns a reference to the cvar's storage. Storage
-// lives as a static-local inside whichever DLL contains the matching
-// REXCVAR_DEFINE_*. Cross-DLL access goes through the import lib.
 #define REXCVAR_DECLARE(type, name) type& FLAGS_##name##_storage_()
 
-// Get a cvar value
 #define REXCVAR_GET(name) (FLAGS_##name##_storage_())
 
-// Set a cvar value
 #define REXCVAR_SET(name, value) (FLAGS_##name##_storage_() = (value))
 
-// Cross-module typed query that goes through the cvar registry by name.
-// Use this when the defining DLL is not on the consumer's link line (e.g.,
-// across one-way subsystem dependencies where adding the reverse link would
-// create a cycle). Slower than REXCVAR_GET; prefer REXCVAR_GET when possible.
 #define REXCVAR_QUERY(type, name) (::rex::cvar::Query<type>(#name))
 
-// Define cvars (use in one .cpp file per cvar)
-// The FlagRegistrar registers the flag in its destructor, allowing method chaining.
 #define REXCVAR_DEFINE_BOOL(name, default_val, category, desc)                                   \
   bool& FLAGS_##name##_storage_() {                                                              \
     static bool storage = (default_val);                                                         \
@@ -554,9 +479,6 @@ inline bool ParseDouble(std::string_view s, double& out) {
                                   "<command>",                                           \
                                   false})
 
-// Define an argument-taking command. `callback` is convertible to
-// std::function<void(std::string_view args)>; the console passes the text
-// after the command name as `args`.
 #define REXCVAR_DEFINE_COMMAND_ARGS(name, callback, category, desc)                         \
   std::function<void(std::string_view)>& FLAGS_##name##_storage_() {                        \
     static std::function<void(std::string_view)> storage = (callback);                      \
@@ -589,5 +511,5 @@ class ScopedLifecycleOverride {
 
 void ResetAllForTesting();
 
-}  // namespace testing
-}  // namespace rex::cvar
+}
+}

@@ -15,7 +15,6 @@
 
 #include <rex/cvar.h>
 
-// Test cvars
 REXCVAR_DEFINE_BOOL(test_bool_flag, false, "Test", "Test boolean flag");
 REXCVAR_DEFINE_INT32(test_int32_flag, 42, "Test", "Test int32 flag");
 REXCVAR_DEFINE_STRING(test_string_flag, "default", "Test", "Test string flag");
@@ -28,7 +27,6 @@ REXCVAR_DEFINE_STRING(test_init_only_flag, "initial", "Test", "Init-only flag")
 REXCVAR_DEFINE_BOOL(test_restart_flag, false, "Test", "Requires restart")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-// Command dispatch test fixtures.
 static int g_noarg_cmd_calls = 0;
 static std::string g_args_cmd_received;
 REXCVAR_DEFINE_COMMAND(
@@ -106,8 +104,6 @@ TEST_CASE("cvar SetFlagByName and GetFlagByName string API", "[cvar]") {
 }
 
 TEST_CASE("cvar boolean parsing accepts multiple formats", "[cvar]") {
-  // This test specifically tests the string-based SetFlagByName API
-  // which parses string representations into native types
   SECTION("true values") {
     rex::cvar::SetFlagByName("test_bool_flag", "true");
     CHECK(REXCVAR_GET(test_bool_flag) == true);
@@ -174,7 +170,6 @@ TEST_CASE("cvar TOML config loading", "[cvar]") {
     file << "test_string_flag = \"from config\"\n";
     file.close();
 
-    // Set initial values using REXCVAR_SET
     REXCVAR_SET(test_bool_flag, false);
     REXCVAR_SET(test_int32_flag, 0);
     REXCVAR_SET(test_string_flag, "");
@@ -244,7 +239,7 @@ void SetTestEnv(const char* name, const char* value) {
 #endif
 }
 
-}  // namespace
+}
 
 TEST_CASE("cvar source precedence", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
@@ -267,7 +262,6 @@ TEST_CASE("cvar source precedence", "[cvar]") {
     CHECK(REXCVAR_GET(test_string_flag) == "from cmdline");
     CHECK(rex::cvar::GetFlagSource("test_string_flag") == rex::cvar::Source::kCommandLine);
 
-    // A flag the command line did not mention still takes the config value
     CHECK(REXCVAR_GET(test_int32_flag) == 111);
     CHECK(rex::cvar::GetFlagSource("test_int32_flag") == rex::cvar::Source::kConfig);
   }
@@ -375,21 +369,18 @@ TEST_CASE("cvar title defaults sit under every other source", "[cvar]") {
   char* argv[] = {argv0};
   rex::cvar::Init(1, argv);
 
-  // Registered: the title's default replaces the compiled-in one.
   CHECK(rex::cvar::SetTitleDefault("test_string_flag", "title"));
   CHECK(REXCVAR_GET(test_string_flag) == "title");
   CHECK(rex::cvar::GetFlagSource("test_string_flag") == rex::cvar::Source::kDefault);
   CHECK_FALSE(rex::cvar::HasNonDefaultValue("test_string_flag"));
-  // A user's choice wins; a title default after it changes nothing.
+
   REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "7"));
   CHECK(rex::cvar::SetTitleDefault("test_int32_flag", "9"));
   CHECK(REXCVAR_GET(test_int32_flag) == 7);
-  // Unknown values and out-of-range ones are refused.
+
   CHECK_FALSE(rex::cvar::SetTitleDefault("test_ranged_flag", "50"));
   CHECK(REXCVAR_GET(test_ranged_flag) == 5);
 
-  // A runtime-loaded module's flag: applied as it registers, under the
-  // config file.
   auto config_path = std::filesystem::temp_directory_path() / "test_title_default.toml";
   {
     std::ofstream file(config_path);
@@ -422,7 +413,7 @@ TEST_CASE("cvar title defaults sit under every other source", "[cvar]") {
   }
   std::filesystem::remove(config_path);
   rex::cvar::testing::ResetAllForTesting();
-  // Put the compiled-in default back for the tests after this one.
+
   CHECK(rex::cvar::SetTitleDefault("test_string_flag", "default"));
 }
 
@@ -439,13 +430,13 @@ TEST_CASE("cvar range validation", "[cvar]") {
   }
 
   SECTION("Value outside range fails") {
-    REXCVAR_SET(test_ranged_flag, 5);  // Reset to known value
+    REXCVAR_SET(test_ranged_flag, 5);
 
     CHECK_FALSE(rex::cvar::SetFlagByName("test_ranged_flag", "0"));
-    CHECK(REXCVAR_GET(test_ranged_flag) == 5);  // Unchanged
+    CHECK(REXCVAR_GET(test_ranged_flag) == 5);
 
     CHECK_FALSE(rex::cvar::SetFlagByName("test_ranged_flag", "11"));
-    CHECK(REXCVAR_GET(test_ranged_flag) == 5);  // Unchanged
+    CHECK(REXCVAR_GET(test_ranged_flag) == 5);
   }
 }
 
@@ -462,19 +453,15 @@ TEST_CASE("cvar allowed values validation", "[cvar]") {
   }
 
   SECTION("Disallowed value fails") {
-    REXCVAR_SET(test_enum_flag, "low");  // Reset
+    REXCVAR_SET(test_enum_flag, "low");
 
     CHECK_FALSE(rex::cvar::SetFlagByName("test_enum_flag", "ultra"));
-    CHECK(REXCVAR_GET(test_enum_flag) == "low");  // Unchanged
+    CHECK(REXCVAR_GET(test_enum_flag) == "low");
   }
 }
 
 TEST_CASE("cvar lifecycle enforcement", "[cvar]") {
-  // Note: This test must run before FinalizeInit is called elsewhere,
-  // or use testing utilities to reset state
-
   SECTION("InitOnly flag can be set before finalization") {
-    // Assuming not finalized yet in test context
     if (!rex::cvar::IsFinalized()) {
       REQUIRE(rex::cvar::SetFlagByName("test_init_only_flag", "modified"));
       CHECK(REXCVAR_GET(test_init_only_flag) == "modified");
@@ -483,7 +470,6 @@ TEST_CASE("cvar lifecycle enforcement", "[cvar]") {
 }
 
 TEST_CASE("cvar restart tracking", "[cvar]") {
-  // Clear any existing pending flags
   rex::cvar::ClearPendingRestartFlags();
 
   SECTION("Changing RequiresRestart flag tracks it") {
@@ -521,7 +507,7 @@ TEST_CASE("cvar ListFlagsByLifecycle", "[cvar]") {
 
 TEST_CASE("cvar reset and diff utilities", "[cvar]") {
   SECTION("HasNonDefaultValue detects changes") {
-    REXCVAR_SET(test_int32_flag, 42);  // Reset to default
+    REXCVAR_SET(test_int32_flag, 42);
     CHECK_FALSE(rex::cvar::HasNonDefaultValue("test_int32_flag"));
 
     REXCVAR_SET(test_int32_flag, 100);
@@ -537,8 +523,8 @@ TEST_CASE("cvar reset and diff utilities", "[cvar]") {
   }
 
   SECTION("ListModifiedFlags returns changed flags") {
-    REXCVAR_SET(test_int32_flag, 42);    // Default
-    REXCVAR_SET(test_bool_flag, false);  // Default
+    REXCVAR_SET(test_int32_flag, 42);
+    REXCVAR_SET(test_bool_flag, false);
 
     auto modified = rex::cvar::ListModifiedFlags();
     bool found_int =
@@ -556,7 +542,7 @@ TEST_CASE("cvar testing utilities", "[cvar]") {
   SECTION("ResetAllForTesting resets state") {
     REXCVAR_SET(test_int32_flag, 999);
     rex::cvar::testing::ResetAllForTesting();
-    CHECK(REXCVAR_GET(test_int32_flag) == 42);  // Back to default
+    CHECK(REXCVAR_GET(test_int32_flag) == 42);
   }
 }
 
@@ -568,11 +554,9 @@ TEST_CASE("cvar TOML serialization", "[cvar]") {
 
   auto toml = rex::cvar::SerializeToTOML();
 
-  // Should contain modified flags
   CHECK(toml.find("test_int32_flag = 999") != std::string::npos);
   CHECK(toml.find("test_string_flag = \"custom\"") != std::string::npos);
 
-  // Should not contain flags at default
   CHECK(toml.find("test_bool_flag") == std::string::npos);
 }
 
@@ -580,26 +564,21 @@ TEST_CASE("cvar metadata integration test", "[cvar][integration]") {
   rex::cvar::testing::ResetAllForTesting();
 
   SECTION("Full metadata workflow") {
-    // 1. Verify metadata is queryable
     auto* info = rex::cvar::GetFlagInfo("test_ranged_flag");
     REQUIRE(info != nullptr);
     CHECK(info->constraints.min.value_or(0) == 1);
     CHECK(info->constraints.max.value_or(0) == 10);
 
-    // 2. Verify validation works (set to valid non-default value, then invalid)
     CHECK(rex::cvar::SetFlagByName("test_ranged_flag", "7"));
     CHECK_FALSE(rex::cvar::SetFlagByName("test_ranged_flag", "100"));
 
-    // 3. Verify change tracking (value 7 is different from default 5)
     CHECK(rex::cvar::HasNonDefaultValue("test_ranged_flag"));
 
-    // 4. Verify reset works
     rex::cvar::ResetToDefault("test_ranged_flag");
     CHECK_FALSE(rex::cvar::HasNonDefaultValue("test_ranged_flag"));
   }
 }
 
-// Additional test cvars for extended coverage
 REXCVAR_DEFINE_INT64(test_int64_flag, 1000000000LL, "Test", "Test int64 flag");
 REXCVAR_DEFINE_UINT32(test_uint32_flag, 42u, "Test", "Test uint32 flag");
 REXCVAR_DEFINE_UINT64(test_uint64_flag, 999999999999ULL, "Test", "Test uint64 flag");
@@ -646,12 +625,11 @@ TEST_CASE("cvar custom validator", "[cvar]") {
   SECTION("Invalid value fails") {
     REXCVAR_SET(test_validated_flag, "valid");
 
-    // Too short (less than 3 chars)
     CHECK_FALSE(rex::cvar::SetFlagByName("test_validated_flag", "ab"));
-    CHECK(REXCVAR_GET(test_validated_flag) == "valid");  // Unchanged
+    CHECK(REXCVAR_GET(test_validated_flag) == "valid");
 
     CHECK_FALSE(rex::cvar::SetFlagByName("test_validated_flag", "x"));
-    CHECK(REXCVAR_GET(test_validated_flag) == "valid");  // Unchanged
+    CHECK(REXCVAR_GET(test_validated_flag) == "valid");
   }
 }
 
@@ -660,7 +638,6 @@ TEST_CASE("cvar debug_only flag", "[cvar]") {
   REQUIRE(info != nullptr);
   CHECK(info->is_debug_only == true);
 
-  // Non-debug flag should have is_debug_only = false
   auto* non_debug = rex::cvar::GetFlagInfo("test_bool_flag");
   REQUIRE(non_debug != nullptr);
   CHECK(non_debug->is_debug_only == false);
@@ -669,7 +646,6 @@ TEST_CASE("cvar debug_only flag", "[cvar]") {
 TEST_CASE("cvar ScopedLifecycleOverride", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
 
-  // Finalize to lock init-only flags
   rex::cvar::FinalizeInit();
   CHECK(rex::cvar::IsFinalized());
 
@@ -683,7 +659,7 @@ TEST_CASE("cvar ScopedLifecycleOverride", "[cvar]") {
       REQUIRE(rex::cvar::SetFlagByName("test_init_only_flag", "overridden"));
       CHECK(REXCVAR_GET(test_init_only_flag) == "overridden");
     }
-    // After scope, should be blocked again
+
     CHECK_FALSE(rex::cvar::SetFlagByName("test_init_only_flag", "blocked_again"));
   }
 
@@ -691,7 +667,6 @@ TEST_CASE("cvar ScopedLifecycleOverride", "[cvar]") {
 }
 
 TEST_CASE("cvar ResetAllToDefaults", "[cvar]") {
-  // Modify several flags
   REXCVAR_SET(test_bool_flag, true);
   REXCVAR_SET(test_int32_flag, 999);
   REXCVAR_SET(test_string_flag, "modified");
@@ -710,9 +685,8 @@ TEST_CASE("cvar ResetAllToDefaults", "[cvar]") {
 TEST_CASE("cvar SerializeToTOML with category filter", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
 
-  // Modify flags in different categories
-  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "123"));         // Category: Test
-  REQUIRE(rex::cvar::SetFlagByName("test_category_flag", "changed"));  // Category: TestCategory
+  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "123"));
+  REQUIRE(rex::cvar::SetFlagByName("test_category_flag", "changed"));
 
   SECTION("Filter by category returns only that category") {
     auto test_toml = rex::cvar::SerializeToTOML("Test");
@@ -732,7 +706,6 @@ TEST_CASE("cvar SaveConfig", "[cvar]") {
   auto temp_dir = std::filesystem::temp_directory_path();
   auto save_path = temp_dir / "test_save_config.toml";
 
-  // Clean up any existing file
   std::filesystem::remove(save_path);
 
   SECTION("SaveConfig writes modified flags to file") {
@@ -741,7 +714,6 @@ TEST_CASE("cvar SaveConfig", "[cvar]") {
 
     rex::cvar::SaveConfig(save_path);
 
-    // Verify file exists and contains expected content
     REQUIRE(std::filesystem::exists(save_path));
 
     std::string content;
@@ -775,11 +747,7 @@ TEST_CASE("cvar SaveConfig", "[cvar]") {
 TEST_CASE("cvar ApplyEnvironment", "[cvar]") {
   rex::cvar::testing::ResetAllForTesting();
 
-  // Note: This test modifies the environment, which may affect other tests
-  // In practice, environment application happens once at startup
-
   SECTION("Environment variables are applied with REX_ prefix") {
-// Set environment variable
 #ifdef _WIN32
     _putenv_s("REX_TEST_INT32_FLAG", "12345");
 #else
@@ -790,7 +758,6 @@ TEST_CASE("cvar ApplyEnvironment", "[cvar]") {
 
     CHECK(REXCVAR_GET(test_int32_flag) == 12345);
 
-// Clean up
 #ifdef _WIN32
     _putenv_s("REX_TEST_INT32_FLAG", "");
 #else
@@ -818,9 +785,6 @@ TEST_CASE("cvar InvokeCommand dispatches commands", "[cvar]") {
   }
 }
 
-// SaveConfig writes what the user chose: config-file and runtime values.
-// Values for one run (command line, environment) never become permanent,
-// the leak Canary #844 describes for per-game configs (ADR-009).
 TEST_CASE("cvar SaveConfig keeps one-run values out of the file", "[cvar][save]") {
   rex::cvar::testing::ResetAllForTesting();
   auto config_path = std::filesystem::temp_directory_path() / "test_save_sources.toml";

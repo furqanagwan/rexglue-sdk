@@ -44,13 +44,12 @@ int seh_filter(uint32_t code, void* ep) {
   uint32_t code = tls_seh_state.code;
   ULONG_PTR info[2] = {tls_seh_state.info[0], tls_seh_state.info[1]};
 
-  // For access violations, include the extra info (read/write flag and address)
   if (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_IN_PAGE_ERROR) {
     RaiseException(code, EXCEPTION_NONCONTINUABLE, 2, info);
   } else {
     RaiseException(code, EXCEPTION_NONCONTINUABLE, 0, nullptr);
   }
-  // RaiseException doesn't return, but compiler may not know that
+
 #ifdef __clang__
   __builtin_unreachable();
 #else
@@ -59,7 +58,6 @@ int seh_filter(uint32_t code, void* ep) {
 }
 
 void seh_initialize() {
-  // Native SEH needs no signal handler setup, but mark as initialized
   g_seh_initialized.store(true, std::memory_order_relaxed);
 }
 
@@ -67,4 +65,4 @@ bool& seh_active() {
   return tls_seh_active;
 }
 
-}  // namespace rex::platform
+}

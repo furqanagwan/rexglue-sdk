@@ -52,5 +52,5 @@ bool WriteFileDurably(const std::filesystem::path& path, std::span<const uint8_t
   return true;
 }
 
-}  // namespace filesystem
-}  // namespace rex
+}
+}

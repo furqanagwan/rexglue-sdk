@@ -57,4 +57,4 @@ std::u16string ByteStream::Read() {
   return str;
 }
 
-}  // namespace rex::stream
+}

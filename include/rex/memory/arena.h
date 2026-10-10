@@ -34,8 +34,7 @@ class Arena {
   T* Alloc() {
     return reinterpret_cast<T*>(Alloc(sizeof(T), alignof(T)));
   }
-  // When rewinding aligned allocations, any padding that was applied during
-  // allocation will be leaked
+
   void Rewind(size_t size);
 
   void* CloneContents();
@@ -66,4 +65,4 @@ class Arena {
   Chunk* active_chunk_;
 };
 
-}  // namespace rex::memory
+}

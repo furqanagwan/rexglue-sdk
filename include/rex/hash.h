@@ -16,23 +16,14 @@
 #include <string>
 #include <string_view>
 
-// Enable inline implementations and advanced API (XXH3)
 #ifndef XXH_INLINE_ALL
 #define XXH_INLINE_ALL
 #endif
-
-// Can't use XXH_X86DISPATCH because XXH is calculated on multiple threads,
-// while the dispatch writes the result (multiple pointers without any
-// synchronization) to XXH_g_dispatch at the first call.
 
 #include <xxhash.h>
 
 namespace rex {
 
-// For use in unordered_sets and unordered_maps (primarily multisets and
-// multimaps, with manual collision resolution), where the hash is calculated
-// externally (for instance, as XXH3), possibly requiring context data rather
-// than a pure function to calculate the hash
 template <typename Key>
 struct IdentityHasher {
   size_t operator()(const Key& key) const { return static_cast<size_t>(key); }
@@ -45,12 +36,8 @@ struct XXHasher {
   }
 };
 
-/// 128-bit XXH3 digest as a 32-character lowercase hex string. For fingerprints
-/// and cache keys, not for anything security bearing.
 std::string hash_bytes(std::string_view data);
 
-/// Same digest over a file's contents, streamed in chunks. Empty string when
-/// the file cannot be opened.
 std::string hash_file(const std::filesystem::path& path);
 
-}  // namespace rex
+}

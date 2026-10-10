@@ -24,13 +24,6 @@
 #include <rex/system/thread_state.h>
 #include <rex/types.h>
 
-//=============================================================================
-// Hook Macros
-//=============================================================================
-
-// Hook a recompiled function with an auto-marshaled native C++ function.
-// The native function uses plain types (u32, mapped_u32, etc.) and
-// HostToGuestFunction handles register translation automatically.
 #ifdef REXGLUE_ENABLE_PROFILING
 #include <tracy/Tracy.hpp>
 #define REX_HOOK(subroutine, function)                           \
@@ -45,10 +38,8 @@
   }
 #endif
 
-// Define a raw hook with direct ctx/base access.
 #define REX_HOOK_RAW(name) extern "C" REX_FUNC(name)
 
-// Stub: logs a warning when called.
 #define REX_STUB(subroutine)              \
   extern "C" REX_FUNC(subroutine) {       \
     (void)base;                           \
@@ -68,7 +59,6 @@
     ctx.r3.u64 = (value);                                                                 \
   }
 
-// Export: hook + register in global registry for kernel ordinal lookup.
 #define REX_EXPORT(name, function) \
   REX_HOOK(name, function)         \
   static rex::ppc::detail::PPCFuncRegistrar _ppc_reg_##name(#name, &name);
@@ -82,13 +72,6 @@
   static rex::ppc::detail::PPCFuncRegistrar _ppc_reg_##name(#name, &name);
 
 namespace rex {
-
-//=============================================================================
-// CallFrame - Lightweight isolated calling context
-//=============================================================================
-// For side calls that must not disturb the outer hook's register state.
-// Stack-allocated, NOT zero-initialized. Only copies the registers a callee
-// actually needs from the parent context.
 
 struct CallFrame {
   PPCContext ctx;
@@ -108,13 +91,9 @@ struct CallFrame {
   CallFrame& operator=(const CallFrame&) = delete;
 };
 
-}  // namespace rex
+}
 
 namespace rex::ppc {
-
-//=============================================================================
-// ImportFunction - Zero-overhead typed callable for recompiled functions
-//=============================================================================
 
 template <typename S>
 struct ImportFunction;
@@ -143,8 +122,6 @@ struct ImportFunction<R(Args...)> {
     return (*this)(frame.ctx, base, args...);
   }
 
-  /// Auto-isolating call: retrieves ctx/base internally, creates isolated
-  /// context with 0x70 frame, calls function, returns result.
   R operator()(Args... args) const {
     auto* ts = rex::runtime::ThreadState::Get();
     PPCContext* parentCtx = ts->context();
@@ -177,13 +154,9 @@ struct ImportFunction<R(Args...)> {
   }
 };
 
-}  // namespace rex::ppc
+}
 
 namespace rex {
-
-//=============================================================================
-// StackFrame - RAII guest stack allocation
-//=============================================================================
 
 class [[deprecated("Use rex::ppc::stack_push / stack_guard instead")]] StackFrame {
   PPCContext& ctx_;
@@ -217,30 +190,13 @@ class [[deprecated("Use rex::ppc::stack_push / stack_guard instead")]] StackFram
   StackFrame& operator=(const StackFrame&) = delete;
 };
 
-}  // namespace rex
-
-//=============================================================================
-// REX_IMPORT - Typed callable import of a recompiled function
-//=============================================================================
-// Three explicit arguments, no hidden prefix transformations:
-//   symbol:   the exact linker symbol to reference
-//   callable: the name of the typed callable variable
-//   sig:      the function signature (e.g. u32(u32, u32))
-//
-// The callable is internal-linkage on purpose: on ELF, a namespace-scope C++
-// variable is not name-mangled, so an external-linkage callable named after a
-// guest function would collide with the generated weak function alias and
-// hijack its function table entry (MSVC decorates variables, hiding the bug).
+}
 
 #define REX_IMPORT(symbol, callable, sig)                          \
   REX_EXTERN(symbol);                                              \
   [[maybe_unused]] static rex::ppc::ImportFunction<sig> callable { \
     symbol                                                         \
   }
-
-//=============================================================================
-// Legacy Compat Aliases
-//=============================================================================
 
 #define XBOXKRNL_EXPORT(n, f) REX_EXPORT(n, f)
 #define XBOXKRNL_EXPORT_STUB(n) REX_EXPORT_STUB(n)

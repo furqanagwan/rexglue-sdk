@@ -25,13 +25,11 @@ namespace chrono {
 using hundrednanoseconds = std::chrono::duration<int64_t, hundrednano>;
 
 namespace detail {
-// Implementation detail: NtSystemClock template for Host/Guest time domains.
-// Trick to reduce code duplication and keep all the chrono template magic
-// working.
+
 enum class Domain {
-  // boring host clock:
+
   Host,
-  // adheres to guest scaling (differrent speed, changing clock drift etc):
+
   Guest
 };
 
@@ -41,13 +39,8 @@ struct NtSystemClock {
   using period = hundrednano;
   using duration = hundrednanoseconds;
   using time_point = std::chrono::time_point<NtSystemClock<domain_>>;
-  // This really depends on the context the clock is used in:
-  // static constexpr bool is_steady = false;
 
  public:
-  // The delta between std::chrono::system_clock (Jan 1 1970) and NT file
-  // time (Jan 1 1601), in seconds. In the spec std::chrono::system_clock's
-  // epoch is undefined, but C++20 cements it as Jan 1 1970.
   static constexpr std::chrono::seconds unix_epoch_delta() {
     using std::chrono::steady_clock;
     auto filetime_epoch = std::chrono::year{1601} / std::chrono::month{1} / std::chrono::day{1};
@@ -68,8 +61,6 @@ struct NtSystemClock {
     return time_point{duration{tp}};
   }
 
-  // To convert XSystemClock to sys, do clock_cast<WinSystemTime>(tp) first
-  // Only available for Host domain (Guest time must be converted via clock_cast)
   static constexpr std::chrono::system_clock::time_point to_sys(const time_point& tp)
     requires(domain_ == Domain::Host)
   {
@@ -93,24 +84,20 @@ struct NtSystemClock {
 
   [[nodiscard]] static time_point now() noexcept {
     if constexpr (domain_ == Domain::Host) {
-      // QueryHostSystemTime() returns windows epoch times even on POSIX
       return from_file_time(Clock::QueryHostSystemTime());
     } else if constexpr (domain_ == Domain::Guest) {
       return from_file_time(Clock::QueryGuestSystemTime());
     }
   }
 };
-}  // namespace detail
+}
 
-// Unscaled system clock which can be used for filetime <-> system_clock
-// conversion
 using WinSystemClock = detail::NtSystemClock<detail::Domain::Host>;
 
-// Guest system clock, scaled
 using XSystemClock = detail::NtSystemClock<detail::Domain::Guest>;
 
-}  // namespace chrono
-}  // namespace rex
+}
+}
 
 namespace std::chrono {
 
@@ -122,7 +109,6 @@ struct clock_time_conversion<::rex::chrono::WinSystemClock, ::rex::chrono::XSyst
   template <typename Duration>
   typename WClock_::time_point operator()(
       const std::chrono::time_point<XClock_, Duration>& t) const {
-    // Consult chrono_steady_cast.h for explanation on this:
     std::atomic_thread_fence(std::memory_order_acq_rel);
     auto w_now = WClock_::now();
     auto x_now = XClock_::now();
@@ -145,7 +131,6 @@ struct clock_time_conversion<::rex::chrono::XSystemClock, ::rex::chrono::WinSyst
   template <typename Duration>
   typename XClock_::time_point operator()(
       const std::chrono::time_point<WClock_, Duration>& t) const {
-    // Consult chrono_steady_cast.h for explanation on this:
     std::atomic_thread_fence(std::memory_order_acq_rel);
     auto w_now = WClock_::now();
     auto x_now = XClock_::now();
@@ -160,4 +145,4 @@ struct clock_time_conversion<::rex::chrono::XSystemClock, ::rex::chrono::WinSyst
   }
 };
 
-}  // namespace std::chrono
+}

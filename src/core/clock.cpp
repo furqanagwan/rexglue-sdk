@@ -24,29 +24,23 @@ REXCVAR_DEFINE_BOOL(clock_source_raw, false, "Clock", "Use raw clock source with
 
 namespace rex::chrono {
 
-// Time scalar applied to all time operations.
 double guest_time_scalar_ = 1.0;
-// Tick frequency of guest.
+
 uint64_t guest_tick_frequency_ = Clock::host_tick_frequency_platform();
-// Base FILETIME of the guest system from app start.
+
 uint64_t guest_system_time_base_ = Clock::QueryHostSystemTime();
-// Combined time and frequency ratio between host and guest.
-// Split in numerator (first) and denominator (second).
-// Computed by RecomputeGuestTickScalar.
+
 std::pair<uint64_t, uint64_t> guest_tick_ratio_ = std::make_pair(1, 1);
 
-// Native guest ticks.
 uint64_t last_guest_tick_count_ = 0;
-// Last sampled host tick count.
+
 uint64_t last_host_tick_count_ = Clock::QueryHostTickCount();
-// Mutex to ensure last_host_tick_count_ and last_guest_tick_count_ are in sync
+
 std::mutex tick_mutex_;
 
 void RecomputeGuestTickScalar() {
-  // Create a rational number with numerator (first) and denominator (second)
   auto frac = std::make_pair(guest_tick_frequency_, Clock::QueryHostTickFrequency());
-  // Doing it this way ensures we don't mess up our frequency scaling and
-  // precisely controls the precision the guest_time_scalar_ can have.
+
   if (guest_time_scalar_ > 1.0) {
     frac.first *= static_cast<uint64_t>(guest_time_scalar_ * 10.0);
     frac.second *= 10;
@@ -54,26 +48,22 @@ void RecomputeGuestTickScalar() {
     frac.first *= 10;
     frac.second *= static_cast<uint64_t>(10.0 / guest_time_scalar_);
   }
-  // Keep this a rational calculation and reduce the fraction
+
   reduce_fraction(frac);
 
   std::lock_guard<std::mutex> lock(tick_mutex_);
   guest_tick_ratio_ = frac;
 }
 
-// Update the guest timer for all threads.
-// Return a copy of the value so locking is reduced.
 uint64_t UpdateGuestClock() {
   uint64_t host_tick_count = Clock::QueryHostTickCount();
 
   if (REXCVAR_GET(clock_no_scaling)) {
-    // Nothing to update, calculate on the fly
     return host_tick_count * guest_tick_ratio_.first / guest_tick_ratio_.second;
   }
 
   std::unique_lock<std::mutex> lock(tick_mutex_, std::defer_lock);
   if (lock.try_lock()) {
-    // Translate host tick count to guest tick count.
     uint64_t host_tick_delta =
         host_tick_count > last_host_tick_count_ ? host_tick_count - last_host_tick_count_ : 0;
     last_host_tick_count_ = host_tick_count;
@@ -82,13 +72,11 @@ uint64_t UpdateGuestClock() {
     last_guest_tick_count_ += guest_tick_delta;
     return last_guest_tick_count_;
   } else {
-    // Wait until another thread has finished updating the clock.
     lock.lock();
     return last_guest_tick_count_;
   }
 }
 
-// Offset of the current guest system file time relative to the guest base time.
 inline uint64_t QueryGuestSystemTimeOffset() {
   if (REXCVAR_GET(clock_no_scaling)) {
     return Clock::QueryHostSystemTime() - guest_system_time_base_;
@@ -96,7 +84,7 @@ inline uint64_t QueryGuestSystemTimeOffset() {
 
   auto guest_tick_count = UpdateGuestClock();
 
-  uint64_t numerator = 10000000;  // 100ns/10MHz resolution
+  uint64_t numerator = 10000000;
   uint64_t denominator = guest_tick_frequency_;
   reduce_fraction(numerator, denominator);
 
@@ -176,11 +164,9 @@ uint32_t Clock::QueryGuestUptimeMillis() {
 
 void Clock::SetGuestSystemTime(uint64_t system_time) {
   if (REXCVAR_GET(clock_no_scaling)) {
-    // Time is fixed to host time.
     return;
   }
 
-  // Query the filetime offset to calculate a new base time.
   auto guest_system_time_offset = QueryGuestSystemTimeOffset();
   guest_system_time_base_ = system_time - guest_system_time_offset;
 }
@@ -210,13 +196,11 @@ int64_t Clock::ScaleGuestDurationFileTime(int64_t guest_file_time) {
   if (!guest_file_time) {
     return 0;
   } else if (guest_file_time > 0) {
-    // Absolute time.
     uint64_t guest_time = Clock::QueryGuestSystemTime();
     int64_t relative_time = guest_file_time - static_cast<int64_t>(guest_time);
     int64_t scaled_time = static_cast<int64_t>(relative_time * guest_time_scalar_);
     return static_cast<int64_t>(guest_time) + scaled_time;
   } else {
-    // Relative time.
     uint64_t scaled_file_time =
         static_cast<uint64_t>((static_cast<uint64_t>(guest_file_time) * guest_time_scalar_));
 
@@ -241,4 +225,4 @@ void Clock::ScaleGuestDurationTimeval(int32_t* tv_sec, int32_t* tv_usec) {
   *tv_usec = int32_t(scaled_usec);
 }
 
-}  // namespace rex::chrono
+}

@@ -36,9 +36,6 @@ void copy_128_aligned(void* dest, const void* src, size_t count) {
 
 #if REX_ARCH_AMD64
 
-// This works around a GCC bug
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100801
-
 #if REX_COMPILER_GNUC
 #define REX_WORKAROUND_CONSTANT_RETURN_IF(x) \
   if (__builtin_constant_p(x) && (x))        \
@@ -62,7 +59,7 @@ void copy_and_swap_16_aligned(void* dest_ptr, const void* src_ptr, size_t count)
     _mm_store_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 8 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -80,7 +77,7 @@ void copy_and_swap_16_unaligned(void* dest_ptr, const void* src_ptr, size_t coun
     _mm_storeu_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 8 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -101,7 +98,7 @@ void copy_and_swap_32_aligned(void* dest_ptr, const void* src_ptr, size_t count)
     _mm_store_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 4 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -119,7 +116,7 @@ void copy_and_swap_32_unaligned(void* dest_ptr, const void* src_ptr, size_t coun
     _mm_storeu_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 4 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -140,7 +137,7 @@ void copy_and_swap_64_aligned(void* dest_ptr, const void* src_ptr, size_t count)
     _mm_store_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 2 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -158,7 +155,7 @@ void copy_and_swap_64_unaligned(void* dest_ptr, const void* src_ptr, size_t coun
     _mm_storeu_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 2 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = byte_swap(src[i]);
   }
 }
@@ -173,7 +170,7 @@ void copy_and_swap_16_in_32_aligned(void* dest_ptr, const void* src_ptr, size_t 
     _mm_store_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 4 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = (src[i] >> 16) | (src[i] << 16);
   }
 }
@@ -188,17 +185,12 @@ void copy_and_swap_16_in_32_unaligned(void* dest_ptr, const void* src_ptr, size_
     _mm_storeu_si128(reinterpret_cast<__m128i*>(&dest[i]), output);
   }
   REX_WORKAROUND_CONSTANT_RETURN_IF(count % 4 == 0);
-  for (; i < count; ++i) {  // handle residual elements
+  for (; i < count; ++i) {
     dest[i] = (src[i] >> 16) | (src[i] << 16);
   }
 }
 
 #elif REX_ARCH_ARM64
-
-// Although NEON offers vector rev instructions (like vrev32q_u8), they are
-// slower in benchmarks. Also, using uint8x16xN_t wasn't any faster in the
-// benchmarks, hence we use just use one SIMD register to minimize residual
-// processing.
 
 void copy_and_swap_16_aligned(void* dst_ptr, const void* src_ptr, size_t count) {
   copy_and_swap_16_unaligned(dst_ptr, src_ptr, count);
@@ -217,8 +209,7 @@ void copy_and_swap_16_unaligned(void* dst_ptr, const void* src_ptr, size_t count
     vst1q_u8(dst, data);
 
     count -= 8;
-    // These pointer increments will be combined with the load/stores (ldr/str)
-    // into single instructions (at least by clang)
+
     dst += 16;
     src += 16;
   }
@@ -311,7 +302,6 @@ void copy_and_swap_16_in_32_unaligned(void* dst_ptr, const void* src_ptr, size_t
 
 #else
 
-// Generic routines.
 void copy_and_swap_16_aligned(void* dest, const void* src, size_t count) {
   return copy_and_swap_16_unaligned(dest, src, count);
 }
@@ -367,5 +357,5 @@ void copy_and_swap_16_in_32_unaligned(void* dst_ptr, const void* src_ptr, size_t
 
 #endif
 
-}  // namespace memory
-}  // namespace rex
+}
+}

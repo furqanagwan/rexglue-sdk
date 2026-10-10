@@ -45,7 +45,6 @@ LegacyDataMove MoveLegacyUserData(const fs::path& legacy_user, const fs::path& u
   }
   fs::create_directories(user_data.parent_path(), ec);
 
-  // The cache is rebuilt on demand, so it leaves first and is never copied.
   const fs::path legacy_cache = legacy_user / "cache";
   if (fs::is_directory(legacy_cache, ec) && !fs::exists(cache, ec)) {
     fs::create_directories(cache.parent_path(), ec);
@@ -80,4 +79,4 @@ LegacyDataMove MoveLegacyUserData(const fs::path& legacy_user, const fs::path& u
   return result;
 }
 
-}  // namespace rex::filesystem
+}

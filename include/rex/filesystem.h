@@ -31,48 +31,29 @@ std::filesystem::path to_path(const std::u16string_view source);
 
 namespace filesystem {
 
-// Get executable path.
 std::filesystem::path GetExecutablePath();
 
-// Get executable folder.
 std::filesystem::path GetExecutableFolder();
 
-// Get user folder.
 std::filesystem::path GetUserFolder();
 
-// Creates the parent folder of the specified path if needed.
-// This can be used to ensure the destination path for a new file exists before
-// attempting to create it.
 bool CreateParentFolder(const std::filesystem::path& path);
 
-// Creates an empty file at the given path, overwriting if it exists.
 bool CreateEmptyFile(const std::filesystem::path& path);
 
-// Replaces the file at `path` with `bytes` through a flushed sibling
-// `<path>.tmp` and a rename, so a crash leaves the old contents or the new,
-// never a torn file. Returns false if a step failed; the target is then
-// unchanged.
 bool WriteFileDurably(const std::filesystem::path& path, std::span<const uint8_t> bytes);
 
-// Opens the file at the given path with the specified mode.
-// This behaves like fopen and the returned handle can be used with stdio.
 FILE* OpenFile(const std::filesystem::path& path, const std::string_view mode);
 
-// Wrapper for the 64-bit version of fseek, returns true on success.
 bool Seek(FILE* file, int64_t offset, int origin);
 
-// Wrapper for the 64-bit version of ftell, returns a positive value on success.
 int64_t Tell(FILE* file);
 
-// Reduces the size of a stdio file opened for writing. The file pointer is
-// clamped. If this returns false, the size of the file and the file pointer are
-// undefined.
 bool TruncateStdioFile(FILE* file, uint64_t length);
 
 struct FileAccess {
-  // Implies kFileReadData.
   static const uint32_t kGenericRead = 0x80000000;
-  // Implies kFileWriteData.
+
   static const uint32_t kGenericWrite = 0x40000000;
   static const uint32_t kGenericExecute = 0x20000000;
   static const uint32_t kGenericAll = 0x10000000;
@@ -83,8 +64,6 @@ struct FileAccess {
 
 class FileHandle {
  public:
-  // Opens the file, failing if it doesn't exist.
-  // The desired_access bitmask denotes the permissions on the file.
   static std::unique_ptr<FileHandle> OpenExisting(const std::filesystem::path& path,
                                                   uint32_t desired_access,
                                                   bool allow_share_delete = false);
@@ -93,23 +72,14 @@ class FileHandle {
 
   const std::filesystem::path& path() const { return path_; }
 
-  // Reads the requested number of bytes from the file starting at the given
-  // offset. The total number of bytes read is returned only if the complete
-  // read succeeds.
   virtual bool Read(size_t file_offset, void* buffer, size_t buffer_length,
                     size_t* out_bytes_read) = 0;
 
-  // Writes the given buffer to the file starting at the given offset.
-  // The total number of bytes written is returned only if the complete
-  // write succeeds.
   virtual bool Write(size_t file_offset, const void* buffer, size_t buffer_length,
                      size_t* out_bytes_written) = 0;
 
-  // Set length of the file in bytes.
   virtual bool SetLength(size_t length) = 0;
 
-  // Flushes any pending write buffers to the underlying filesystem.
-  // Returns false if the host reports the flush failed.
   virtual bool Flush() = 0;
 
  protected:
@@ -134,5 +104,5 @@ struct FileInfo {
 bool GetInfo(const std::filesystem::path& path, FileInfo* out_info);
 std::vector<FileInfo> ListFiles(const std::filesystem::path& path);
 
-}  // namespace filesystem
-}  // namespace rex
+}
+}

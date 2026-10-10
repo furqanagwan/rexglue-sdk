@@ -22,8 +22,7 @@ DynamicLibrary& DynamicLibrary::operator=(DynamicLibrary&& other) noexcept {
   return *this;
 }
 
-bool DynamicLibrary::Load(const std::filesystem::path& path, SymbolResolution /*mode*/) {
-  // Windows resolves all imports at load time; mode is informational only.
+bool DynamicLibrary::Load(const std::filesystem::path& path, SymbolResolution) {
   Close();
   handle_ = static_cast<void*>(LoadLibraryW(path.c_str()));
   return handle_ != nullptr;
@@ -42,4 +41,4 @@ void* DynamicLibrary::GetRawSymbol(const char* name) const {
   return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(handle_), name));
 }
 
-}  // namespace rex::platform
+}

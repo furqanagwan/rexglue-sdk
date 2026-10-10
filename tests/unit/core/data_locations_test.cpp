@@ -43,7 +43,7 @@ std::string ReadFile(const fs::path& path) {
   return std::string(std::istreambuf_iterator<char>(in), {});
 }
 
-}  // namespace
+}
 
 TEST_CASE("Default title data locations follow Xbox PC conventions", "[core][data_locations]") {
   const auto locations = DefaultTitleDataLocations("C:/Users/A/Saved Games",
@@ -67,7 +67,6 @@ TEST_CASE("Game files are found beside the executable", "[core][data_locations]"
   WriteFile(root.path / "default.xex", "x");
   CHECK(FindGameDataRoot(root.path) == root.path);
 
-  // A game folder wins over the executable's own folder.
   WriteFile(root.path / "game" / "default.xex", "x");
   CHECK(FindGameDataRoot(root.path) == root.path / "game");
 }
@@ -90,7 +89,6 @@ TEST_CASE("Legacy user data moves once, cache separately", "[core][data_location
   CHECK_FALSE(fs::exists(user / "cache"));
   CHECK(ReadFile(cache / "shaders.bin") == "cache");
 
-  // Nothing happens again, even if an old folder reappears.
   WriteFile(legacy / "other.bin", "old");
   const auto second = MoveLegacyUserData(legacy, user, cache);
   CHECK_FALSE(second.moved);
@@ -138,8 +136,6 @@ TEST_CASE("Legacy user data is copied when it cannot be renamed", "[core][data_l
 
   LegacyDataMove result;
   {
-    // An open file inside the folder stops Windows renaming it, as a move to
-    // another volume would.
     std::ifstream held(legacy / "save.bin", std::ios::binary);
     REQUIRE(held);
     result = MoveLegacyUserData(legacy, user, cache);
@@ -149,5 +145,5 @@ TEST_CASE("Legacy user data is copied when it cannot be renamed", "[core][data_l
   CHECK(result.error.empty());
   CHECK(ReadFile(user / "save.bin") == "save");
   CHECK(ReadFile(user / "profile" / "settings.bin") == "profile");
-  CHECK(ReadFile(legacy / "save.bin") == "save");  // the old copy stays
+  CHECK(ReadFile(legacy / "save.bin") == "save");
 }

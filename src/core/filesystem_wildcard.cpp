@@ -108,4 +108,4 @@ bool WildcardEngine::Match(const std::string_view str) const {
   return true;
 }
 
-}  // namespace rex::filesystem
+}

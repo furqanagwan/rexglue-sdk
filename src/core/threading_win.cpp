@@ -35,7 +35,7 @@ uint32_t RequestHighTimerResolution() {
   if (!query || !set) {
     return 0;
   }
-  // "Minimum" and "maximum" name the coarsest and finest periods.
+
   ULONG coarsest = 0, finest = 0, current = 0;
   if (query(&coarsest, &finest, &current) < 0) {
     return 0;
@@ -56,13 +56,12 @@ uint32_t current_thread_system_id() {
   return static_cast<uint32_t>(GetCurrentThreadId());
 }
 
-// https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
 #pragma pack(push, 8)
 struct THREADNAME_INFO {
-  DWORD dwType;      // Must be 0x1000.
-  LPCSTR szName;     // Pointer to name (in user addr space).
-  DWORD dwThreadID;  // Thread ID (-1=caller thread).
-  DWORD dwFlags;     // Reserved for future use, must be zero.
+  DWORD dwType;
+  LPCSTR szName;
+  DWORD dwThreadID;
+  DWORD dwFlags;
 };
 #pragma pack(pop)
 
@@ -87,7 +86,6 @@ static void set_thread_name_impl(HANDLE thread, const std::string_view name) {
   if (kernel) {
     auto func = (SetThreadDescriptionFn)GetProcAddress(kernel, "SetThreadDescription");
     if (func) {
-      // Convert UTF-8 name to UTF-16 using Windows API
       int size_needed =
           MultiByteToWideChar(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), nullptr, 0);
       std::wstring u16name(size_needed, 0);
@@ -129,9 +127,6 @@ SleepResult AlertableSleep(std::chrono::microseconds duration) {
 
 namespace {
 
-// The calling thread's high-resolution timer (Windows 10 1803+), created on
-// first use and closed when the thread exits. A synchronization timer:
-// setting it clears any earlier expiry.
 HANDLE ThreadTimer() {
   struct Timer {
     HANDLE handle = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
@@ -148,7 +143,7 @@ HANDLE ThreadTimer() {
 
 bool ArmThreadTimer(HANDLE timer, std::chrono::microseconds duration) {
   LARGE_INTEGER due_time;
-  due_time.QuadPart = -int64_t(duration.count()) * 10;  // Relative, 100 ns units.
+  due_time.QuadPart = -int64_t(duration.count()) * 10;
   return SetWaitableTimer(timer, &due_time, 0, nullptr, nullptr, FALSE) != FALSE;
 }
 
@@ -156,7 +151,7 @@ std::chrono::milliseconds CeilMilliseconds(std::chrono::microseconds duration) {
   return std::chrono::ceil<std::chrono::milliseconds>(duration);
 }
 
-}  // namespace
+}
 
 SleepResult PreciseSleep(std::chrono::microseconds duration, bool alertable,
                          WaitHandle* interrupt) {
@@ -281,8 +276,7 @@ std::pair<WaitResult, size_t> WaitAnyPrecise(WaitHandle* wait_handles[], size_t 
     return WaitMultiple(wait_handles, wait_handle_count, false, is_alertable,
                         CeilMilliseconds(timeout));
   }
-  // The timer goes last: when an object and the timer are both signaled, the
-  // lowest index wins, so the object is reported.
+
   std::vector<HANDLE> handles(wait_handle_count + 1);
   for (size_t i = 0; i < wait_handle_count; ++i) {
     handles[i] = wait_handles[i]->native_handle();
@@ -314,8 +308,6 @@ class Win32Event : public Win32Handle<Event> {
   void Reset() override { ResetEvent(handle_); }
   void Pulse() override { PulseEvent(handle_); }
   bool IsSignaled() override {
-    // NtQueryEvent (EventBasicInformation) reads the state; a zero-timeout
-    // wait would consume an auto-reset event's signal.
     struct EventBasicInformation {
       LONG event_type;
       LONG event_state;
@@ -325,7 +317,7 @@ class Win32Event : public Win32Handle<Event> {
         GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryEvent"));
     EventBasicInformation info = {};
     if (!nt_query_event || nt_query_event(handle_, 0, &info, sizeof(info), nullptr) < 0) {
-      assert_always();  // ntdll always exports it; the handle is our own event.
+      assert_always();
       return false;
     }
     return info.event_state != 0;
@@ -440,7 +432,6 @@ class Win32Timer : public Win32Handle<Timer> {
   }
 
   bool Cancel() override {
-    // Reset the callback immediately so that any completions don't call it.
     std::lock_guard<std::mutex> lock(mutex_);
     callback_ = nullptr;
     return CancelWaitableTimer(handle_) ? true : false;
@@ -448,7 +439,6 @@ class Win32Timer : public Win32Handle<Timer> {
 
  private:
   static void CompletionRoutine(Win32Timer* timer, DWORD timer_low, DWORD timer_high) {
-    // As the callback may reset the timer, store local.
     std::function<void()> callback;
     {
       std::lock_guard<std::mutex> lock(timer->mutex_);
@@ -602,4 +592,4 @@ void Thread::Exit(int exit_code) {
   ExitThread(exit_code);
 }
 
-}  // namespace rex::thread
+}

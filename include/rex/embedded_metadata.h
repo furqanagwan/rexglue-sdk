@@ -23,12 +23,10 @@ struct EmbeddedMetadataAsset {
   std::span<const std::uint8_t> bytes;
 };
 
-// Registers a metadata asset embedded into the host executable. Paths are
-// relative to the metadata root, for example "icons/custom/67.png".
 bool RegisterEmbeddedMetadataAsset(std::string_view relative_path, const std::uint8_t* data,
                                    std::size_t size);
 
 std::optional<EmbeddedMetadataAsset> FindEmbeddedMetadataAsset(
     const std::filesystem::path& relative_path);
 
-}  // namespace rex
+}
