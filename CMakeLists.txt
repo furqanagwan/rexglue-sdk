@@ -183,6 +183,7 @@ endif()
 
 if(REXGLUE_BUILD_FUZZERS)
     set(REXGLUE_ENABLE_ASAN ON)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
     add_compile_options(-fsanitize=fuzzer-no-link)
 endif()
 if(REXGLUE_ENABLE_ASAN)
