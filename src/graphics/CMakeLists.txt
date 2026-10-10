@@ -46,6 +46,8 @@ if(REXGLUE_USE_D3D12)
         pipeline/shader/dxbc_translator_fetch.cpp
         pipeline/shader/dxbc_translator_memexport.cpp
         pipeline/shader/dxbc_translator_om.cpp
+        pipeline/shader/dxbc_translator_om_rov.cpp
+        pipeline/shader/dxbc_translator_vertex_fetch.cpp
     )
 
     # D3D12 GPU backend
@@ -64,6 +66,7 @@ if(REXGLUE_USE_D3D12)
         d3d12/shader.cpp
         d3d12/shared_memory.cpp
         d3d12/texture_cache.cpp
+        d3d12/texture_cache_scaled_resolve.cpp
         d3d12/deferred_command_list.cpp
         d3d12/pipeline_cache.cpp
         d3d12/pipeline_cache_dxil.cpp
