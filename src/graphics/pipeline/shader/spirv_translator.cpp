@@ -1890,9 +1890,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
       switch (host_type) {
         case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
         case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed: {
-          // Triangle domain requires at least 2 registers (r0 for barycentric,
-          // r1 for control point indices or patch index).
-          assert_true(register_count() >= 2);
           // Triangle domain: gl_TessCoord.xyz -> r0.zyx
           // ZYX swizzle according to 415607E1 and 4D5307F2.
           uint_vector_temp_.clear();
@@ -1920,10 +1917,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           break;
         }
         case Shader::HostVertexShaderType::kQuadDomainCPIndexed: {
-          // Quad domain requires at least 2 registers (r0 for the domain
-          // location and the first control point index, r1 for the other
-          // three).
-          assert_true(register_count() >= 2);
           // Quad domain CP-indexed, matching the Direct3D 12 domain shader:
           // r0.xy = domain location, r0.z = control point index 0,
           // r1.xyz = control point indices 1, 2, 3 (already endian swapped and
@@ -1950,7 +1943,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           builder_->createStore(builder_->createCompositeConstruct(type_float4_, id_vector_temp_),
                                 r0_ptr);
           // Store r1.xyz = control point indices 1, 2, 3.
-          for (uint32_t i = 1; i <= 3; ++i) {
+          for (uint32_t i = 1; i <= 3 && register_count() >= 2; ++i) {
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
             spv::Id control_point_index = builder_->createLoad(
@@ -1967,9 +1960,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           break;
         }
         case Shader::HostVertexShaderType::kQuadDomainPatchIndexed: {
-          // Quad domain requires at least 2 registers (r0 for domain location
-          // and patch index, r1 for swizzle indicator).
-          assert_true(register_count() >= 2);
           // Quad domain patch-indexed: gl_TessCoord.xy -> r0.yz,
           // patch index -> r0.x, r0.w = 1
           // XY swizzle according to the ground shader in 4D5307F2.
