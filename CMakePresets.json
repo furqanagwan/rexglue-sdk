@@ -71,6 +71,25 @@
       }
     },
     {
+      "name": "win-amd64-gdk-asan",
+      "displayName": "Windows AMD64 (April 2026 GDK) + AddressSanitizer",
+      "description": "The win-amd64-gdk build with AddressSanitizer and tests; Release only; see docs/fuzzing.md",
+      "inherits": "win-amd64-gdk",
+      "cacheVariables": {
+        "REXGLUE_ENABLE_ASAN": "ON",
+        "REXGLUE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "win-amd64-gdk-fuzz",
+      "displayName": "Windows AMD64 (April 2026 GDK) + libFuzzer",
+      "description": "libFuzzer targets for the file parsers, with AddressSanitizer; Release only; see docs/fuzzing.md",
+      "inherits": "win-amd64-gdk",
+      "cacheVariables": {
+        "REXGLUE_BUILD_FUZZERS": "ON"
+      }
+    },
+    {
       "name": "win-arm64",
       "displayName": "Windows ARM64",
       "description": "Unsupported research preset; GDK ARM64 toolchain and title gates remain blocked under RG-GDK-030/031",
@@ -111,6 +130,16 @@
     {
       "name": "win-amd64-gdk-dxil-release",
       "configurePreset": "win-amd64-gdk-dxil",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-asan-release",
+      "configurePreset": "win-amd64-gdk-asan",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-fuzz-release",
+      "configurePreset": "win-amd64-gdk-fuzz",
       "configuration": "Release"
     },
     {
@@ -163,6 +192,16 @@
     {
       "name": "win-amd64-gdk-dxil-release",
       "configurePreset": "win-amd64-gdk-dxil",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-asan-release",
+      "configurePreset": "win-amd64-gdk-asan",
+      "configuration": "Release"
+    },
+    {
+      "name": "win-amd64-gdk-fuzz-release",
+      "configurePreset": "win-amd64-gdk-fuzz",
       "configuration": "Release"
     },
     {

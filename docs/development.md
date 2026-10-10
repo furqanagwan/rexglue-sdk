@@ -102,6 +102,9 @@ fixture with independent live `Memory` instances in one test process violates
 the singleton contract; the combined unit executable is not an alternative
 passing gate. Test isolation must be explicit, not a way to conceal failures.
 
+A change to a file parser (XEX, XDBF, ISO/XDVDFS, STFS, XUI) also runs its
+libFuzzer target with AddressSanitizer; see [fuzzing](fuzzing.md).
+
 Hosted GDK software CI builds both configurations and runs unit/PPC cases.
 Installed-runtime cases have a separate label and remain part of local CTest;
 hosted software runs exclude them explicitly. GPU, actual package deployment,
