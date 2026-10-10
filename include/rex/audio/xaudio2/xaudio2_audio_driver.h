@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -58,6 +59,8 @@ class XAudio2AudioDriver : public AudioDriver {
     // Buffers queued with no OnBufferEnd for this long mean the device is gone
     // even if XAudio2 never reported it.
     std::chrono::milliseconds stall_timeout{1000};
+    // The Windows endpoint ID to play through; empty follows the default.
+    std::string output_device;
   };
 
   XAudio2AudioDriver(memory::Memory* memory, rex::thread::Semaphore* semaphore);
@@ -78,6 +81,14 @@ class XAudio2AudioDriver : public AudioDriver {
   bool has_device() const;
   // Channels submitted to the device: 2 (stereo fold) or 6 (5.1).
   uint32_t output_channels() const;
+  // Moves the output to another Windows endpoint (empty: the default); the
+  // service thread reopens the engine on it.
+  void SetOutputDevice(std::string device_id);
+  // The endpoint the open engine plays through: empty for the default, and
+  // for a chosen endpoint that could not be opened.
+  std::string opened_device() const;
+  // Engines opened so far.
+  uint32_t engine_opens() const { return engine_opens_.load(); }
   // Device losses handled so far (critical errors and stalls).
   uint32_t device_losses() const { return device_losses_.load(); }
   // Semaphore releases so far.
@@ -111,6 +122,7 @@ class XAudio2AudioDriver : public AudioDriver {
   // With mutex_ held.
   void PaceLocked(uint32_t slot, Clock::time_point now);
   void ReleaseSlotLocked(uint32_t slot);
+  // A null reason is an orderly teardown: nothing is logged.
   void MarkEngineLostLocked(const char* reason);
 
   rex::thread::Semaphore* semaphore_;
@@ -130,6 +142,9 @@ class XAudio2AudioDriver : public AudioDriver {
   uint32_t output_channels_ = 2;
   bool shutdown_requested_ = false;
   bool simulate_no_device_ = false;
+  std::string output_device_;
+  std::string opened_device_;
+  bool device_switch_requested_ = false;
 
   // Owned by the service thread; used by SubmitGuestFrame only while
   // engine_live_ is set, under mutex_.
@@ -145,6 +160,7 @@ class XAudio2AudioDriver : public AudioDriver {
   bool create_failure_logged_ = false;
 
   std::atomic<uint32_t> device_losses_ = 0;
+  std::atomic<uint32_t> engine_opens_ = 0;
   std::atomic<uint64_t> frames_released_ = 0;
 };
 

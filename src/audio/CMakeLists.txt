@@ -45,6 +45,7 @@ if(WIN32)
         xaudio2/xaudio2_audio_driver.cpp
         xaudio2/xaudio2_audio_system.cpp
         xaudio2/ui_sound_player.cpp
+        xaudio2/audio_outputs.cpp
     )
     target_link_libraries(rexaudio PUBLIC xaudio2 ole32)
 endif()

@@ -759,11 +759,6 @@ void SaveConfig(const std::filesystem::path& config_path) {
 
 bool TrySaveConfig(const std::filesystem::path& config_path) {
   std::string content = SerializeToTOML();
-  if (content.empty()) {
-    REXLOG_DEBUG("SaveConfig: no modified flags to save");
-    return true;
-  }
-
   try {
     // The per-user settings folder may not exist yet.
     std::error_code ec;

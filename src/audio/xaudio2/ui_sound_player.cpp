@@ -9,6 +9,7 @@
 #include <rex/audio/ui_sound.h>
 
 #include <mutex>
+#include <string>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -20,7 +21,9 @@
 #include <windows.h>
 #include <xaudio2.h>
 
+#include <rex/audio/flags.h>
 #include <rex/logging.h>
+#include <rex/string/utf8.h>
 
 namespace rex::audio {
 namespace {
@@ -28,10 +31,26 @@ namespace {
 // Enough for a guide's overlapping focus, select and blade sounds.
 constexpr size_t kMaxVoices = 16;
 
+IXAudio2MasteringVoice* OpenOutput(IXAudio2* xaudio2, const std::string& device_id) {
+  IXAudio2MasteringVoice* mastering = nullptr;
+  if (!device_id.empty()) {
+    const std::u16string id = string::to_utf16(device_id);
+    if (FAILED(xaudio2->CreateMasteringVoice(&mastering, XAUDIO2_DEFAULT_CHANNELS,
+                                             XAUDIO2_DEFAULT_SAMPLERATE, 0,
+                                             reinterpret_cast<LPCWSTR>(id.c_str())))) {
+      mastering = nullptr;
+    }
+  }
+  if (!mastering && FAILED(xaudio2->CreateMasteringVoice(&mastering))) {
+    mastering = nullptr;
+  }
+  return mastering;
+}
+
 class XAudio2UiSoundPlayer final : public UiSoundPlayer {
  public:
-  XAudio2UiSoundPlayer(IXAudio2* xaudio2, IXAudio2MasteringVoice* mastering)
-      : xaudio2_(xaudio2), mastering_(mastering) {}
+  XAudio2UiSoundPlayer(IXAudio2* xaudio2, IXAudio2MasteringVoice* mastering, std::string device)
+      : xaudio2_(xaudio2), mastering_(mastering), device_(std::move(device)) {}
 
   ~XAudio2UiSoundPlayer() override {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -39,7 +58,9 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
       active.voice->DestroyVoice();
     }
     active_.clear();
-    mastering_->DestroyVoice();
+    if (mastering_) {
+      mastering_->DestroyVoice();
+    }
     xaudio2_->Release();
   }
 
@@ -48,6 +69,12 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
       return;
     }
     std::lock_guard<std::mutex> lock(mutex_);
+    if (REXCVAR_GET(audio_output_device) != device_) {
+      FollowOutputDevice(REXCVAR_GET(audio_output_device));
+    }
+    if (!mastering_) {
+      return;
+    }
     ReapFinished();
     if (active_.size() >= kMaxVoices) {
       active_.front().voice->DestroyVoice();
@@ -82,6 +109,18 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
     std::shared_ptr<const PcmSound> sound;  // the voice reads these samples
   };
 
+  void FollowOutputDevice(std::string device) {
+    for (Active& active : active_) {
+      active.voice->DestroyVoice();
+    }
+    active_.clear();
+    if (mastering_) {
+      mastering_->DestroyVoice();
+    }
+    mastering_ = OpenOutput(xaudio2_, device);
+    device_ = std::move(device);
+  }
+
   void ReapFinished() {
     for (size_t i = 0; i < active_.size();) {
       XAUDIO2_VOICE_STATE state = {};
@@ -97,6 +136,7 @@ class XAudio2UiSoundPlayer final : public UiSoundPlayer {
 
   IXAudio2* xaudio2_;
   IXAudio2MasteringVoice* mastering_;
+  std::string device_;
   std::mutex mutex_;
   std::vector<Active> active_;
 };
@@ -109,13 +149,14 @@ std::unique_ptr<UiSoundPlayer> UiSoundPlayer::Create() {
     REXAPU_WARN("UI sounds: XAudio2 is not available");
     return nullptr;
   }
-  IXAudio2MasteringVoice* mastering = nullptr;
-  if (FAILED(xaudio2->CreateMasteringVoice(&mastering))) {
+  const std::string device = REXCVAR_GET(audio_output_device);
+  IXAudio2MasteringVoice* mastering = OpenOutput(xaudio2, device);
+  if (!mastering) {
     REXAPU_WARN("UI sounds: no audio output device");
     xaudio2->Release();
     return nullptr;
   }
-  return std::make_unique<XAudio2UiSoundPlayer>(xaudio2, mastering);
+  return std::make_unique<XAudio2UiSoundPlayer>(xaudio2, mastering, device);
 }
 
 }  // namespace rex::audio

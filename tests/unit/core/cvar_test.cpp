@@ -757,10 +757,18 @@ TEST_CASE("cvar SaveConfig", "[cvar]") {
     std::filesystem::remove(save_path);
   }
 
-  SECTION("SaveConfig with no modifications creates no file or empty") {
-    rex::cvar::testing::ResetAllForTesting();
-    rex::cvar::SaveConfig(save_path);
-    // Either file doesn't exist or is minimal (just header comment)
+  SECTION("A flag set back to its default leaves the file") {
+    REQUIRE(rex::cvar::SetFlagByName("test_string_flag", "saved_value"));
+    REQUIRE(rex::cvar::TrySaveConfig(save_path));
+    REQUIRE(rex::cvar::SetFlagByName("test_string_flag", "default"));
+    REQUIRE(rex::cvar::TrySaveConfig(save_path));
+
+    std::ifstream file(save_path);
+    const std::string content((std::istreambuf_iterator<char>(file)),
+                              std::istreambuf_iterator<char>());
+    file.close();
+    CHECK(content.find("test_string_flag") == std::string::npos);
+    std::filesystem::remove(save_path);
   }
 }
 

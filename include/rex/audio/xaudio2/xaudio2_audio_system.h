@@ -8,9 +8,15 @@
 
 #pragma once
 
+#include <mutex>
+#include <string>
+#include <vector>
+
 #include <rex/audio/audio_system.h>
 
 namespace rex::audio::xaudio2 {
+
+class XAudio2AudioDriver;
 
 class XAudio2AudioSystem : public AudioSystem {
  public:
@@ -22,6 +28,13 @@ class XAudio2AudioSystem : public AudioSystem {
   X_STATUS CreateDriver(size_t index, rex::thread::Semaphore* semaphore,
                         AudioDriver** out_driver) override;
   void DestroyDriver(AudioDriver* driver) override;
+
+ private:
+  void SetOutputDevice(std::string device_id);
+
+  std::mutex drivers_mutex_;
+  std::vector<XAudio2AudioDriver*> drivers_;
+  std::string output_device_;
 };
 
 }  // namespace rex::audio::xaudio2

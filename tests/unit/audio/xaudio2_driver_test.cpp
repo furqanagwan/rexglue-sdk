@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <rex/audio/audio_backend.h>
+#include <rex/audio/audio_outputs.h>
 #include <rex/audio/flags.h>
 #include <rex/audio/nop/nop_audio_system.h>
 #include <rex/audio/xaudio2/xaudio2_audio_driver.h>
@@ -155,6 +156,69 @@ TEST_CASE("XAudio2 device loss releases queued frames and reopens the device", "
   std::this_thread::sleep_for(50ms);
   CHECK(rig.driver.frames_released() == 50);
   CHECK(rig.DrainSemaphore() == 50);
+}
+
+TEST_CASE("Windows lists its active audio outputs", "[audio][xaudio2]") {
+  const auto outputs = rex::audio::ListAudioOutputs();
+  if (outputs.empty()) {
+    SKIP("No audio endpoint on this machine");
+  }
+  size_t defaults = 0;
+  for (const auto& output : outputs) {
+    INFO(output.id);
+    CHECK_FALSE(output.id.empty());
+    CHECK_FALSE(output.name.empty());
+    defaults += output.is_default ? 1 : 0;
+  }
+  CHECK(defaults <= 1);
+}
+
+TEST_CASE("XAudio2 moves to a chosen output and back to the default", "[audio][xaudio2]") {
+  Rig rig;
+  const auto outputs = rex::audio::ListAudioOutputs();
+  if (!rig.driver.has_device() || outputs.empty()) {
+    SKIP("No audio endpoint on this machine");
+  }
+  CHECK(rig.driver.opened_device().empty());
+  auto reopened = [&](uint32_t opens) {
+    const auto deadline = Clock::now() + 5s;
+    while (rig.driver.engine_opens() <= opens || !rig.driver.has_device()) {
+      if (Clock::now() > deadline) {
+        return false;
+      }
+      std::this_thread::sleep_for(5ms);
+    }
+    return true;
+  };
+
+  rig.Submit(20);
+  uint32_t opens = rig.driver.engine_opens();
+  rig.driver.SetOutputDevice(outputs.back().id);
+  REQUIRE(reopened(opens));
+  CHECK(rig.driver.opened_device() == outputs.back().id);
+  rig.Submit(10);
+  REQUIRE(rig.WaitReleased(30));
+
+  opens = rig.driver.engine_opens();
+  rig.driver.SetOutputDevice("");
+  REQUIRE(reopened(opens));
+  CHECK(rig.driver.opened_device().empty());
+  std::this_thread::sleep_for(50ms);
+  CHECK(rig.driver.frames_released() == 30);
+  CHECK(rig.DrainSemaphore() == 30);
+  CHECK(rig.driver.device_losses() == 0);
+}
+
+TEST_CASE("XAudio2 plays through the default when the chosen output is gone", "[audio][xaudio2]") {
+  XAudio2AudioDriver::Options options;
+  options.output_device = "{0.0.0.00000000}.{00000000-0000-0000-0000-000000000000}";
+  Rig rig(options);
+  if (!rig.driver.has_device()) {
+    SKIP("No audio endpoint on this machine");
+  }
+  CHECK(rig.driver.opened_device().empty());
+  rig.Submit(8);
+  REQUIRE(rig.WaitReleased(8));
 }
 
 TEST_CASE("XAudio2 stall watchdog frees frames a silent voice holds", "[audio][xaudio2]") {

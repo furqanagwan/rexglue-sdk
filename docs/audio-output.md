@@ -46,6 +46,17 @@ where Xenia hand-declares the 2.7 and 2.8 interfaces and loads
   follows default-device changes itself, and not forcing a rate lets it move to
   a 44.1 kHz endpoint
   ([XAudio 2.9 guide](https://learn.microsoft.com/windows/win32/xaudio2/xaudio2-redistributable)).
+- **Choosing an output.** `audio_output_device` holds a Windows endpoint ID
+  (`IMMDevice::GetId`); empty, the default, follows the Windows default as
+  above. `rex::audio::ListAudioOutputs` lists the active render endpoints with
+  their friendly names and which is the default, for the guide's Settings >
+  Preferences > Audio Output page. The XAudio2 audio system registers for the
+  cvar's changes and hands the ID to each driver (`SetOutputDevice`), and the
+  service thread reopens the engine on it. The frames the old voice held move
+  to the clock, as for a lost device, so each frame still releases the client
+  once. An endpoint that cannot be opened (unplugged) falls back to the default
+  with a warning. The guide's UI sounds reopen on the chosen output on their
+  next sound.
 - **One release per frame.** Every frame the guest submits releases the client
   semaphore exactly once: when the device finishes playing it, or, when there
   is no usable device, on a wall clock at the frame rate (5.33 ms). A title
@@ -78,6 +89,11 @@ without it, engine creation fails and frames are paced by the clock.
   - a simulated critical error releases the voice's frames and reopens the device;
   - a silently stopped voice is caught by the stall watchdog;
   - a device that appears later is picked up;
+  - Windows lists its active outputs, each with an ID and a name, at most one
+    the default;
+  - the driver moves to a chosen output and back to the default, every frame
+    still released once and no loss counted;
+  - a chosen output that is not there plays through the default;
   - more frames than slots still release once each;
   - 25 create, submit and teardown cycles, plus two clients at once;
   - `audio_backend` selection, and a guest client registered, fed from guest
@@ -88,8 +104,13 @@ without it, engine creation fails and frames are paced by the clock.
 - Quantum of Solace is the only title run on the XAudio2 output.
 - Unplugging and reconnecting a real device, and switching between 48 kHz and
   44.1-kHz-only endpoints, were not exercised. The loss paths are covered by
-  simulated critical errors and stalls. This machine has one active endpoint
-  (NVIDIA HDMI audio on the monitor).
+  simulated critical errors and stalls. Choosing an output was run in Quantum
+  of Solace on this machine's two endpoints, both NVIDIA HDMI audio: the ROG
+  Gjallar (8 channels, 5.1 submitted) and the PG38UQ monitor (2 channels, the
+  stereo fold), there and back through the guide.
+- A chosen output that was unplugged and comes back is not picked up again
+  until the game restarts or the output is chosen again; until then the game
+  plays through the default.
 - The 5.1 speaker mapping on a real surround endpoint was not checked by ear;
   the conversion tests cover the channel order handed to XAudio2.
 - Output is not resampled to the guest clock (Xenia's `SetFrequencyRatio` from

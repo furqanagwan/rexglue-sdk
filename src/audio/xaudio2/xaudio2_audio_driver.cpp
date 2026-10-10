@@ -27,6 +27,7 @@
 #include <rex/audio/flags.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
+#include <rex/string/utf8.h>
 
 namespace rex::audio::xaudio2 {
 
@@ -88,7 +89,8 @@ XAudio2AudioDriver::XAudio2AudioDriver(memory::Memory* memory, rex::thread::Sema
     : AudioDriver(memory),
       semaphore_(semaphore),
       options_(options),
-      simulate_no_device_(options.simulate_no_device) {
+      simulate_no_device_(options.simulate_no_device),
+      output_device_(options.output_device) {
   free_slots_.reserve(kFrameSlots);
   for (uint32_t i = kFrameSlots; i-- > 0;) {
     free_slots_.push_back(i);
@@ -206,6 +208,23 @@ uint32_t XAudio2AudioDriver::output_channels() const {
   return output_channels_;
 }
 
+void XAudio2AudioDriver::SetOutputDevice(std::string device_id) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (device_id == output_device_) {
+      return;
+    }
+    output_device_ = std::move(device_id);
+    device_switch_requested_ = true;
+  }
+  wake_.notify_all();
+}
+
+std::string XAudio2AudioDriver::opened_device() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return opened_device_;
+}
+
 void XAudio2AudioDriver::SimulateDeviceLoss() {
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -268,7 +287,9 @@ void XAudio2AudioDriver::MarkEngineLostLocked(const char* reason) {
   if (!engine_live_) {
     return;
   }
-  REXAPU_WARN("XAudio2 output lost ({}); pacing frames until a device returns", reason);
+  if (reason) {
+    REXAPU_WARN("XAudio2 output lost ({}); pacing frames until a device returns", reason);
+  }
   engine_live_ = false;
   engine_lost_ = true;
   ++generation_;
@@ -284,8 +305,10 @@ void XAudio2AudioDriver::MarkEngineLostLocked(const char* reason) {
 }
 
 bool XAudio2AudioDriver::CreateEngine() {
+  std::string wanted_device;
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    wanted_device = output_device_;
     if (simulate_no_device_) {
       if (!create_failure_logged_) {
         REXAPU_WARN("XAudio2: no audio device (simulated); pacing frames");
@@ -328,8 +351,24 @@ bool XAudio2AudioDriver::CreateEngine() {
   }
   // Default device, channels and rate: the default device ID selects the
   // virtual audio client, which follows default-device changes itself, and
-  // not forcing a rate lets it switch to a 44.1 kHz endpoint.
-  hr = xaudio2->CreateMasteringVoice(&mastering);
+  // not forcing a rate lets it switch to a 44.1 kHz endpoint. A chosen
+  // endpoint that is gone falls back to the default.
+  std::string opened_device = wanted_device;
+  if (!wanted_device.empty()) {
+    const std::u16string id = string::to_utf16(wanted_device);
+    hr = xaudio2->CreateMasteringVoice(&mastering, XAUDIO2_DEFAULT_CHANNELS,
+                                       XAUDIO2_DEFAULT_SAMPLERATE, 0,
+                                       reinterpret_cast<LPCWSTR>(id.c_str()));
+    if (FAILED(hr)) {
+      mastering = nullptr;
+      opened_device.clear();
+      REXAPU_WARN("XAudio2: output {} could not be opened (0x{:08X}); using the default output",
+                  wanted_device, static_cast<uint32_t>(hr));
+    }
+  }
+  if (!mastering) {
+    hr = xaudio2->CreateMasteringVoice(&mastering);
+  }
   if (FAILED(hr)) {
     mastering = nullptr;
     return fail("CreateMasteringVoice", hr);
@@ -364,10 +403,13 @@ bool XAudio2AudioDriver::CreateEngine() {
     return fail("IXAudio2SourceVoice::Start", hr);
   }
 
-  REXAPU_INFO("XAudio2 output: device {} ch (mask 0x{:X}), {} Hz; submitting {} ch",
+  REXAPU_INFO("XAudio2 output: {}, device {} ch (mask 0x{:X}), {} Hz; submitting {} ch",
+              opened_device.empty() ? std::string("the default output") : opened_device,
               details.InputChannels, static_cast<uint32_t>(device_mask), details.InputSampleRate,
               channels);
   std::lock_guard<std::mutex> lock(mutex_);
+  opened_device_ = std::move(opened_device);
+  ++engine_opens_;
   xaudio2_ = xaudio2;
   mastering_voice_ = mastering;
   source_voice_ = source;
@@ -388,7 +430,7 @@ void XAudio2AudioDriver::DestroyEngine() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (engine_live_) {
       // An orderly teardown, not a loss: same bookkeeping without counting it.
-      MarkEngineLostLocked("engine shut down");
+      MarkEngineLostLocked(nullptr);
       --device_losses_;
     }
     engine_lost_ = false;
@@ -450,6 +492,15 @@ void XAudio2AudioDriver::ServiceThread() {
     }
     if (engine_live_ && engine_frames_ > 0 && now - engine_progress_ > options_.stall_timeout) {
       MarkEngineLostLocked("no buffer finished within the stall timeout");
+    }
+    if (device_switch_requested_) {
+      device_switch_requested_ = false;
+      lock.unlock();
+      DestroyEngine();
+      CreateEngine();
+      lock.lock();
+      retry_at = Clock::now() + options_.retry_interval;
+      continue;
     }
     if (engine_lost_) {
       // Recreate straight away: the loss is often a device switch the virtual
