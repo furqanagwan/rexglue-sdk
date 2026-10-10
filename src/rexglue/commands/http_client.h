@@ -15,9 +15,7 @@
 
 namespace rexglue::cli {
 
-/// GET `url` (http or https, redirects followed) with WinHTTP. The body on a
-/// 200, otherwise nullopt with `error` saying why.
 std::optional<std::vector<uint8_t>> HttpGet(const std::string& url, std::string* error,
                                             int timeout_ms = 30000);
 
-}  // namespace rexglue::cli
+}

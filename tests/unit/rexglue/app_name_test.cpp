@@ -20,8 +20,6 @@ TEST_CASE("Project names keep their case", "[rexglue][init]") {
 }
 
 TEST_CASE("Names from earlier versions regenerate unchanged", "[rexglue][init]") {
-  // Earlier versions wrote snake_case names into the manifest; the refresh of
-  // rexglue.cmake must still name that project's files and targets.
   CHECK(parse_app_name("my_game").original == "my_game");
   CHECK(parse_app_name("quantumofsolace").original == "quantumofsolace");
   CHECK(parse_app_name("my_game").upper_case == "MYGAME");
@@ -29,7 +27,6 @@ TEST_CASE("Names from earlier versions regenerate unchanged", "[rexglue][init]")
 }
 
 TEST_CASE("Spaces and dashes become one underscore", "[rexglue][init]") {
-  // The name is a C++ identifier in REX_DEFINE_APP.
   CHECK(parse_app_name("Blood Stone").original == "Blood_Stone");
   CHECK(parse_app_name("Bond-Legends").original == "Bond_Legends");
   CHECK(parse_app_name("my  -_game ").original == "my_game");

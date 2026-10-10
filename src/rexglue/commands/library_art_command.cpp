@@ -45,8 +45,6 @@ using rex::Result;
 
 namespace {
 
-// The 360 marketplace's box art carries the console's banner (the orb,
-// XBOX 360 and LIVE) across its top 13%.
 constexpr double kMarketplaceBanner = 0.13;
 
 struct LibraryArtArgs {
@@ -79,8 +77,6 @@ Result<void> WritePng(const Image& image, const std::filesystem::path& path) {
   return rex::Ok();
 }
 
-// The title's image from the 360 marketplace: boxartlg.jpg (219 x 300) or
-// background.jpg (1280 x 720).
 std::optional<Image> Marketplace(const std::string& title_id, std::string_view file,
                                  std::string* error) {
   std::string id = title_id;
@@ -120,7 +116,7 @@ Result<void> WriteLibraryArt(const LibraryArtArgs& args) {
     return Err<void>(ErrorCategory::Config, "give the title ID or --cover");
   }
   std::string error;
-  // The box art: the builder's own (no banner), or the marketplace's.
+
   std::optional<Image> cover;
   double crop_top = 0.0;
   if (!args.cover.empty()) {
@@ -133,7 +129,6 @@ Result<void> WriteLibraryArt(const LibraryArtArgs& args) {
     return Err<void>(ErrorCategory::IO, fmt::format("box art: {}", error));
   }
 
-  // The orb and wordmark from the console's own splash_360.png.
   std::optional<StripArt> strip;
   if (!args.system_update.empty()) {
     using rex::ui::xui::SystemUpdate;
@@ -164,8 +159,7 @@ Result<void> WriteLibraryArt(const LibraryArtArgs& args) {
     const char* name;
     int size;
   };
-  // The four ShellVisuals sizes, and the full tile for the Xbox app's own
-  // artwork choice on a game added by hand.
+
   for (const Tile& tile : {Tile{"LibraryTile.png", 1080}, Tile{"Square480x480Logo.png", 480},
                            Tile{"Square150x150Logo.png", 150}, Tile{"StoreLogo.png", 100},
                            Tile{"Square44x44Logo.png", 44}}) {
@@ -174,7 +168,6 @@ Result<void> WriteLibraryArt(const LibraryArtArgs& args) {
     }
   }
 
-  // The splash: the title's key art, as the BC packages show.
   std::optional<Image> background;
   if (!args.background.empty()) {
     background = Local(args.background, &error);
@@ -193,7 +186,7 @@ Result<void> WriteLibraryArt(const LibraryArtArgs& args) {
   return rex::Ok();
 }
 
-}  // namespace
+}
 
 void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   (void)ctx;
@@ -218,8 +211,6 @@ void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction&
     pending = [args]() -> Result<void> { return WriteLibraryArt(*args); };
   });
 
-  // Original title art for Windows resources and GDK ShellVisuals. No console
-  // assets, downloads or service identity are needed for this path.
   struct TitleArtArgs {
     std::string image;
     std::string output;
@@ -242,7 +233,7 @@ void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction&
       if (!ico)
         return Err<void>(ErrorCategory::IO, error);
       const std::filesystem::path output(title_args->output);
-      // Check the entire set before writing, so existing custom art is safe.
+
       if (!title_args->force) {
         std::vector<std::string> names = {"Title.ico"};
         for (const auto& item : rex::codegen::GameConfigImages())
@@ -274,4 +265,4 @@ void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction&
   });
 }
 
-}  // namespace rexglue::cli
+}

@@ -43,7 +43,7 @@ bool IsSourceExtension(const fs::path& p) {
   return kExts.contains(ToLower(p.extension().string()));
 }
 
-}  // namespace
+}
 
 static nlohmann::json TitleUpdatesJson(const std::vector<TitleUpdateTarget>& title_updates) {
   nlohmann::json list = nlohmann::json::array();
@@ -135,4 +135,4 @@ std::vector<SourceWarning> ScanStaleIncludes(
   return matches;
 }
 
-}  // namespace rexglue::cli
+}

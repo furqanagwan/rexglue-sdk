@@ -74,7 +74,7 @@ std::string_view LevelColor(spdlog::level::level_enum lvl) {
   }
 }
 
-}  // namespace
+}
 
 PresentationSink::PresentationSink(std::ostream& out, bool tty, bool color)
     : out_(out), tty_(tty), color_(color) {}
@@ -164,7 +164,7 @@ void SetSinkActiveProgress(bool active) {
   g_sink->setActiveProgress(active);
 }
 
-}  // namespace detail
+}
 
 void Init(const InitOptions& opts) {
   if (g_sink)
@@ -253,4 +253,4 @@ void FailureSummary(std::string_view reason, std::chrono::milliseconds elapsed) 
   acc.flush();
 }
 
-}  // namespace rexglue::ui
+}

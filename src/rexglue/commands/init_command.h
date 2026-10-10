@@ -43,13 +43,11 @@ struct InitModuleOptions {
 struct InitAchievementsOptions {
   std::string xex_path;
   std::string output_dir;
-  // XLanguage ID to extract strings for; defaults to English (1) when unset.
+
   uint32_t language = 1;
 };
 
 struct InitGameConfigOptions {
-  // Where MicrosoftGame.config and the images go; `gdk` under the project
-  // root, which generated/rexglue.cmake stages next to the title executable.
   std::string output_dir;
   rex::codegen::GameConfigIdentity identity;
   bool force = false;
@@ -62,4 +60,4 @@ Result<void> InitGameConfig(const InitGameConfigOptions& opts, const CliContext&
 
 void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pending);
 
-}  // namespace rexglue::cli
+}

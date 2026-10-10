@@ -50,11 +50,11 @@ namespace {
 
 constexpr std::string_view kCatalog = "http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query";
 constexpr int kAddOnMediaType = 18;
-constexpr int kPageSize = 300;   // the service's largest page
-constexpr int kMaxPages = 1000;  // 300,000 add-ons: far past the catalogue
-// Image relationship types in a catalogue entry.
-constexpr std::string_view kBannerImage = "27";  // banner.png, 420 x 95
-constexpr std::string_view kTileImage = "23";    // tile.png, 64 x 64
+constexpr int kPageSize = 300;
+constexpr int kMaxPages = 1000;
+
+constexpr std::string_view kBannerImage = "27";
+constexpr std::string_view kTileImage = "23";
 
 std::string QueryUrl(std::string_view locale, int page, int page_size,
                      const std::vector<std::string>& ids) {
@@ -70,7 +70,6 @@ std::string QueryUrl(std::string_view locale, int page, int page_size,
   return url;
 }
 
-// The builder's Windows locale ("en-GB"): the catalogue's language and market.
 std::string DefaultLocale() {
   wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
   if (!GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH)) {
@@ -133,7 +132,6 @@ std::string DecodeEntities(std::string_view text) {
   return out;
 }
 
-// The text of the first <tag> in `xml`, entities decoded.
 std::string Tag(std::string_view xml, std::string_view tag) {
   const std::string open = fmt::format("<{}>", tag);
   const std::string close = fmt::format("</{}>", tag);
@@ -146,7 +144,7 @@ std::string Tag(std::string_view xml, std::string_view tag) {
     return {};
   }
   std::string text = DecodeEntities(xml.substr(start + open.size(), end - start - open.size()));
-  // Some titles end in a line break.
+
   const auto space = [](unsigned char c) { return std::isspace(c) != 0; };
   while (!text.empty() && space(text.back())) {
     text.pop_back();
@@ -155,7 +153,6 @@ std::string Tag(std::string_view xml, std::string_view tag) {
   return std::string(first, text.end());
 }
 
-// Each <entry> of a FindGames feed.
 std::vector<std::string_view> Entries(std::string_view feed) {
   std::vector<std::string_view> out;
   for (size_t at = 0;;) {
@@ -233,14 +230,12 @@ Result<void> WriteCatalog(const CatalogArgs& args) {
     entries.push_back(std::move(entry));
   }
   std::string error;
-  // One query for all; ten IDs a page is far below any title's add-ons.
+
   std::optional<std::string> feed;
   if (!entries.empty()) {
     feed = Fetch(QueryUrl(locale, 1, int(args.ids.size()), args.ids), &error);
   }
   if (!feed && !entries.empty()) {
-    // Offline or the service is down: the build goes on, and the guide
-    // lists the add-ons by the names in their packages.
     REXLOG_WARN("DLC catalogue: {}; building it with IDs only", error);
   }
   size_t found = 0;
@@ -351,7 +346,7 @@ Result<void> FindDlc(const FindArgs& args) {
     return hits;
   };
   std::vector<Hit> hits = scan(*first);
-  // Six requests at a time.
+
   for (int page = 2; page <= pages; page += 6) {
     std::vector<std::future<std::optional<std::string>>> batch;
     for (int p = page; p < page + 6 && p <= pages; ++p) {
@@ -383,7 +378,7 @@ Result<void> FindDlc(const FindArgs& args) {
   return rex::Ok();
 }
 
-}  // namespace
+}
 
 void RegisterDlcCommands(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   (void)ctx;
@@ -411,4 +406,4 @@ void RegisterDlcCommands(CLI::App& parent, const CliContext& ctx, DeferredAction
       [find, &pending]() { pending = [find]() -> Result<void> { return FindDlc(*find); }; });
 }
 
-}  // namespace rexglue::cli
+}

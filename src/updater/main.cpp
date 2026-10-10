@@ -89,7 +89,7 @@ void ShowError(const std::string& message) {
   MessageBoxW(nullptr, text.c_str(), L"Update failed", MB_OK | MB_ICONERROR);
 }
 
-}  // namespace
+}
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   const auto options = ParseOptions();

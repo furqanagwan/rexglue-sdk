@@ -41,7 +41,7 @@ std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* e
     for (int i = 0; i < 4; ++i)
       result[offset + i] = uint8_t(value >> (8 * i));
   };
-  put16(2, 1);  // ICONDIR type: icon, not cursor.
+  put16(2, 1);
   put16(4, uint16_t(sizes.size()));
   for (size_t i = 0; i < sizes.size(); ++i) {
     const auto resized = Cover(image, sizes[i], sizes[i]);
@@ -59,7 +59,7 @@ std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* e
         for (int j = 0; j < 4; ++j)
           frame[offset + j] = uint8_t(value >> (8 * j));
       };
-      frame32(0, 40);  // BITMAPINFOHEADER, with XOR and AND planes stacked.
+      frame32(0, 40);
       frame32(4, size);
       frame32(8, size * 2);
       frame[12] = 1;
@@ -70,7 +70,7 @@ std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* e
           const auto* pixel = resized.at(x, y);
           const size_t row = size_t(size - y - 1);
           auto* dest = frame.data() + 40 + (row * size + x) * 4;
-          // Icon DIBs store straight BGRA, unlike our premultiplied images.
+
           for (int c = 0; c < 3; ++c) {
             dest[c] =
                 pixel[3]
@@ -89,7 +89,7 @@ std::optional<std::vector<uint8_t>> EncodeIco(const Image& image, std::string* e
       return std::nullopt;
     }
     const size_t entry = 6 + i * 16;
-    result[entry] = result[entry + 1] = uint8_t(sizes[i]);  // 0 denotes 256.
+    result[entry] = result[entry + 1] = uint8_t(sizes[i]);
     put16(entry + 4, 1);
     put16(entry + 6, 32);
     put32(entry + 8, uint32_t(frame.size()));
@@ -105,7 +105,6 @@ using Microsoft::WRL::ComPtr;
 
 IWICImagingFactory* Factory() {
   static ComPtr<IWICImagingFactory> factory = [] {
-    // The command may run on a thread COM already set up another way.
     const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     (void)init;
     ComPtr<IWICImagingFactory> f;
@@ -158,7 +157,6 @@ Image Blank(int width, int height, uint32_t bgra = 0) {
   return image;
 }
 
-// `src` over `dst` at (x, y); both premultiplied.
 void Draw(Image& dst, const Image& src, int x, int y) {
   for (int sy = 0; sy < src.height; ++sy) {
     const int dy = y + sy;
@@ -188,7 +186,6 @@ Image Crop(const Image& image, int x, int y, int width, int height) {
   return out;
 }
 
-// Quarter turn anticlockwise: the left edge becomes the bottom.
 Image RotateLeft(const Image& image) {
   Image out = Blank(image.height, image.width);
   for (int y = 0; y < out.height; ++y) {
@@ -199,14 +196,11 @@ Image RotateLeft(const Image& image) {
   return out;
 }
 
-// The strip, measured on the Store's 1080 x 1080 tiles for Xbox 360 games.
 constexpr double kMaster = 1080.0;
 constexpr double kStripWidth = 189.0;
 constexpr double kWordmarkTop = 494.0, kWordmarkLength = 415.0;
 constexpr double kOrbCentreY = 986.5, kOrbDiameter = 113.0;
 
-// The swooshes: bands from the top, each with its lower edge's depth at four
-// points across the strip; the edges curve down to the right.
 constexpr double kBandX[] = {5.0, 60.0, 120.0, 175.0};
 struct Band {
   uint8_t r, g, b;
@@ -220,10 +214,9 @@ constexpr Band kBands[] = {
     {26, 142, 42, {337, 345, 364, 378}},  {105, 181, 82, {360, 370, 383, 400}},
     {84, 173, 78, {379, 387, 401, 419}},  {59, 164, 73, {400, 405, 412, 428}},
 };
-// Below the last band, its green fades to white by this depth.
+
 constexpr double kFadeEnd[] = {425, 432, 444, 460};
 
-// y = a + b x + c x^2 through the four points, least squares.
 std::array<double, 3> Fit(const double (&y)[4]) {
   double s[5] = {}, t[3] = {};
   for (int i = 0; i < 4; ++i) {
@@ -236,7 +229,7 @@ std::array<double, 3> Fit(const double (&y)[4]) {
       p *= kBandX[i];
     }
   }
-  // Normal equations, Cramer's rule.
+
   const double m[3][3] = {{s[0], s[1], s[2]}, {s[1], s[2], s[3]}, {s[2], s[3], s[4]}};
   auto det = [](const double (&a)[3][3]) {
     return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) -
@@ -261,7 +254,6 @@ double At(const std::array<double, 3>& f, double x) {
   return f[0] + f[1] * x + f[2] * x * x;
 }
 
-// The strip's swooshes and white, at the master size, 4 x 4 samples a pixel.
 void DrawStrip(Image& tile) {
   std::array<std::array<double, 3>, std::size(kBands)> edges;
   for (size_t i = 0; i < std::size(kBands); ++i) {
@@ -304,7 +296,7 @@ void DrawStrip(Image& tile) {
   }
 }
 
-}  // namespace
+}
 
 std::optional<Image> DecodeImage(std::span<const uint8_t> bytes, std::string* error) {
   IWICImagingFactory* factory = Factory();
@@ -380,8 +372,7 @@ Image Resize(const Image& image, int width, int height) {
                                    WICBitmapInterpolationModeHighQualityCubic))) {
     scaler->CopyPixels(nullptr, UINT(width) * 4, UINT(out.pixels.size()), out.pixels.data());
   }
-  // Cubic filtering rings past edges: a colour above its alpha is not
-  // premultiplied, and shows as bright specks once the alpha is divided out.
+
   for (size_t i = 0; i < out.pixels.size(); i += 4) {
     for (int c = 0; c < 3; ++c) {
       out.pixels[i + c] = std::min(out.pixels[i + c], out.pixels[i + 3]);
@@ -413,7 +404,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
     }
     return false;
   };
-  // Two blocks of rows: the orb, a gap, the wordmark.
+
   std::vector<std::pair<int, int>> blocks;
   for (int y = 0; y < splash.height; ++y) {
     if (!row_inked(y)) {
@@ -428,7 +419,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
   if (blocks.size() != 2) {
     return fail();
   }
-  // The columns inked between rows `top` and `bottom`.
+
   auto columns = [&](int top, int bottom) {
     int first = splash.width, last = -1;
     for (int x = 0; x < splash.width; ++x) {
@@ -443,8 +434,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
     return std::pair{first, last};
   };
   StripArt art;
-  // The orb: the disc around its block's centre; the trade mark sign at its
-  // upper right falls outside.
+
   const auto [orb_left, orb_right] = columns(blocks[0].first, blocks[0].second);
   const int orb_size = std::min(orb_right - orb_left, blocks[0].second - blocks[0].first) + 1;
   if (orb_size < 32) {
@@ -453,13 +443,10 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
   const double cx = (orb_left + orb_right + 1) / 2.0;
   const double cy = (blocks[0].first + blocks[0].second + 1) / 2.0;
   const double radius = orb_size / 2.0;
-  // Made as the strip shows it, turned a quarter left with the wordmark: the
-  // white orb, a sphere lit from the upper left, white to light grey, with the
-  // splash's X over it in the tiles' green, darker on the left.
+
   art.orb = Blank(orb_size, orb_size);
   for (int y = 0; y < orb_size; ++y) {
     for (int x = 0; x < orb_size; ++x) {
-      // The splash pixel that turns to (x, y).
       const double sx = cx - radius + (orb_size - 1 - y) + 0.5, sy = cy - radius + x + 0.5;
       const int ix = int(sx), iy = int(sy);
       if (ix < 0 || iy < 0 || ix >= splash.width || iy >= splash.height) {
@@ -470,7 +457,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
       const double t = std::clamp(0.5 + 0.5 * (dx + dy) / (radius * std::sqrt(2.0)), 0.0, 1.0);
       const double grey = 255.0 - 65.0 * std::pow(t, 1.5);
       const uint8_t* s = splash.at(ix, iy);
-      // Saturation picks the X, highlights included; the sphere is grey.
+
       const int high = std::max({s[0], s[1], s[2]}), low = std::min({s[0], s[1], s[2]});
       const double green = high && s[1] == high
                                ? std::clamp((double(high - low) / high - 0.08) / 0.2, 0.0, 1.0)
@@ -485,8 +472,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
       p[3] = uint8_t(255 * cover + 0.5);
     }
   }
-  // The wordmark: its block's columns inked in its upper 60%; the trade mark
-  // sign after it sits at the baseline.
+
   const auto rows = blocks[1];
   const auto [word_left, word_right] =
       columns(rows.first, rows.first + (rows.second - rows.first) * 3 / 5);
@@ -495,8 +481,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
   }
   art.wordmark =
       Crop(splash, word_left, rows.first, word_right - word_left + 1, rows.second - rows.first + 1);
-  // The trade mark sign tucks under the 0's last columns: clear every piece
-  // of ink far smaller than a letter.
+
   {
     Image& w = art.wordmark;
     std::vector<int> piece(size_t(w.width) * w.height, -1);
@@ -530,7 +515,6 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
     for (const auto& p : pieces) {
       if (p.size() * 8 < largest) {
         for (int at : p) {
-          // The piece and its soft edge.
           const int x = at % w.width, y = at / w.width;
           for (int ny = std::max(0, y - 1); ny <= std::min(w.height - 1, y + 1); ++ny) {
             for (int nx = std::max(0, x - 1); nx <= std::min(w.width - 1, x + 1); ++nx) {
@@ -544,8 +528,7 @@ std::optional<StripArt> StripArtFromSplash(const Image& splash, std::string* err
       }
     }
   }
-  // In the tiles' colours, the splash's own only as a mask: XBOX dark green,
-  // 360 grey.
+
   for (size_t i = 0; i < art.wordmark.pixels.size(); i += 4) {
     uint8_t* p = &art.wordmark.pixels[i];
     const bool is_green = p[1] > p[2] + 24;
@@ -562,7 +545,7 @@ Image ComposeTile(const Image& cover, double crop_top, const StripArt* strip_art
   const int master = int(kMaster);
   Image tile = Blank(master, master, 0xFFFFFFFF);
   DrawStrip(tile);
-  // The cover, without its banner, over the rest.
+
   const int cut = std::clamp(int(std::lround(cover.height * crop_top)), 0, cover.height - 1);
   const Image art = Cover(Crop(cover, 0, cut, cover.width, cover.height - cut),
                           master - int(kStripWidth), master);
@@ -580,4 +563,4 @@ Image ComposeTile(const Image& cover, double crop_top, const StripArt* strip_art
   return Resize(tile, size, size);
 }
 
-}  // namespace rexglue::cli
+}

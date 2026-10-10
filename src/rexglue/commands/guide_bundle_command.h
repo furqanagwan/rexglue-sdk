@@ -18,4 +18,4 @@ namespace rexglue::cli {
 
 void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction& pending);
 
-}  // namespace rexglue::cli
+}

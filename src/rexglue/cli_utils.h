@@ -22,4 +22,4 @@ struct CliContext {
 
 using DeferredAction = std::function<rex::Result<void>()>;
 
-}  // namespace rexglue::cli
+}

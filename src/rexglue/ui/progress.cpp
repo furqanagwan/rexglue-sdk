@@ -26,7 +26,7 @@ namespace rexglue::ui {
 namespace {
 constexpr std::string_view kEraseLine = "\r\033[K";
 constexpr auto kSpinnerInterval = std::chrono::milliseconds(100);
-}  // namespace
+}
 
 ProgressView::ProgressView(std::string_view title) : title_(title) {
   {
@@ -209,4 +209,4 @@ void ProgressView::projectPhaseFinished() {
   active_line_kind_ = ActiveLineKind::None;
 }
 
-}  // namespace rexglue::ui
+}

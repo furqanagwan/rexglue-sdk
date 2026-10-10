@@ -19,7 +19,6 @@
 #include <rex/filesystem.h>
 #include <rex/system/gaming_runtime.h>
 
-// The GDK headers need the Windows headers first.
 #include <windows.h>
 
 #include <appmodel.h>
@@ -45,7 +44,6 @@ std::filesystem::path ReportPath() {
   return std::filesystem::path(std::wstring(module, length)).parent_path() / "gdk_smoke_result.txt";
 }
 
-// ReXApp's default user_data_root is Saved Games / <app name>.
 int BumpSaveCounter() {
   const auto dir = rex::filesystem::GetSavedGamesFolder() / "rexglue_gdk_smoke";
   std::filesystem::create_directories(dir);
@@ -62,12 +60,11 @@ int BumpSaveCounter() {
   return count;
 }
 
-}  // namespace
+}
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   std::ofstream report(ReportPath(), std::ios::trunc);
   if (!report) {
-    // An installed package's folder is read-only: report beside the save.
     const auto dir = rex::filesystem::GetSavedGamesFolder() / "rexglue_gdk_smoke";
     std::filesystem::create_directories(dir);
     report.open(dir / "gdk_smoke_result.txt", std::ios::trunc);
@@ -82,7 +79,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     return 1;
   }
 
-  // Windows package identity (wdapp register, MSIX) ...
   UINT32 full_name_length = 0;
   std::wstring full_name;
   if (GetCurrentPackageFullName(&full_name_length, nullptr) == ERROR_INSUFFICIENT_BUFFER) {
@@ -97,7 +93,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
          << (full_name.empty() ? std::string("none")
                                : std::string(full_name.begin(), full_name.end()))
          << "\n";
-  // ... and the GDK's installation identity (a game install).
+
   const bool packaged = XPackageIsPackagedProcess();
   report << "packaged: " << (packaged ? "yes" : "no") << "\n";
   if (packaged) {
