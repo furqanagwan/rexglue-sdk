@@ -25,11 +25,7 @@ using namespace rex::system;
 
 u32 XexCheckExecutablePrivilege_entry(u32 privilege) {
   REXKRNL_IMPORT_TRACE("XexCheckExecutablePrivilege", "priv={}", (uint32_t)privilege);
-  // BOOL
-  // DWORD Privilege
 
-  // Privilege is bit position in xe_xex2_system_flags enum - so:
-  // Privilege=6 -> 0x00000040 -> XEX_SYSTEM_INSECURE_SOCKETS
   uint32_t mask = 1 << privilege;
 
   auto module = REX_KERNEL_STATE()->GetExecutableModule();
@@ -57,7 +53,6 @@ u32 XexGetModuleHandle_entry(mapped_string module_name, mapped_u32 hmodule_ptr) 
     return X_ERROR_NOT_FOUND;
   }
 
-  // NOTE: we don't retain the handle for return.
   *hmodule_ptr = module->hmodule_ptr();
 
   return X_ERROR_SUCCESS;
@@ -89,10 +84,6 @@ u32 XexLoadImage_entry(mapped_string module_name, u32 module_flags, u32 min_vers
 
   uint32_t hmodule = 0;
   {
-    // Lookup + load_count++ must be atomic vs XexUnloadImage to prevent
-    // resurrecting a module between the read of hmodule and the increment.
-    // The fresh-load path can't share this lock: LoadUserModule runs
-    // DllMain ATTACH outside the global lock by design.
     auto lock = rex::thread::global_critical_region::AcquireDirect();
     auto module = REX_KERNEL_STATE()->GetModule(module_name.value());
     if (module) {
@@ -106,7 +97,6 @@ u32 XexLoadImage_entry(mapped_string module_name, u32 module_flags, u32 min_vers
   if (!hmodule) {
     auto user_module = REX_KERNEL_STATE()->LoadUserModule(module_name.value());
     if (user_module) {
-      // Released by the last XexUnloadImage call.
       auto user_module_raw = user_module.release();
       hmodule = user_module_raw->hmodule_ptr();
       auto lock = rex::thread::global_critical_region::AcquireDirect();
@@ -130,8 +120,6 @@ u32 XexUnloadImage_entry(mapped_void hmodule) {
     return X_STATUS_SUCCESS;
   }
 
-  // Decrement-and-check under the global lock so concurrent unloads can't both
-  // observe zero and double-free.
   bool last_ref;
   {
     auto lock = rex::thread::global_critical_region::AcquireDirect();
@@ -149,7 +137,6 @@ u32 XexUnloadImage_entry(mapped_void hmodule) {
 }
 
 u32 XexGetProcedureAddress_entry(mapped_void hmodule, u32 ordinal, mapped_u32 out_function_ptr) {
-  // May be entry point?
   assert_not_zero(ordinal);
 
   uint32_t caller_address = 0;
@@ -200,11 +187,9 @@ u32 XexGetProcedureAddress_entry(mapped_void hmodule, u32 ordinal, mapped_u32 ou
 void ExRegisterTitleTerminateNotification_entry(ppc_ptr_t<X_EX_TITLE_TERMINATE_REGISTRATION> reg,
                                                 u32 create) {
   if (create) {
-    // Adding.
     REX_KERNEL_STATE()->RegisterTitleTerminateNotification(reg->notification_routine,
                                                            reg->priority);
   } else {
-    // Removing.
     REX_KERNEL_STATE()->RemoveTitleTerminateNotification(reg->notification_routine);
   }
 }
@@ -214,7 +199,7 @@ u32 XexLoadImageHeaders_entry(mapped_string path, mapped_void headers) {
   return X_STATUS_NOT_IMPLEMENTED;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__XexCheckExecutablePrivilege,
            rex::kernel::xboxkrnl::XexCheckExecutablePrivilege_entry)

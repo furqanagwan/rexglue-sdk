@@ -25,12 +25,6 @@ using namespace rex::system;
 XbdmModule::XbdmModule(Runtime* emulator, KernelState* kernel_state)
     : KernelModule(kernel_state, "xe:\\xbdm.xex") {
   RegisterExportTable(export_resolver_);
-
-  // Register all exported functions.
-  // #define XE_MODULE_EXPORT_GROUP(m, n) \
-//  Register##n##Exports(export_resolver_, kernel_state_);
-  // #include <rex/kernel/xbdm/module_export_groups.inc>
-  // #undef XE_MODULE_EXPORT_GROUP
 }
 
 std::vector<rex::runtime::Export*> xbdm_exports(4096);
@@ -44,7 +38,6 @@ rex::runtime::Export* RegisterExport_xbdm(rex::runtime::Export* export_entry) {
 void XbdmModule::RegisterExportTable(rex::runtime::ExportResolver* export_resolver) {
   assert_not_null(export_resolver);
 
-// Build the export table used for resolution.
 #include "../export_table_pre.inc"
   static rex::runtime::Export xbdm_export_table[] = {
 #include "export_table.inc"
@@ -62,6 +55,6 @@ void XbdmModule::RegisterExportTable(rex::runtime::ExportResolver* export_resolv
 
 XbdmModule::~XbdmModule() {}
 
-}  // namespace xbdm
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}

@@ -28,16 +28,10 @@ using namespace rex::system::xam;
 #define ONE_GB (1024ull * 1024ull * 1024ull)
 
 static const DummyDeviceInfo dummy_hdd_device_info_ = {
-    DummyDeviceId::HDD, DeviceType::HDD,
-    20ull * ONE_GB,  // 20GB
-    3ull * ONE_GB,   // 3GB, so it looks a little used.
-    u"Dummy HDD",
+    DummyDeviceId::HDD, DeviceType::HDD, 20ull * ONE_GB, 3ull * ONE_GB, u"Dummy HDD",
 };
 static const DummyDeviceInfo dummy_odd_device_info_ = {
-    DummyDeviceId::ODD, DeviceType::ODD,
-    7ull * ONE_GB,  // 7GB (rough maximum)
-    0ull * ONE_GB,  // read-only FS, so no free space
-    u"Dummy ODD",
+    DummyDeviceId::ODD, DeviceType::ODD, 7ull * ONE_GB, 0ull * ONE_GB, u"Dummy ODD",
 };
 static const DummyDeviceInfo* dummy_device_infos_[] = {
     &dummy_hdd_device_info_,
@@ -129,7 +123,6 @@ u32 XamContentCreateDeviceEnumerator_entry(u32 content_type, u32 content_flags, 
   }
 
   for (const auto& device_info : dummy_device_infos_) {
-    // Copy our dummy device into the enumerator
     auto device_data = e->AppendItem();
     assert_not_null(device_data);
     if (device_data) {
@@ -148,11 +141,10 @@ u32 XamContentCreateDeviceEnumerator_entry(u32 content_type, u32 content_flags, 
   return X_ERROR_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
-// fix me later
 namespace rex {
 namespace system {
 namespace xam {
@@ -161,9 +153,9 @@ const DummyDeviceInfo* GetDummyDeviceInfo(uint32_t device_id) {
   return rex::kernel::xam::GetDummyDeviceInfo(device_id);
 }
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamContentGetDeviceName, rex::kernel::xam::XamContentGetDeviceName_entry)
 REX_EXPORT(__imp__XamContentGetDeviceState, rex::kernel::xam::XamContentGetDeviceState_entry)

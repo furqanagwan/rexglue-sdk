@@ -251,24 +251,18 @@ static void FillFindData(mapped_void lpFindFileData, rex::filesystem::Entry* ent
   std::memset(buf, 0, 0x140);
 
   auto* fields = reinterpret_cast<be<uint32_t>*>(buf);
-  fields[0] = entry->attributes();  // 0x00 dwFileAttributes
-  fields[1] =
-      static_cast<uint32_t>(entry->create_timestamp() & 0xFFFFFFFF);   // 0x04 ftCreationTime.Low
-  fields[2] = static_cast<uint32_t>(entry->create_timestamp() >> 32);  // 0x08 ftCreationTime.High
-  fields[3] =
-      static_cast<uint32_t>(entry->access_timestamp() & 0xFFFFFFFF);   // 0x0C ftLastAccessTime.Low
-  fields[4] = static_cast<uint32_t>(entry->access_timestamp() >> 32);  // 0x10 ftLastAccessTime.High
-  fields[5] =
-      static_cast<uint32_t>(entry->write_timestamp() & 0xFFFFFFFF);   // 0x14 ftLastWriteTime.Low
-  fields[6] = static_cast<uint32_t>(entry->write_timestamp() >> 32);  // 0x18 ftLastWriteTime.High
-  fields[7] = static_cast<uint32_t>(entry->size() >> 32);             // 0x1C nFileSizeHigh
-  fields[8] = static_cast<uint32_t>(entry->size() & 0xFFFFFFFF);      // 0x20 nFileSizeLow
-  // 0x24 dwReserved0, 0x28 dwReserved1 already zero
+  fields[0] = entry->attributes();
+  fields[1] = static_cast<uint32_t>(entry->create_timestamp() & 0xFFFFFFFF);
+  fields[2] = static_cast<uint32_t>(entry->create_timestamp() >> 32);
+  fields[3] = static_cast<uint32_t>(entry->access_timestamp() & 0xFFFFFFFF);
+  fields[4] = static_cast<uint32_t>(entry->access_timestamp() >> 32);
+  fields[5] = static_cast<uint32_t>(entry->write_timestamp() & 0xFFFFFFFF);
+  fields[6] = static_cast<uint32_t>(entry->write_timestamp() >> 32);
+  fields[7] = static_cast<uint32_t>(entry->size() >> 32);
+  fields[8] = static_cast<uint32_t>(entry->size() & 0xFFFFFFFF);
 
-  // 0x2C cFileName[260]
   const auto& name = entry->name();
   rex::string::copy_truncating(reinterpret_cast<char*>(buf + 0x2C), name, 260);
-  // 0x130 cAlternateFileName[14] already zero
 }
 
 u32 FindFirstFileA_entry(mapped_string lpFileName, mapped_void lpFindFileData) {
@@ -337,8 +331,7 @@ u32 MoveFileA_entry(mapped_string lpExistingFileName, mapped_string lpNewFileNam
     REXKRNL_DEBUG("rexcrt_MoveFileA: source not found '{}'", src);
     return 0;
   }
-  // Win32 MoveFileA fails if the destination already exists; callers wanting
-  // overwrite semantics use MoveFileExA with MOVEFILE_REPLACE_EXISTING.
+
   if (fs->ResolvePath(dst)) {
     REXKRNL_DEBUG("rexcrt_MoveFileA: destination exists '{}'", dst);
     return 0;
@@ -364,7 +357,7 @@ u32 GetFileAttributesA_entry(mapped_string lpFileName) {
   auto* entry = REX_KERNEL_FS()->ResolvePath(path);
   if (!entry) {
     REXKRNL_DEBUG("rexcrt_GetFileAttributesA: not found '{}'", path);
-    return kInvalidHandleValue;  // INVALID_FILE_ATTRIBUTES
+    return kInvalidHandleValue;
   }
   REXKRNL_TRACE("rexcrt_GetFileAttributesA: '{}' -> attrs={:#x}", path, entry->attributes());
   return entry->attributes();
@@ -379,18 +372,17 @@ u32 GetFileAttributesExA_entry(u32 fInfoLevelId, mapped_string lpFileName,
     return 0;
   }
 
-  // Fill WIN32_FILE_ATTRIBUTE_DATA (GetFileExInfoStandard = 0)
   auto* buf =
       reinterpret_cast<be<uint32_t>*>(static_cast<uint8_t*>(static_cast<void*>(lpFileInformation)));
-  buf[0] = entry->attributes();                                            // dwFileAttributes
-  buf[1] = static_cast<uint32_t>(entry->create_timestamp() & 0xFFFFFFFF);  // ftCreationTime.Low
-  buf[2] = static_cast<uint32_t>(entry->create_timestamp() >> 32);         // ftCreationTime.High
-  buf[3] = static_cast<uint32_t>(entry->access_timestamp() & 0xFFFFFFFF);  // ftLastAccessTime.Low
-  buf[4] = static_cast<uint32_t>(entry->access_timestamp() >> 32);         // ftLastAccessTime.High
-  buf[5] = static_cast<uint32_t>(entry->write_timestamp() & 0xFFFFFFFF);   // ftLastWriteTime.Low
-  buf[6] = static_cast<uint32_t>(entry->write_timestamp() >> 32);          // ftLastWriteTime.High
-  buf[7] = static_cast<uint32_t>(entry->size() >> 32);                     // nFileSizeHigh
-  buf[8] = static_cast<uint32_t>(entry->size() & 0xFFFFFFFF);              // nFileSizeLow
+  buf[0] = entry->attributes();
+  buf[1] = static_cast<uint32_t>(entry->create_timestamp() & 0xFFFFFFFF);
+  buf[2] = static_cast<uint32_t>(entry->create_timestamp() >> 32);
+  buf[3] = static_cast<uint32_t>(entry->access_timestamp() & 0xFFFFFFFF);
+  buf[4] = static_cast<uint32_t>(entry->access_timestamp() >> 32);
+  buf[5] = static_cast<uint32_t>(entry->write_timestamp() & 0xFFFFFFFF);
+  buf[6] = static_cast<uint32_t>(entry->write_timestamp() >> 32);
+  buf[7] = static_cast<uint32_t>(entry->size() >> 32);
+  buf[8] = static_cast<uint32_t>(entry->size() & 0xFFFFFFFF);
   return 1;
 }
 
@@ -424,15 +416,14 @@ u32 SetFilePointerEx_entry(u32 hFile, u32 distHigh, u32 distLow, mapped_void lpN
   if (lpNewFilePointer) {
     auto* out = reinterpret_cast<be<uint32_t>*>(
         static_cast<uint8_t*>(static_cast<void*>(lpNewFilePointer)));
-    out[0] = static_cast<uint32_t>(new_pos & 0xFFFFFFFF);  // LowPart
-    out[1] = static_cast<uint32_t>(new_pos >> 32);         // HighPart
+    out[0] = static_cast<uint32_t>(new_pos & 0xFFFFFFFF);
+    out[1] = static_cast<uint32_t>(new_pos >> 32);
   }
   return 1;
 }
 
 u32 SetFileTime_entry(u32 hFile, mapped_void lpCreationTime, mapped_void lpLastAccessTime,
                       mapped_void lpLastWriteTime) {
-  // VFS doesn't support modifying timestamps; report success.
   (void)hFile;
   (void)lpCreationTime;
   (void)lpLastAccessTime;
@@ -445,7 +436,7 @@ u32 CompareFileTime_entry(mapped_void lpFileTime1, mapped_void lpFileTime2) {
       reinterpret_cast<be<uint32_t>*>(static_cast<uint8_t*>(static_cast<void*>(lpFileTime1)));
   auto* ft2 =
       reinterpret_cast<be<uint32_t>*>(static_cast<uint8_t*>(static_cast<void*>(lpFileTime2)));
-  // FILETIME: { dwLowDateTime, dwHighDateTime }
+
   uint64_t t1 =
       (static_cast<uint64_t>(static_cast<uint32_t>(ft1[1])) << 32) | static_cast<uint32_t>(ft1[0]);
   uint64_t t2 =
@@ -464,7 +455,6 @@ u32 CopyFileA_entry(mapped_string lpExistingFileName, mapped_string lpNewFileNam
 
   auto* ks = REX_KERNEL_STATE();
 
-  // Open source for reading
   rex::filesystem::File* src_file = nullptr;
   rex::filesystem::FileAction action;
   X_STATUS status = ks->file_system()->OpenFile(
@@ -475,7 +465,6 @@ u32 CopyFileA_entry(mapped_string lpExistingFileName, mapped_string lpNewFileNam
     return 0;
   }
 
-  // Open/create destination
   auto disp = static_cast<uint32_t>(bFailIfExists) ? rex::filesystem::FileDisposition::kCreate
                                                    : rex::filesystem::FileDisposition::kOverwriteIf;
   rex::filesystem::File* dst_file = nullptr;
@@ -488,7 +477,6 @@ u32 CopyFileA_entry(mapped_string lpExistingFileName, mapped_string lpNewFileNam
     return 0;
   }
 
-  // Copy data in 64KB chunks
   constexpr size_t kBufSize = 65536;
   auto buf = std::make_unique<uint8_t[]>(kBufSize);
   uint64_t offset = 0;
@@ -526,8 +514,8 @@ u32 RemoveDirectoryA_entry(mapped_string lpPathName) {
 u32 GetFileType_entry(u32 hFile) {
   auto file = REX_KERNEL_OBJECTS()->LookupObject<rex::system::XFile>(static_cast<uint32_t>(hFile));
   if (!file)
-    return 0;  // FILE_TYPE_UNKNOWN
-  return 1;    // FILE_TYPE_DISK
+    return 0;
+  return 1;
 }
 
 u32 GetDiskFreeSpaceExA_entry(mapped_string lpDirectoryName,
@@ -571,7 +559,7 @@ u32 GetDiskFreeSpaceExA_entry(mapped_string lpDirectoryName,
   return 1;
 }
 
-}  // namespace rex::kernel::crt
+}
 
 REX_HOOK(rexcrt_CreateFileA, rex::kernel::crt::CreateFileA_entry)
 REX_HOOK(rexcrt_ReadFile, rex::kernel::crt::ReadFile_entry)
@@ -598,7 +586,6 @@ REX_HOOK(rexcrt_CopyFileA, rex::kernel::crt::CopyFileA_entry)
 REX_HOOK(rexcrt_RemoveDirectoryA, rex::kernel::crt::RemoveDirectoryA_entry)
 REX_HOOK(rexcrt_GetFileType, rex::kernel::crt::GetFileType_entry)
 
-// XAM exports -- same implementations, for games that import file I/O from xam.xex
 REX_EXPORT(__imp__CreateFileA, rex::kernel::crt::CreateFileA_entry)
 REX_EXPORT(__imp__ReadFile, rex::kernel::crt::ReadFile_entry)
 REX_EXPORT(__imp__WriteFile, rex::kernel::crt::WriteFile_entry)

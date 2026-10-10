@@ -11,4 +11,4 @@
 
 #pragma once
 
-namespace rex::kernel::xboxkrnl {}  // namespace rex::kernel::xboxkrnl
+namespace rex::kernel::xboxkrnl {}

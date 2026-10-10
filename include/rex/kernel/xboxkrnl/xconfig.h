@@ -12,11 +12,8 @@
 
 namespace rex::kernel::xboxkrnl {
 
-// XCONFIG_USER_VIDEO_FLAGS as the console reports it.
 inline constexpr uint32_t kXConfigUserVideoFlags = 0x00040000;
 
-// XCONFIG_USER_AUDIO_FLAGS: analog stereo (0x00010001), the value Xenia
-// Canary and Edge report by default. XGetAudioFlags returns the same value.
 inline constexpr uint32_t kXConfigUserAudioFlags = 0x00010001;
 
-}  // namespace rex::kernel::xboxkrnl
+}

@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/kernel/xboxkrnl/private.h>
@@ -22,17 +21,13 @@
 namespace rex::kernel::xboxkrnl {
 
 void HalReturnToFirmware_entry(u32 routine) {
-  // void
-  // IN FIRMWARE_REENTRY  Routine
-
-  // Routine must be 1 'HalRebootRoutine'
   assert_true(routine == 1);
 
   REXKRNL_ERROR("Game requested shutdown via HalReturnToFirmware");
   exit(0);
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__HalReturnToFirmware, rex::kernel::xboxkrnl::HalReturnToFirmware_entry)
 

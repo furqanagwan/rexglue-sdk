@@ -30,9 +30,9 @@ u32 XGetVideoCapabilities_entry() {
   return 0;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XGetVideoMode, rex::kernel::xam::XGetVideoMode_entry)
 REX_EXPORT(__imp__XGetVideoCapabilities, rex::kernel::xam::XGetVideoCapabilities_entry)

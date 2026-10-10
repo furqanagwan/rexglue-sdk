@@ -29,6 +29,6 @@ class XbdmModule : public system::KernelModule {
   static void RegisterExportTable(rex::runtime::ExportResolver* export_resolver);
 };
 
-}  // namespace xbdm
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}

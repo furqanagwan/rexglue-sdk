@@ -40,12 +40,6 @@ void xeXamRemoveSystemUI() {
 XamModule::XamModule(Runtime* emulator, KernelState* kernel_state)
     : KernelModule(kernel_state, "xe:\\xam.xex"), loader_data_() {
   RegisterExportTable(export_resolver_);
-
-  // Register all exported functions.
-  // #define XE_MODULE_EXPORT_GROUP(m, n) \
-//  Register##n##Exports(export_resolver_, kernel_state_);
-  // #include <rex/kernel/xam/module_export_groups.inc>
-  // #undef XE_MODULE_EXPORT_GROUP
 }
 
 std::vector<rex::runtime::Export*> xam_exports(4096);
@@ -59,7 +53,6 @@ rex::runtime::Export* RegisterExport_xam(rex::runtime::Export* export_entry) {
 void XamModule::RegisterExportTable(rex::runtime::ExportResolver* export_resolver) {
   assert_not_null(export_resolver);
 
-// Build the export table used for resolution.
 #include "../export_table_pre.inc"
   static rex::runtime::Export xam_export_table[] = {
 #include "export_table.inc"
@@ -77,6 +70,6 @@ void XamModule::RegisterExportTable(rex::runtime::ExportResolver* export_resolve
 
 XamModule::~XamModule() {}
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}

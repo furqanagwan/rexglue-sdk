@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <cstring>
@@ -53,11 +52,9 @@ i32 XamUserGetXUID_entry(u32 user_index, u32 type_mask, mapped_u64 xuid_ptr) {
       const auto& user_profile = REX_KERNEL_STATE()->user_profile();
       auto type = user_profile->type() & type_mask;
       if (type & (2 | 4)) {
-        // maybe online profile?
         xuid = user_profile->xuid();
         result = X_E_SUCCESS;
       } else if (type & 1) {
-        // maybe offline profile?
         xuid = user_profile->xuid();
         result = X_E_SUCCESS;
       }
@@ -82,10 +79,10 @@ u32 XamUserGetSigninState_entry(u32 user_index) {
 
 typedef struct {
   rex::be<uint64_t> xuid;
-  rex::be<uint32_t> unk08;  // maybe zero?
+  rex::be<uint32_t> unk08;
   rex::be<uint32_t> signin_state;
-  rex::be<uint32_t> unk10;  // ?
-  rex::be<uint32_t> unk14;  // ?
+  rex::be<uint32_t> unk10;
+  rex::be<uint32_t> unk14;
   char name[16];
 } X_USER_SIGNIN_INFO;
 static_assert_size(X_USER_SIGNIN_INFO, 40);
@@ -147,7 +144,6 @@ typedef struct {
 } X_USER_READ_PROFILE_SETTINGS;
 static_assert_size(X_USER_READ_PROFILE_SETTINGS, 8);
 
-// https://github.com/oukiar/freestyledash/blob/master/Freestyle/Tools/Generic/xboxtools.cpp
 uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, uint32_t xuid_count,
                                       be<uint64_t>* xuids, uint32_t setting_count,
                                       be<uint32_t>* setting_ids, uint32_t unk,
@@ -164,19 +160,16 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
 
     xuid_count = 1;
   }
-  assert_zero(unk);  // probably flags
+  assert_zero(unk);
 
-  // must have at least 1 to 32 settings
   if (setting_count < 1 || setting_count > 32) {
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  // buffer size pointer must be valid
   if (!buffer_size_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  // if buffer size is non-zero, buffer pointer must be valid
   auto buffer_size = static_cast<uint32_t>(*buffer_size_ptr);
   if (buffer_size && !buffer) {
     return X_ERROR_INVALID_PARAMETER;
@@ -211,11 +204,7 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
     return X_ERROR_INSUFFICIENT_BUFFER;
   }
 
-  // Title ID = 0 means us.
-  // 0xfffe07d1 = profile?
-
   if (!xuids && user_index) {
-    // Only support user 0.
     if (overlapped) {
       REX_KERNEL_STATE()->CompleteOverlappedImmediate(
           REX_KERNEL_MEMORY()->HostToGuestVirtual(overlapped), X_ERROR_NO_SUCH_USER);
@@ -225,9 +214,6 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
   }
 
   const auto& user_profile = REX_KERNEL_STATE()->user_profile();
-
-  // First call asks for size (fill buffer_size_ptr).
-  // Second call asks for buffer contents with that size.
 
   bool any_missing = false;
   for (uint32_t i = 0; i < setting_count; ++i) {
@@ -309,7 +295,6 @@ u32 XamUserWriteProfileSettings_entry(u32 title_id, u32 user_index, u32 setting_
   }
 
   if (user_index) {
-    // Only support user 0.
     if (overlapped) {
       REX_KERNEL_STATE()->CompleteOverlappedImmediate(overlapped.guest_address(),
                                                       X_ERROR_NO_SUCH_USER);
@@ -318,7 +303,6 @@ u32 XamUserWriteProfileSettings_entry(u32 title_id, u32 user_index, u32 setting_
     return X_ERROR_NO_SUCH_USER;
   }
 
-  // Update and save settings.
   const auto& user_profile = REX_KERNEL_STATE()->user_profile();
 
   for (uint32_t n = 0; n < setting_count; ++n) {
@@ -341,11 +325,9 @@ u32 XamUserWriteProfileSettings_entry(u32 title_id, u32 user_index, u32 setting_
         size_t binary_size = setting.data.binary.size;
         std::vector<uint8_t> bytes;
         if (setting.data.binary.ptr) {
-          // Copy provided data
           bytes.resize(binary_size);
           std::memcpy(bytes.data(), binary_ptr, binary_size);
         } else {
-          // Data pointer was NULL, so just fill with zeroes
           bytes.resize(binary_size, 0);
         }
         user_profile->AddSetting(
@@ -371,7 +353,6 @@ u32 XamUserWriteProfileSettings_entry(u32 title_id, u32 user_index, u32 setting_
 }
 
 u32 XamUserCheckPrivilege_entry(u32 user_index, u32 mask, mapped_u32 out_value) {
-  // checking all users?
   if (user_index != 0xFF) {
     if (user_index >= 4) {
       return X_ERROR_INVALID_PARAMETER;
@@ -382,7 +363,6 @@ u32 XamUserCheckPrivilege_entry(u32 user_index, u32 mask, mapped_u32 out_value) 
     }
   }
 
-  // If we deny everything, games should hopefully not try to do stuff.
   *out_value = 0;
   return X_ERROR_SUCCESS;
 }
@@ -392,7 +372,6 @@ u32 XamUserContentRestrictionGetFlags_entry(u32 user_index, mapped_u32 out_flags
     return X_ERROR_NO_SUCH_USER;
   }
 
-  // No restrictions?
   *out_flags = 0;
   return X_ERROR_SUCCESS;
 }
@@ -403,8 +382,6 @@ u32 XamUserContentRestrictionGetRating_entry(u32 user_index, u32 unk1, mapped_u3
     return X_ERROR_NO_SUCH_USER;
   }
 
-  // Some games have special case paths for 3F that differ from the failure
-  // path, so my guess is that's 'don't care'.
   *out_unk2 = 0x3F;
   *out_unk3 = 0;
   return X_ERROR_SUCCESS;
@@ -432,7 +409,7 @@ u32 XamUserGetMembershipTier_entry(u32 user_index) {
   if (user_index) {
     return X_ERROR_NO_SUCH_USER;
   }
-  return 6 /* 6 appears to be Gold */;
+  return 6;
 }
 
 u32 XamUserAreUsersFriends_entry(u32 user_index, u32 unk1, u32 unk2, mapped_u32 out_value,
@@ -448,13 +425,11 @@ u32 XamUserAreUsersFriends_entry(u32 user_index, u32 unk1, u32 unk2, mapped_u32 
       if (user_profile->signin_state() == 0) {
         result = X_ERROR_NOT_LOGGED_ON;
       } else {
-        // No friends!
         are_friends = 0;
         result = X_ERROR_SUCCESS;
       }
     } else {
-      // Only support user 0.
-      result = X_ERROR_NO_SUCH_USER;  // if user is local -> X_ERROR_NOT_LOGGED_ON
+      result = X_ERROR_NO_SUCH_USER;
     }
   }
 
@@ -475,14 +450,8 @@ u32 XamUserAreUsersFriends_entry(u32 user_index, u32 unk1, u32 unk2, mapped_u32 
 }
 
 u32 XamShowSigninUI_entry(u32 unk, u32 unk_mask) {
-  // Mask values vary. Probably matching user types? Local/remote?
-
-  // To fix game modes that display a 4 profile signin UI (even if playing
-  // alone):
-  // XN_SYS_SIGNINCHANGED
   REX_KERNEL_STATE()->BroadcastNotification(0x0000000A, 1);
-  // Games seem to sit and loop until we trigger this notification:
-  // XN_SYS_UI (off)
+
   REX_KERNEL_STATE()->BroadcastNotification(0x00000009, 0);
   return X_ERROR_SUCCESS;
 }
@@ -522,8 +491,6 @@ class XStaticAchievementEnumerator : public XEnumerator {
     uint32_t flags;
   };
 
-  // Enumeration starts at the title's offset: titles page through their
-  // achievements with one enumerator per page (Canary 603355ae5b).
   XStaticAchievementEnumerator(KernelState* kernel_state, size_t items_per_enumerate, size_t offset,
                                uint32_t flags)
       : XEnumerator(kernel_state, items_per_enumerate,
@@ -621,7 +588,6 @@ u32 XamUserCreateAchievementEnumerator_entry(u32 title_id, u32 user_index, u32 x
     return result;
   }
 
-  // ACHIEVED | ACHIEVED_ONLINE flags the game checks to consider an achievement earned.
   constexpr uint32_t kAchievedFlags = 0x00030000;
 
   auto fill_unlock = [](XStaticAchievementEnumerator::AchievementDetails& item, uint32_t id,
@@ -636,8 +602,6 @@ u32 XamUserCreateAchievementEnumerator_entry(u32 title_id, u32 user_index, u32 x
 
   const auto* ks = REX_KERNEL_STATE();
 
-  // Prefer the runtime store (populated from TOML or XDBF at boot) so that
-  // dev-edited labels/descriptions are visible to the game's own queries.
   const auto store = ks->loaded_achievements();
   if (!store.empty()) {
     for (const auto& info : store) {
@@ -721,9 +685,9 @@ u32 XamSessionRefObjByHandle_entry(u32 handle, mapped_u32 obj_ptr) {
   return X_ERROR_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamUserGetXUID, rex::kernel::xam::XamUserGetXUID_entry)
 REX_EXPORT(__imp__XamUserGetSigninState, rex::kernel::xam::XamUserGetSigninState_entry)

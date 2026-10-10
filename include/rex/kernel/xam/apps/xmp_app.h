@@ -24,9 +24,6 @@ namespace kernel {
 namespace xam {
 namespace apps {
 
-// Only source of docs for a lot of these functions:
-// https://github.com/oukiar/freestyledash/blob/master/Freestyle/Scenes/Media/Music/ScnMusic.cpp
-
 class XmpApp : public system::xam::App {
  public:
   enum class State : uint32_t {
@@ -39,11 +36,11 @@ class XmpApp : public system::xam::App {
     kTitle = 1,
   };
   enum class PlaybackMode : uint32_t {
-    // kInOrder = ?,
+
     kUnknown = 0,
   };
   enum class RepeatMode : uint32_t {
-    // kNoRepeat = ?,
+
     kUnknown = 0,
   };
   struct Song {
@@ -111,7 +108,7 @@ class XmpApp : public system::xam::App {
   uint32_t next_song_handle_;
 };
 
-}  // namespace apps
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
+}

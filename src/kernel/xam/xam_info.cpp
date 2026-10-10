@@ -38,7 +38,6 @@ u32 XamFeatureEnabled_entry(u32 unk) {
   return 0;
 }
 
-// Empty stub schema binary.
 uint8_t schema_bin[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x2C, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00,
@@ -56,7 +55,6 @@ u32 XamGetOnlineSchema_entry() {
     memory::store_and_swap<uint32_t>(schema + 4, sizeof(schema_bin));
   }
 
-  // return pointer to the schema ptr/schema size struct
   return schema_guest;
 }
 
@@ -113,20 +111,11 @@ u32 XamBuildResourceLocator_entry(u64 module, mapped_wstring container, mapped_w
 
 u32 XamBuildGamercardResourceLocator_entry(mapped_wstring filename, mapped_void buffer_ptr,
                                            u32 buffer_count) {
-  // On an actual xbox these funcs would return a locator to xam.xex resources,
-  // but for Xenia we can return a locator to the resources as local files. (big
-  // thanks to MS for letting XamBuildResourceLocator return local file
-  // locators!)
-
-  // If you're running an app that'll need them, make sure to extract xam.xex
-  // resources with xextool ("xextool -d . xam.xex") and add a .xzp extension.
-
   return keXamBuildResourceLocator(0, u"gamercrd", filename.value(), buffer_ptr, buffer_count);
 }
 
 u32 XamBuildSharedSystemResourceLocator_entry(mapped_wstring filename, mapped_void buffer_ptr,
                                               u32 buffer_count) {
-  // see notes inside XamBuildGamercardResourceLocator above
   return keXamBuildResourceLocator(0, u"shrdres", filename.value(), buffer_ptr, buffer_count);
 }
 
@@ -141,29 +130,16 @@ u32 XamBuildXamResourceLocator_entry(mapped_wstring filename, mapped_void buffer
 }
 
 u32 XamGetSystemVersion_entry() {
-  // eh, just picking one. If we go too low we may break new games, but
-  // this value seems to be used for conditionally loading symbols and if
-  // we pretend to be old we have less to worry with implementing.
-  // 0x200A3200
-  // 0x20096B00
   return 0;
 }
 
-void XCustomRegisterDynamicActions_entry() {
-  // ???
-}
+void XCustomRegisterDynamicActions_entry() {}
 
-// Real XAM reads XCONFIG_USER_AUDIO_FLAGS; so does this (Edge xam_info.cc).
 u32 XGetAudioFlags_entry() {
   return xboxkrnl::kXConfigUserAudioFlags;
 }
 
 u32 XGetAVPack_entry() {
-  // DWORD
-  // Not sure what the values are for this, but 6 is VGA.
-  // Other likely values are 3/4/8 for HDMI or something.
-  // Games seem to use this as a PAL check - if the result is not 3/4/6/8
-  // they explode with errors if not in PAL mode.
   REXKRNL_IMPORT_RESULT("XGetAVPack", "6");
   return 6;
 }
@@ -181,8 +157,6 @@ u32 XGetLanguage_entry() {
 }
 
 u32 XamGetCurrentTitleId_entry() {
-  // NOTE(tomc): Switched this up to get title ID from executable module instead of runtime
-  // (emulator)
   auto module = REX_KERNEL_STATE()->GetExecutableModule();
   if (module) {
     return module->title_id();
@@ -248,9 +222,6 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
   auto& loader_data = xam->loader_data();
   loader_data.launch_flags = flags;
 
-  // A statically compiled binary holds one title module and cannot load
-  // another executable, so every launch ends the running title; say which kind
-  // it was instead of ending silently (RG-GDK-017; see docs/content-persistence.md).
   const auto running = REX_KERNEL_STATE()->GetExecutableModule()->path();
   const auto request = rex::system::xam::ClassifyLaunch(
       running, raw_name_ptr ? std::optional<std::string_view>(raw_name_ptr.value()) : std::nullopt);
@@ -273,20 +244,16 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
       break;
   }
 
-  // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();
 }
 
 void XamLoaderTerminateTitle_entry() {
-  // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();
 }
 
 u32 XamAlloc_entry(u32 unk, u32 size, mapped_u32 out_ptr) {
   assert_true(unk == 0);
 
-  // Allocate from the heap. Not sure why XAM does this specially, perhaps
-  // it keeps stuff in a separate heap?
   uint32_t ptr = REX_KERNEL_MEMORY()->SystemHeapAlloc(size);
   *out_ptr = ptr;
 
@@ -299,28 +266,24 @@ u32 XamFree_entry(mapped_u32 ptr) {
   return X_ERROR_SUCCESS;
 }
 
-u32 XamQueryLiveHiveW_entry(mapped_wstring name, mapped_void out_buf, u32 out_size,
-                            u32 type /* guess */) {
+u32 XamQueryLiveHiveW_entry(mapped_wstring name, mapped_void out_buf, u32 out_size, u32 type) {
   return X_STATUS_INVALID_PARAMETER_1;
 }
 
 u32 XamLoaderGetDvdTrayState_entry(mapped_u32 out_state) {
-  // 0 = tray open, 1 = tray closed with disc
   if (out_state)
     *out_state = 1;
   return X_STATUS_SUCCESS;
 }
 
 u32 XamSwapDisc_entry(u32 disc_number) {
-  // Stub for multi-disc games. Single-disc games (like Blue Dragon's reblue test)
-  // don't need this, but the game may look it up dynamically via XexGetProcedureAddress.
   REXKRNL_DEBUG("XamSwapDisc({}) - stub, returning success", (uint32_t)disc_number);
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamFeatureEnabled, rex::kernel::xam::XamFeatureEnabled_entry)
 REX_EXPORT(__imp__XamGetOnlineSchema, rex::kernel::xam::XamGetOnlineSchema_entry)

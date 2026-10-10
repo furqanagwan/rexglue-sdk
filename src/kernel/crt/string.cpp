@@ -16,10 +16,6 @@
 
 namespace rex::kernel::crt {
 
-// ---------------------------------------------------------------------------
-// C string operations
-// ---------------------------------------------------------------------------
-
 static int native_strncmp(const char* s1, const char* s2, size_t n) {
   return std::strncmp(s1, s2, n);
 }
@@ -42,7 +38,6 @@ static char* native_strrchr(const char* s, int c) {
 }
 
 static char* native_strtok(char* s, const char* delim) {
-  // Non-reentrant per guest libc contract; concurrent guest threads will trample.
   static char* context = nullptr;
   return strtok_s(s, delim, &context);
 }
@@ -55,16 +50,11 @@ static int native_strcpy_s(char* dst, size_t dstsz, const char* src) {
   return strcpy_s(dst, dstsz, src);
 }
 
-// ---------------------------------------------------------------------------
-// Win32 string functions (lstr*)
-// ---------------------------------------------------------------------------
-
 static int native_lstrlenA(const char* s) {
   return s ? static_cast<int>(std::strlen(s)) : 0;
 }
 
 static char* native_lstrcpyA(char* dst, const char* src) {
-  // Unbounded by guest contract.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   return std::strcpy(dst, src);
 }
@@ -79,7 +69,6 @@ static char* native_lstrcpynA(char* dst, const char* src, int maxlen) {
 }
 
 static char* native_lstrcatA(char* dst, const char* src) {
-  // Unbounded by guest contract.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   return std::strcat(dst, src);
 }
@@ -87,10 +76,6 @@ static char* native_lstrcatA(char* dst, const char* src) {
 static int native_lstrcmpiA(const char* s1, const char* s2) {
   return _stricmp(s1, s2);
 }
-
-// ---------------------------------------------------------------------------
-// C UTF-16 Widestring functions (int16_t*)
-// ---------------------------------------------------------------------------
 
 static uint32_t native_wcslen(const int16_t* str) {
   const int16_t* last = str;
@@ -122,7 +107,7 @@ static uint32_t native_wcsncmp(const int16_t* lhs, const int16_t* rhs, int count
 static uint32_t native_wcscoll(const int16_t* lhs, const int16_t* rhs) {
   if (lhs && rhs)
     return native_wcscmp(lhs, rhs);
-  return 22;  // EINVAL
+  return 22;
 }
 
 static int16_t* native_wcschr(const int16_t* str, int16_t ch) {
@@ -162,7 +147,7 @@ static int16_t* native_wcsncpy(int16_t* dest, const int16_t* src, int count) {
 
 static uint32_t native_wcsncpy_s(int16_t* dst, size_t dstsz, const int16_t* src, size_t count) {
   if (!dst || !src || dstsz == 0)
-    return 22;  // EINVAL
+    return 22;
 
   size_t i = 0;
 
@@ -175,7 +160,7 @@ static uint32_t native_wcsncpy_s(int16_t* dst, size_t dstsz, const int16_t* src,
     dst[dstsz - 1] = 0;
 
   if (i < count && src[i] != 0)
-    return 34;  // ERANGE
+    return 34;
 
   return 0;
 }
@@ -200,7 +185,7 @@ static int16_t* native_wcsstr(const int16_t* dest, const int16_t* src) {
   return 0;
 }
 
-}  // namespace rex::kernel::crt
+}
 
 REX_HOOK(rexcrt_strncmp, rex::kernel::crt::native_strncmp)
 REX_HOOK(rexcrt_strncpy, rex::kernel::crt::native_strncpy)

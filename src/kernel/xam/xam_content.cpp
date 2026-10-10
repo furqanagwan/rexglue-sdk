@@ -30,9 +30,6 @@ using namespace rex::system;
 using namespace rex::system::xam;
 
 u32 XamContentGetLicenseMask_entry(mapped_u32 mask_ptr, mapped_void overlapped_ptr) {
-  // Each bit in the mask represents a granted license. Available licenses
-  // seems to vary from game to game, but most appear to use bit 0 to indicate
-  // if the game is purchased or not.
   *mask_ptr = REXCVAR_GET(license_mask);
 
   if (overlapped_ptr) {
@@ -48,16 +45,11 @@ u32 XamContentResolve_entry(u32 user_index, mapped_void content_data_ptr, mapped
                             u32 buffer_size, u32 unk1, u32 unk2, u32 unk3) {
   auto content_data = content_data_ptr.as<XCONTENT_DATA*>();
 
-  // Result of buffer_ptr is sent to RtlInitAnsiString.
-  // buffer_size is usually 260 (max path).
-  // Games expect zero if resolve was successful.
   assert_always();
   REXKRNL_WARN("XamContentResolve unimplemented!");
   return X_ERROR_NOT_FOUND;
 }
 
-// https://github.com/MrColdbird/gameservice/blob/master/ContentManager.cpp
-// https://github.com/LestaD/SourceEngine2007/blob/master/se2007/engine/xboxsystem.cpp#L499
 u32 XamContentCreateEnumerator_entry(u32 user_index, u32 device_id, u32 content_type,
                                      u32 content_flags, u32 items_per_enumerate,
                                      mapped_u32 buffer_size_ptr, mapped_u32 handle_out) {
@@ -84,7 +76,6 @@ u32 XamContentCreateEnumerator_entry(u32 user_index, u32 device_id, u32 content_
   }
 
   if (!device_info || device_info->device_id == DummyDeviceId::HDD) {
-    // Enumerate user-specific content
     auto content_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
         static_cast<uint32_t>(DummyDeviceId::HDD), xuid, XContentType(uint32_t(content_type)));
     for (const auto& content_data : content_datas) {
@@ -92,7 +83,6 @@ u32 XamContentCreateEnumerator_entry(u32 user_index, u32 device_id, u32 content_
       *item = content_data;
     }
 
-    // Also enumerate common content (xuid=0)
     if (xuid != 0) {
       auto common_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
           static_cast<uint32_t>(DummyDeviceId::HDD), 0, XContentType(uint32_t(content_type)));
@@ -145,18 +135,16 @@ u32 xeXamContentCreate(u32 user_index, mapped_string root_name, mapped_void cont
     X_RESULT result = X_ERROR_INVALID_PARAMETER;
     kDispositionState disposition = kDispositionState::Unknown;
     switch (flags & 0xF) {
-      case 1:  // CREATE_NEW
-               // Fail if exists.
+      case 1:
+
         if (content_manager->ContentExists(xuid, content_data)) {
           result = X_ERROR_ALREADY_EXISTS;
         } else {
           disposition = kDispositionState::Create;
         }
         break;
-      case 2:  // CREATE_ALWAYS
-               // Overwrite existing, if any.
-        // Close any existing mount under this root name first.
-        // Games may reuse the same root without explicitly closing.
+      case 2:
+
         content_manager->CloseContent(root_name);
         if (content_manager->ContentExists(xuid, content_data) &&
             content_manager->DeleteContent(xuid, content_data) != X_ERROR_SUCCESS) {
@@ -165,24 +153,24 @@ u32 xeXamContentCreate(u32 user_index, mapped_string root_name, mapped_void cont
         }
         disposition = kDispositionState::Create;
         break;
-      case 3:  // OPEN_EXISTING
-               // Open only if exists.
+      case 3:
+
         if (!content_manager->ContentExists(xuid, content_data)) {
           result = X_ERROR_PATH_NOT_FOUND;
         } else {
           disposition = kDispositionState::Open;
         }
         break;
-      case 4:  // OPEN_ALWAYS
-               // Create if needed.
+      case 4:
+
         if (!content_manager->ContentExists(xuid, content_data)) {
           disposition = kDispositionState::Create;
         } else {
           disposition = kDispositionState::Open;
         }
         break;
-      case 5:  // TRUNCATE_EXISTING
-               // Fail if doesn't exist, if does exist delete and recreate.
+      case 5:
+
         if (!content_manager->ContentExists(xuid, content_data)) {
           result = X_ERROR_PATH_NOT_FOUND;
         } else {
@@ -261,10 +249,6 @@ u32 XamContentOpenFile_entry(u32 user_index, mapped_string root_name, mapped_str
 }
 
 u32 XamContentFlush_entry(mapped_string root_name, mapped_void overlapped_ptr) {
-  // Success means the root's written files are durable on the host and its
-  // header exists (adapted from xenia-canary #1216, which rewrites its header
-  // file). Failures are reported through the overlapped too, so a title
-  // waiting on it is released.
   X_RESULT result = REX_KERNEL_STATE()->content_manager()->FlushContent(root_name.value());
   if (overlapped_ptr) {
     REX_KERNEL_STATE()->CompleteOverlappedImmediate(overlapped_ptr.guest_address(), result);
@@ -275,7 +259,6 @@ u32 XamContentFlush_entry(mapped_string root_name, mapped_void overlapped_ptr) {
 }
 
 u32 XamContentClose_entry(mapped_string root_name, mapped_void overlapped_ptr) {
-  // Closes a previously opened root from XamContentCreate*.
   auto result = REX_KERNEL_STATE()->content_manager()->CloseContent(root_name.value());
 
   if (overlapped_ptr) {
@@ -298,7 +281,6 @@ u32 XamContentGetCreator_entry(u32 user_index, mapped_void content_data_ptr,
 
   if (content_exists) {
     if (content_data.content_type == XContentType::kSavedGame) {
-      // User always creates saves.
       *is_creator_ptr = 1;
       if (creator_xuid_ptr) {
         *creator_xuid_ptr = xuid;
@@ -329,7 +311,6 @@ u32 XamContentGetThumbnail_entry(u32 user_index, mapped_void content_data_ptr,
   uint64_t xuid = REX_KERNEL_STATE()->user_profile()->xuid();
   XCONTENT_AGGREGATE_DATA content_data = *content_data_ptr.as<XCONTENT_DATA*>();
 
-  // Get thumbnail (if it exists).
   std::vector<uint8_t> buffer;
   auto result =
       REX_KERNEL_STATE()->content_manager()->GetContentThumbnail(xuid, content_data, &buffer);
@@ -337,14 +318,10 @@ u32 XamContentGetThumbnail_entry(u32 user_index, mapped_void content_data_ptr,
   *buffer_size_ptr = uint32_t(buffer.size());
 
   if (result == X_ERROR_SUCCESS) {
-    // Write data, if we were given a pointer.
-    // This may have just been a size query.
     if (buffer_ptr) {
       if (buffer_size < buffer.size()) {
-        // Dest buffer too small.
         result = X_ERROR_INSUFFICIENT_BUFFER;
       } else {
-        // Copy data.
         std::memcpy((uint8_t*)buffer_ptr, buffer.data(), buffer.size());
       }
     }
@@ -364,7 +341,6 @@ u32 XamContentSetThumbnail_entry(u32 user_index, mapped_void content_data_ptr,
   uint64_t xuid = REX_KERNEL_STATE()->user_profile()->xuid();
   XCONTENT_AGGREGATE_DATA content_data = *content_data_ptr.as<XCONTENT_DATA*>();
 
-  // Buffer is PNG data.
   auto buffer = std::vector<uint8_t>((uint8_t*)buffer_ptr, (uint8_t*)buffer_ptr + buffer_size);
   auto result = REX_KERNEL_STATE()->content_manager()->SetContentThumbnail(xuid, content_data,
                                                                            std::move(buffer));
@@ -393,8 +369,6 @@ u32 XamContentDelete_entry(u32 user_index, mapped_void content_data_ptr,
 }
 
 u32 XamContentDeleteInternal_entry(mapped_void content_data_ptr, mapped_void overlapped_ptr) {
-  // INFO: Analysis of xam.xex shows that "internal" functions are wrappers with
-  // 0xFE as user_index
   uint64_t xuid = REX_KERNEL_STATE()->user_profile()->xuid();
   XCONTENT_AGGREGATE_DATA content_data = *content_data_ptr.as<XCONTENT_AGGREGATE_DATA*>();
 
@@ -408,9 +382,9 @@ u32 XamContentDeleteInternal_entry(mapped_void content_data_ptr, mapped_void ove
   }
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamContentGetLicenseMask, rex::kernel::xam::XamContentGetLicenseMask_entry)
 REX_EXPORT(__imp__XamContentResolve, rex::kernel::xam::XamContentResolve_entry)

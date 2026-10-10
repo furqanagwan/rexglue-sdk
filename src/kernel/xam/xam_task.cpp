@@ -48,7 +48,6 @@ u32 XamTaskSchedule_entry(mapped_void callback, ppc_ptr_t<XTASK_MESSAGE> message
 
   uint32_t stack_size = REX_KERNEL_STATE()->GetExecutableModule()->stack_size();
 
-  // Stack must be aligned to 16kb pages
   stack_size = std::max((uint32_t)0x4000, ((stack_size + 0xFFF) & 0xFFFFF000));
 
   auto thread =
@@ -58,7 +57,6 @@ u32 XamTaskSchedule_entry(mapped_void callback, ppc_ptr_t<XTASK_MESSAGE> message
   X_STATUS result = thread->Create();
 
   if (XFAILED(result)) {
-    // Failed!
     REXKRNL_ERROR("XAM task creation failed: {:08X}", result);
     return result;
   }
@@ -77,9 +75,9 @@ u32 XamTaskCloseHandle_entry(u32 handle) {
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamTaskSchedule, rex::kernel::xam::XamTaskSchedule_entry)
 REX_EXPORT(__imp__XamTaskShouldExit, rex::kernel::xam::XamTaskShouldExit_entry)

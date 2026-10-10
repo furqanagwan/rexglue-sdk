@@ -54,8 +54,6 @@ Stats Measure(int iterations, F&& operation) {
   return {samples[samples.size() / 2], samples.back()};
 }
 
-// A thread object for KeDelayExecutionThread's path; Delay needs no host
-// thread of its own.
 XThread& DelayThread() {
   static object_ref<XThread> thread(new XThread(Kernel()));
   return *thread;
@@ -90,10 +88,8 @@ Stats MeasureAbsoluteDelay(int64_t us, int iterations = 20) {
   });
 }
 
-}  // namespace
+}
 
-// Prints the table in docs/threading-contracts.md:
-//   kernel_tests "[.timing-report]" -s
 TEST_CASE("Guest delay and wait timing report", "[.timing-report]") {
   for (bool precise : {true, false}) {
     PreciseTimers mode(precise);
@@ -115,10 +111,6 @@ TEST_CASE("Guest delay and wait timing report", "[.timing-report]") {
   }
 }
 
-// The contract: a delay or timed wait never ends before the guest asked, and
-// with precise timers ends within a few milliseconds of it (the Windows
-// system timer alone rounds up to 15.6 ms steps). Loose upper bounds keep a
-// busy machine from failing the test; the report above has the real numbers.
 TEST_CASE("Precise guest delays and waits are neither early nor a timer tick late",
           "[kernel][timing]") {
   PreciseTimers mode(true);
@@ -131,7 +123,7 @@ TEST_CASE("Precise guest delays and waits are neither early nor a timer tick lat
     CHECK(wait.median_us >= us);
     CHECK(wait.median_us < us + 5000);
   }
-  // Sub-millisecond delays sleep instead of yielding.
+
   CHECK(MeasureDelay(-5000, 15).median_us >= 500);
 }
 
@@ -139,11 +131,11 @@ TEST_CASE("An absolute-time delay waits until that guest time", "[kernel][timing
   auto precise = GENERATE(true, false);
   PreciseTimers mode(precise);
   INFO("guest_precise_timers " << precise);
-  // Before RG-GDK-015 an absolute time asserted in Debug and returned at once.
+
   Stats delay = MeasureAbsoluteDelay(10000, 10);
-  CHECK(delay.median_us >= 9000);  // The guest clock's own granularity.
+  CHECK(delay.median_us >= 9000);
   CHECK(delay.median_us < 40000);
-  // A time already passed is a zero delay.
+
   auto past = Measure(
       10, [] { DelayThread().Delay(0, 0, rex::chrono::Clock::QueryGuestSystemTime() - 10000); });
   CHECK(past.median_us < 5000);
@@ -151,9 +143,9 @@ TEST_CASE("An absolute-time delay waits until that guest time", "[kernel][timing
 
 TEST_CASE("guest_precise_timers off keeps the system-timer behaviour", "[kernel][timing]") {
   PreciseTimers mode(false);
-  // Sub-millisecond delays truncate to a zero delay, a yield.
+
   CHECK(MeasureDelay(-5000, 15).median_us < 500);
-  // Whole milliseconds are never early.
+
   CHECK(MeasureDelay(-10000, 5).median_us >= 1000);
 }
 
@@ -161,7 +153,7 @@ TEST_CASE("A signaled object ends a precise timed wait at once", "[kernel][timin
   PreciseTimers mode(true);
   auto event = object_ref<XEvent>(new XEvent(Kernel()));
   event->Initialize(true, true);
-  uint64_t timeout = uint64_t(-10000000);  // 1 s.
+  uint64_t timeout = uint64_t(-10000000);
   auto start = Clock::now();
   CHECK(event->Wait(3, 1, 0, &timeout) == X_STATUS_SUCCESS);
   CHECK(Clock::now() - start < std::chrono::milliseconds(100));
@@ -181,7 +173,7 @@ TEST_CASE("A user APC ends an alertable delay or wait early", "[kernel][timing]"
     std::chrono::steady_clock::duration elapsed{};
     std::thread thread([&] {
       auto start = Clock::now();
-      uint64_t timeout = uint64_t(-20000000);  // 2 s.
+      uint64_t timeout = uint64_t(-20000000);
       status = delay ? DelayThread().Delay(0, 1, timeout) : event->Wait(3, 1, 1, &timeout);
       elapsed = Clock::now() - start;
     });

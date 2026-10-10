@@ -101,8 +101,6 @@ inline std::filesystem::path PackagePath(const std::filesystem::path& root,
   return root / "E000000012345678" / "4D5307E6" / "00000001" / file_name;
 }
 
-// Opens `path` inside mounted root `root_name` for writing, as the guest's
-// NtCreateFile would, and wraps it in a kernel file object.
 inline object_ref<XFile> OpenGuestFile(KernelState* kernel, const std::string& root_name,
                                        const std::string& path) {
   rex::filesystem::File* file = nullptr;
@@ -128,7 +126,6 @@ inline std::string ReadHost(const std::filesystem::path& path) {
   return std::string(std::istreambuf_iterator<char>(in), {});
 }
 
-// A file whose host flush fails, standing in for a disk that rejects it.
 class FailingFlushFile : public rex::filesystem::File {
  public:
   explicit FailingFlushFile(rex::filesystem::Entry* entry)
@@ -141,4 +138,4 @@ class FailingFlushFile : public rex::filesystem::File {
   X_STATUS Flush() override { return X_STATUS_UNEXPECTED_IO_ERROR; }
 };
 
-}  // namespace rex::testing
+}

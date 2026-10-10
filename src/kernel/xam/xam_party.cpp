@@ -15,7 +15,6 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/xtypes.h>
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 namespace rex {
@@ -23,8 +22,6 @@ namespace kernel {
 namespace xam {
 
 u32 XamPartyGetUserList_entry(u32 player_count, mapped_u32 party_list) {
-  // 5345085D wants specifically this code to skip loading party data.
-  // This code is not documented in NT_STATUS code list
   return 0x807D0003;
 }
 
@@ -40,9 +37,9 @@ u32 XamPartyGetBandwidth_entry(u32 r3, u32 r4) {
   return X_ERROR_FUNCTION_FAILED;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamPartyGetUserList, rex::kernel::xam::XamPartyGetUserList_entry)
 REX_EXPORT(__imp__XamPartySendGameInvites, rex::kernel::xam::XamPartySendGameInvites_entry)

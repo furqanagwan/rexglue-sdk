@@ -21,17 +21,17 @@
 namespace rex::kernel::xboxkrnl {
 
 struct X_KEDEBUGMONITORDATA {
-  rex::be<uint32_t> unk_00;       // 0x00
-  rex::be<uint32_t> unk_04;       // 0x04
-  rex::be<uint32_t> unk_08;       // 0x08
-  rex::be<uint32_t> unk_0C;       // 0x0C
-  rex::be<uint32_t> unk_10;       // 0x10
-  rex::be<uint32_t> unk_14;       // 0x14
-  rex::be<uint32_t> callback_fn;  // 0x18 function
-  rex::be<uint32_t> unk_1C;       // 0x1C
-  rex::be<uint32_t> unk_20;       // 0x20 Vd graphics data?
+  rex::be<uint32_t> unk_00;
+  rex::be<uint32_t> unk_04;
+  rex::be<uint32_t> unk_08;
+  rex::be<uint32_t> unk_0C;
+  rex::be<uint32_t> unk_10;
+  rex::be<uint32_t> unk_14;
+  rex::be<uint32_t> callback_fn;
+  rex::be<uint32_t> unk_1C;
+  rex::be<uint32_t> unk_20;
 };
 
 void KeDebugMonitorCallback(::PPCContext* ppc_context, rex::system::KernelState* kernel_state);
 
-}  // namespace rex::kernel::xboxkrnl
+}

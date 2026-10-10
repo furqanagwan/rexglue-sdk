@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/cvar.h>
@@ -33,11 +32,11 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
 
   switch (category) {
     case 0x0002:
-      // XCONFIG_SECURED_CATEGORY
+
       switch (setting) {
-        case 0x0002:  // XCONFIG_SECURED_AV_REGION
+        case 0x0002:
           setting_size = 4;
-          memory::store_and_swap<uint32_t>(value, 0x00001000);  // USA/Canada
+          memory::store_and_swap<uint32_t>(value, 0x00001000);
           break;
         default:
           REXKRNL_WARN("Unimplemented XConfig SECURED setting 0x{:04X}", setting);
@@ -45,42 +44,42 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
       }
       break;
     case 0x0003:
-      // XCONFIG_USER_CATEGORY
+
       switch (setting) {
-        case 0x0001:  // XCONFIG_USER_TIME_ZONE_BIAS
-        case 0x0002:  // XCONFIG_USER_TIME_ZONE_STD_NAME
-        case 0x0003:  // XCONFIG_USER_TIME_ZONE_DLT_NAME
-        case 0x0004:  // XCONFIG_USER_TIME_ZONE_STD_DATE
-        case 0x0005:  // XCONFIG_USER_TIME_ZONE_DLT_DATE
-        case 0x0006:  // XCONFIG_USER_TIME_ZONE_STD_BIAS
-        case 0x0007:  // XCONFIG_USER_TIME_ZONE_DLT_BIAS
+        case 0x0001:
+        case 0x0002:
+        case 0x0003:
+        case 0x0004:
+        case 0x0005:
+        case 0x0006:
+        case 0x0007:
           setting_size = 4;
 
           memory::store_and_swap<uint32_t>(value, 0);
           break;
-        case 0x0009:  // XCONFIG_USER_LANGUAGE
+        case 0x0009:
           setting_size = 4;
           memory::store_and_swap<uint32_t>(value, uint32_t(system::GetUserLanguage()));
           break;
-        case 0x000A:  // XCONFIG_USER_VIDEO_FLAGS
+        case 0x000A:
           setting_size = 4;
           memory::store_and_swap<uint32_t>(value, kXConfigUserVideoFlags);
           break;
-        case 0x000B:  // XCONFIG_USER_AUDIO_FLAGS
+        case 0x000B:
           setting_size = 4;
           memory::store_and_swap<uint32_t>(value, kXConfigUserAudioFlags);
           break;
-        case 0x000C:  // XCONFIG_USER_RETAIL_FLAGS
+        case 0x000C:
           setting_size = 4;
           memory::store_and_swap<uint32_t>(value, 0x40);
           break;
-        case 0x000E:  // XCONFIG_USER_COUNTRY
+        case 0x000E:
           setting_size = 1;
           value[0] = static_cast<uint8_t>(REXCVAR_GET(user_country));
           break;
-        case 0x0019:  // XCONFIG_USER_PC_FLAGS
+        case 0x0019:
           setting_size = 1;
-          // XBLAllowed | XBLMembershipCreationAllowed
+
           value[0] = 0x03;
           break;
         default:
@@ -124,7 +123,7 @@ u32 ExGetXConfigSetting_entry(u16 category, u16 setting, mapped_void buffer_ptr,
   return result;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__ExGetXConfigSetting, rex::kernel::xboxkrnl::ExGetXConfigSetting_entry)
 REX_EXPORT_STUB(__imp__ExSetXConfigSetting);

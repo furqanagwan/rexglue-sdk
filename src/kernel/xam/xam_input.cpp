@@ -38,15 +38,12 @@ rex::input::InputSystem* input_system() {
   return static_cast<rex::input::InputSystem*>(REX_KERNEL_STATE()->emulator()->input_system());
 }
 
-void XamResetInactivity_entry() {
-  // Do we need to do anything?
-}
+void XamResetInactivity_entry() {}
 
 u32 XamEnableInactivityProcessing_entry(u32 unk, u32 enable) {
   return X_ERROR_SUCCESS;
 }
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetcapabilities(v=vs.85).aspx
 u32 XamInputGetCapabilities_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_CAPABILITIES> caps) {
   REXKRNL_TRACE("[XAM] XamInputGetCapabilities called: user={}, flags=0x{:X}", (uint32_t)user_index,
                 (uint32_t)flags);
@@ -55,13 +52,11 @@ u32 XamInputGetCapabilities_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_C
   }
 
   if ((flags & 0xFF) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & 0xFF) == 0xFF || (flags & XINPUT_FLAG_ANY_USER)) {
-    // Always pin user to 0.
     actual_user_index = 0;
   }
 
@@ -76,24 +71,20 @@ u32 XamInputGetCapabilitiesEx_entry(u32 unk, u32 user_index, u32 flags,
   }
 
   if ((flags & 0xFF) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & 0xFF) == 0xFF || (flags & XINPUT_FLAG_ANY_USER)) {
-    // Always pin user to 0.
     actual_user_index = 0;
   }
 
-  (void)unk;  // Unused in this implementation
+  (void)unk;
   auto* is = input_system();
   return is->GetCapabilities(actual_user_index, flags, caps);
 }
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetstate(v=vs.85).aspx
 u32 XamInputGetState_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_STATE> input_state) {
-  // Games call this with a NULL state ptr, probably as a query.
   static int call_count = 0;
   if (++call_count <= 5) {
     REXKRNL_TRACE("[XAM] XamInputGetState called: user={}, flags=0x{:X}", (uint32_t)user_index,
@@ -101,13 +92,11 @@ u32 XamInputGetState_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_STATE> i
   }
 
   if ((flags & 0xFF) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & 0xFF) == 0xFF || (flags & XINPUT_FLAG_ANY_USER)) {
-    // Always pin user to 0.
     actual_user_index = 0;
   }
 
@@ -115,7 +104,6 @@ u32 XamInputGetState_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_STATE> i
   return is->GetState(actual_user_index, input_state);
 }
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputsetstate(v=vs.85).aspx
 u32 XamInputSetState_entry(u32 user_index, u32 unk, ppc_ptr_t<X_INPUT_VIBRATION> vibration) {
   if (!vibration) {
     return X_ERROR_BAD_ARGUMENTS;
@@ -123,33 +111,25 @@ u32 XamInputSetState_entry(u32 user_index, u32 unk, ppc_ptr_t<X_INPUT_VIBRATION>
 
   uint32_t actual_user_index = user_index;
   if ((user_index & 0xFF) == 0xFF) {
-    // Always pin user to 0.
     actual_user_index = 0;
   }
 
-  (void)unk;  // Unused in this implementation
+  (void)unk;
   auto* is = input_system();
   return is->SetState(actual_user_index, vibration);
 }
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetkeystroke(v=vs.85).aspx
 u32 XamInputGetKeystroke_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_KEYSTROKE> keystroke) {
-  // https://github.com/CodeAsm/ffplay360/blob/master/Common/AtgXime.cpp
-  // user index = index or XUSER_INDEX_ANY
-  // flags = XINPUT_FLAG_GAMEPAD (| _ANYUSER | _ANYDEVICE)
-
   if (!keystroke) {
     return X_ERROR_BAD_ARGUMENTS;
   }
 
   if ((flags & 0xFF) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & 0xFF) == 0xFF || (flags & XINPUT_FLAG_ANY_USER)) {
-    // Always pin user to 0.
     actual_user_index = 0;
   }
 
@@ -157,7 +137,6 @@ u32 XamInputGetKeystroke_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_KEYS
   return is->GetKeystroke(actual_user_index, flags, keystroke);
 }
 
-// Same as non-ex, just takes a pointer to user index.
 u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
                                  ppc_ptr_t<X_INPUT_KEYSTROKE> keystroke) {
   if (!keystroke) {
@@ -165,19 +144,17 @@ u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
   }
 
   if ((flags & 0xFF) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   uint32_t user_index = *user_index_ptr;
   if ((user_index & 0xFF) == 0xFF || (flags & XINPUT_FLAG_ANY_USER)) {
-    // Always pin user to 0.
     user_index = 0;
   }
 
   auto* is = input_system();
   auto result = is->GetKeystroke(user_index, flags, keystroke);
-  // An X_RESULT: X_ERROR_EMPTY is positive, so XSUCCEEDED would accept it.
+
   if (result == X_ERROR_SUCCESS) {
     *user_index_ptr = keystroke->user_index;
   }
@@ -185,9 +162,6 @@ u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
 }
 
 i32 XamUserGetDeviceContext_entry(u32 user_index, u32 unk, mapped_u32 out_ptr) {
-  // Games check the result - usually with some masking.
-  // If this function fails they assume zero, so let's fail AND
-  // set zero just to be safe.
   *out_ptr = 0;
   if (!user_index || (user_index & 0xFF) == 0xFF) {
     return X_E_SUCCESS;
@@ -196,9 +170,9 @@ i32 XamUserGetDeviceContext_entry(u32 user_index, u32 unk, mapped_u32 out_ptr) {
   }
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamResetInactivity, rex::kernel::xam::XamResetInactivity_entry)
 REX_EXPORT(__imp__XamEnableInactivityProcessing,

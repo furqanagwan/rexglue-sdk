@@ -16,7 +16,7 @@ class Runtime;
 namespace system {
 class KernelState;
 }
-}  // namespace rex
+}
 
 namespace rex::kernel {
 void InitializeKernel(Runtime* runtime, system::KernelState* kernel_state);

@@ -24,7 +24,6 @@ using namespace rex::system;
 using namespace rex::system::xam;
 
 uint32_t xeXamNotifyCreateListener(uint64_t mask, uint32_t is_system, uint32_t max_version) {
-  // A guest value; clamp it rather than assert on it.
   if (max_version > 10) {
     REXKRNL_WARN("XamNotifyCreateListener: max_version {} clamped to 10", max_version);
     max_version = 10;
@@ -33,7 +32,6 @@ uint32_t xeXamNotifyCreateListener(uint64_t mask, uint32_t is_system, uint32_t m
   auto listener = object_ref<XNotifyListener>(new XNotifyListener(REX_KERNEL_STATE()));
   listener->Initialize(mask, max_version);
 
-  // Handle ref is incremented, so return that.
   uint32_t handle = listener->handle();
 
   REXKRNL_DEBUG(
@@ -51,7 +49,6 @@ u32 XamNotifyCreateListenerInternal_entry(u64 mask, u32 is_system, u32 max_versi
   return xeXamNotifyCreateListener(mask, is_system, max_version);
 }
 
-// https://github.com/CodeAsm/ffplay360/blob/master/Common/AtgSignIn.cpp
 u32 XNotifyGetNext_entry(u32 handle, u32 match_id, mapped_u32 id_ptr, mapped_u32 param_ptr) {
   if (param_ptr) {
     *param_ptr = 0;
@@ -62,7 +59,6 @@ u32 XNotifyGetNext_entry(u32 handle, u32 match_id, mapped_u32 id_ptr, mapped_u32
   }
   *id_ptr = 0;
 
-  // Grab listener.
   auto listener = REX_KERNEL_OBJECTS()->LookupObject<XNotifyListener>(handle);
   if (!listener) {
     return 0;
@@ -72,18 +68,14 @@ u32 XNotifyGetNext_entry(u32 handle, u32 match_id, mapped_u32 id_ptr, mapped_u32
   uint32_t id = 0;
   uint32_t param = 0;
   if (match_id) {
-    // Asking for a specific notification
     id = match_id;
     dequeued = listener->DequeueNotification(match_id, &param);
   } else {
-    // Just get next.
     dequeued = listener->DequeueNotification(&id, &param);
   }
 
   *id_ptr = dequeued ? id : 0;
-  // param_ptr may be null - 555307F0 Demo explicitly passes nullptr in the
-  // code.
-  // https://github.com/xenia-project/xenia/pull/1577
+
   if (param_ptr) {
     *param_ptr = dequeued ? param : 0;
   }
@@ -96,17 +88,14 @@ u32 XNotifyGetNext_entry(u32 handle, u32 match_id, mapped_u32 id_ptr, mapped_u32
 }
 
 u32 XNotifyDelayUI_entry(u32 delay_ms) {
-  // Ignored.
   return 0;
 }
 
-void XNotifyPositionUI_entry(u32 position) {
-  // Ignored.
-}
+void XNotifyPositionUI_entry(u32 position) {}
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamNotifyCreateListener, rex::kernel::xam::XamNotifyCreateListener_entry)
 REX_EXPORT(__imp__XamNotifyCreateListenerInternal,

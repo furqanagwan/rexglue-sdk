@@ -34,4 +34,4 @@ void InitializeKernel(Runtime* runtime, system::KernelState* kernel_state) {
   kernel_state->LoadKernelModule<xbdm::XbdmModule>();
 }
 
-}  // namespace rex::kernel
+}

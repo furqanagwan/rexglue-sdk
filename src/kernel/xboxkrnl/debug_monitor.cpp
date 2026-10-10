@@ -61,14 +61,14 @@ void KeDebugMonitorCallback(PPCContext* ppc_context, rex::system::KernelState* k
     case DebugMonitorCommand::Unknown66: {
       struct callback_info {
         rex::be<uint32_t> callback_fn;
-        rex::be<uint32_t> callback_arg;  // D3D device object?
+        rex::be<uint32_t> callback_arg;
       };
       auto cbi = kernel_state->memory()->TranslateVirtual<callback_info*>(arg);
       ppc_context->r[3] = 0;
       break;
     }
     case DebugMonitorCommand::Unknown89:
-      // arg = function pointer?
+
       ppc_context->r[3] = 0;
       break;
     case DebugMonitorCommand::Unknown94:
@@ -80,4 +80,4 @@ void KeDebugMonitorCallback(PPCContext* ppc_context, rex::system::KernelState* k
   }
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}

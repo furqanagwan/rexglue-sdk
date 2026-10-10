@@ -36,18 +36,16 @@ using namespace rex::testing;  // NOLINT
 constexpr char kFaultChildEnv[] = "REXGLUE_FAULT_REPORT_CHILD";
 constexpr uint32_t kCodeBase = 0x82E00000;
 constexpr uint32_t kFaultingAddress = kCodeBase + 0x40;
-// Unallocated guest virtual memory in a non-physical heap.
+
 constexpr uint32_t kUnmappedGuest = 0x3FFF0000;
 
-// Stands in for a recompiled guest function that reads freed guest memory.
 void FaultingGuestFunction(PPCContext& ctx, uint8_t* base) {
   volatile uint32_t* p = reinterpret_cast<volatile uint32_t*>(base + kUnmappedGuest);
   ctx.r3.u64 = *p;
 }
 
-}  // namespace
+}
 
-// Runs in a child process: calls the faulting function, which kills it.
 TEST_CASE("Fault report child", "[.fault-report-child]") {
   const char* log_path = std::getenv(kFaultChildEnv);
   REQUIRE(log_path);
@@ -58,7 +56,7 @@ TEST_CASE("Fault report child", "[.fault-report-child]") {
   REQUIRE(dispatcher->SetFunction(kFaultingAddress, &FaultingGuestFunction));
   PPCContext ctx{};
   dispatcher->GetFunction(kFaultingAddress)(ctx, kernel->memory()->virtual_membase());
-  TerminateProcess(GetCurrentProcess(), 77);  // not reached
+  TerminateProcess(GetCurrentProcess(), 77);
 }
 
 TEST_CASE("A fatal guest access violation names the guest function", "[kernel][fault]") {
@@ -81,7 +79,7 @@ TEST_CASE("A fatal guest access violation names the guest function", "[kernel][f
   GetExitCodeProcess(process.hProcess, &exit_code);
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
-  CHECK(exit_code != 77);  // the read faulted
+  CHECK(exit_code != 77);
 
   std::ifstream in(log_path);
   std::stringstream text;

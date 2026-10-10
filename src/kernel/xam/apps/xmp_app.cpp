@@ -37,8 +37,6 @@ XmpApp::XmpApp(KernelState* kernel_state)
 
 X_HRESULT XmpApp::XMPGetStatus(uint32_t state_ptr) {
   if (!XThread::GetCurrentThread()->main_thread()) {
-    // Some stupid games will hammer this on a thread - induce a delay
-    // here to keep from starving real threads.
     rex::thread::Sleep(std::chrono::milliseconds(1));
   }
 
@@ -134,7 +132,6 @@ X_HRESULT XmpApp::XMPPlayTitlePlaylist(uint32_t playlist_handle, uint32_t song_h
     return X_E_SUCCESS;
   }
 
-  // Start playlist?
   REXKRNL_WARN("Playlist playback not supported");
   active_playlist_ = playlist;
   active_song_index_ = 0;
@@ -156,7 +153,7 @@ X_HRESULT XmpApp::XMPContinue() {
 X_HRESULT XmpApp::XMPStop(uint32_t unk) {
   assert_zero(unk);
   REXKRNL_DEBUG("XMPStop({:08X})", unk);
-  active_playlist_ = nullptr;  // ?
+  active_playlist_ = nullptr;
   active_song_index_ = 0;
   state_ = State::kIdle;
   OnStateChanged();
@@ -204,14 +201,13 @@ void XmpApp::OnStateChanged() {
 
 X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
                                       uint32_t buffer_length) {
-  // NOTE: buffer_length may be zero or valid.
   auto buffer = memory_->TranslateVirtual(buffer_ptr);
   switch (message) {
     case 0x00070002: {
       assert_true(!buffer_length || buffer_length == 12);
       uint32_t xmp_client = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t storage_ptr = memory::load_and_swap<uint32_t>(buffer + 4);
-      uint32_t song_handle = memory::load_and_swap<uint32_t>(buffer + 8);  // 0?
+      uint32_t song_handle = memory::load_and_swap<uint32_t>(buffer + 8);
       uint32_t playlist_handle =
           memory::load_and_swap<uint32_t>(memory_->TranslateVirtual(storage_ptr));
       assert_true(xmp_client == 0x00000002);
@@ -270,7 +266,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     case 0x00070009: {
       assert_true(!buffer_length || buffer_length == 8);
       uint32_t xmp_client = memory::load_and_swap<uint32_t>(buffer + 0);
-      uint32_t state_ptr = memory::load_and_swap<uint32_t>(buffer + 4);  // out ptr to 4b - expect 0
+      uint32_t state_ptr = memory::load_and_swap<uint32_t>(buffer + 4);
       assert_true(xmp_client == 0x00000002);
       return XMPGetStatus(state_ptr);
     }
@@ -325,7 +321,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
         playlist_name = memory::load_and_swap<std::u16string>(
             memory_->TranslateVirtual(args->playlist_name_ptr));
       }
-      // dummy_alloc_ptr is the result of a XamAlloc of storage_size.
+
       assert_true(uint32_t(args->storage_size) == 4 + uint32_t(args->song_count) * 128);
       return XMPCreateTitlePlaylist(args->songs_ptr, args->song_count, args->playlist_name_ptr,
                                     playlist_name, args->flags, args->song_handles_ptr,
@@ -335,7 +331,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       assert_true(!buffer_length || buffer_length == 12);
       struct {
         rex::be<uint32_t> xmp_client;
-        rex::be<uint32_t> unk_ptr;  // 0
+        rex::be<uint32_t> unk_ptr;
         rex::be<uint32_t> info_ptr;
       }* args = memory_->TranslateVirtual<decltype(args)>(buffer_ptr);
       static_assert_size(decltype(*args), 12);
@@ -374,7 +370,6 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return XMPDeleteTitlePlaylist(playlist_handle);
     }
     case 0x0007001A: {
-      // XMPSetPlaybackController
       assert_true(!buffer_length || buffer_length == 12);
       struct {
         rex::be<uint32_t> xmp_client;
@@ -393,7 +388,6 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return X_E_SUCCESS;
     }
     case 0x0007001B: {
-      // XMPGetPlaybackController
       assert_true(!buffer_length || buffer_length == 12);
       struct {
         rex::be<uint32_t> xmp_client;
@@ -409,14 +403,12 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       memory::store_and_swap<uint32_t>(memory_->TranslateVirtual(args->locked_ptr), 0);
 
       if (!XThread::GetCurrentThread()->main_thread()) {
-        // Atrain spawns a thread 82437FD0 to call this in a tight loop forever.
         rex::thread::Sleep(std::chrono::milliseconds(10));
       }
 
       return X_E_SUCCESS;
     }
     case 0x00070029: {
-      // XMPGetPlaybackBehavior
       assert_true(!buffer_length || buffer_length == 16);
       struct {
         rex::be<uint32_t> xmp_client;
@@ -445,8 +437,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     }
     case 0x0007002E: {
       assert_true(!buffer_length || buffer_length == 12);
-      // Query of size for XamAlloc - the result of the alloc is passed to
-      // 0x0007000D.
+
       struct {
         rex::be<uint32_t> xmp_client;
         rex::be<uint32_t> song_count;
@@ -455,13 +446,12 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       static_assert_size(decltype(*args), 12);
 
       assert_true(args->xmp_client == 0x00000002 || args->xmp_client == 0x00000000);
-      // We don't use the storage, so just fudge the number.
+
       memory::store_and_swap<uint32_t>(memory_->TranslateVirtual(args->size_ptr),
                                        4 + uint32_t(args->song_count) * 128);
       return X_E_SUCCESS;
     }
     case 0x0007003D: {
-      // XMPCaptureOutput - not sure how this works :/
       REXKRNL_DEBUG("XMPCaptureOutput(...)");
       assert_always("XMP output not unimplemented");
       return X_E_FAIL;
@@ -474,7 +464,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
   return X_E_FAIL;
 }
 
-}  // namespace apps
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
+}

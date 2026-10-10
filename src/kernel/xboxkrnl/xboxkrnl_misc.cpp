@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/kernel/xboxkrnl/private.h>
@@ -24,7 +23,7 @@ namespace rex::kernel::xboxkrnl {
 
 void KeEnableFpuExceptions_entry(u32 enabled) {}
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__KeEnableFpuExceptions, rex::kernel::xboxkrnl::KeEnableFpuExceptions_entry)
 

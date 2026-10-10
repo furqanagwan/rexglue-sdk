@@ -44,8 +44,6 @@ extern std::atomic<int> xam_dialogs_shown_;
 
 namespace {
 
-// Holds guest input for as long as a dialog is on screen, so the title does
-// not act on the presses driving it - including the one that dismisses it.
 class ScopedGuestInputBlock {
  public:
   ScopedGuestInputBlock() {
@@ -69,7 +67,7 @@ class ScopedGuestInputBlock {
   rex::input::InputSystem* input_system_ = nullptr;
 };
 
-}  // namespace
+}
 
 class XamDialog : public rex::ui::ImGuiDialog {
  public:
@@ -93,10 +91,7 @@ class XamDialog : public rex::ui::ImGuiDialog {
 template <typename T>
 X_RESULT xeXamDispatchDialog(T* dialog, std::function<X_RESULT(T*)> close_callback,
                              uint32_t overlapped) {
-  auto pre = []() {
-    // Broadcast XN_SYS_UI = true
-    REX_KERNEL_STATE()->BroadcastNotification(0x9, true);
-  };
+  auto pre = []() { REX_KERNEL_STATE()->BroadcastNotification(0x9, true); };
   auto run = [dialog, close_callback]() -> X_RESULT {
     ScopedGuestInputBlock input_block;
     X_RESULT result;
@@ -112,12 +107,12 @@ X_RESULT xeXamDispatchDialog(T* dialog, std::function<X_RESULT(T*)> close_callba
     } else {
       delete dialog;
     }
-    // dialog should be deleted at this point!
+
     return result;
   };
   auto post = []() {
     rex::thread::Sleep(std::chrono::milliseconds(100));
-    // Broadcast XN_SYS_UI = false
+
     REX_KERNEL_STATE()->BroadcastNotification(0x9, false);
   };
   if (!overlapped) {
@@ -135,10 +130,7 @@ template <typename T>
 X_RESULT xeXamDispatchDialogEx(T* dialog,
                                std::function<X_RESULT(T*, uint32_t&, uint32_t&)> close_callback,
                                uint32_t overlapped) {
-  auto pre = []() {
-    // Broadcast XN_SYS_UI = true
-    REX_KERNEL_STATE()->BroadcastNotification(0x9, true);
-  };
+  auto pre = []() { REX_KERNEL_STATE()->BroadcastNotification(0x9, true); };
   auto run = [dialog, close_callback](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
     ScopedGuestInputBlock input_block;
     rex::ui::WindowedAppContext* app_context = REX_KERNEL_STATE()->emulator()->app_context();
@@ -155,12 +147,12 @@ X_RESULT xeXamDispatchDialogEx(T* dialog,
     } else {
       delete dialog;
     }
-    // dialog should be deleted at this point!
+
     return result;
   };
   auto post = []() {
     rex::thread::Sleep(std::chrono::milliseconds(100));
-    // Broadcast XN_SYS_UI = false
+
     REX_KERNEL_STATE()->BroadcastNotification(0x9, false);
   };
   if (!overlapped) {
@@ -179,13 +171,13 @@ X_RESULT xeXamDispatchDialogEx(T* dialog,
 X_RESULT xeXamDispatchHeadless(std::function<X_RESULT()> run_callback, uint32_t overlapped) {
   auto pre = []() {
     REXKRNL_DEBUG("xeXamDispatchHeadless: Broadcasting XN_SYS_UI = true");
-    // Broadcast XN_SYS_UI = true
+
     REX_KERNEL_STATE()->BroadcastNotification(0x9, true);
   };
   auto post = []() {
     rex::thread::Sleep(std::chrono::milliseconds(100));
     REXKRNL_DEBUG("xeXamDispatchHeadless: Broadcasting XN_SYS_UI = false");
-    // Broadcast XN_SYS_UI = false
+
     REX_KERNEL_STATE()->BroadcastNotification(0x9, false);
   };
   if (!overlapped) {
@@ -201,13 +193,10 @@ X_RESULT xeXamDispatchHeadless(std::function<X_RESULT()> run_callback, uint32_t 
 
 X_RESULT xeXamDispatchHeadlessEx(std::function<X_RESULT(uint32_t&, uint32_t&)> run_callback,
                                  uint32_t overlapped) {
-  auto pre = []() {
-    // Broadcast XN_SYS_UI = true
-    REX_KERNEL_STATE()->BroadcastNotification(0x9, true);
-  };
+  auto pre = []() { REX_KERNEL_STATE()->BroadcastNotification(0x9, true); };
   auto post = []() {
     rex::thread::Sleep(std::chrono::milliseconds(100));
-    // Broadcast XN_SYS_UI = false
+
     REX_KERNEL_STATE()->BroadcastNotification(0x9, false);
   };
   if (!overlapped) {
@@ -283,7 +272,6 @@ class MessageBoxDialog : public XamDialog {
   uint32_t chosen_button_ = 0;
 };
 
-// https://www.se7ensins.com/forums/threads/working-xshowmessageboxui.844116/
 u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_wstring text_ptr,
                               u32 button_count, mapped_u32 button_ptrs, u32 active_button,
                               u32 flags, mapped_u32 result_ptr, mapped_void overlapped) {
@@ -314,7 +302,6 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
 
   X_RESULT result;
   if (REXCVAR_GET(headless)) {
-    // Auto-pick the focused button.
     auto run = [result_ptr, active_button]() -> X_RESULT {
       *result_ptr = static_cast<uint32_t>(active_button);
       return X_ERROR_SUCCESS;
@@ -323,16 +310,16 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
   } else {
     switch (flags & 0xF) {
       case 0:
-        // config.pszMainIcon = nullptr;
+
         break;
       case 1:
-        // config.pszMainIcon = TD_ERROR_ICON;
+
         break;
       case 2:
-        // config.pszMainIcon = TD_WARNING_ICON;
+
         break;
       case 3:
-        // config.pszMainIcon = TD_INFORMATION_ICON;
+
         break;
     }
     auto close = [result_ptr](MessageBoxDialog* dialog) -> X_RESULT {
@@ -346,7 +333,6 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
           new MessageBoxDialog(imgui_drawer, title, text_str, buttons, active_button), close,
           overlapped.guest_address());
     } else {
-      // Fallback to headless if no drawer available
       auto run = [result_ptr, active_button]() -> X_RESULT {
         *result_ptr = static_cast<uint32_t>(active_button);
         return X_ERROR_SUCCESS;
@@ -435,11 +421,10 @@ class KeyboardInputDialog : public XamDialog {
   bool cancelled_ = true;
 };
 
-// https://www.se7ensins.com/forums/threads/release-how-to-use-xshowkeyboardui-release.906568/
 namespace {
 std::mutex keyboard_provider_mutex_;
 KeyboardProvider keyboard_provider_;
-}  // namespace
+}
 
 void xeXamSetKeyboardProvider(KeyboardProvider provider) {
   std::lock_guard<std::mutex> lock(keyboard_provider_mutex_);
@@ -448,8 +433,6 @@ void xeXamSetKeyboardProvider(KeyboardProvider provider) {
 
 namespace {
 
-// Console: shows the keyboard a title gets from XamShowKeyboardUI, with a
-// sample prompt, and logs what was typed.
 void ConsoleKeyboardTest(std::string_view args) {
   KeyboardProvider provider;
   {
@@ -466,7 +449,7 @@ void ConsoleKeyboardTest(std::string_view args) {
   request.description = u"Enter a name for your save game.";
   request.default_text = rex::string::to_utf16(std::string(args));
   request.max_length = 15;
-  // After a second, so the console can be closed first.
+
   std::thread([app_context, provider, request] {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     app_context->CallInUIThread([provider, request] {
@@ -484,7 +467,7 @@ void ConsoleKeyboardTest(std::string_view args) {
   }).detach();
 }
 
-}  // namespace
+}
 
 REXCVAR_DEFINE_COMMAND_ARGS(keyboard_test, ConsoleKeyboardTest, "Console",
                             "Show the console keyboard XamShowKeyboardUI uses, [default text]");
@@ -507,7 +490,6 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
   X_RESULT result;
   if (REXCVAR_GET(headless)) {
     auto run = [default_text, buffer, buffer_length, buffer_size]() -> X_RESULT {
-      // Redirect default_text back into the buffer.
       if (!default_text) {
         std::memset(buffer, 0, buffer_size);
       } else {
@@ -524,7 +506,6 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
         length = 0;
         return X_ERROR_SUCCESS;
       } else {
-        // Zero the output buffer.
         auto text = rex::string::to_utf16(dialog->text());
         rex::string::copy_and_swap_truncating(buffer, text, buffer_length);
         extended_error = X_ERROR_SUCCESS;
@@ -535,7 +516,6 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
     const Runtime* emulator = REX_KERNEL_STATE()->emulator();
     ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
 
-    // Read and convert title/description/default_text from guest memory as utf16 to utf8 strings
     std::string title_str = title
                                 ? rex::string::to_utf8(rex::memory::load_and_swap<std::u16string>(
                                       REX_KERNEL_MEMORY()->TranslateVirtual(title.guest_address())))
@@ -555,8 +535,6 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
       provider = keyboard_provider_;
     }
     if (provider && emulator->app_context()) {
-      // The console's own keyboard (RG-GDK-059); the ImGui dialog when it
-      // cannot be shown (no keyboard scenes built in).
       auto load = [](mapped_wstring s) {
         return s ? rex::memory::load_and_swap<std::u16string>(
                        REX_KERNEL_MEMORY()->TranslateVirtual(s.guest_address()))
@@ -582,7 +560,6 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
           rex::ui::ImGuiDialog* dialog = provider(
               request, [&text](std::optional<std::u16string> result) { text = std::move(result); });
           if (!dialog && imgui_drawer) {
-            // Fallback: the ImGui dialog, its result read as it closes.
             auto* fallback = new KeyboardInputDialog(imgui_drawer, title_str, desc_str,
                                                      def_text_str, buffer_length + 1);
             fallback->set_close_callback([fallback, &text] {
@@ -629,13 +606,12 @@ u32 XamShowKeyboardUI_entry(u32 user_index, u32 flags, mapped_wstring default_te
         result = X_ERROR_IO_PENDING;
       }
     } else if (imgui_drawer) {
-      uint32_t buffer_length_safe = buffer_length + 1;  // +1 for null terminator, just in case
+      uint32_t buffer_length_safe = buffer_length + 1;
       result = xeXamDispatchDialogEx<KeyboardInputDialog>(
           new KeyboardInputDialog(imgui_drawer, title_str, desc_str, def_text_str,
                                   buffer_length_safe),
           close, overlapped.guest_address());
     } else {
-      // Fallback to headless
       auto run = [default_text, buffer, buffer_length, buffer_size]() -> X_RESULT {
         if (!default_text) {
           std::memset(buffer, 0, buffer_size);
@@ -659,7 +635,6 @@ u32 XamShowDeviceSelectorUI_entry(u32 user_index, u32 content_type, u32 content_
                 overlapped.guest_address());
   return xeXamDispatchHeadless(
       [device_id_ptr]() -> X_RESULT {
-        // NOTE: 0x00000001 is our dummy device ID from xam_content.cc
         *device_id_ptr = 0x00000001;
         return X_ERROR_SUCCESS;
       },
@@ -680,14 +655,12 @@ void XamShowDirtyDiscErrorUI_entry(u32 user_index) {
                              {"OK"}, 0),
         [](MessageBoxDialog*) -> X_RESULT { return X_ERROR_SUCCESS; }, 0);
   } else {
-    // No UI available - log prominently and pause to let user see the error
     REXKRNL_ERROR("===========================================");
     REXKRNL_ERROR("FATAL: Disc Read Error (no UI to display)");
     REXKRNL_ERROR("Check that all game content files are present");
     REXKRNL_ERROR("Missing files or bad mounts cause this error");
     REXKRNL_ERROR("===========================================");
   }
-  // This is death, and should never return.
 
   exit(1);
 }
@@ -709,9 +682,9 @@ uint32_t XamShowMessageBoxUIEx_entry() {
   return 0;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamIsUIActive, rex::kernel::xam::XamIsUIActive_entry)
 REX_EXPORT(__imp__XamShowMessageBoxUI, rex::kernel::xam::XamShowMessageBoxUI_entry)

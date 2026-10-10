@@ -25,7 +25,6 @@ class Memory;
 
 namespace rex::kernel::crt {
 
-/// Mirrors O1HeapDiagnostics without requiring o1heap.h in consumer headers.
 struct HeapDiagnostics {
   uint64_t capacity;
   uint64_t allocated;
@@ -68,10 +67,8 @@ class ReXHeap {
   HeapDiagnostics GetDiagnosticsLocked() const;
 };
 
-/// Initialize the global rexcrt heap. Called by Runtime::Setup() when enabled.
 bool InitHeap(uint32_t heap_size_mb, rex::memory::Memory* memory);
 
-/// Access the global heap instance (valid after InitHeap).
 ReXHeap& GetHeap();
 
-}  // namespace rex::kernel::crt
+}

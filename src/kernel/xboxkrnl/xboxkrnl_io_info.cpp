@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/filesystem/device.h>
@@ -126,8 +125,6 @@ u32 NtQueryInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> i
 
   switch (info_class) {
     case XFileInternalInformation: {
-      // Internal unique file pointer. Not sure why anyone would want this.
-
       auto info = info_ptr.as<X_FILE_INTERNAL_INFORMATION*>();
       info->index_number = rex::memory::hash_combine(0, file->path());
       out_length = sizeof(*info);
@@ -151,17 +148,12 @@ u32 NtQueryInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> i
       REXKRNL_ERROR(
           "NtQueryInformationFile(XFileXctdCompressionInformation) "
           "unimplemented");
-      // Files that are XCTD compressed begin with the magic 0x0FF512ED but we
-      // shouldn't detect this that way. There's probably a flag somewhere
-      // (attributes?) that defines if it's compressed or not.
+
       status = X_STATUS_INVALID_PARAMETER;
       out_length = 0;
       break;
     };
     case XFileNetworkOpenInformation: {
-      // Make sure we're working with up-to-date information, just in case the
-      // file size has changed via something other than NtSetInfoFile
-      // (eg. seems NtWriteFile might extend the file in some cases)
       file->entry()->update();
 
       auto info = info_ptr.as<X_FILE_NETWORK_OPEN_INFORMATION*>();
@@ -176,14 +168,12 @@ u32 NtQueryInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> i
       break;
     }
     case XFileAlignmentInformation: {
-      // Requested by XMountUtilityDrive XAM-task
       auto info = info_ptr.as<uint32_t*>();
-      *info = 0;  // FILE_BYTE_ALIGNMENT?
+      *info = 0;
       out_length = sizeof(*info);
       break;
     }
     default: {
-      // Unsupported, for now.
       assert_always();
       status = X_STATUS_INVALID_PARAMETER;
       out_length = 0;
@@ -310,7 +300,6 @@ u32 NtSetInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_
       result = file->SetLength(info->allocation_size);
       out_length = sizeof(*info);
 
-      // Update the file entry information.
       file->entry()->update();
       break;
     }
@@ -319,12 +308,10 @@ u32 NtSetInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_
       result = file->SetLength(info->end_of_file);
       out_length = sizeof(*info);
 
-      // Update the files rex::filesystem::Entry information
       file->entry()->update();
       break;
     }
     case XFileCompletionInformation: {
-      // Info contains IO Completion handle and completion key
       auto info = info_ptr.as<X_FILE_COMPLETION_INFORMATION*>();
       auto handle = uint32_t(info->handle);
       auto key = uint32_t(info->key);
@@ -338,7 +325,7 @@ u32 NtSetInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_
       break;
     }
     default:
-      // Unsupported, for now.
+
       assert_always();
       out_length = 0;
       break;
@@ -394,7 +381,7 @@ u32 NtQueryVolumeInformationFile_entry(u32 file_handle,
     case XFileFsVolumeInformation: {
       auto info = info_ptr.as<X_FILE_FS_VOLUME_INFORMATION*>();
       info->creation_time = 0;
-      info->serial_number = 0;  // set for FATX, but we don't do that currently
+      info->serial_number = 0;
       info->supports_objects = 0;
       info->label_length = 0;
       out_length = offsetof(X_FILE_FS_VOLUME_INFORMATION, label);
@@ -437,7 +424,6 @@ u32 NtQueryVolumeInformationFile_entry(u32 file_handle,
       break;
     }
     default: {
-      // Unsupported, for now.
       assert_always();
       out_length = 0;
       break;
@@ -452,7 +438,7 @@ u32 NtQueryVolumeInformationFile_entry(u32 file_handle,
   return status;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__NtQueryInformationFile, rex::kernel::xboxkrnl::NtQueryInformationFile_entry)
 REX_EXPORT(__imp__NtSetInformationFile, rex::kernel::xboxkrnl::NtSetInformationFile_entry)

@@ -21,4 +21,4 @@ void xeRtlInitializeCriticalSection(X_RTL_CRITICAL_SECTION* cs, uint32_t cs_ptr)
 X_STATUS xeRtlInitializeCriticalSectionAndSpinCount(X_RTL_CRITICAL_SECTION* cs, uint32_t cs_ptr,
                                                     uint32_t spin_count);
 
-}  // namespace rex::kernel::xboxkrnl
+}
