@@ -5,7 +5,7 @@ A title update changes a game's code: its package carries XEX delta patches
 A recompiled title's code is fixed when it's built, so a running build can't
 take an update's code. Instead each title update a title supports is built as
 its own executable, and the original stays as it was
-([Guide #5](https://github.com/furqanagwan/xbox-guide/issues/5), transferred from SDK #153).
+([Guide #5](https://github.com/furqanagwan/xbox/issues/5), transferred from SDK #153).
 
 Mods and code patches are written against one executable's addresses, so each
 version has its own config: a mod made for the original never reaches the

@@ -79,7 +79,7 @@ rex_target_pch(rexruntime
 
 target_include_directories(rexruntime PUBLIC
     $<BUILD_INTERFACE:${REXGLUE_ROOT}/include>
-    $<BUILD_INTERFACE:${XBOX_GUIDE_SOURCE_DIR}/include>
+    "$<BUILD_INTERFACE:${XBOX_INCLUDE_DIRS}>"
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

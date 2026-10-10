@@ -1278,11 +1278,11 @@ package validated locally has SHA-256
 `8119312192ad3ac41345336c6302a97bc471af2ab6689f04ffe92e9e07bc7c45`
 (`su20076000_00000000`). Design: [ADR-011](adr/ADR-011-xbox-guide-from-system-xui.md);
 record: [Xbox guide](xbox-guide.md); tracking:
-[Guide issue #1](https://github.com/furqanagwan/xbox-guide/issues/1)
+[Guide issue #1](https://github.com/furqanagwan/xbox/issues/1)
 (transferred from SDK #127).
 
 Source ownership moved on 2026-10-06 to
-[xbox-guide](https://github.com/furqanagwan/xbox-guide), pinned by this SDK's
+[xbox-guide](https://github.com/furqanagwan/xbox), pinned by this SDK's
 Guide submodule. Extraction source: local SDK
 `d1a87b4ef0a09c7a7813ab2a2b27976de01de203`; classification B (source/host
 organization, no upstream subsystem import). Source notices and an affected
@@ -1767,7 +1767,7 @@ failure is unchanged.
 ## RG-GDK-058: standalone host scenes and source adapter (2026-10-07)
 
 Source: original Guide component work, base `3d5ea575a0f6a6ceb9f0c39c097d5c06c59b72aa`,
-head `db55a4d`; [Guide PR #8](https://github.com/furqanagwan/xbox-guide/pull/8)
+head `db55a4d`; [Guide PR #8](https://github.com/furqanagwan/xbox/pull/8)
 is open/draft, not merged. SDK adapter base `98f006b`, topic
 `pc-guide-source-scenes`. Class B for neutral message-box/activity models and
 host source/progress/history integration; class A for reading terminal
@@ -1800,7 +1800,7 @@ SDK branch `guide-by-title-platform` consumes Guide commit
 `db55a4d347c9edc74a17632fd7f71311ea1e7410`. Class A: avoid automatic BC scene/source
 selection for a 360 title, and hide reused notification controls even when the
 initial Active Downloads row count is zero. No upstream port or Microsoft code
-is incorporated. The issue boundary remains [Guide #1](https://github.com/furqanagwan/xbox-guide/issues/1).
+is incorporated. The issue boundary remains [Guide #1](https://github.com/furqanagwan/xbox/issues/1).
 
 The owner explicitly requires the prior 360 Guide for 360 titles, and BC scenes
 for original Xbox presentation. The SDK supplies per-target selection and shared

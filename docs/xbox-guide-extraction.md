@@ -1,8 +1,8 @@
-# Xbox Guide repository extraction
+# Xbox repository extraction
 
 Date: 2026-10-06. Guide sources are maintained in
-[furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox-guide), pinned under
-`thirdparty/xbox-guide`. The extraction source is SDK commit
+[furqanagwan/xbox-guide](https://github.com/furqanagwan/xbox), pinned under
+`thirdparty/xbox`. The extraction source is SDK commit
 `d1a87b4ef0a09c7a7813ab2a2b27976de01de203`.
 
 The Guide, native XUI sources, public headers and eight unit-test translation
@@ -35,13 +35,13 @@ in the destination repository.
 
 | Original SDK issue | Guide issue | State | Comments preserved |
 | --- | --- | --- | --- |
-| [#127](https://github.com/furqanagwan/rexglue-sdk/issues/127) | [#1](https://github.com/furqanagwan/xbox-guide/issues/1) | open | 0 |
-| [#132](https://github.com/furqanagwan/rexglue-sdk/issues/132) | [#2](https://github.com/furqanagwan/xbox-guide/issues/2) | closed | 0 |
-| [#143](https://github.com/furqanagwan/rexglue-sdk/issues/143) | [#3](https://github.com/furqanagwan/xbox-guide/issues/3) | closed | 0 |
-| [#145](https://github.com/furqanagwan/rexglue-sdk/issues/145) | [#4](https://github.com/furqanagwan/xbox-guide/issues/4) | closed | 0 |
-| [#153](https://github.com/furqanagwan/rexglue-sdk/issues/153) | [#5](https://github.com/furqanagwan/xbox-guide/issues/5) | closed | 1 |
-| [#161](https://github.com/furqanagwan/rexglue-sdk/issues/161) | [#6](https://github.com/furqanagwan/xbox-guide/issues/6) | closed | 0 |
-| [#166](https://github.com/furqanagwan/rexglue-sdk/issues/166) | [#7](https://github.com/furqanagwan/xbox-guide/issues/7) | closed | 4 |
+| [#127](https://github.com/furqanagwan/rexglue-sdk/issues/127) | [#1](https://github.com/furqanagwan/xbox/issues/1) | open | 0 |
+| [#132](https://github.com/furqanagwan/rexglue-sdk/issues/132) | [#2](https://github.com/furqanagwan/xbox/issues/2) | closed | 0 |
+| [#143](https://github.com/furqanagwan/rexglue-sdk/issues/143) | [#3](https://github.com/furqanagwan/xbox/issues/3) | closed | 0 |
+| [#145](https://github.com/furqanagwan/rexglue-sdk/issues/145) | [#4](https://github.com/furqanagwan/xbox/issues/4) | closed | 0 |
+| [#153](https://github.com/furqanagwan/rexglue-sdk/issues/153) | [#5](https://github.com/furqanagwan/xbox/issues/5) | closed | 1 |
+| [#161](https://github.com/furqanagwan/rexglue-sdk/issues/161) | [#6](https://github.com/furqanagwan/xbox/issues/6) | closed | 0 |
+| [#166](https://github.com/furqanagwan/rexglue-sdk/issues/166) | [#7](https://github.com/furqanagwan/xbox/issues/7) | closed | 4 |
 
 ## Validation, 2026-10-06
 
@@ -51,7 +51,7 @@ Windows x64, Clang 22.1.8, CMake 4.4.3, installed VS 2026 Community.
 
 - Standalone scene library: Debug and Release each discover and pass one CTest
   test containing three Catch2 cases / 16 assertions. Fresh Windows
-  [CI at the pinned revision](https://github.com/furqanagwan/xbox-guide/actions/runs/37527134574) also
+  [CI at the pinned revision](https://github.com/furqanagwan/xbox/actions/runs/37527134574) also
   builds/tests both configurations after fetching the pinned dependencies,
   without an SDK checkout.
 - Refreshed SDK source baseline and extracted Release Guide suites each

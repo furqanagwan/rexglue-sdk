@@ -66,7 +66,7 @@ which builds the three Xbox 360 James Bond games.
 | `src/graphics` | Xbox 360 graphics on Direct3D 12 |
 | `src/audio`, `src/input`, `src/filesystem` | Sound, controllers, files and saves |
 | `src/ui` | Window, presenter and overlays |
-| `thirdparty/xbox-guide` | The Xbox 360 Guide ([its own repo](https://github.com/furqanagwan/xbox-guide)) |
+| `thirdparty/xbox` | The Xbox 360 Guide ([its own repo](https://github.com/furqanagwan/xbox)) |
 | `tests` | Unit and instruction tests |
 | `docs` | Design notes, decisions and test evidence |
 
