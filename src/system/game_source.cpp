@@ -10,6 +10,7 @@
 #include <rex/filesystem/devices/optical_disc_reader.h>
 #include <rex/filesystem/file.h>
 #include <rex/hash.h>
+#include <rex/logging.h>
 #include <rex/system/util/xdbf_utils.h>
 
 namespace rex::system {
@@ -55,17 +56,19 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
     start = end + 1;
   }
   if (invalid_path || guest_path.ends_with('/')) {
-    result.error = "The executable path must be relative to the game source.";
+    result.error =
+        "This game is set up incorrectly and can't be started from a disc (its executable path "
+        "isn't relative).";
     return result;
   }
   if (cancelled && cancelled()) {
-    result.error = "Source check cancelled.";
+    result.error = "Cancelled.";
     return result;
   }
   std::error_code ec;
   const auto absolute = std::filesystem::absolute(path, ec);
   if (path.empty() || ec) {
-    result.error = "Choose a game source.";
+    result.error = "Choose the game's disc, disc image or folder.";
     return result;
   }
   result.source_path = absolute.lexically_normal();
@@ -75,29 +78,30 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
              std::filesystem::is_regular_file(absolute, ec)) {
     result.device = std::make_unique<filesystem::DiscImageDevice>("source:", absolute);
   } else {
-    result.error = "The game source is missing or unavailable.";
+    result.error = "The disc or file can't be found. Check that it's connected, and try again.";
     return result;
   }
   if (!result.device->Initialize()) {
     result.error = filesystem::IsOpticalDiscPath(absolute)
-                       ? "No readable Xbox 360 game partition. Reinsert the disc; ordinary PC "
-                         "drives require game-readable, Kreon-style firmware."
-                       : "The source has no readable XDVDFS game partition or could not be opened.";
+                       ? "Unable to read the disc. Make sure it's an Xbox 360 game disc. Most PC "
+                         "drives can't read Xbox 360 discs."
+                       : "This isn't an Xbox 360 game disc image, or it's damaged.";
     return result;
   }
   auto* entry = result.device->ResolvePath(guest_path);
   if (!entry || (entry->attributes() & filesystem::kFileAttributeDirectory)) {
-    result.error = fmt::format("The source does not contain {}.", executable);
+    result.error = fmt::format("The game wasn't found here ({} is missing).", executable);
     return result;
   }
 
   if (entry->size() < 24 || entry->size() > 512 * 1024 * 1024) {
-    result.error = "The executable has an invalid or unsupported size.";
+    result.error = "This isn't an Xbox 360 game.";
     return result;
   }
   filesystem::File* file = nullptr;
   if (XFAILED(entry->Open(filesystem::FileAccess::kGenericRead, &file))) {
-    result.error = "The executable could not be opened.";
+    result.error =
+        "Unable to read the game. Check that the disc or drive is connected, and try again.";
     return result;
   }
   struct Close {
@@ -108,18 +112,20 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
   std::vector<uint8_t> header(header_size);
   size_t read = 0;
   if (XFAILED(file->ReadSync(header, 0, &read)) || read != header.size()) {
-    result.error = "The executable could not be read; reconnect its drive and retry.";
+    result.error =
+        "Unable to read the game. Check that the disc or drive is connected, and try again.";
     return result;
   }
   result.identity.title_id = XexSourceTitleId(header);
   if (!result.identity.title_id) {
-    result.error = "The executable is not a supported Xbox 360 XEX with title identity.";
+    result.error = "This isn't an Xbox 360 game.";
     return result;
   }
   auto state =
       std::unique_ptr<XXH3_state_t, decltype(&XXH3_freeState)>(XXH3_createState(), XXH3_freeState);
   if (!state || XXH3_128bits_reset(state.get()) == XXH_ERROR) {
-    result.error = "The executable checksum could not be calculated.";
+    result.error =
+        "Unable to read the game. Check that the disc or drive is connected, and try again.";
     return result;
   }
 
@@ -130,13 +136,14 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
   std::array<uint8_t, 256 * 1024> chunk;
   for (size_t offset = 0; offset < entry->size();) {
     if (cancelled && cancelled()) {
-      result.error = "Source check cancelled.";
+      result.error = "Cancelled.";
       return result;
     }
     const auto count = std::min(chunk.size(), entry->size() - offset);
     if (XFAILED(file->ReadSync(std::span(chunk).first(count), offset, &read)) || read != count ||
         XXH3_128bits_update(state.get(), chunk.data(), count) == XXH_ERROR) {
-      result.error = "The executable checksum read failed; reconnect its drive and retry.";
+      result.error =
+          "Unable to read the game. Check that the disc or drive is connected, and try again.";
       return result;
     }
     if (other_title)
@@ -147,16 +154,18 @@ GameSourceResult InspectGameSource(const std::filesystem::path& path, std::strin
   result.identity.executable_checksum = fmt::format("{:016x}{:016x}", hash.high64, hash.low64);
   if (other_title) {
     result.identity.title_name = util::TitleDisplayName(XexTitleName(whole));
-    auto name = [](const GameSourceIdentity& identity) {
-      return identity.title_name.empty()
-                 ? fmt::format("title {:08X}", identity.title_id)
-                 : fmt::format("{} ({:08X})", identity.title_name, identity.title_id);
-    };
+    REXLOG_WARN("Game source is title {:08X}; this build is for title {:08X}",
+                result.identity.title_id, expected.title_id);
+    const std::string found =
+        result.identity.title_name.empty() ? "a different game" : result.identity.title_name;
     result.error =
-        fmt::format("This is {}. This build is for {}.", name(result.identity), name(expected));
+        expected.title_name.empty()
+            ? fmt::format("This is {}. Choose the disc for this game.", found)
+            : fmt::format("This is {}. Choose the disc for {}.", found, expected.title_name);
   } else if (!expected.executable_checksum.empty() &&
              expected.executable_checksum != result.identity.executable_checksum) {
-    result.error = "This executable revision does not match the one used to build this recomp.";
+    result.error =
+        "This version of the game isn't supported. It may be from another region or edition.";
   }
   return result;
 }
@@ -179,7 +188,7 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
   }
   auto* disc = dynamic_cast<filesystem::DiscImageDevice*>(source.device.get());
   if (!disc) {
-    result.error = "Choose a disc image to extract.";
+    result.error = "Choose a disc image.";
     return result;
   }
   std::filesystem::path staging;
@@ -199,8 +208,7 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
   try {
     const auto target = std::filesystem::absolute(destination).lexically_normal();
     if (destination.empty() || std::filesystem::exists(target)) {
-      result.error =
-          "The extraction destination already exists or is empty; it will not be overwritten.";
+      result.error = "The game files can't be copied there because that folder already exists.";
       return result;
     }
     std::filesystem::create_directories(target.parent_path());
@@ -208,7 +216,8 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
               (target.filename().string() + ".partial-" +
                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     if (!std::filesystem::create_directory(staging)) {
-      result.error = "The extraction staging folder could not be created.";
+      result.error =
+          "Unable to copy the game files. Check that there's enough free space, and try again.";
       return result;
     }
     owns_staging = true;
@@ -240,7 +249,7 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
            upper[3] >= '1' && upper[3] <= '9');
       if (name.empty() || name == "." || name == ".." || reserved || name.back() == '.' ||
           name.back() == ' ' || name.find_first_of("\\/:*?\"<>|") != std::string::npos) {
-        result.error = "The disc contains a filename that cannot be extracted on Windows.";
+        result.error = "This disc has files that can't be copied to this PC.";
         cleanup();
         return result;
       }
@@ -255,14 +264,16 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
       filesystem::File* file = nullptr;
       if (XFAILED(const_cast<filesystem::Entry*>(item.entry)
                       ->Open(filesystem::FileAccess::kGenericRead, &file)))
-        throw std::runtime_error("A disc file could not be opened.");
+        throw std::runtime_error(
+            "Unable to read the game. Check that the disc or drive is connected, and try again.");
       struct Close {
         filesystem::File* file;
         ~Close() { file->Destroy(); }
       } close{file};
       std::ofstream output_file(output, std::ios::binary);
       if (!output_file)
-        throw std::runtime_error("An extracted file could not be created.");
+        throw std::runtime_error(
+            "Unable to copy the game files. Check that there's enough free space, and try again.");
       for (size_t offset = 0; offset < item.entry->size();) {
         if (cancelled && cancelled()) {
           result.cancelled = true;
@@ -274,17 +285,20 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
         size_t read = 0;
         if (XFAILED(file->ReadSync(std::span(buffer).first(count), offset, &read)) || read != count)
           throw std::runtime_error(
-              "A disc read failed during extraction; reconnect the source and retry.");
+              "Unable to read the game. Check that the disc or drive is connected, and try again.");
         output_file.write(reinterpret_cast<const char*>(buffer.data()), count);
         if (!output_file)
-          throw std::runtime_error("An extracted file could not be written.");
+          throw std::runtime_error(
+              "Unable to copy the game files. Check that there's enough free space, and try "
+              "again.");
         offset += count;
         copied += count;
         if (progress)
           progress(copied, total);
       }
       if (!output_file.flush())
-        throw std::runtime_error("An extracted file could not be flushed.");
+        throw std::runtime_error(
+            "Unable to copy the game files. Check that there's enough free space, and try again.");
     }
     if (cancelled && cancelled()) {
       result.cancelled = true;
@@ -295,6 +309,7 @@ GameSourceExtraction ExtractGameSource(const std::filesystem::path& image,
     owns_staging = false;
     result.folder = target;
   } catch (const std::exception& error) {
+    REXLOG_WARN("Copying the game from {} failed: {}", path_to_utf8(image), error.what());
     result.error = error.what();
     cleanup();
   }

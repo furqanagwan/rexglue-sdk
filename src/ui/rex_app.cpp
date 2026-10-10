@@ -344,7 +344,7 @@ bool ReXApp::BeginLaunch(PathConfig paths) {
     source_error = std::move(source.error);
   } else if (!needs_source && !std::filesystem::is_directory(paths.game_data_root)) {
     needs_source = true;
-    source_error = "Regenerate this build to validate a disc image's executable identity.";
+    source_error = "Choose the game's disc, disc image or folder.";
   }
   if (needs_source) {
     if (!imgui_drawer_) {

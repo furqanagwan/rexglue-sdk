@@ -236,13 +236,13 @@ TEST_CASE("Game source identity checks the original XEX header and full-file che
   auto cancelled =
       rex::system::InspectGameSource(root, "default.xex", expected, [] { return true; });
   CHECK_FALSE(cancelled);
-  CHECK(cancelled.error.find("cancelled") != std::string::npos);
+  CHECK(cancelled.error == "Cancelled.");
   auto wrong_title = expected;
   wrong_title.title_id = 0x87654321;
   auto mismatch = rex::system::InspectGameSource(root, "default.xex", wrong_title);
   CHECK_FALSE(mismatch);
-  CHECK(mismatch.error.find("87654321") != std::string::npos);
-  CHECK(mismatch.error.find("12345678") != std::string::npos);
+  CHECK(mismatch.error.starts_with("This is "));
+  CHECK(mismatch.error.ends_with("Choose the disc for this game."));
   xex.back() ^= 1;
   {
     std::ofstream file(root / "default.xex", std::ios::binary);
@@ -320,12 +320,11 @@ TEST_CASE("A source holding another game names both games", "[game_source]") {
   auto mismatch = rex::system::InspectGameSource(root, "default.xex", expected);
   CHECK_FALSE(mismatch);
   CHECK(mismatch.identity.title_name == "Test Game");
-  CHECK(mismatch.error ==
-        "This is Test Game (12345678). This build is for 007: Quantum of Solace (41560817).");
+  CHECK(mismatch.error == "This is Test Game. Choose the disc for 007: Quantum of Solace.");
 
   expected.title_name.clear();
   CHECK(rex::system::InspectGameSource(root, "default.xex", expected).error ==
-        "This is Test Game (12345678). This build is for title 41560817.");
+        "This is Test Game. Choose the disc for this game.");
 }
 
 TEST_CASE("A retail XEX's title name decodes from its encrypted image", "[game_source][local]") {

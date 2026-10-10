@@ -354,7 +354,7 @@ void GameSourceDialog::ShowDriveScreen() {
   for (const auto& drive : optical_drives_)
     rows.push_back({drive, "Drive", "Read the Xbox 360 disc in drive " + drive + "."});
   ShowConsolePage(ConsoleScreen::kDrives, "Choose Disc Drive", std::move(rows), 0, "Back",
-                  "No optical drive is available.");
+                  "No disc drive was found.");
 }
 
 void GameSourceDialog::ShowBrowseScreen() {
@@ -414,13 +414,13 @@ void GameSourceDialog::ReturnFromCheck() {
 void GameSourceDialog::CompleteConsoleSelection(bool remember) {
   const auto path = Utf8(validated_);
   if (!cvar::SetFlagByName("game_source", path)) {
-    ShowConsoleScreen(ConsoleScreen::kError, "Game Files",
-                      "The source setting could not be applied.",
+    ShowConsoleScreen(ConsoleScreen::kError, "Game Files", "Unable to use these game files.",
                       {"Choose Another Source", "Leave Game"}, 0);
   } else if (remember && !cvar::TrySaveConfig(config_)) {
-    ShowConsoleScreen(ConsoleScreen::kSaveFailed, "Game Files",
-                      "The source could not be saved. Use it once, or choose another source.",
-                      {"Use Once", "Choose Another Source", "Leave Game"}, 0);
+    ShowConsoleScreen(
+        ConsoleScreen::kSaveFailed, "Game Files",
+        "These game files couldn't be remembered. Use them this time only, or choose others.",
+        {"Use Once", "Choose Another Source", "Leave Game"}, 0);
   } else {
     selected_ = validated_;
     Close();
@@ -462,7 +462,7 @@ void GameSourceDialog::HandleConsoleChoice(size_t choice) {
         CollectOpticalDrives();
         check_origin_ = ConsoleScreen::kSource;
         if (optical_drives_.empty())
-          ShowConsoleScreen(ConsoleScreen::kError, "Disc Drive", "No optical drive is available.",
+          ShowConsoleScreen(ConsoleScreen::kError, "Disc Drive", "No disc drive was found.",
                             {"Choose Another Source", "Leave Game"}, 0);
         else
           ShowDriveScreen();
@@ -535,7 +535,7 @@ void GameSourceDialog::BrowseNative(bool folder) {
   Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
   if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                               IID_PPV_ARGS(&dialog)))) {
-    error_ = "The file picker could not be opened. Enter the path below.";
+    error_ = "Unable to open the file browser. Type the location below.";
     return;
   }
   DWORD options = 0;
@@ -618,11 +618,10 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
       extracting_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
     try {
       const auto result = extracting_.get();
-      error_ =
-          result.cancelled ? "Extraction cancelled; the game source is unchanged." : result.error;
+      error_ = result.cancelled ? "Copying was cancelled. Nothing was changed." : result.error;
       if (activity_completed_) {
         guide::GuideActivity activity;
-        activity.title = "Game source extraction";
+        activity.title = "Copying Game Files";
         activity.status = result.cancelled ? "Cancelled" : result ? "Completed" : "Failed";
         activity.details = result ? "Game files copied to this PC." : error_;
         activity_completed_(std::move(activity));
@@ -790,7 +789,7 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
       }
     }
     if (!found)
-      ImGui::TextUnformatted("No optical drive is available.");
+      ImGui::TextUnformatted("No disc drive was found.");
     ImGui::EndPopup();
   }
   if (ImGui::InputText("Source path", path_.data(), path_.size())) {
@@ -846,7 +845,7 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
       console_downloads_ = GameSourceConsoleDownloads::Create(visuals_);
     if (console_downloads_) {
       guide::GuideActivity activity;
-      activity.title = "Game source extraction";
+      activity.title = "Copying Game Files";
       activity.status =
           total
               ? std::to_string(unsigned(std::min(100.0, double(done) / double(total) * 100))) + "%"
@@ -867,7 +866,7 @@ void GameSourceDialog::OnDraw(ImGuiIO& io) {
   if (ImGui::Button("Use this source")) {
     const auto path = rex::string::to_utf8(validated_.u16string());
     if (!cvar::SetFlagByName("game_source", path)) {
-      error_ = "The source setting could not be applied.";
+      error_ = "Unable to use these game files.";
     } else if (remember_ && !cvar::TrySaveConfig(config_)) {
       error_ = "The source could not be saved. Uncheck Remember source to use it for this session.";
     } else {
