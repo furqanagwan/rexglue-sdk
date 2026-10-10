@@ -19,6 +19,7 @@
 
 #include <rex/assert.h>
 #include <rex/graphics/format/dxbc.h>
+#include <rex/graphics/format/dxbc_assembler.h>
 #include <rex/graphics/format/ucode.h>
 #include <rex/graphics/pipeline/shader/translator.h>
 #include <rex/math.h>

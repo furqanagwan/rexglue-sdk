@@ -42,6 +42,7 @@ if(REXGLUE_USE_D3D12)
         pipeline/shader/dxbc.cpp
         pipeline/shader/dxbc_translator.cpp
         pipeline/shader/dxbc_translator_alu.cpp
+        pipeline/shader/dxbc_translator_container.cpp
         pipeline/shader/dxbc_translator_fetch.cpp
         pipeline/shader/dxbc_translator_memexport.cpp
         pipeline/shader/dxbc_translator_om.cpp
@@ -51,13 +52,23 @@ if(REXGLUE_USE_D3D12)
     set(REXGPU_XENOS_D3D12_SOURCES
         d3d12/graphics_system.cpp
         d3d12/command_processor.cpp
+        d3d12/command_processor_bindings.cpp
+        d3d12/command_processor_descriptors.cpp
+        d3d12/command_processor_draw.cpp
+        d3d12/command_processor_submission.cpp
         d3d12/primitive_processor.cpp
         d3d12/render_target_cache.cpp
+        d3d12/render_target_cache_dump.cpp
+        d3d12/render_target_cache_transfer_pipelines.cpp
+        d3d12/render_target_cache_transfers.cpp
         d3d12/shader.cpp
         d3d12/shared_memory.cpp
         d3d12/texture_cache.cpp
         d3d12/deferred_command_list.cpp
         d3d12/pipeline_cache.cpp
+        d3d12/pipeline_cache_dxil.cpp
+        d3d12/pipeline_cache_geometry_shader.cpp
+        d3d12/pipeline_cache_storage.cpp
         d3d12/zpd_query_pool.cpp
     )
 endif()
@@ -81,8 +92,15 @@ if(REXGLUE_SHADER_DXIL)
         pipeline/shader/spirv_translator.cpp
         pipeline/shader/spirv_translator_alu.cpp
         pipeline/shader/spirv_translator_fetch.cpp
+        pipeline/shader/spirv_translator_fragment.cpp
         pipeline/shader/spirv_translator_memexport.cpp
-        pipeline/shader/spirv_translator_rb.cpp)
+        pipeline/shader/spirv_translator_operands.cpp
+        pipeline/shader/spirv_translator_rb.cpp
+        pipeline/shader/spirv_translator_rb_color.cpp
+        pipeline/shader/spirv_translator_rb_depth_stencil.cpp
+        pipeline/shader/spirv_translator_texture_bindings.cpp
+        pipeline/shader/spirv_translator_vertex.cpp
+        pipeline/shader/spirv_translator_vertex_fetch.cpp)
 endif()
 
 add_library(rexgpu-xenos SHARED ${REXGPU_XENOS_SOURCES})
