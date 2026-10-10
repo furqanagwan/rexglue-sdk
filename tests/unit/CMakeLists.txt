@@ -55,6 +55,7 @@ add_executable(unit_tests
     input/gamepad_devices_test.cpp
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
+    ui/display_info_test.cpp
     ui/launch_settings_test.cpp
     ui/game_source_test.cpp
     codegen/codegen_writer_test.cpp

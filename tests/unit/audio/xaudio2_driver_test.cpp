@@ -168,9 +168,23 @@ TEST_CASE("Windows lists its active audio outputs", "[audio][xaudio2]") {
     INFO(output.id);
     CHECK_FALSE(output.id.empty());
     CHECK_FALSE(output.name.empty());
+    CHECK(output.channels > 0);
+    CHECK(output.sample_rate > 0);
+    CHECK_FALSE(rex::audio::SpeakerLayoutName(output.channels, output.channel_mask).empty());
     defaults += output.is_default ? 1 : 0;
   }
   CHECK(defaults <= 1);
+}
+
+TEST_CASE("Speaker layouts are named from the channel mask, then the count", "[audio]") {
+  using rex::audio::SpeakerLayoutName;
+  CHECK(SpeakerLayoutName(2, 0x3) == "Stereo");
+  CHECK(SpeakerLayoutName(6, 0x3F) == "5.1 surround");
+  CHECK(SpeakerLayoutName(6, 0x60F) == "5.1 surround");
+  CHECK(SpeakerLayoutName(8, 0x63F) == "7.1 surround");
+  CHECK(SpeakerLayoutName(8, 0) == "7.1 surround");
+  CHECK(SpeakerLayoutName(12, 0) == "12 channels");
+  CHECK(SpeakerLayoutName(0, 0).empty());
 }
 
 TEST_CASE("XAudio2 moves to a chosen output and back to the default", "[audio][xaudio2]") {

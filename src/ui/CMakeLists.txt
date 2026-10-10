@@ -48,6 +48,7 @@ endif()
 # Platform sources: the native Win32 window and message loop (RG-GDK-021;
 # SDL3 was removed by RG-GDK-033).
 set(REXUI_PLATFORM_SOURCES
+    display_info_win.cpp
     surface_win.cpp
     window_win.cpp
     windowed_app_context_win.cpp

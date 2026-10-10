@@ -1509,6 +1509,10 @@ void ReXApp::ToggleGuide() {
   host.restart_title = [this] { restart_on_exit_ = true; };
   host.display_scale = DisplayScale(DisplayHeight(window_.get()));
   host.audio_outputs = [] { return rex::audio::ListAudioOutputs(); };
+  host.displays = [this] {
+    auto* win32 = static_cast<ui::Win32Window*>(window_.get());
+    return ui::ListDisplays(win32 ? win32->hwnd() : nullptr);
+  };
   host.save_settings = [this] { rex::cvar::SaveConfig(config_path_); };
   host.activities = [this] {
     return std::vector<ui::guide::GuideActivity>(source_activities_.rbegin(),

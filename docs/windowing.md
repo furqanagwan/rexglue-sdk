@@ -58,8 +58,26 @@ The D3D12 presenter is unchanged: both windows give it the same `Win32HwndSurfac
 
 Dialogs are ImGui overlays drawn by the presenter; nothing else used SDL.
 
+## Choosing the display
+
+`rex::ui::ListDisplays` lists the displays in the `monitor` setting's order
+(primary first, then enumeration order), for the guide's Settings > Preferences
+> Display page, which sets `monitor` and so moves the game live. Each display
+reports:
+
+- its monitor name and native (preferred) resolution, and whether it supports
+  HDR and has it on, from Windows' display configuration (`QueryDisplayConfig`,
+  `DisplayConfigGetDeviceInfo`);
+- its current mode, and the fastest refresh of its native and standard
+  resolutions (2160p, 1440p, 1080p, 720p, up to four), from its mode list;
+- its peak brightness and bits per colour, from DXGI (`IDXGIOutput6::GetDesc1`).
+
+A soundbar or receiver that passes HDMI through to a TV shows under the
+soundbar's name, as Windows names it.
+
 ## Tests
 
+- `unit_tests [ui][display_info]`: notable resolutions start at native and keep the fastest refresh; common resolutions are named; Windows lists the displays in the setting's order, each with a name, mode and resolutions.
 - `unit_tests [ui][win32]`:
   - the Win32 context creates a `Win32Window` with a live HWND and a DPI-scaled client size
   - resize, minimize and restore reach listeners
@@ -77,7 +95,8 @@ Dialogs are ImGui overlays drawn by the presenter; nothing else used SDL.
 ## Not established
 
 - In-title checks of overlays, fullscreen toggling during gameplay and mouse look on the Win32 window.
-- Multi-monitor moves across different DPIs (one monitor here), DPI change at runtime, and WM_DPICHANGED while fullscreen.
+- Multi-monitor moves across different DPIs, DPI change at runtime, and WM_DPICHANGED while fullscreen. Moving the fullscreen game between two displays at the same scaling was checked in Quantum of Solace through the guide: from a 3840 x 2160 144 Hz monitor to a 3840 x 2160 60 Hz TV and back, the window covering each display exactly.
+- HDR output: the game presents in SDR; the Display page only reports a display's HDR support.
 - `fullscreen_exclusive` switching is not in the automated tests, which would change the developer's display. The mode choice is unit-tested, and the switch was checked by hand in Quantum of Solace (see the port's PR).
 - AMD and Intel presentation; hardware results are NVIDIA only, with WARP as a supplement.
 - A GDK-packaged title using the Win32 window (RG-GDK-022).

@@ -57,6 +57,16 @@ where Xenia hand-declares the 2.7 and 2.8 interfaces and loads
   once. An endpoint that cannot be opened (unplugged) falls back to the default
   with a warning. The guide's UI sounds reopen on the chosen output on their
   next sound.
+- **What an output supports.** `ListAudioOutputs` also reports each output's
+  speaker layout, rate and bit depth, from the audio engine's device format
+  (`PKEY_AudioEngine_DeviceFormat`, or the mix format without it). It reports
+  which compressed surround formats it decodes: Dolby Digital, Dolby Digital
+  Plus, Dolby TrueHD (Atmos), DTS and DTS-HD, asked as exclusive-mode IEC 61937
+  formats (`IsFormatSupported`). An output that refuses exclusive mode leaves
+  them unknown. Spatial sound is on when `ISpatialAudioClient` offers dynamic
+  objects. The game itself always sends PCM (5.1, or the stereo fold), so the
+  decoded formats are for the player's information; the guide's Audio Output
+  page shows them for the focused output.
 - **One release per frame.** Every frame the guest submits releases the client
   semaphore exactly once: when the device finishes playing it, or, when there
   is no usable device, on a wall clock at the frame rate (5.33 ms). A title
@@ -89,8 +99,9 @@ without it, engine creation fails and frames are paced by the clock.
   - a simulated critical error releases the voice's frames and reopens the device;
   - a silently stopped voice is caught by the stall watchdog;
   - a device that appears later is picked up;
-  - Windows lists its active outputs, each with an ID and a name, at most one
-    the default;
+  - Windows lists its active outputs, each with an ID, a name, channels, a rate
+    and a named speaker layout, at most one the default;
+  - speaker layouts are named from the channel mask, then the count;
   - the driver moves to a chosen output and back to the default, every frame
     still released once and no loss counted;
   - a chosen output that is not there plays through the default;
