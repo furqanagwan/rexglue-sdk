@@ -248,7 +248,7 @@ uint4_xe XePack32bpp4Pixels(float4_xe pixel_0, float4_xe pixel_1,
   uint4_xe packed;
   switch (format) {
     case kXenosFormat_8_8_8_8:
-    // TODO(Triang3l): Investigate 8_8_8_8_A.
+
     case kXenosFormat_8_8_8_8_A:
     case kXenosFormat_8_8_8_8_AS_16_16_16_16:
       packed.x = XePackR8G8B8A8(pixel_0, num_format);
@@ -810,11 +810,11 @@ uint4_xe XeDXT3AAs1111TwoBlocksRowToBGRA4(uint2_xe halfblocks) {
   // DXT1/DXT3/DXT5 color components and CTX1 X/Y are ordered in:
   // http://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/talks/unc-xenos-doggett.pdf
   // (LSB on the right, MSB on the left.)
-  // TODO(Triang3l): Investigate this better, 4D53085B is the only known game
-  // that uses it (for lighting in certain places - one of easy to notice usages
-  // is the T-shaped (or somewhat H-shaped) metal beams in the beginning of the
-  // first mission), however the contents don't say anything about the channel
-  // order.
+
+
+
+
+
   uint4_xe row =
       (((halfblocks.xxyy >> uint2_xe(3u, 11u).xyxy) & 1u) << 8u) |
       (((halfblocks.xxyy >> uint2_xe(7u, 15u).xyxy) & 1u) << 24u) |
@@ -837,11 +837,11 @@ uint4_xe XeDXT3AAs1111TwoBlocksRowToARGB4(uint2_xe halfblocks) {
   // DXT1/DXT3/DXT5 color components and CTX1 X/Y are ordered in:
   // http://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/talks/unc-xenos-doggett.pdf
   // (LSB on the right, MSB on the left.)
-  // TODO(Triang3l): Investigate this better, 4D53085B is the only known game
-  // that uses it (for lighting in certain places - one of easy to notice usages
-  // is the T-shaped (or somewhat H-shaped) metal beams in the beginning of the
-  // first mission), however the contents don't say anything about the channel
-  // order.
+
+
+
+
+
   uint4_xe row =
       (((halfblocks.xxyy >> uint2_xe(3u, 11u).xyxy) & 1u) << 4u) |
       (((halfblocks.xxyy >> uint2_xe(7u, 15u).xyxy) & 1u) << 20u) |

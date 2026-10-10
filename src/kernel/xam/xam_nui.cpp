@@ -43,23 +43,6 @@ u32 XamShowNuiTroubleshooterUI_entry(u32 unk1, u32 unk2, u32 unk3) {
   if (REXCVAR_GET(headless)) {
     return 0;
   }
-  // TODO(tomc): Implement imgui stuff
-  // const Runtime* emulator = REX_KERNEL_STATE()->emulator();
-  // ui::Window* display_window = emulator->display_window();
-  // ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  // if (display_window && imgui_drawer) {
-  //  rex::thread::Fence fence;
-  //  if (display_window->app_context().CallInUIThreadSynchronous([&]() {
-  //        rex::ui::ImGuiDialog::ShowMessageBox(
-  //            imgui_drawer, "NUI Troubleshooter",
-  //            "The game has indicated there is a problem with NUI (Kinect).")
-  //            ->Then(&fence);
-  //      })) {
-  //    ++xam_dialogs_shown_;
-  //    fence.Wait();
-  //    --xam_dialogs_shown_;
-  //  }
-  //}
 
   return 0;
 }

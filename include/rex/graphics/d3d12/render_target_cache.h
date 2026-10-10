@@ -249,8 +249,7 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
     ui::d3d12::D3D12CpuDescriptorPool::Descriptor descriptor_load_separate_;
     // Texture SRV non-shader-visible descriptors, to prepare shader-visible
     // descriptors faster, by copying rather than by creating every time.
-    // TODO(Triang3l): With bindless resources, persistently store them in the
-    // heap.
+
     ui::d3d12::D3D12CpuDescriptorPool::Descriptor descriptor_srv_;
     ui::d3d12::D3D12CpuDescriptorPool::Descriptor descriptor_srv_stencil_;
     D3D12_RESOURCE_STATES resource_state_;
@@ -427,11 +426,6 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
     TransferInvocation(const Transfer& transfer, const TransferShaderKey& shader_key)
         : transfer(transfer), shader_key(shader_key) {}
     bool operator<(const TransferInvocation& other_invocation) const {
-      // TODO(Triang3l): See if it may be better to sort by the source in the
-      // first place, especially when reading the same data multiple times (like
-      // to write the stencil bits after depth) for better read locality.
-      // Sort by the shader key primarily to reduce pipeline state (context)
-      // switches.
       if (shader_key != other_invocation.shader_key) {
         return shader_key < other_invocation.shader_key;
       }

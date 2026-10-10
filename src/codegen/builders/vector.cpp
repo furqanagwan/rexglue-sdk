@@ -157,7 +157,6 @@ bool build_vminfp(BuilderContext& ctx) {
 }
 
 bool build_vrefp(BuilderContext& ctx) {
-  // TODO: see if we can use rcp safely
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr("simde_mm_div_ps(simde_mm_set1_ps(1), simde_mm_load_ps({vA}.f32))");
   return true;
@@ -394,7 +393,7 @@ bool build_vadduhs(BuilderContext& ctx) {
 
 bool build_vsubsws(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s32", 4, "INT32_MIN", "INT32_MAX", '-');
-  // TODO: vectorize
+
   for (size_t i = 0; i < 4; i++) {
     ctx.println("\t{}.s64 = int64_t({}.s32[{}]) - int64_t({}.s32[{}]);", ctx.temp(),
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
@@ -953,7 +952,6 @@ bool build_vsrh(BuilderContext& ctx) {
 }
 
 bool build_vsrb(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
   for (size_t i = 0; i < 16; i++)
     ctx.println("\t{}.u8[{}] = {}.u8[{}] >> ({}.u8[{}] & 0x7);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
@@ -961,7 +959,6 @@ bool build_vsrb(BuilderContext& ctx) {
 }
 
 bool build_vsrab(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
   for (size_t i = 0; i < 16; i++)
     ctx.println("\t{}.s8[{}] = {}.s8[{}] >> ({}.u8[{}] & 0x7);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
@@ -1002,7 +999,6 @@ bool build_vrlh(BuilderContext& ctx) {
 }
 
 bool build_vrlw(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
   for (size_t i = 0; i < 4; i++) {
     ctx.println("\t{{ uint32_t sh = {}.u32[{}] & 0x1F;", ctx.v(ctx.insn.operands[2]), i);
     ctx.println("\t{}.u32[{}] = ({}.u32[{}] << sh) | (sh ? ({}.u32[{}] >> (32 - sh)) : 0); }}",
@@ -1069,7 +1065,6 @@ bool build_vsr(BuilderContext& ctx) {
 }
 
 bool build_vsraw(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
   for (size_t i = 0; i < 4; i++)
     ctx.println("\t{}.s32[{}] = {}.s32[{}] >> ({}.u8[{}] & 0x1F);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i * 4);
@@ -1077,7 +1072,6 @@ bool build_vsraw(BuilderContext& ctx) {
 }
 
 bool build_vsrw(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
   for (size_t i = 0; i < 4; i++)
     ctx.println("\t{}.u32[{}] = {}.u32[{}] >> ({}.u8[{}] & 0x1F);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i * 4);
@@ -1270,8 +1264,6 @@ bool build_vpkpx(BuilderContext& ctx) {
 }
 
 bool build_vpkd3d128(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: handling vector reversal here too
   ctx.emit_set_flush_mode(true);
   switch (ctx.insn.operands[2]) {
     case 0:  // D3D color
@@ -1489,8 +1481,6 @@ bool build_vpkd3d128(BuilderContext& ctx) {
 //=============================================================================
 
 bool build_vupkd3d128(BuilderContext& ctx) {
-  // TODO(tomc): Vectorize
-  // NOTE: handling vector reversal here too
   switch (ctx.insn.operands[2] >> 2) {
     case 0:  // D3D color
       for (size_t i = 0; i < 4; i++) {

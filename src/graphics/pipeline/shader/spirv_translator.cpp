@@ -124,8 +124,7 @@ std::vector<uint8_t> SpirvShaderTranslator::CreateDepthOnlyFragmentShader(
     Modification::DepthStencilMode depth_stencil_mode, bool zpd_total, bool viz_survey) {
   is_depth_only_fragment_shader_ = true;
   is_viz_survey_fragment_shader_ = viz_survey;
-  // TODO(Triang3l): Handle in a nicer way (is_depth_only_fragment_shader_ is a
-  // leftover from when a Shader object wasn't used during translation).
+
   Shader shader(xenos::ShaderType::kPixel, 0, nullptr, 0);
   string::StringBuffer instruction_disassembly_buffer;
   shader.AnalyzeUcode(instruction_disassembly_buffer);
@@ -310,7 +309,6 @@ void SpirvShaderTranslator::BisectOverrideColorOutput() {
 }
 
 void SpirvShaderTranslator::StartTranslation() {
-  // TODO(Triang3l): Logger.
   builder_ = std::make_unique<SpirvBuilder>(features_.spirv_version, (kSpirvMagicToolId << 16) | 1,
                                             nullptr);
   builder_->SetAllowContraction(features_.allow_float_contraction);
@@ -716,12 +714,7 @@ void SpirvShaderTranslator::StartTranslation() {
     // CompleteVertexOrTessEvalShaderInMain. Only reachable on hosts without
     // geometry shaders (currently Metal; MoltenVK / GS-less Vulkan also land
     // here), selected by PrimitiveProcessor via kRectangleListAsTriangleStrip.
-    // TODO(has207): Replace this 3x-VS hack with a Metal mesh shader once
-    // Xenia has a mesh-shader authoring path. SPIRV-Cross supports MSL mesh
-    // shaders (ExecutionModelMeshEXT) but not geometry shaders, so rect/point
-    // expansion could be expressed cleanly as SPIR-V mesh shaders and
-    // translated the same way the rest of the pipeline is. Same applies to
-    // kPointListAsTriangleStrip.
+
     spv::Block& main_rect_list_loop_pre_header = *builder_->getBuildPoint();
     main_rect_list_loop_header_ = &builder_->makeNewBlock();
     spv::Block& main_rect_list_loop_body = builder_->makeNewBlock();
@@ -1052,7 +1045,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
     }
   }
 
-  // TODO(Triang3l): Avoid copy?
   std::vector<unsigned int> module_uints;
   builder_->dump(module_uints);
 
@@ -2124,7 +2116,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                                         const_uint_2, builder_->makeUintConstant(1))));
           // Load the 32 bits containing the whole vertex index or two 16-bit
           // vertex indices.
-          // TODO(Triang3l): Bounds checking.
+
           loaded_vertex_index = LoadUint32FromSharedMemory(
               builder_->createUnaryOp(spv::OpBitcast, type_int_,
                                       builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
@@ -2155,9 +2147,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
         vertex_index = builder_->createTriOp(spv::OpSelect, type_uint_, vertex_index_in_bounds,
                                              vertex_index, const_uint_0_);
       } else {
-        // TODO(Triang3l): Close line loop primitive.
-        // Load the unswapped index as uint for swapping, or for indirect
-        // loading if needed.
         if (!features_.full_draw_index_uint32) {
           spv::Id vertex_index_in_bounds =
               builder_->createBinOp(spv::OpULessThan, type_bool_, vertex_index, vertex_index_count);
@@ -2175,7 +2164,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           spv::Id loaded_vertex_index;
           {
             // Load the 32-bit index.
-            // TODO(Triang3l): Bounds checking.
+
             id_vector_temp_.clear();
             id_vector_temp_.push_back(
                 builder_->makeIntConstant(kSystemConstantVertexIndexLoadAddress));
@@ -2739,11 +2728,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
           output_point_coordinates_);
     }
 
-    // TODO(Triang3l): For points, handle ps_ucp_mode (take the guest clip space
-    // coordinates instead of the host ones, calculate the distances to the user
-    // clip planes, cull using the distance from the center for modes 0, 1 and
-    // 2, cull and clip per-vertex for modes 2 and 3) in clip and cull
-    // distances.
   } else {
     // Store the position converted to the host.
     spv::Id position;
@@ -3017,12 +3001,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
 }
 
 void SpirvShaderTranslator::StartFragmentShaderInMain() {
-  // TODO(Triang3l): With sample shading (for depth format conversion) only
-  // for the bottom-right sample (unlike in Direct3D, the sample mask input
-  // doesn't include covered samples of the primitive that correspond to other
-  // invocations, so use the sample that's the most friendly to the half-pixel
-  // offset).
-
   // The ZPD Total counter tracks coverage entering the shader until all
   // pre-depth/stencil tests finish dropping samples.
   var_main_zpd_coverage_ = spv::NoResult;
@@ -3051,7 +3029,6 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
   // interlock.
   if (current_shader().kills_pixels()) {
     if (features_.demote_to_helper_invocation) {
-      // TODO(Triang3l): Promoted to SPIR-V 1.6 - don't add the extension there.
       builder_->addExtension("SPV_EXT_demote_to_helper_invocation");
       builder_->addCapability(spv::CapabilityDemoteToHelperInvocationEXT);
     } else {
@@ -3138,11 +3115,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
       // samples don't additionally need to be discarded.
       spv::Id quad_needs_execution =
           builder_->createBinOp(spv::OpINotEqual, type_bool_, main_fsi_sample_mask_, const_uint_0_);
-      // TODO(Triang3l): Use GroupNonUniformQuad operations where supported.
-      // If none of the pixels in the quad passed the depth / stencil test, the
-      // value of (any samples covered ? 1.0f : 0.0f) for the current pixel will
-      // be 0.0f, and since it will be 0.0f in other pixels too, the derivatives
-      // will be zero as well.
+
       builder_->addCapability(spv::CapabilityDerivativeControl);
       // Query the horizontally adjacent pixel.
       quad_needs_execution = builder_->createBinOp(
@@ -3361,11 +3334,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
     // OpFNegate requires sign bit flipping even for 0.0 (in this case, the
     // first column or row of pixels) only since SPIR-V 1.5 revision 2 (not the
     // base 1.5).
-    // TODO(Triang3l): When SPIR-V 1.6 is used in Xenia, see if OpFNegate can be
-    // used there, should be cheaper because it may be implemented as a hardware
-    // instruction modifier, though it respects the rule for subnormal numbers -
-    // see the actual hardware instructions in both OpBitwiseXor and OpFNegate
-    // cases.
+
     spv::Id const_sign_bit = builder_->makeUintConstant(UINT32_C(1) << 31);
     // X - pixel X .0 in the magnitude, is back-facing in the sign bit.
     assert_true(input_fragment_coordinates_ != spv::NoResult);

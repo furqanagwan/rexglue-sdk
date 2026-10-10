@@ -889,8 +889,7 @@ TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key) {
   }
 
   // Try to find an existing texture.
-  // TODO(Triang3l): Reuse a texture with mip_page unchanged, but base_page
-  // previously 0, now not 0, to save memory - common case in streaming.
+
   auto found_texture_it = textures_.find(key);
   if (found_texture_it != textures_.end()) {
     return found_texture_it->second.get();

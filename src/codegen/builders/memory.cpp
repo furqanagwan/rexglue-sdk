@@ -638,8 +638,6 @@ bool build_lvsr(BuilderContext& ctx) {
 //=============================================================================
 
 bool build_stvebx(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: accounting for the full vector reversal here
   emitVectorEA(ctx);
   ctx.println("\tREX_STORE_U8({}, {}.u8[15 - ({} & 0xF)]);", ctx.ea(), ctx.v(ctx.insn.operands[0]),
               ctx.ea());
@@ -647,8 +645,6 @@ bool build_stvebx(BuilderContext& ctx) {
 }
 
 bool build_stvehx(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: accounting for the full vector reversal here
   emitVectorEA(ctx, "0x1");
   ctx.println("\tREX_STORE_U16(ea, {}.u16[7 - (({} & 0xF) >> 1)]);", ctx.v(ctx.insn.operands[0]),
               ctx.ea());
@@ -656,8 +652,6 @@ bool build_stvehx(BuilderContext& ctx) {
 }
 
 bool build_stvewx(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: accounting for the full vector reversal here
   emitVectorEA(ctx, "0x3");
   ctx.println("\tREX_STORE_U32(ea, {}.u32[3 - (({} & 0xF) >> 2)]);", ctx.v(ctx.insn.operands[0]),
               ctx.ea());
@@ -665,8 +659,6 @@ bool build_stvewx(BuilderContext& ctx) {
 }
 
 bool build_stvlx(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: accounting for the full vector reversal here
   emitVectorEA(ctx);
 
   ctx.println("\tfor (size_t i = 0; i < (16 - ({} & 0xF)); i++)", ctx.ea());
@@ -675,8 +667,6 @@ bool build_stvlx(BuilderContext& ctx) {
 }
 
 bool build_stvrx(BuilderContext& ctx) {
-  // TODO(tomc): vectorize
-  // NOTE: accounting for the full vector reversal here
   emitVectorEA(ctx);
 
   ctx.println("\tfor (size_t i = 0; i < ({} & 0xF); i++)", ctx.ea());

@@ -170,8 +170,6 @@ X_STATUS ObjectTable::ReleaseHandle(X_HANDLE handle) {
     return RemoveHandle(handle);
   }
 
-  // FIXME: Return a status code telling the caller it wasn't released
-  // (but not a failure code)
   return X_STATUS_SUCCESS;
 }
 

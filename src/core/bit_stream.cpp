@@ -47,7 +47,7 @@ uint64_t BitStream::Peek(size_t num_bits) {
   uint64_t bits = *(uint64_t*)(buffer_ + offset_bytes);
 
   // We need the data in little endian.
-  // TODO: Have a flag specifying endianness of data?
+
   bits = rex::byte_swap(bits);
 
   // Shift right
@@ -68,7 +68,6 @@ uint64_t BitStream::Read(size_t num_bits) {
   return val;
 }
 
-// TODO: This is totally not tested!
 bool BitStream::Write(uint64_t val, size_t num_bits) {
   assert_false(num_bits > 57);
   assert_false(offset_bits_ + num_bits >= size_bits_);

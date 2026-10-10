@@ -179,7 +179,6 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
   // Inputs and outputs - matching glslang order, in gl_PerVertex gl_in[],
   // user-defined outputs, user-defined inputs, out gl_PerVertex.
-  // TODO(Triang3l): Point parameters from the system uniform buffer.
 
   spv::Id const_input_primitive_vertex_count =
       builder.makeUintConstant(input_primitive_vertex_count);
@@ -385,10 +384,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
   // Cull the whole primitive if any cull distance for all vertices in the
   // primitive is < 0.
-  // TODO(Triang3l): For points, handle ps_ucp_mode (transform the host clip
-  // space to the guest one, calculate the distances to the user clip planes,
-  // cull using the distance from the center for modes 0, 1 and 2, cull and clip
-  // per-vertex for modes 2 and 3) - except for the vertex kill flag.
+
   if (cull_distance_count) {
     spv::Id const_member_in_gl_per_vertex_cull_distance =
         builder.makeIntConstant(int32_t(member_in_gl_per_vertex_cull_distance));
@@ -608,8 +604,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
             point_vertex_position,
             builder.createAccessChain(spv::StorageClassOutput, out_gl_per_vertex, id_vector_temp));
         // Clip distances.
-        // TODO(Triang3l): Handle ps_ucp_mode properly, clip expanded points if
-        // needed.
+
         if (clip_distance_count) {
           id_vector_temp.clear();
           id_vector_temp.push_back(const_member_out_gl_per_vertex_clip_distance);
@@ -873,8 +868,7 @@ std::vector<unsigned int> BuildGuestPrimitiveGeometryShaderSpirv(
 
       // Build the triangle strip from the original quad vertices in the
       // 0, 1, 3, 2 order (like specified for GL_QUAD_STRIP).
-      // TODO(Triang3l): Find the correct decomposition of quads into triangles
-      // on the real hardware.
+
       for (uint32_t i = 0; i < 4; ++i) {
         spv::Id const_vertex_index = builder.makeIntConstant(int32_t(i ^ (i >> 1)));
         // Interpolators.

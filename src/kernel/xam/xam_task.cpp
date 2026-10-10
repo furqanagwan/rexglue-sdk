@@ -44,7 +44,6 @@ static_assert_size(XTASK_MESSAGE, 0x1C);
 
 u32 XamTaskSchedule_entry(mapped_void callback, ppc_ptr_t<XTASK_MESSAGE> message,
                           mapped_u32 unknown, mapped_u32 handle_ptr) {
-  // TODO(gibbed): figure out what this is for
   *handle_ptr = 12345;
 
   uint32_t stack_size = REX_KERNEL_STATE()->GetExecutableModule()->stack_size();

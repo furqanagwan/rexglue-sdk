@@ -75,9 +75,9 @@ entry_inputs_end_code_begin_xe
   uint3_xe apply_gamma_input = uint3_xe(
       texel_fetch_2d_xe(xe_apply_gamma_source, pixel_index, 0).rgb * 1023.0f +
       0.5f);
-  // TODO(Triang3l): If this is ever used for gamma other than 128 entries for a
-  // 10bpc front buffer, handle the increment from DC_LUTA/B_CONTROL. Currently
-  // assuming it's 2^3 = 8, or 1024 / 128.
+
+
+
   float4_xe apply_gamma_output;
   apply_gamma_output.r = XeApplyPWLGamma(
       apply_gamma_input.r,

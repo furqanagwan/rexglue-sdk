@@ -23,7 +23,6 @@ namespace xam {
 using namespace rex::system;
 
 void XGetVideoMode_entry(ppc_ptr_t<X_VIDEO_MODE> video_mode) {
-  // TODO(benvanik): actually check to see if these are the same.
   xboxkrnl::VdQueryVideoMode(std::move(video_mode));
 }
 

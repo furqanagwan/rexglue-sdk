@@ -248,77 +248,6 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
   //   on most hardware, so small precision differences are very unlikely to
   //   affect coverage.
   //
-  // FIXME(Triang3l): Overestimate or more properly round the viewport scissor
-  // boundaries if this flooring causes gaps on the bottom / right side in real
-  // games if any are found using fractional viewport coordinates. Viewport
-  // scissoring is not an inherent result of the viewport scale / offset, these
-  // are used merely for transformation of coordinates; rather, it's done by
-  // intersecting the viewport and scissor rectangles in the guest driver and
-  // writing the common portion to PA_SC_WINDOW_SCISSOR, so how the scissor is
-  // computed for a fractional viewport is entirely up to the guest.
-  //
-  //   Even though Xbox 360 games are designed for Direct3D, with 0...W range of
-  //   Z in clip space, the GPU also allows -W...W. Since Xenia is not targeting
-  //   OpenGL (where it would be toggled via glClipControl - or, on ES, it would
-  //   always be -W...W), this function always remaps it to 0...W, though
-  //   numerically not precisely (0 is moved to 0.5, locking the exponent near
-  //   what was the truly floating-point 0 originally). It is the guest
-  //   viewport's responsibility (haven't checked, but it's logical) to remap
-  //   from -1...1 in the NDC to glDepthRange within the 0...1 range. Also -Z
-  //   pointing forward in OpenGL doesn't matter here (the -W...W clip space is
-  //   symmetric).
-  //
-  // - Clipping is disabled:
-  //
-  //   The most common case of drawing without clipping in games is screen-space
-  //   draws, most prominently clears, directly in render target coordinates.
-  //
-  //   In this particular case (though all the general case arithmetic still
-  //   applies), the vertex shader returns a position in pixels, pre-divided by
-  //   W (though this doesn't matter if W is 1).
-  //
-  //   Because clipping is disabled, this huge polygon with, for example,
-  //   a (1280, 720, 0, 1) vertex, is not clipped to (-w, -w) ... (w, w), so the
-  //   vertex becomes (1280, 720) in the NDC as well (even though in regular 3D
-  //   draws with clipping, disregarding the guard band for simplicity, it can't
-  //   be bigger than (1, 1) after clipping and the division by W).
-  //
-  //   For these draws, the viewport is also usually disabled (though, again, it
-  //   doesn't have to be - an enabled viewport would likely still work as
-  //   usual) by disabling PA_CL_VTE_CNTL::VPORT_X/Y/Z_SCALE/OFFSET_ENA - which
-  //   equals to having a viewport scale of (1, 1, 1) and offset of (0, 0, 0).
-  //   This results in the NDC being treated directly as pixel coordinates.
-  //   Normally, with clipping, this would make only a tiny 1x1 area in the
-  //   corner of the render target being possible to cover (and 3 unreachable
-  //   pixels outside of the render target). The window offset is then applied,
-  //   if needed, as well as the half-pixel offset.
-  //
-  //   It's also possible (though not verified) that without clipping, Z (as a
-  //   result of, for instance, polygon offset, or explicit calculations in the
-  //   vertex shader) may end up outside the viewport Z range. Direct3D 10
-  //   requires clamping to the viewport Z bounds in all cases in the
-  //   output-merger according to the Direct3D 11.3 functional specification. A
-  //   different behavior is likely on the Xbox 360, however, because while
-  //   Direct3D 10-compatible AMD GPUs such as the R600 have
-  //   PA_SC_VPORT_ZMIN/ZMAX registers, the Adreno 200 doesn't seem to have any
-  //   equivalents, neither in PA nor in RB. This probably also applies to
-  //   shader depth output - possibly doesn't need to be clamped as well.
-  //
-  //   On the PC, we need to emulate disabled clipping by using a viewport at
-  //   least as large as the scissor region within the render target, as well as
-  //   the full viewport depth range (plus changing Z clipping to Z clamping on
-  //   the host if possible), and rescale from the guest clip space to the host
-  //   "no clip" clip space, as well as apply the viewport, the window offset,
-  //   and the half-pixel offset, in the vertex shader. Ideally, the host
-  //   viewport should have a power of 2 size - so scaling doesn't affect
-  //   precision, and is merely an exponent bias.
-  //
-  // NDC XY point towards +XY on the render target - the viewport scale sign
-  // handles the remapping from Direct3D 9 -Y towards +U to a generic
-  // transformation from the NDC to pixel coordinates.
-  //
-  // TODO(Triang3l): Investigate the need for clamping of oDepth to 0...1 for
-  // D24FS8 as well.
 
   auto pa_cl_clip_cntl = regs.Get<reg::PA_CL_CLIP_CNTL>();
   auto pa_cl_vte_cntl = regs.Get<reg::PA_CL_VTE_CNTL>();
@@ -675,9 +604,7 @@ void AddMemExportRanges(const RegisterFile& regs, const Shader& shader,
       // format, the draw can still be performed.
       continue;
     }
-    // TODO(Triang3l): Remove the unresearched format logging when it's known
-    // how exactly these formats need to be handled (most importantly what
-    // components need to be stored and in which order).
+
     switch (stream.format) {
       case xenos::ColorFormat::k_8_A:
       case xenos::ColorFormat::k_8_B:
@@ -812,7 +739,7 @@ bool GetResolveInfo(const RegisterFile& regs, const memory::Memory& memory,
 
   // Get the extent of pixels covered by the resolve rectangle, according to the
   // top-left rasterization rule.
-  // D3D9 HACK: Vertices to use are always in vf0, and are written by the CPU.
+
   xenos::xe_gpu_vertex_fetch_t fetch = regs.GetVertexFetch(0);
   if (fetch.type != xenos::FetchConstantType::kVertex || fetch.size != 3 * 2) {
     REXGPU_ERROR("Unsupported resolve vertex buffer format");

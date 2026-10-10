@@ -163,9 +163,6 @@ void ImGuiDrawer::Initialize() {
   platform_io.Platform_SetImeDataFn = PlatformSetImeData;
   platform_io.Platform_ImeUserData = this;
 
-  // TODO(gibbed): disable imgui.ini saving for now,
-  // imgui assumes paths are char* so we can't throw a good path at it on
-  // Windows.
   io.IniFilename = nullptr;
   // Draws honour each command's VtxOffset, so a draw list may pass 65536
   // vertices with 16-bit indices (the Xbox guide's gradients do).
@@ -498,7 +495,7 @@ void ImGuiDrawer::OnKeyUp(KeyEvent& e) {
 
 void ImGuiDrawer::OnKeyChar(KeyEvent& e) {
   auto& io = GetIO();
-  // TODO(Triang3l): Accept the Unicode character.
+
   unsigned int character = static_cast<unsigned int>(e.virtual_key());
   if (character > 0 && character < 0x10000) {
     io.AddInputCharacter(character);
@@ -630,7 +627,7 @@ void ImGuiDrawer::OnKey(KeyEvent& e, bool is_down) {
       io.KeyCtrl = is_down;
       break;
     case VirtualKey::kMenu:
-      // FIXME(Triang3l): Doesn't work in xenia-ui-window-demo.
+
       io.KeyAlt = is_down;
       break;
     case VirtualKey::kLWin:

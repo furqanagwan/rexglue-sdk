@@ -994,9 +994,6 @@ class Shader {
   // Whether the shader can have early depth and stencil writing enabled, unless
   // alpha test or alpha to coverage is enabled.
   bool implicit_early_z_write_allowed() const {
-    // TODO(Triang3l): Investigate what happens to memexport when the pixel
-    // fails the depth/stencil test, but in Direct3D 11 UAV writes disable early
-    // depth/stencil.
     return !kills_pixels() && !writes_depth() && !memexport_eM_written();
   }
 

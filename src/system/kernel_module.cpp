@@ -84,7 +84,6 @@ uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller
 }
 
 uint32_t KernelModule::GetProcAddressByName(const std::string_view name) {
-  // TODO: Does this even work for kernel modules?
   (void)name;
   REXSYS_ERROR("KernelModule::GetProcAddressByName not implemented");
   return 0;

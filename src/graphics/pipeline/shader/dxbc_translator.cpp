@@ -85,8 +85,7 @@ std::vector<uint8_t> DxbcShaderTranslator::CreateDepthOnlyPixelShader(
     bool zpd_total, Modification::DepthStencilMode depth_stencil_mode, bool viz_survey) {
   is_depth_only_pixel_shader_ = true;
   is_viz_survey_pixel_shader_ = viz_survey;
-  // TODO(Triang3l): Handle in a nicer way (is_depth_only_pixel_shader_ is a
-  // leftover from when a Shader object wasn't used during translation).
+
   Shader shader(xenos::ShaderType::kPixel, 0, nullptr, 0);
   shader.AnalyzeUcode(instruction_disassembly_buffer_);
   Modification modification(0);
@@ -580,7 +579,7 @@ void DxbcShaderTranslator::StartVertexOrDomainShader() {
       break;
 
     default:
-      // TODO(Triang3l): Support line and non-adaptive quad patches.
+
       assert_unhandled_case(host_vertex_shader_type);
       EmitTranslationError("Unsupported host vertex shader type in StartVertexOrDomainShader");
       break;
@@ -1225,7 +1224,6 @@ std::vector<uint8_t> DxbcShaderTranslator::CompleteTranslation() {
                           reinterpret_cast<unsigned int*>(&container_header.hash));
   }
 
-  // TODO(Triang3l): Avoid copy?
   std::vector<uint8_t> shader_object_bytes;
   shader_object_bytes.resize(shader_object_size_bytes);
   std::memcpy(shader_object_bytes.data(), shader_object_.data(), shader_object_size_bytes);
@@ -2764,7 +2762,7 @@ void DxbcShaderTranslator::WritePatchConstantSignature() {
       tess_factor_inside_system_value = dxbc::Name::kFinalQuadInsideTessFactor;
       break;
     default:
-      // TODO(Triang3l): Support line patches.
+
       assert_unhandled_case(host_vertex_shader_type);
       EmitTranslationError("Unsupported host vertex shader type in WritePatchConstantSignature");
   }
@@ -3126,7 +3124,7 @@ void DxbcShaderTranslator::WriteShaderCode() {
         tessellator_domain = dxbc::TessellatorDomain::kQuad;
         break;
       default:
-        // TODO(Triang3l): Support line patches.
+
         assert_unhandled_case(shader_modification.vertex.host_vertex_shader_type);
         EmitTranslationError("Unsupported host vertex shader type in WriteShaderCode");
     }

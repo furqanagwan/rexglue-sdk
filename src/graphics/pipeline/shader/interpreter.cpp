@@ -945,7 +945,7 @@ void ShaderInterpreter::StoreFetchResult(uint32_t dest, bool is_dest_relative, u
         break;
       default:
         // ucode::FetchDestinationSwizzle::k0 or the invalid swizzle 6.
-        // TODO(Triang3l): Find the correct handling of the invalid swizzle 6.
+
         assert_true(component_swizzle == ucode::FetchDestinationSwizzle::k0);
         dest_data[i] = 0.0f;
         break;
@@ -954,10 +954,6 @@ void ShaderInterpreter::StoreFetchResult(uint32_t dest, bool is_dest_relative, u
 }
 
 void ShaderInterpreter::ExecuteVertexFetchInstruction(ucode::VertexFetchInstruction instr) {
-  // FIXME(Triang3l): Bit scan loops over components cause a link-time
-  // optimization internal error in Visual Studio 2019, mainly in the format
-  // unpacking. Using loops with up to 4 iterations here instead.
-
   if (!instr.is_mini_fetch()) {
     state_.vfetch_full_last = instr;
   }
@@ -973,7 +969,6 @@ void ShaderInterpreter::ExecuteVertexFetchInstruction(ucode::VertexFetchInstruct
     state_.vfetch_address_dwords = instr.stride() * vertex_index + fetch_constant.address;
   }
 
-  // TODO(Triang3l): Find the default values for unused components.
   float result[4] = {};
   uint32_t dest_swizzle = instr.dest_swizzle();
   uint32_t used_result_components = 0b0000;

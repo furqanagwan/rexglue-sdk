@@ -567,8 +567,7 @@ class RenderTargetCache {
   // resolve operation via a host render target clear. resolve_info is expected
   // to be obtained via draw_util::GetResolveInfo. Returns whether any clears
   // need to be done (false in both empty and error cases).
-  // TODO(Triang3l): Try to defer clears until the first draw in the next pass
-  // (if it uses one or both render targets being cleared) for tile-based GPUs.
+
   bool PrepareHostRenderTargetsResolveClear(const draw_util::ResolveInfo& resolve_info,
                                             Transfer::Rectangle& clear_rectangle_out,
                                             RenderTarget*& depth_render_target_out,
@@ -706,9 +705,7 @@ class RenderTargetCache {
   // Map of host render targets currently containing the most up-to-date version
   // of the tile. Has no gaps, unused parts are represented by empty render
   // target keys.
-  // TODO(Triang3l): Pool allocator (or a custom red-black tree with one even),
-  // since standard containers use dynamic allocation for elements, though
-  // changes to this throughout a frame are pretty rare.
+
   std::map<uint32_t, OwnershipRange> ownership_ranges_;
 
   // Render targets actually used by the draw call with the last successful

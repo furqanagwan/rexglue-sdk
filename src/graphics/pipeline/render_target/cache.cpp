@@ -136,7 +136,7 @@ void RenderTargetCache::GetPSIColorFormatInfo(xenos::ColorRenderTargetFormat for
     case xenos::ColorRenderTargetFormat::k_16_16_16_16_FLOAT:
       // No NaNs on the Xbox 360 GPU, though can't use the extended range with
       // Direct3D and Vulkan conversions.
-      // TODO(Triang3l): Use the extended-range encoding in all implementations.
+
       clamp_rgb_low = clamp_alpha_low = -65504.0f;
       clamp_rgb_high = clamp_alpha_high = 65504.0f;
       if (!(write_mask & 0b0001)) {
@@ -565,12 +565,6 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
         draw_resolution_scale_x();
     uint32_t max_render_target_width = GetMaxRenderTargetWidth();
     if (pitch_pixels_tile_aligned_scaled > max_render_target_width) {
-      // TODO(Triang3l): If really needed for some game on some device, clamp
-      // the pitch and generate multiple ranges (each for every row of tiles)
-      // with gaps for padding. Very few PowerVR GPUs have 4096, not 8192, as
-      // the limit, though with 8192 (on Mali) the actual limit for Xenia is
-      // 8160 because tile padding is stored - but 8192 should be extremely rare
-      // anyway.
       REXGPU_ERROR(
           "Surface pitch aligned to EDRAM tiles and resolution-scaled {} "
           "larger than the maximum host render target width {}",
@@ -1203,8 +1197,6 @@ bool RenderTargetCache::PrepareHostRenderTargetsResolveClear(
   uint32_t pitch_pixels_scaled = pitch_pixels * draw_resolution_scale_x();
   uint32_t max_render_target_width = GetMaxRenderTargetWidth();
   if (pitch_pixels_scaled > max_render_target_width) {
-    // TODO(Triang3l): If really needed for some game on some device, clamp the
-    // pitch the same way as explained in the comment in Update.
     REXGPU_ERROR(
         "Surface pitch aligned to EDRAM tiles and resolution-scaled {} larger "
         "than the maximum host render target width {} in a resolve",

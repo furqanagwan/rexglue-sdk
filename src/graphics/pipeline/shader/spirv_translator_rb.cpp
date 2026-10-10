@@ -427,8 +427,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         SpirvBuilder::IfBuilder kill_pixel_if(
             builder_->createLoad(var_main_kill_pixel_, spv::NoPrecision),
             spv::SelectionControlMaskNone, *builder_);
-        // TODO(Triang3l): Use OpTerminateInvocation when SPIR-V 1.6 is
-        // targeted.
+
         builder_->createNoResultOp(spv::OpKill);
         // OpKill terminates the block.
         kill_pixel_if.makeEndIf(false);
@@ -479,8 +478,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
     }
 
     // Alpha test.
-    // TODO(Triang3l): Check how alpha test works with NaN on Direct3D 9.
-    // Extract the comparison function (less, equal, greater bits).
+
     spv::Id alpha_test_function = builder_->createTriOp(
         spv::OpBitFieldUExtract, type_uint_, main_system_constant_flags_,
         builder_->makeUintConstant(kSysFlag_AlphaPassIfLess_Shift), builder_->makeUintConstant(3));
@@ -560,14 +558,11 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         if (edram_fragment_shader_interlock_) {
           assert_true(features_.demote_to_helper_invocation);
           fsi_pixel_potentially_killed = true;
-          // TODO(Triang3l): Promoted to SPIR-V 1.6 - don't add the extension
-          // there.
+
           builder_->addExtension("SPV_EXT_demote_to_helper_invocation");
           builder_->addCapability(spv::CapabilityDemoteToHelperInvocationEXT);
           builder_->createNoResultOp(spv::OpDemoteToHelperInvocationEXT);
         } else {
-          // TODO(Triang3l): Use OpTerminateInvocation when SPIR-V 1.6 is
-          // targeted.
           builder_->createNoResultOp(spv::OpKill);
           // OpKill terminates the block.
           branch_to_alpha_test_kill_merge = false;
@@ -627,7 +622,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         // Don't do anything related to writing to the EDRAM if the pixel was
         // killed.
         id_vector_temp_.clear();
-        // TODO(Triang3l): Use HelperInvocation volatile load on SPIR-V 1.6.
+
         main_fsi_sample_mask_ = builder_->createTriOp(
             spv::OpSelect, type_uint_,
             builder_->createOp(spv::OpIsHelperInvocationEXT, type_bool_, id_vector_temp_),
@@ -1133,7 +1128,7 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
         // Convert to gamma space - this is incorrect, since it must be done
         // after blending on the Xbox 360, but this is just one of many blending
         // issues in the host render target path.
-        // TODO(Triang3l): Gamma as unorm8 check.
+
         uint_vector_temp_.clear();
         uint_vector_temp_.push_back(0);
         uint_vector_temp_.push_back(1);

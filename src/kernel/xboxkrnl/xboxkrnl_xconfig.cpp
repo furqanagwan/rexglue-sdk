@@ -31,9 +31,6 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
   uint16_t setting_size = 0;
   alignas(uint32_t) uint8_t value[4];
 
-  // TODO(benvanik): have real structs here that just get copied from.
-  // https://free60project.github.io/wiki/XConfig.html
-  // https://github.com/oukiar/freestyledash/blob/master/Freestyle/Tools/Generic/ExConfig.h
   switch (category) {
     case 0x0002:
       // XCONFIG_SECURED_CATEGORY
@@ -58,7 +55,7 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting, void* buffer
         case 0x0006:  // XCONFIG_USER_TIME_ZONE_STD_BIAS
         case 0x0007:  // XCONFIG_USER_TIME_ZONE_DLT_BIAS
           setting_size = 4;
-          // TODO(benvanik): get this value.
+
           memory::store_and_swap<uint32_t>(value, 0);
           break;
         case 0x0009:  // XCONFIG_USER_LANGUAGE

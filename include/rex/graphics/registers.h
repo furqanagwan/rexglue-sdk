@@ -218,19 +218,7 @@ union alignas(uint32_t) SQ_CONTEXT_MISC {
     //     positions of the vertices relative to each other even when the
     //     winding order stays the same. It's also unknown what effect the
     //     provoking vertex convention has on the order.
-    // TODO(Triang3l): Research the order, as well as the sampling location, of
-    // PsParamGen.zw, the behavior (whether they're extrapolated) when the
-    // center of the pixel is not covered, on the real hardware.
-    // * Sign bit of X - is front face (according to the disassembly of vFace
-    //   and gl_FrontFacing usage), non-negative for front face, negative for
-    //   back face (used with `rcpc` in shaders to take signedness of 0 into
-    //   account in `cndge`).
-    // * Sign bit of Y - is the primitive type a point (according to the
-    //   IPR2015-00325 sequencer specification), negative for a point,
-    //   non-negative for other primitive types.
-    // * Sign bit of Z - is the primitive type a line (according to the
-    //   IPR2015-00325 sequencer specification), negative for a line,
-    //   non-negative for other primitive types.
+
     uint32_t param_gen_pos : 8;    // +8
     uint32_t perfcounter_ref : 1;  // +16
     uint32_t yield_optimize : 1;   // +17
@@ -686,43 +674,7 @@ union alignas(uint32_t) RB_COLORCONTROL {
     uint32_t alpha_to_mask_enable : 1;      // +4
     // Everything in between was added on Adreno.
     uint32_t _pad_5 : 19;  // +5
-    // TODO(Triang3l): Redo these tests and possibly flip these vertically in
-    // the comment and in the actual implementation. It appears that
-    // gl_FragCoord.y is mirrored as opposed to the actual screen coordinates in
-    // the rasterizer (see the SQ_CONTEXT_MISC::param_gen_pos comment here).
-    // According to tests on an Adreno 200 device (LG Optimus L7), done by
-    // drawing 0.5x0.5 rectangles in different corners of four pixels in a quad
-    // to a multisampled GLSurfaceView, the coverage mask is the following for 4
-    // samples:
-    // 0.25)  [0.25, 0.5)  [0.5, 0.75)  [0.75, 1)   [1
-    //  --        --           --          --       --
-    // |  |      |  |         | #|        |##|     |##|
-    // |  |      |# |         |# |        |# |     |##|
-    //  --        --           --          --       --
-    // (gl_FragCoord.y near 0 in the top, near 1 in the bottom here - D3D-like.)
-    // For 2 samples, the top sample (closer to gl_FragCoord.y 0) is covered
-    // when alpha is in [0.5, 1), the bottom sample is covered when the alpha is
-    // [1. With these thresholds, however, in 5454082B, almost all distant trees
-    // are transparent, this is asymmetric - fully transparent for a quarter of
-    // the range (or even half of the range for 2x and almost the entire range
-    // for 1x), but fully opaque only in one value.
-    // Though, 2, 2, 2, 2 offset values are commonly used for undithered alpha
-    // to coverage (in games such as 5454082B, and overall in AMD driver
-    // implementations) - it appears that 2, 2, 2, 2 offsets are supposed to
-    // make this symmetric.
-    // Both 5454082B and RADV (which used AMDVLK as a reference) use 3, 1, 0, 2
-    // offsets for dithered alpha to mask.
-    // https://gitlab.freedesktop.org/nchery/mesa/commit/8a52e4cc4fad4f1c75acc0badd624778f9dfe202
-    // It appears that the offsets lower the thresholds by (offset / 4 /
-    // sample count). That's consistent with both 2, 2, 2, 2 making the test
-    // symmetric and 0, 0, 0, 0 (forgetting to set the offset values) resulting
-    // in what the official Adreno 200 driver for Android (which is pretty buggy
-    // overall) produces.
-    // According to Evergreen register reference:
-    // - offset0 is for pixel (0, 0) in each quad.
-    // - offset1 is for pixel (0, 1) in each quad.
-    // - offset2 is for pixel (1, 0) in each quad.
-    // - offset3 is for pixel (1, 1) in each quad.
+
     uint32_t alpha_to_mask_offset0 : 2;  // +24
     uint32_t alpha_to_mask_offset1 : 2;  // +26
     uint32_t alpha_to_mask_offset2 : 2;  // +28

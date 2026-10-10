@@ -2934,7 +2934,7 @@ void DxbcShaderTranslator::CompletePixelShader() {
     // pass even for NaNs, though the expected behavior in this case hasn't been
     // checked, but let's assume this means "always", not "less, equal or
     // greater".
-    // TODO(Triang3l): Check how alpha test works with NaN on Direct3D 9.
+
     a_.OpINE(alpha_test_op_dest, alpha_test_mask_src,
              dxbc::Src::LU(uint32_t(xenos::CompareFunction::kAlways)));
     // Don't do the test if the mode is "always".

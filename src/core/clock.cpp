@@ -219,7 +219,7 @@ int64_t Clock::ScaleGuestDurationFileTime(int64_t guest_file_time) {
     // Relative time.
     uint64_t scaled_file_time =
         static_cast<uint64_t>((static_cast<uint64_t>(guest_file_time) * guest_time_scalar_));
-    // TODO(benvanik): check for overflow?
+
     return scaled_file_time;
   }
 }

@@ -513,7 +513,7 @@ object_ref<KernelModule> KernelState::GetKernelModule(const std::string_view nam
 object_ref<XModule> KernelState::GetModule(const std::string_view name, bool user_only) {
   if (name.empty()) {
     // NULL name = self.
-    // TODO(benvanik): lookup module from caller address.
+
     return GetExecutableModule();
   } else if (rex::string::utf8_equal_case(name, "kernel32.dll")) {
     // Some games request this, for some reason. wtf.
@@ -647,8 +647,7 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
   }
 
   // Spin up deferred dispatch worker.
-  // TODO(benvanik): move someplace more appropriate (out of ctor, but around
-  // here).
+
   if (!dispatch_thread_running_) {
     dispatch_thread_running_ = true;
     dispatch_thread_ = object_ref<XHostThread>(new XHostThread(this, 128 * 1024, 0, [this]() {
@@ -1074,9 +1073,6 @@ void KernelState::OnThreadExecute(XThread* thread) {
   // Must be called on executing thread.
   assert_true(XThread::GetCurrentThread() == thread);
 
-  // TODO(tomc): Do we need this?
-  //             Xenia would iterate user_modules_ and call function_dispatcher()->Execute() for
-  //             each Note that this would require reimplementation of guest thread management
   (void)thread;
 }
 
@@ -1086,7 +1082,6 @@ void KernelState::OnThreadExit(XThread* thread) {
   // Must be called on executing thread.
   assert_true(XThread::GetCurrentThread() == thread);
 
-  // TODO(tomc): Do we need this? Same idea as OnThreadExecute
   (void)thread;
 }
 
@@ -1179,9 +1174,6 @@ void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
 }
 
 void KernelState::CompleteOverlappedImmediate(uint32_t overlapped_ptr, X_RESULT result) {
-  // TODO(gibbed): there are games that check 'length' of overlapped as
-  // an indication of success. WTF?
-  // Setting length to -1 when not success seems to be helping.
   uint32_t length = !result ? 0 : 0xFFFFFFFF;
   CompleteOverlappedImmediateEx(overlapped_ptr, result, result, length);
 }

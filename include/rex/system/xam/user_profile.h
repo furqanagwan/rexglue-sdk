@@ -37,8 +37,7 @@ struct X_USER_PROFILE_SETTING_DATA {
   uint8_t type;
   uint8_t unk_1[3];
   rex::be<uint32_t> unk_4;
-  // TODO(sabretooth): not sure if this is a union, but it seems likely.
-  // Haven't run into cases other than "binary data" yet.
+
   union {
     rex::be<int32_t> s32;
     rex::be<int64_t> s64;

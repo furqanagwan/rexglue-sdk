@@ -319,8 +319,6 @@ void TextureInfo::SetupMemoryInfo(uint32_t base_address, uint32_t mip_address) {
   }
 
   if (mip_min_level == 0 && base_address == mip_address) {
-    // TODO(gibbed): This doesn't actually make any sense. Force only one mip.
-    // Offending title issues: #26, #45
     return;
   }
 

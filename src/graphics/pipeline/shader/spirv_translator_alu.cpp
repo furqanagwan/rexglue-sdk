@@ -715,10 +715,7 @@ spv::Id SpirvShaderTranslator::ProcessVectorAluOperation(
 
     case ucode::AluVectorOpcode::kMax4: {
       // Find max of all different components of the first operand.
-      // FIXME(Triang3l): Not caring about NaN because no info about the
-      // correct order, just using NMax here, which replaces them with the
-      // non-NaN component (however, there's one nice thing about it is that it
-      // may be compiled into max3 + max on GCN).
+
       uint32_t components_remaining = 0b0000;
       for (uint32_t i = 0; i < 4; ++i) {
         SwizzleSource swizzle_source = instr.vector_operands[0].GetComponent(i);
@@ -1277,10 +1274,7 @@ spv::Id SpirvShaderTranslator::ProcessScalarAluOperation(
           GetOperandComponents(operand_storage[1], instr.scalar_operands[1], 0b0001);
       spv::Id result =
           builder_->createNoContractionBinOp(spv::OpFMul, type_float_, operand_0, operand_1);
-      // TODO(boma): Experimental round to zero for Volition titles (5451080D,
-      // 4B4D07F6, 5451086D) that experience camera-independent, batch-boundary
-      // vertex explosions with the default round-to-nearest behavior.
-      // Real hardware rounding behavior needs to be verified.
+
       if (REXCVAR_GET(mulsc_round_toward_zero)) {
         // Fma isn't guaranteed to be fused (spirv_to_dxil splits 32-bit Fma
         // into a multiply and an add), so recover the product error with a

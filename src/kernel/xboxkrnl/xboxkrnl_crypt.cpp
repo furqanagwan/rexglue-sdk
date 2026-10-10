@@ -187,7 +187,6 @@ void XeCryptSha_entry(mapped_void input_1, u32 input_1_size, mapped_void input_2
   std::copy_n(digest, std::min<size_t>(rex::countof(digest), output_size), output.as<uint8_t*>());
 }
 
-// TODO: Size of this struct hasn't been confirmed yet.
 typedef struct {
   rex::be<uint32_t> count;     // 0x0
   rex::be<uint32_t> state[8];  // 0x4
@@ -474,7 +473,6 @@ void XeCryptAesKey_entry(ppc_ptr_t<XECRYPT_AES_STATE> state_ptr, mapped_void key
     dec[15] ^= t ^ v;
   }
   std::memcpy(state_ptr->keytabdec[10], state_ptr->keytabenc[0], 16);
-  // TODO(Triang3l): Verify the order in keytabenc and everything in keytabdec.
 }
 
 void XeCryptAesEcb_entry(ppc_ptr_t<XECRYPT_AES_STATE> state_ptr, mapped_void inp_ptr,
@@ -575,7 +573,6 @@ void XeCryptHmacSha_entry(mapped_void key, u32 key_size_in, mapped_void inp_1, u
 }
 
 // Keys
-// TODO: Array of keys we need
 
 // Retail key 0x19
 static const uint8_t key19[] = {0xE1, 0xBC, 0x15, 0x9C, 0x73, 0xB1, 0xEA, 0xE9,

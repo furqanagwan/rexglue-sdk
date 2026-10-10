@@ -76,7 +76,7 @@ void XamFormatDateString_entry(u32 unk, u64 filetime, mapped_void output_buffer,
   std::memset(output_buffer, 0, output_count * sizeof(char16_t));
 
   auto st = xeGetLocalSystemTime(filetime);
-  // TODO: format this depending on users locale?
+
   auto str = fmt::format(u"{:02d}/{:02d}/{}", st.wMonth, st.wDay, st.wYear);
   rex::string::copy_and_swap_truncating(output_buffer.as<char16_t*>(), str, output_count);
 }
@@ -85,7 +85,7 @@ void XamFormatTimeString_entry(u32 unk, u64 filetime, mapped_void output_buffer,
   std::memset(output_buffer, 0, output_count * sizeof(char16_t));
 
   auto st = xeGetLocalSystemTime(filetime);
-  // TODO: format this depending on users locale?
+
   auto str = fmt::format(u"{:02d}:{:02d}", st.wHour, st.wMinute);
   rex::string::copy_and_swap_truncating(output_buffer.as<char16_t*>(), str, output_count);
 }

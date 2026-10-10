@@ -228,8 +228,6 @@ u32 NtProtectVirtualMemory_entry(mapped_u32 base_addr_ptr, mapped_u32 region_siz
 
   uint32_t tmp_old_protect = 0;
 
-  // FIXME: I think it's valid for NtProtectVirtualMemory to span regions, but
-  // as of now our implementation will fail in this case. Need to verify.
   if (!heap->Protect(adjusted_base, adjusted_size, protect, &tmp_old_protect)) {
     return X_STATUS_ACCESS_DENIED;
   }
@@ -530,7 +528,7 @@ u32 MmQueryStatistics_entry(ppc_ptr_t<X_MM_QUERY_STATISTICS_RESULT> stats_ptr) {
       stats_ptr->total_physical_pages - stats_ptr->kernel_pages - used_pages;
   stats_ptr->title.total_virtual_memory_bytes = 0x2FFE0000;
   stats_ptr->title.reserved_virtual_memory_bytes = reserved_pages_bytes;
-  stats_ptr->title.physical_pages = 0x00001000;  // TODO(gibbed): FIXME
+  stats_ptr->title.physical_pages = 0x00001000;
   stats_ptr->title.pool_pages = 0x00000010;
   stats_ptr->title.stack_pages = 0x00000100;
   stats_ptr->title.image_pages = 0x00000100;
@@ -634,7 +632,6 @@ u32 KeGetImagePageTableEntry_entry(mapped_void address) {
 }
 
 u32 KeLockL2_entry() {
-  // TODO
   return 0;
 }
 

@@ -40,24 +40,6 @@ namespace kernel {
 namespace xam {
 using namespace rex::system;
 
-// TODO(gibbed): This is all one giant WIP that seems to work better than the
-// previous immediate synchronous completion of dialogs.
-//
-// The deferred execution of dialog handling is done in such a way that there is
-// a pre-, peri- (completion), and post- callback steps.
-//
-// pre();
-// result = completion();
-// CompleteOverlapped(result);
-// post();
-//
-// There are games that are batshit insane enough to wait for the X_OVERLAPPED
-// to be completed (ie not X_ERROR_PENDING) before creating a listener to
-// receive a notification, which is why we have distinct pre- and post- steps.
-//
-// We deliberately delay the XN_SYS_UI = false notification to give games time
-// to create a listener (if they're insane enough do this).
-
 extern std::atomic<int> xam_dialogs_shown_;
 
 namespace {
@@ -186,7 +168,7 @@ X_RESULT xeXamDispatchDialogEx(T* dialog,
     uint32_t extended_error, length;
     auto result = run(extended_error, length);
     post();
-    // TODO(gibbed): do something with extended_error/length?
+
     return result;
   } else {
     REX_KERNEL_STATE()->CompleteOverlappedDeferredEx(run, overlapped, pre, post);
@@ -233,7 +215,7 @@ X_RESULT xeXamDispatchHeadlessEx(std::function<X_RESULT(uint32_t&, uint32_t&)> r
     uint32_t extended_error, length;
     auto result = run_callback(extended_error, length);
     post();
-    // TODO(gibbed): do something with extended_error/length?
+
     return result;
   } else {
     REX_KERNEL_STATE()->CompleteOverlappedDeferredEx(run_callback, overlapped, pre, post);
@@ -315,7 +297,7 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
     title = rex::string::to_utf8(rex::memory::load_and_swap<std::u16string>(
         REX_KERNEL_MEMORY()->TranslateVirtual(title_ptr.guest_address())));
   } else {
-    title = "";  // TODO(gibbed): default title based on flags?
+    title = "";
   }
   std::string text_str = text_ptr
                              ? rex::string::to_utf8(rex::memory::load_and_swap<std::u16string>(
@@ -339,7 +321,6 @@ u32 XamShowMessageBoxUI_entry(u32 user_index, mapped_wstring title_ptr, mapped_w
     };
     result = xeXamDispatchHeadless(run, overlapped.guest_address());
   } else {
-    // TODO(benvanik): setup icon states.
     switch (flags & 0xF) {
       case 0:
         // config.pszMainIcon = nullptr;
@@ -707,7 +688,7 @@ void XamShowDirtyDiscErrorUI_entry(u32 user_index) {
     REXKRNL_ERROR("===========================================");
   }
   // This is death, and should never return.
-  // TODO(benvanik): cleaner exit.
+
   exit(1);
 }
 
@@ -720,7 +701,6 @@ u32 XamShowCommunitySessionsUI_entry(u32 r3, u32 r4) {
 }
 
 uint32_t XamShowMessageBoxUIEx_entry() {
-  // TODO(tomc): implement properly
   static bool warned = false;
   if (!warned) {
     REXKRNL_WARN("[STUB] XamShowMessageBoxUIEx - not implemented");

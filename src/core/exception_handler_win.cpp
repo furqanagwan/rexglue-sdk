@@ -120,11 +120,7 @@ void ExceptionHandler::Install(Handler fn, void* data) {
   if (!veh_handle_) {
     veh_handle_ = AddVectoredExceptionHandler(1, ExceptionHandlerCallback);
 
-    if (IsDebuggerPresent()) {
-      // TODO(benvanik): do we need a continue handler if a debugger is
-      // attached?
-      // vch_handle_ = AddVectoredContinueHandler(1, ExceptionHandlerCallback);
-    }
+    if (IsDebuggerPresent()) {}
   }
 
   for (size_t i = 0; i < rex::countof(handlers_); ++i) {

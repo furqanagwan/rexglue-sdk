@@ -69,19 +69,6 @@ REXCVAR_DEFINE_INT32(primitive_processor_cache_min_indices, 0, "GPU",
 //     "pre-swapping of 32-bit vertex indices as if the host only supports 24-bit "
 //     "indices.",
 //     "GPU");
-// TODO(Triang3l): More investigation of the cache threshold as cache lookups
-// and insertions require global critical region locking, and insertions also
-// require protecting pages. At 1024, the cache only made the performance worse
-// (415607D4, 16-bit primitive reset index replacement).
-// DEFINE_int32(
-//     primitive_processor_cache_min_indices, 4096,
-//     "Smallest number of guest indices to store in the cache to try reusing "
-//     "later in the same frame if processing (such as primitive type conversion "
-//     "or reset index replacement) is performed.\n"
-//     "Setting this to a very high value may result in excessive CPU processing, "
-//     "while a very low value may result in excessive locking and lookups.\n"
-//     "Negative values disable caching.",
-//     "GPU");
 
 namespace rex::graphics {
 
@@ -221,11 +208,10 @@ bool PrimitiveProcessor::InitializeCommon(bool full_32bit_vertex_indices_support
                 uint16_t* triangle_list_ptr =
                     mapping_16bit +
                     builtin_ib_offset_quad_lists_to_triangle_lists_ / sizeof(uint16_t);
-                // TODO(Triang3l): SIMD for faster initialization?
+
                 for (uint32_t i = 0; i < UINT16_MAX / 4; ++i) {
                   uint16_t quad_first_index = uint16_t(i * 4);
-                  // TODO(Triang3l): Find the correct order.
-                  // v0, v1, v2.
+
                   *(triangle_list_ptr++) = quad_first_index;
                   *(triangle_list_ptr++) = quad_first_index + 1;
                   *(triangle_list_ptr++) = quad_first_index + 2;
@@ -298,7 +284,7 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
     // Currently only supporting tessellation in known cases for safety, and not
     // yet converting patch strips / fans to patch lists until games using them
     // are found for easier debugging when it actually happens.
-    // TODO(Triang3l): Conversion of patch strips / fans if found.
+
     host_vertex_shader_type = Shader::HostVertexShaderType(-1);
     switch (guest_primitive_type) {
       case xenos::PrimitiveType::kTriangleList:
@@ -352,7 +338,7 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
         host_vertex_shader_type = Shader::HostVertexShaderType::kQuadDomainPatchIndexed;
         break;
       default:
-        // TODO(Triang3l): Support line patches.
+
         break;
     }
     if (host_vertex_shader_type == Shader::HostVertexShaderType(-1)) {
@@ -448,7 +434,6 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
       // There is an index buffer.
       assert_true(vgt_draw_initiator.source_select == xenos::SourceSelect::kDMA);
       if (vgt_draw_initiator.source_select != xenos::SourceSelect::kDMA) {
-        // TODO(Triang3l): Support immediate-indexed vertices.
         REXGPU_ERROR(
             "Primitive processor: Unsupported vertex index source {}. Report "
             "the game to Xenia developers!",
@@ -542,7 +527,6 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
     // There is an index buffer.
     assert_true(vgt_draw_initiator.source_select == xenos::SourceSelect::kDMA);
     if (vgt_draw_initiator.source_select != xenos::SourceSelect::kDMA) {
-      // TODO(Triang3l): Support immediate-indexed vertices.
       REXGPU_ERROR(
           "Primitive processor: Unsupported vertex index source {}. Report the "
           "game to Xenia developers!",
@@ -666,9 +650,7 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
         if (guest_index_format == xenos::IndexFormat::kInt16) {
           // 16-bit indices - just convert the primitive (or multiple
           // primitives) to the host topology.
-          // TODO(Triang3l): 16-bit > 32-bit primitive type conversion for
-          // Metal, where primitive reset is always enabled, if UINT16_MAX is
-          // used as a real vertex index.
+
           auto guest_indices = reinterpret_cast<const uint16_t*>(guest_indices_ptr);
           if (guest_primitive_reset_enabled &&
               IsResetUsed(guest_indices, guest_draw_vertex_count,
@@ -910,7 +892,7 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
   if (cacheable.index_buffer_type == ProcessedIndexBufferType::kGuestDMA ||
       cacheable.index_buffer_type == ProcessedIndexBufferType::kHostBuiltinForDMA) {
     // Request the index buffer memory.
-    // TODO(Triang3l): Shared memory request cache.
+
     if (!shared_memory_.RequestRange(guest_index_base, guest_index_buffer_needed_bytes)) {
       REXGPU_ERROR(
           "PrimitiveProcessor: Failed to request index buffer 0x{:08X}, 0x{:X} "
@@ -983,8 +965,7 @@ void PrimitiveProcessor::Get16BitResetIndexUsage(const uint16_t* source, uint32_
   // Optimized for the more common case (reset index not used at all), therefore
   // not doing early-outs if both conditions are true for a simpler loop body.
   // Using the index 0xFFFF is likely not that common in general.
-  // TODO(Triang3l): Revisit this - maybe the early-out will be free if this
-  // function is bandwidth-bound.
+
   is_ffff_used_as_vertex_index_out = false;
   if (reset_index_guest_endian == UINT16_MAX) {
     is_reset_index_used_out = IsResetUsed(source, count, reset_index_guest_endian);
@@ -1231,8 +1212,7 @@ template void PrimitiveProcessor::ReplaceResetIndex32To24<xenos::Endian::k16in32
   XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION_NO_PASSTHROUGH(ConverterName)
 XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION(TriangleFanToList)
 XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION_NO_PASSTHROUGH(LineLoopToStrip)
-// TODO(Triang3l): SIMD quad conversion maybe - 2 vectors to 3 vectors (though
-// multiple quads are rarely drawn anyway).
+
 XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION(QuadListToTriangleList)
 #undef XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION_NO_PASSTHROUGH
 #undef XE_GPU_PRIMITIVE_PROCESSOR_INSTANTIATE_CONVERSION

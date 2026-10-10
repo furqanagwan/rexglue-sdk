@@ -360,15 +360,6 @@ class Window {
   // necessarily be true immediately.
   void Focus();
 
-  // TODO(Triang3l): A resize function, primarily for snapping externally to
-  // 1280x720, 1920x1080, and other 1:1 resolutions. It will need to resize the
-  // window (to a desired logical size - the actual physical size is entirely
-  // the feedback of the implementation) in the normal state, and possibly also
-  // un-maximize (and possibly un-fullscreen) it (but this choice will possibly
-  // need to be exposed to the caller). Because it's currently not needed, it's
-  // not implemented to avoid platform-specific complexities regarding
-  // maximization, DPI, etc.
-
   void SetPresenter(Presenter* presenter);
 
   // Request repainting of the surface. Can be called from non-UI threads as

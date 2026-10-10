@@ -345,7 +345,7 @@ int XexModule::ApplyPatch(XexModule* module) {
       // No-op.
       break;
     case XEX_ENCRYPTION_NORMAL:
-      // TODO: a way to do without a copy/alloc?
+
       free_input = true;
       input_buffer = (const uint8_t*)calloc(1, patch_length);
       aes_decrypt_buffer(session_key_, patch_buffer, patch_length, (uint8_t*)input_buffer,
@@ -370,7 +370,6 @@ int XexModule::ApplyPatch(XexModule* module) {
             patch_header->delta_image_source_size);
   }
 
-  // TODO: should we use new_image_size here instead?
   uint32_t image_target_size =
       patch_header->delta_image_target_offset + patch_header->delta_image_source_size;
 
@@ -647,7 +646,7 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
       // No-op.
       break;
     case XEX_ENCRYPTION_NORMAL:
-      // TODO: a way to do without a copy/alloc?
+
       free_input = true;
       input_buffer = (const uint8_t*)calloc(1, exe_length);
       aes_decrypt_buffer(session_key_, exe_buffer, exe_length, (uint8_t*)input_buffer, exe_length);
@@ -974,8 +973,6 @@ bool XexModule::LoadContinue() {
   GetOptHeader(XEX_HEADER_IMPORT_LIBRARIES, &opt_import_libraries);
 
   if (opt_import_libraries) {
-    // FIXME: Don't know if 32 is the actual limit, but haven't seen more than
-    // 2.
     const char* string_table[32];
     std::memset(string_table, 0, sizeof(string_table));
 

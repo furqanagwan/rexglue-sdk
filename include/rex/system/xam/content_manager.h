@@ -36,7 +36,7 @@ namespace xam {
 
 // If set in XCONTENT_AGGREGATE_DATA, will be substituted with the running
 // titles ID
-// TODO: check if actual x360 kernel/xam has a value similar to this
+
 constexpr uint32_t kCurrentlyRunningTitleId = 0xFFFFFFFF;
 
 struct XCONTENT_DATA {
@@ -211,7 +211,6 @@ class ContentManager {
   KernelState* kernel_state_;
   std::filesystem::path root_path_;
 
-  // TODO(benvanik): remove use of global lock, it's bad here!
   rex::thread::global_critical_region global_critical_region_;
   std::unordered_map<string::string_key_case, ContentPackage*, string::string_key_case::Hash>
       open_packages_;

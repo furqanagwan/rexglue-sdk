@@ -26,7 +26,6 @@
 #include <rex/system/xmemory.h>
 #include <rex/thread.h>
 
-// TODO(benvanik): move xbox.h out
 #include <rex/system/xtypes.h>
 
 REXCVAR_DEFINE_BOOL(protect_zero, true, "Memory", "Protect the zero page from reads and writes")
@@ -631,7 +630,6 @@ void Memory::EnablePhysicalMemoryAccessCallbacks(uint32_t physical_address, uint
 }
 
 uint32_t Memory::SystemHeapAlloc(uint32_t size, uint32_t alignment, uint32_t system_heap_flags) {
-  // TODO(benvanik): lightweight pool.
   bool is_physical = !!(system_heap_flags & memory::kSystemHeapPhysical);
   auto heap = LookupHeapByType(is_physical, 4096);
   uint32_t address;
@@ -648,7 +646,7 @@ void Memory::SystemHeapFree(uint32_t address, uint32_t* out_region_size) {
   if (!address) {
     return;
   }
-  // TODO(benvanik): lightweight pool.
+
   auto heap = LookupHeap(address);
   heap->Release(address, out_region_size);
 }
@@ -1085,7 +1083,6 @@ bool BaseHeap::Save(stream::ByteStream* stream) {
       continue;
     }
 
-    // TODO(DrChat): write compressed with snappy.
     if (page.state & memory::kMemoryAllocationCommit) {
       void* addr = TranslateRelative(i << page_size_shift_);
 
@@ -1140,7 +1137,7 @@ bool BaseHeap::Restore(stream::ByteStream* stream) {
                               memory::PageAccess::kReadWrite);
       // Read into memory with R/W protection, then restore the saved
       // protection.
-      // TODO(DrChat): read compressed with snappy.
+
       rex::memory::Protect(addr, page_size_, memory::PageAccess::kReadWrite, nullptr);
       stream->Read(addr, page_size_);
       rex::memory::Protect(addr, page_size_, page_access, nullptr);
@@ -1179,10 +1176,7 @@ bool BaseHeap::Restore(stream::ByteStream* stream) {
 }
 
 void BaseHeap::Reset() {
-  // TODO(DrChat): protect pages.
   std::memset(page_table_.data(), 0, sizeof(PageEntry) * page_table_.size());
-  // TODO(Triang3l): Remove access callbacks from pages if this is a physical
-  // memory heap.
 }
 
 bool BaseHeap::Alloc(uint32_t size, uint32_t alignment, uint32_t allocation_type, uint32_t protect,
@@ -1375,7 +1369,7 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   // Find a free page range.
   // The base page must match the requested alignment, so we first scan for
   // a free aligned page and only then check for continuous free pages.
-  // TODO(benvanik): optimized searching (free list buckets, bitmap, etc).
+
   uint32_t start_page_number = UINT_MAX;
   uint32_t end_page_number = UINT_MAX;
   uint32_t page_scan_stride = alignment >> page_size_shift_;
@@ -1513,15 +1507,6 @@ bool BaseHeap::Decommit(uint32_t address, uint32_t size) {
   std::lock_guard<std::recursive_mutex> heap_lock(heap_mutex_);
 
   // Release from host.
-  // TODO(benvanik): find a way to actually decommit memory;
-  //     mapped memory cannot be decommitted.
-  /*BOOL result =
-      VirtualFree(TranslateRelative(start_page_number << page_size_shift_),
-                  page_count << page_size_shift_, MEM_DECOMMIT);
-  if (!result) {
-    PLOGW("BaseHeap::Decommit failed due to host VirtualFree failure");
-    return false;
-  }*/
 
   // Perform table change.
   for (uint32_t page_number = start_page_number; page_number <= end_page_number; ++page_number) {
@@ -1560,20 +1545,10 @@ bool BaseHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
   }
 
   // Release from host not needed as mapping reserves the range for us.
-  // TODO(benvanik): protect with NOACCESS?
-  /*BOOL result = VirtualFree(
-      TranslateRelative(base_page_number << page_size_shift_), 0, MEM_RELEASE);
-  if (!result) {
-    PLOGE("BaseHeap::Release failed due to host VirtualFree failure");
-    return false;
-  }*/
-  // Instead, we just protect it, if we can.
+
   if (page_size_ == rex::memory::page_size() ||
       ((base_page_entry.region_page_count << page_size_shift_) % rex::memory::page_size() == 0 &&
        ((base_page_number << page_size_shift_) % rex::memory::page_size() == 0))) {
-    // TODO(benvanik): figure out why games are using memory after releasing
-    // it. It's possible this is some virtual/physical stuff where the GPU
-    // still can access it.
     if (REXCVAR_GET(protect_on_release)) {
       if (!rex::memory::Protect(TranslateRelative(base_page_number << page_size_shift_),
                                 base_page_entry.region_page_count << page_size_shift_,
@@ -1875,7 +1850,7 @@ bool PhysicalHeap::Alloc(uint32_t size, uint32_t alignment, uint32_t allocation_
   uint32_t address = heap_base_ + parent_address - parent_heap_start;
   if (!BaseHeap::AllocFixed(address, size, alignment, allocation_type, protect)) {
     REXSYS_ERROR("PhysicalHeap::Alloc unable to pin physical memory in physical heap");
-    // TODO(benvanik): don't leak parent memory.
+
     return false;
   }
   *out_address = address;
@@ -1896,7 +1871,7 @@ bool PhysicalHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t ali
   // Allocate from parent heap (gets our physical address in 0-512mb).
   // NOTE: this can potentially overwrite heap contents if there are already
   // committed pages in the requested physical range.
-  // TODO(benvanik): flag for ensure-not-committed?
+
   uint32_t parent_base_address = GetPhysicalAddress(base_address);
   if (!parent_heap_->AllocFixed(parent_base_address, size, alignment, allocation_type, protect)) {
     REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
@@ -1908,7 +1883,7 @@ bool PhysicalHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t ali
   uint32_t address = heap_base_ + parent_base_address - GetPhysicalAddress(heap_base_);
   if (!BaseHeap::AllocFixed(address, size, page_size_, allocation_type, protect)) {
     REXSYS_ERROR("PhysicalHeap::Alloc unable to pin physical memory in physical heap");
-    // TODO(benvanik): don't leak parent memory.
+
     return false;
   }
 
@@ -1946,7 +1921,7 @@ bool PhysicalHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint3
   uint32_t address = heap_base_ + parent_address - GetPhysicalAddress(heap_base_);
   if (!BaseHeap::AllocFixed(address, size, page_size_, allocation_type, protect)) {
     REXSYS_ERROR("PhysicalHeap::Alloc unable to pin physical memory in physical heap");
-    // TODO(benvanik): don't leak parent memory.
+
     return false;
   }
   *out_address = address;
@@ -2019,7 +1994,6 @@ bool PhysicalHeap::Protect(uint32_t address, uint32_t size, uint32_t protect,
 void PhysicalHeap::EnableAccessCallbacks(uint32_t physical_address, uint32_t length,
                                          bool enable_invalidation_notifications,
                                          bool enable_data_providers) {
-  // TODO(Triang3l): Implement data providers.
   assert_false(enable_data_providers);
   if (!enable_invalidation_notifications && !enable_data_providers) {
     return;
@@ -2095,13 +2069,9 @@ void PhysicalHeap::EnableAccessCallbacks(uint32_t physical_address, uint32_t len
     // enable invalidation notifications for read-only pages for the same
     // reason.
     if (current_page_access != rex::memory::PageAccess::kNoAccess) {
-      // TODO(Triang3l): Enable data providers.
       if (enable_invalidation_notifications) {
         if (current_page_access != rex::memory::PageAccess::kReadOnly &&
             (page_flags_block.notify_on_invalidation & page_flags_bit) == 0) {
-          // TODO(Triang3l): Check if data providers are already enabled.
-          // If data providers are already enabled for the page, it has even
-          // stricter protection.
           protect_system_page = true;
           page_flags_block.notify_on_invalidation |= page_flags_bit;
         }
@@ -2129,7 +2099,6 @@ void PhysicalHeap::EnableAccessCallbacks(uint32_t physical_address, uint32_t len
 bool PhysicalHeap::TriggerCallbacks(std::unique_lock<std::recursive_mutex> global_lock_locked_once,
                                     uint32_t virtual_address, uint32_t length, bool is_write,
                                     bool unwatch_exact_range, bool unprotect) {
-  // TODO(Triang3l): Support read watches.
   assert_true(is_write);
   if (!is_write) {
     return false;

@@ -118,8 +118,7 @@ int lzx_decompress(const void* lzx_data, size_t lzx_len, void* dest, size_t dest
       auto padding_len = window_size - window_data_len;
       std::memset(&lzxd->window[0], 0, padding_len);
       std::memcpy(&lzxd->window[padding_len], window_data, window_data_len);
-      // TODO(gibbed): should this be set regardless if source window data is
-      // available or not?
+
       lzxd->ref_data_size = window_size;
     }
 
@@ -181,7 +180,7 @@ int lzxdelta_apply_patch(rex::xex2_delta_patch* patch, size_t patch_len, uint32_
     }
 
     cur_patch++;
-    cur_patch = (rex::xex2_delta_patch*)((char*)cur_patch + patch_sz);  // TODO: make this less ugly
+    cur_patch = (rex::xex2_delta_patch*)((char*)cur_patch + patch_sz);
   }
 
   return 0;

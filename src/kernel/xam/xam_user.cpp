@@ -158,11 +158,10 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
   } else {
     assert_true(xuid_count == 1);
     assert_not_null(xuids);
-    // TODO(gibbed): allow proper lookup of arbitrary XUIDs
+
     const auto& user_profile = REX_KERNEL_STATE()->user_profile();
     assert_true(static_cast<uint64_t>(xuids[0]) == user_profile->xuid());
-    // TODO(gibbed): we assert here, but in case a title passes xuid_count > 1
-    // until it's implemented for release builds...
+
     xuid_count = 1;
   }
   assert_zero(unk);  // probably flags
@@ -230,8 +229,6 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
   // First call asks for size (fill buffer_size_ptr).
   // Second call asks for buffer contents with that size.
 
-  // TODO(gibbed): setting validity checking without needing a user profile
-  // object.
   bool any_missing = false;
   for (uint32_t i = 0; i < setting_count; ++i) {
     auto setting_id = static_cast<uint32_t>(setting_ids[i]);
@@ -245,7 +242,6 @@ uint32_t XamUserReadProfileSettingsEx(uint32_t title_id, uint32_t user_index, ui
     }
   }
   if (any_missing) {
-    // TODO(benvanik): don't fail? most games don't even check!
     if (overlapped) {
       REX_KERNEL_STATE()->CompleteOverlappedImmediate(
           REX_KERNEL_MEMORY()->HostToGuestVirtual(overlapped), X_ERROR_INVALID_PARAMETER);
@@ -419,7 +415,6 @@ u32 XamUserContentRestrictionCheckAccess_entry(u32 user_index, u32 unk1, u32 unk
   *out_unk5 = 1;
 
   if (overlapped_ptr) {
-    // TODO(benvanik): does this need the access arg on it?
     REX_KERNEL_STATE()->CompleteOverlappedImmediate(overlapped_ptr, X_ERROR_SUCCESS);
   }
 
@@ -492,7 +487,6 @@ u32 XamShowSigninUI_entry(u32 unk, u32 unk_mask) {
   return X_ERROR_SUCCESS;
 }
 
-// TODO(gibbed): probably a FILETIME/LARGE_INTEGER, unknown currently
 struct X_ACHIEVEMENT_UNLOCK_TIME {
   rex::be<uint32_t> unk_0;
   rex::be<uint32_t> unk_4;
@@ -693,7 +687,6 @@ u32 XamParseGamerTileKey_entry(mapped_u32 key_ptr, mapped_u32 out1_ptr, mapped_u
 
 u32 XamReadTileToTexture_entry(u32 unknown, u32 title_id, u64 tile_id, u32 user_index,
                                mapped_void buffer_ptr, u32 stride, u32 height, u32 overlapped_ptr) {
-  // TODO(gibbed): unknown=0,2,3,9
   if (!tile_id) {
     return X_ERROR_INVALID_PARAMETER;
   }
@@ -723,8 +716,7 @@ u32 XamSessionCreateHandle_entry(mapped_u32 handle_ptr) {
 
 u32 XamSessionRefObjByHandle_entry(u32 handle, mapped_u32 obj_ptr) {
   assert_true(handle == 0xCAFEDEAD);
-  // TODO(PermaNull): Implement this properly,
-  // For the time being returning 0xDEADF00D will prevent crashing.
+
   *obj_ptr = 0xDEADF00D;
   return X_ERROR_SUCCESS;
 }

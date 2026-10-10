@@ -137,8 +137,6 @@ class XFile : public XObject {
   std::mutex completion_port_lock_;
   std::vector<std::pair<uint32_t, object_ref<XIOCompletion>>> completion_ports_;
 
-  // TODO(benvanik): create flags, open state, etc.
-
   uint64_t position_ = 0;
 
   rex::filesystem::WildcardEngine find_engine_;

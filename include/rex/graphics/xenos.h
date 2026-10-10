@@ -60,7 +60,7 @@ enum class PrimitiveType : uint32_t {
   // R6xx/R7xx registers, k2DCopyRectListV0 is 22, and implicit major mode is
   // only used for primitive types 0 through 21) - and tessellation patches use
   // the range that starts from k2DCopyRectListV0.
-  // TODO(Triang3l): Verify if this is also true for the Xenos.
+
   kExplicitMajorModeForceStart = 0x10,
 
   k2DCopyRectListV0 = 0x10,
@@ -148,15 +148,15 @@ enum class AnisoFilter : uint32_t {
 
 enum class BorderColor : uint32_t {
   // (0.0, 0.0, 0.0)
-  // TODO(Triang3l): Is the alpha 0 or 1?
+
   k_ABGR_Black = 0,
   // (1.0, 1.0, 1.0, 1.0)
   k_ABGR_White = 1,
   // Unknown precisely, but likely (0.5, 0.0, 0.5) for unsigned (Cr, Y, Cb)
-  // TODO(Triang3l): Real hardware border color, and is the alpha 0 or 1?
+
   k_ACBYCR_Black = 2,
   // Unknown precisely, but likely (0.0, 0.5, 0.5) for unsigned (Y, Cr, Cb)
-  // TODO(Triang3l): Real hardware border color, and is the alpha 0 or 1?
+
   k_ACBCRY_Black = 3,
 };
 
@@ -460,8 +460,7 @@ enum class TextureFormat : uint32_t {
   //   game saves data automatically" messages. The swizzle in the fetch
   //   constant is 111W (suggesting that internally the only component may be
   //   the alpha one, not red).
-  // TODO(Triang3l): Investigate how k_8_A and k_8_B work in resolves and
-  // memexports, whether they store alpha/blue of the input or red.
+
   k_8_A = 8,
   k_8_B = 9,
   k_8_8 = 10,
@@ -572,7 +571,7 @@ constexpr bool IsColorResolveFormatBitwiseEquivalent(ColorRenderTargetFormat ren
     case ColorRenderTargetFormat::k_8_8_8_8:
     // Shaders fetch data copied from k_8_8_8_8_GAMMA with TextureSign::kGamma.
     case ColorRenderTargetFormat::k_8_8_8_8_GAMMA:
-      // TODO(Triang3l): Investigate k_8_8_8_8_A.
+
       return color_format == ColorFormat::k_8_8_8_8 || color_format == ColorFormat::k_8_8_8_8_A ||
              color_format == ColorFormat::k_8_8_8_8_AS_16_16_16_16;
     case ColorRenderTargetFormat::k_2_10_10_10:
@@ -875,24 +874,7 @@ enum class VertexQuantization : uint32_t {
 enum class EdramMode : uint32_t {
   kNoOperation = 0,
   kColorDepth = 4,
-  // TODO(Triang3l): Verify whether kDepthOnly means the pixel shader is ignored
-  // completely even if it writes depth, exports to memory or kills pixels.
-  // Hints suggesting that it should be completely ignored (which is desirable
-  // on real hardware to avoid scheduling the pixel shader at all and waiting
-  // for it especially since the Xbox 360 doesn't have early per-sample depth /
-  // stencil, only early hi-Z / hi-stencil, and other registers possibly
-  // toggling pixel shader execution are yet to be found):
-  // - Most of depth pre-pass draws in 415607E6 use the kDepthOnly more with a
-  //   `oC0 = tfetch2D(tf0, r0.xy) * r1` shader, some use `oC0 = r0` though.
-  //   However, when alphatested surfaces are drawn, kColorDepth is explicitly
-  //   used with the same shader performing the texture fetch.
-  // - 5454082B has some kDepthOnly draws with alphatest enabled, but the shader
-  //   is `oC0 = r0`, which makes no sense (alphatest based on an interpolant
-  //   from the vertex shader) as no texture alpha cutout is involved.
-  // - 5454082B also has kDepthOnly draws with pretty complex shaders clearly
-  //   for use only in the color pass - even fetching and filtering a shadowmap.
-  // For now, based on these, let's assume the pixel shader is never used with
-  // kDepthOnly.
+
   kDepthOnly = 5,
   kCopy = 6,
 };
@@ -1358,136 +1340,7 @@ static_assert_size(xe_gpu_fetch_group_t, sizeof(uint32_t) * 6);
 // but this is originally an Xbox 360-specific feature, that was later, however,
 // likely reused for GL_QCOM_writeonly_rendering).
 //
-// TODO(Triang3l): Verify whether GL_QCOM_writeonly_rendering is actually
-// memexport on the Adreno 2xx using GL_OES_get_program_binary - it's also
-// interesting to see how alphatest interacts with it, whether it's still true
-// fixed-function alphatest, as it's claimed to be supported as usual by the
-// extension specification.
-//
-// Y of eA contains the offset in elements - this is what shaders are supposed
-// to calculate from something like the vertex index. Again, it's specified as
-// an integer in the low bits, not as a truly floating-point number. For this
-// purpose, stream constants contain the value 2^23 - when a whole
-// floating-point number smaller than 2^23 is added as floating-point to 2^23,
-// its integer representation becomes the mantissa bits of a number with an
-// exponent of 23. Via multiply-add, `offset * 1.0f + exp2f(23)` is written here
-// by the shader, allowing for element offsets of up to 2^23 - 1.
-//
-// Z is a bit field with the information about the formatting of the data. It's
-// also packed as a normalized floating-point number, but in a cleaner way than
-// X because not as many bits are required - just like Y, it has an exponent of
-// 23 (possibly to let shaders build these values manually using floating-point
-// multiply-add like integer shift-or, and finally to add 2^23, though that's
-// not a case easy to handle in emulation, unlike prebuilt stream constants).
-//
-// W contains the number of elements in the stream. It's also packed with the
-// full 23 exponent just like Y and Z, there's no way to index more than 2^23
-// elements using packing via addition to 2^23, so this field also doesn't need
-// more bits than that.
-//
-// According to the sequencer specification from IPR2015-00325 (where memexport
-// is called "pass thru export"):
-// - Pass thru exports can occur anywhere in the shader program.
-// - There can be any number of pass thru exports.
-// - The address register is not kept across clause boundaries, so it must be
-//   refreshed after any Serialize (or yield), allocate instruction or resource
-//   change.
-// - The write to eM# may be predicated if the export is not needed.
-// - Exports are dropped if:
-//   - The index is above the maximum.
-//   - The index sign bit is 1.
-//   - The exponent of the index is not 23.
-// The requirement that eM4 must be written if any eM# other than eM0 is also
-// written doesn't apply to the final Xenos, it's likely an outdated note in the
-// specification considering that it's very preliminary.
-//
-// According to Microsoft's shader validator:
-// - eA can be written only by `mad`.
-// - A single eM# can be written by any number of instruction, including with
-//   write masking.
-// - eA must be written before eM#.
-// - Any alloc instruction or a `serialize` terminates the current memory
-//   export. This doesn't apply to `exec Yield=true`, however, and it's not
-//   clear if that's an oversight or if that's not considered a yield that
-//   terminates the export.
-//
-// From the emulation perspective, this means that:
-// - Alloc instructions (`alloc export` mandatorily, other allocs optionally),
-//   and optionally `serialize` instructions within `exec`, should be treated as
-//   the locations where the currently open export should be flushed to the
-//   memory. It should be taken into account that an export may be in looping
-//   control flow, and in this case it must be performed at every iteration.
-// - Whether each eM# was written to must be tracked at shader execution time,
-//   as predication can disable the export of an element.
-//
-// TODO(Triang3l): Investigate how memory export interacts with pixel killing.
-// Given that eM# writes disabled by predication don't cause an export, it's
-// possible that killed invocations are treated as inactive (invalid in Xenos
-// terms) overall, and thus new memory exports from them shouldn't be done, but
-// that's not verified. However, given that on Direct3D 11+, OpenGL and Vulkan
-// hosts, discarding disables subsequent storage resource writes, on the host,
-// it would be natural to perform all outstanding memory exports before
-// discarding if the kill condition passes.
-//
-// Memory exports can be performed to any ColorFormat, including 8bpp and 16bpp
-// ones. Hosts, however, may have the memory bound as a 32bpp buffer (for
-// instance, due to the minimum resource view size limitation on Direct3D 11).
-// In this case, bytes and shorts aren't addressable directly. However, taking
-// into account that memory accesses are coherent within one shader invocation
-// on Direct3D 11+, OpenGL and Vulkan and thus are done in order relatively to
-// each other, it should be possible to implement them by clearing the bits via
-// an atomic AND, and writing the new value using an atomic OR. This will, of
-// course, make the entire write operation non-atomic, and in case of a race
-// between writes to the same location, the final result may not even be just a
-// value from one of the invocations, but rather, it can be OR of the values
-// from any invocations involved. However, on the Xenos, there doesn't seem to
-// be any possibility of meaningfully accessing the same location from multiple
-// invocations if any of them is writing, memory exports are out-of-order, so
-// such an implementation shouldn't be causing issues in reality. Atomic
-// compare-exchange, however, should not be used for this purpose, as it may
-// result in an infinite loop if different invocations want to write different
-// values to the same memory location.
-//
-// Examples of setup in titles (Z from MSB to LSB):
-//
-// 4D5307E6 particles (different VS invocation counts, like 1, 2, 4):
-// There is a passthrough shader - useful for verification as it simply writes
-// directly what it reads via vfetch of various formats. Another shader (with
-// different c# numbers, but same formats) does complicated math to process the
-// particles.
-// c152:           Z = 010010110000|0|111|00|100110|00000|010, count = 35840
-//   8in32, 32_32_32_32_FLOAT, float, RGBA - from 32_32_32_32_FLOAT vfetch
-// c154, 162:      Z = 010010110000|0|111|00|100000|00000|001, count = 71680
-//   8in16, 16_16_16_16_FLOAT, float, RGBA - from 16_16_16_16_FLOAT vfetch
-// c156, 158, 160: Z = 010010110000|0|000|00|011010|00000|001, count = 71680
-//   8in16, 16_16_16_16, unorm, RGBA - from 16_16_16_16 unorm vfetch
-// c164:           Z = 010010110000|0|111|00|011111|00000|001, count = 143360
-//   8in16, 16_16_FLOAT, float, RGBA - from 16_16_FLOAT vfetch
-// c166:           Z = 010010110000|0|000|00|011001|00000|001, count = 143360
-//   8in16, 16_16, unorm, RGBA - from 16_16 unorm vfetch
-// c168:           Z = 010010110000|0|001|00|000111|00000|010, count = 143360
-//   8in32, 2_10_10_10, snorm, RGBA - from 2_10_10_10 snorm vfetch
-// c170, c172:     Z = 010010110000|1|000|00|000110|00000|010, count = 143360
-//   8in32, 8_8_8_8, unorm, BGRA - from 8_8_8_8 unorm vfetch with .zyxw swizzle
-//
-// 4D5307E6 water simulation (2048 VS invocations):
-// c130: Z = 010010110000|0|111|00|100110|00000|010, count = 16384
-//   8in32, 32_32_32_32_FLOAT, float, RGBA
-//   The shader has 5 memexports of this kind and 6 32_32_32_32_FLOAT vfetches.
-//
-// 4D5307E6 water tessellation factors (1 VS invocation per triangle patch):
-// c130: Z = 010010110000|0|111|11|100100|11111|010, count = patch count * 3
-//   8in32, 32_FLOAT, float, RGBA
-//
-// 41560817 texture memory copying (64 bytes per invocation, two eA, eight eM#):
-// c0: Z = 010010110000|0|010|11|011010|00011|001
-//   8in16, 16_16_16_16, uint, RGBA - from 16_16_16_16 uint vfetch
-//   (16_16_16_16 is the largest color format without special values)
-//
-// 58410B86 hierarchical depth buffer occlusion culling with the result read on
-// the CPU (15000 VS invocations in the main menu):
-// c8: Z = 010010110000|0|010|00|000010|00000|000, count = invocation count
-//   No endian swap, 8, uint, RGBA
+
 union alignas(uint32_t) xe_gpu_memexport_stream_t {
   struct {
     uint32_t dword_0;

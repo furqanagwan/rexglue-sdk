@@ -32,7 +32,6 @@ class File {
   virtual X_STATUS WriteSync(std::span<const uint8_t> buffer, size_t byte_offset,
                              size_t* out_bytes_written) = 0;
 
-  // TODO: Parameters
   virtual X_STATUS ReadAsync(std::span<uint8_t> buffer, size_t byte_offset,
                              size_t* out_bytes_read) {
     (void)buffer;
@@ -42,7 +41,6 @@ class File {
     return X_STATUS_NOT_IMPLEMENTED;
   }
 
-  // TODO: Parameters
   virtual X_STATUS WriteAsync(std::span<const uint8_t> buffer, size_t byte_offset,
                               size_t* out_bytes_written) {
     (void)buffer;

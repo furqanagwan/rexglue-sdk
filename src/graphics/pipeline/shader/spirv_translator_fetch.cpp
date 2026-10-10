@@ -104,11 +104,7 @@ void SpirvShaderTranslator::ProcessVertexFetchInstruction(
         builder_->createLoad(builder_->createAccessChain(spv::StorageClassUniform,
                                                          uniform_fetch_constants_, id_vector_temp_),
                              spv::NoPrecision);
-    // TODO(Triang3l): Verify the fetch constant type (that it's a vertex fetch,
-    // not a texture fetch) here instead of dropping draws with invalid vertex
-    // fetch constants on the CPU when proper bound checks are added - vfetch
-    // may be conditional, so fetch constants may also be used conditionally.
-    // Mask to physical, in dwords - the guest may use a mirror window.
+
     address = builder_->createUnaryOp(
         spv::OpBitcast, type_int_,
         builder_->createBinOp(
@@ -265,9 +261,6 @@ void SpirvShaderTranslator::ProcessVertexFetchInstruction(
 
     case xenos::VertexFormat::k_16_16_FLOAT:
     case xenos::VertexFormat::k_16_16_16_16_FLOAT: {
-      // FIXME(Triang3l): This converts from GLSL float16 with NaNs instead of
-      // Xbox 360 float16 with extended range. However, haven't encountered
-      // games relying on that yet.
       spv::Id word_needed_component_values[2] = {};
       for (uint32_t i = 0; i < 2; ++i) {
         uint32_t word_needed_components = (used_format_components >> (i * 2)) & 0b11;
@@ -566,17 +559,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     case ucode::FetchOpcode::kGetTextureGradients:
       break;
     case ucode::FetchOpcode::kGetTextureWeights:
-      // FIXME(Triang3l): Currently disregarding the LOD completely in
-      // getWeights because the needed code would be very complicated, while
-      // getWeights is mostly used for things like PCF of shadow maps, that
-      // don't have mips. The LOD would be needed for the mip lerp factor in W
-      // of the return value and to choose the LOD where interpolation would
-      // take place for XYZ. That would require either implementing the LOD
-      // calculation algorithm using the ALU (since the `lod` instruction is
-      // limited to pixel shaders and can't be used when there's control flow
-      // divergence, unlike explicit gradients), or sampling a texture filled
-      // with LOD numbers (easier and more consistent - unclamped LOD doesn't
-      // make sense for getWeights anyway). The same applies to offsets.
+
       used_result_nonzero_components &= ~uint32_t(0b1000);
       break;
     default:
@@ -772,12 +755,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     }
 
     // Get offsets applied to the coordinates before sampling.
-    // FIXME(Triang3l): Offsets need to be applied at the LOD being fetched, not
-    // at LOD 0. However, since offsets have granularity of 0.5, not 1, on the
-    // Xenos, they can't be passed directly as ConstOffset to the image sample
-    // instruction (plus-minus 0.5 offsets are very common in games). But
-    // offsetting at mip levels is a rare usage case, mostly offsets are used
-    // for things like shadow maps and blur, where there are no mips.
+
     float offset_values[3] = {};
     // MSDN doesn't list offsets as getCompTexLOD parameters.
     if (instr.opcode != ucode::FetchOpcode::kGetTextureComputedLod) {
@@ -835,9 +813,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
             offset_values[0] -= 0.5f;
             offset_values[1] -= 0.5f;
             // The logic for ST weights is the same for all faces.
-            // FIXME(Triang3l): If LOD calculation is added to getWeights, face
-            // offset probably will need to be handled too (if the hardware
-            // supports it at all, though MSDN lists OffsetZ in tfetchCube).
+
           } else {
             offset_values[2] = instr.attributes.offset_z;
           }
@@ -868,12 +844,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     bool data_is_3d_needed = false;
     if (instr.opcode == ucode::FetchOpcode::kGetTextureWeights) {
       // Size needed for denormalization for coordinate lerp factor.
-      // FIXME(Triang3l): Currently disregarding the LOD completely in
-      // getWeights. However, if the LOD lerp factor and the LOD where filtering
-      // would happen are ever calculated, all components of the size may be
-      // needed for ALU LOD calculation with normalized coordinates (or, if a
-      // texture filled with LOD indices is used, coordinates will need to be
-      // normalized as normally).
+
       if (!instr.attributes.unnormalized_coordinates) {
         switch (coordinate_dimension) {
           case xenos::FetchOpDimension::k1D:
@@ -1181,13 +1152,6 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
       // Z size is not scaled (depth/layers don't change with resolution).
     }
 
-    // FIXME(Triang3l): Mip lerp factor needs to be calculated, and the
-    // coordinate lerp factors should be calculated at the mip level texels
-    // would be sampled from. That would require some way of calculating the
-    // LOD that would be applicable to explicit gradients and vertex shaders.
-    // Also, with point sampling, possibly lerp factors need to be 0. W (mip
-    // lerp factor) should have been masked out previously because it's not
-    // supported currently.
     assert_false(instr.opcode == ucode::FetchOpcode::kGetTextureWeights &&
                  (used_result_nonzero_components & 0b1000));
 
@@ -1261,9 +1225,6 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     // scale-independent.
 
     if (instr.opcode == ucode::FetchOpcode::kGetTextureWeights) {
-      // FIXME(Triang3l): Filtering modes should possibly be taken into account,
-      // but for simplicity, not doing that - from a high level point of view,
-      // would be useless to get weights that will always be zero.
       uint32_t coordinates_remaining_components = coordinates_needed_components;
       uint32_t coordinate_component_index;
       while (rex::bit_scan_forward(coordinates_remaining_components, &coordinate_component_index)) {
@@ -1984,8 +1945,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
               // Only register gradients reach here (auto-LOD uses implicit LOD
               // + bias, handled at the gradient block guard above). Register
               // gradients are already in the cube space for cube maps.
-              // TODO(Triang3l): Are cube map register gradients unnormalized
-              // if the coordinates themselves are unnormalized?
+
               gradients_h = builder_->createLoad(var_main_tfetch_gradients_h_, spv::NoPrecision);
               gradients_v = builder_->createLoad(var_main_tfetch_gradients_v_, spv::NoPrecision);
               gradients_h = builder_->createNoContractionBinOp(
@@ -2680,7 +2640,7 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
             // Clamp normalized unsigned-biased components to -1. Post-filtering
             // clamping can put mixtures with a stored value of 0 up to one
             // component code below the result of clamping each texel before.
-            // TODO(boma): Guest clamping needs to be verified on real hardware.
+
             normalized_result = builder_->createTriOp(
                 spv::OpSelect, type_float4_,
                 builder_->createBinOp(
@@ -2829,8 +2789,7 @@ size_t SpirvShaderTranslator::FindOrAddTextureBinding(uint32_t fetch_constant,
       return i;
     }
   }
-  // TODO(Triang3l): Limit the total count to that actually supported by the
-  // implementation.
+
   size_t new_texture_binding_index = texture_bindings_.size();
   TextureBinding& new_texture_binding = texture_bindings_.emplace_back();
   new_texture_binding.fetch_constant = fetch_constant;
@@ -2877,7 +2836,6 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(
     xenos::TextureFilter mip_filter, xenos::AnisoFilter aniso_filter,
     std::optional<xenos::BorderColor> forced_border_color) {
   if (aniso_filter != xenos::AnisoFilter::kUseFetchConst) {
-    // TODO(Triang3l): Limit to what's actually supported by the implementation.
     aniso_filter = std::min(aniso_filter, xenos::AnisoFilter::kMax_16_1);
   }
   for (size_t i = 0; i < sampler_bindings_.size(); ++i) {
@@ -2890,8 +2848,7 @@ size_t SpirvShaderTranslator::FindOrAddSamplerBinding(
       return i;
     }
   }
-  // TODO(Triang3l): Limit the total count to that actually supported by the
-  // implementation.
+
   size_t new_sampler_binding_index = sampler_bindings_.size();
   SamplerBinding& new_sampler_binding = sampler_bindings_.emplace_back();
   new_sampler_binding.fetch_constant = fetch_constant;

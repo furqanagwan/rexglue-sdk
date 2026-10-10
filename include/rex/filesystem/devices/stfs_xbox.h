@@ -468,8 +468,6 @@ static_assert_size(XContentHeader, 0x344);
 struct StfsHeader {
   XContentHeader header;
   XContentMetadata metadata;
-  // TODO: title/system updates contain more data after XContentMetadata, seems
-  // to affect header.header_size
 };
 static_assert_size(StfsHeader, 0x971A);
 

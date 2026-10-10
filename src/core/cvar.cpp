@@ -665,8 +665,6 @@ std::vector<std::string> Init(int argc, char** argv) {
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& e) {
-    // TODO(tomc): dumb workaround for the stupid chicken and its egg.
-    //             dont call rex logging funcs here for now.
     fprintf(stderr, "cvar: CLI11  parse error: %s\n", e.what());
   }
 

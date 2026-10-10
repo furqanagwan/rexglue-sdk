@@ -28,7 +28,6 @@ void KeCertMonitorCallback(PPCContext* ppc_context, rex::system::KernelState* ke
   auto id = ppc_context->r[3];
   auto arg = ppc_context->r[4];
   REXKRNL_DEBUG("KeCertMonitorCallback({}, {:08X})", id, arg);
-  // TODO: Implement cert monitor callback if needed
 }
 
 }  // namespace rex::kernel::xboxkrnl

@@ -59,7 +59,6 @@ X_STATUS HostPathEntry::Open(uint32_t desired_access, File** out_file) {
   auto file_handle = rex::filesystem::FileHandle::OpenExisting(
       host_path_, desired_access, static_cast<HostPathDevice*>(device_)->allow_share_delete());
   if (!file_handle) {
-    // TODO(benvanik): pick correct response.
     return X_STATUS_NO_SUCH_FILE;
   }
   *out_file = new HostPathFile(desired_access, this, std::move(file_handle));

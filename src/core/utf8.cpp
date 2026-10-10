@@ -123,9 +123,6 @@ size_t utf8_hash_fnv1a_case(const std::string_view view) {
   return hash_fnv1a<true>(view);
 }
 
-// TODO(gibbed): this is a separate inline function instead of inline within
-// split due to a Clang bug: reference to local binding 'needle_begin' declared
-// in enclosing function 'split'.
 inline utf8_citer find_needle(utf8_citer haystack_it, utf8_citer haystack_end,
                               utf8_citer needle_begin, utf8_citer needle_end) {
   return std::find_if(haystack_it, haystack_end, [&](const auto& c) {

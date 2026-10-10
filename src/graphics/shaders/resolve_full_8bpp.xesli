@@ -54,7 +54,7 @@ entry_inputs_end_code_begin_compute_xe
     pixels_0123.x = pixels_0123.y;
   }
   // Convert to R8.
-  // TODO(Triang3l): Investigate formats 8_A and 8_B.
+
   array_buffer_store_xe(
       xe_resolve_dest,
       XeResolveDestPixelAddress(resolve_info, pixel_index, 0u) >> 3u,

@@ -326,10 +326,7 @@ void DxbcShaderTranslator::ProcessVectorAluOperation(
     case AluVectorOpcode::kMax4: {
       result_swizzle = dxbc::Src::kXXXX;
       // Find max of all different components of the first operand.
-      // FIXME(Triang3l): Not caring about NaN because no info about the
-      // correct order, just using SM4 max here, which replaces them with the
-      // non-NaN component (however, there's one nice thing about it is that it
-      // may be compiled into max3 + max on GCN).
+
       uint32_t remaining_components = 0;
       for (uint32_t i = 0; i < 4; ++i) {
         remaining_components |= 1 << ((operands[0].swizzle_ >> (i * 2)) & 3);
@@ -961,11 +958,7 @@ void DxbcShaderTranslator::ProcessScalarAluOperation(
 
     case AluScalarOpcode::kMulsc0:
     case AluScalarOpcode::kMulsc1:
-      // TODO(boma): Experimental round to zero for Volition titles (5451080D,
-      // 4B4D07F6, 5451086D) that experience camera-independent, batch-boundary
-      // vertex explosions with the default round-to-nearest behavior.
-      // Real hardware rounding behavior needs to be verified.
-      // Source: xenia-canary #1245 (3390fc219b32be4a87777ddd72217259b24dc09e).
+
       a_.OpMul(ps_dest, operand_0_a, operand_1);
       if (REXCVAR_GET(mulsc_round_toward_zero)) {
         // DXBC mad isn't guaranteed to stay fused, so recover the product

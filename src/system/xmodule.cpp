@@ -91,7 +91,7 @@ object_ref<XModule> XModule::Restore(KernelState* kernel_state, stream::ByteStre
   auto hmodule_ptr = stream->Read<uint32_t>();
 
   // Can only save user modules at the moment, so just redirect.
-  // TODO: Find a way to call RestoreObject here before UserModule::Restore.
+
   auto module = UserModule::Restore(kernel_state, stream, path);
   if (!module) {
     return nullptr;

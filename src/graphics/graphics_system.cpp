@@ -187,8 +187,7 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
         }
         return 0;
       }));
-  // TODO: set_can_debugger_suspend not yet ported
-  // vsync_worker_thread_->set_can_debugger_suspend(true);
+
   vsync_worker_thread_->set_name("GPU VSync");
   vsync_worker_thread_->Create();
 
@@ -221,16 +220,6 @@ void GraphicsSystem::Shutdown() {
 }
 
 void GraphicsSystem::OnHostGpuLossFromAnyThread([[maybe_unused]] bool is_responsible) {
-  // TODO(Triang3l): Somehow gain exclusive ownership of the Provider (may be
-  // used by the command processor, the presenter, and possibly anything else,
-  // it's considered free-threaded, except for lifetime management which will be
-  // involved in this case) and reset it so a new host GPU API device is
-  // created. Then ask the command processor to reset itself in its thread, and
-  // ask the UI thread to reset the Presenter (the UI thread manages its
-  // lifetime - but if there's no WindowedAppContext, either don't reset it as
-  // in this case there's no user who needs uninterrupted gameplay, or somehow
-  // protect it with a mutex so any thread can be considered a UI thread and
-  // reset).
   if (host_gpu_loss_reported_.test_and_set(std::memory_order_relaxed)) {
     return;
   }
@@ -338,17 +327,11 @@ void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
 }
 
 void GraphicsSystem::MarkVblank() {
-  // TODO: Enable profiling once ported
-  // SCOPE_profile_cpu_f("gpu");
-
   // Increment vblank counter (so the game sees us making progress).
   if (command_processor_) {
     command_processor_->increment_counter();
   }
 
-  // TODO(benvanik): we shouldn't need to do the dispatch here, but there's
-  //     something wrong and the CP will block waiting for code that
-  //     needs to be run in the interrupt.
   DispatchInterruptCallback(0, 2);
 }
 

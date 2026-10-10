@@ -269,8 +269,7 @@ void discoverAllFunctions(CodegenContext& ctx) {
 
 //=============================================================================
 // Function Pointer Scan: find lis/addi pairs loading code addresses
-// TODO(tomc): THIS IS WIP AND PROB A BAD IDEA LOL LETS SEE
-//=============================================================================
+
 void functionPointerScan(CodegenContext& ctx) {
   if (!ctx.hasDecoded()) {
     REXCODEGEN_WARN("functionPointerScan: DecodedBinary not initialized, skipping");

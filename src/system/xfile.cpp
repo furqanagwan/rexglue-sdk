@@ -36,7 +36,6 @@ XFile::XFile() : XObject(kObjectType) {
 }
 
 XFile::~XFile() {
-  // TODO(benvanik): signal that the file is closing?
   async_event_->Set();
   file_->Destroy();
 }
@@ -216,8 +215,6 @@ X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length, ui
   rex::be<uint32_t>* segments =
       reinterpret_cast<rex::be<uint32_t>*>(memory()->TranslateVirtual(segments_guest_address));
 
-  // TODO: not sure if this is meant to change depending on buffer address?
-  // (only game seen using this always seems to use 4096-byte buffers)
   uint32_t page_size = 4096;
 
   uint32_t read_total = 0;

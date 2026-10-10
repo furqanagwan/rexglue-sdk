@@ -130,8 +130,7 @@ class PrimitiveProcessor {
     // index buffer is always from the guest and fully 32-bit, and contains the
     // floating-point tessellation factors.
     xenos::TessellationMode tessellation_mode;
-    // TODO(Triang3l): If important, split into the index count and the actual
-    // index buffer size, using zeros for out-of-bounds indices.
+
     uint32_t guest_draw_vertex_count;
     uint32_t host_draw_vertex_count;
     uint32_t line_loop_closing_index;
@@ -447,10 +446,6 @@ class PrimitiveProcessor {
     }
   }
 
-  // TODO(Triang3l): 16-bit > 32-bit primitive type conversion for Metal, where
-  // primitive reset is always enabled, if UINT16_MAX is used as a real vertex
-  // index.
-
   struct PassthroughIndexTransform {
     uint16_t operator()(uint16_t index) const { return index; }
     uint32_t operator()(uint32_t index) const { return index; }
@@ -547,8 +542,6 @@ class PrimitiveProcessor {
                                      const IndexTransform& index_transform) {
     uint32_t quad_count = source_index_count / 4;
     for (uint32_t i = 0; i < quad_count; ++i) {
-      // TODO(Triang3l): Find the correct order.
-      // v0, v1, v2.
       Index common_index_0 = index_transform(*(source++));
       *(dest++) = common_index_0;
       *(dest++) = index_transform(*(source++));

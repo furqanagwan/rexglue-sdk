@@ -62,7 +62,6 @@ u32 RtlCompareMemoryUlong_entry(mapped_void source, u32 length, u32 pattern) {
 
   uint32_t n = 0;
   for (uint32_t i = 0; i < (length / 4); i++) {
-    // FIXME: This assumes as_array returns rex::be
     uint32_t val = source.as_array<uint32_t>()[i];
     if (val == pattern) {
       n++;
@@ -246,9 +245,6 @@ u32 RtlMultiByteToUnicodeN_entry(mapped_u16 destination_ptr, u32 destination_len
   uint32_t copy_len = destination_len >> 1;
   copy_len = copy_len < source_len ? copy_len : source_len;
 
-  // TODO(benvanik): maybe use MultiByteToUnicode on Win32? would require
-  // swapping.
-
   for (uint32_t i = 0; i < copy_len; i++) {
     destination_ptr[i] = source_ptr[i];
   }
@@ -266,7 +262,6 @@ u32 RtlUnicodeToMultiByteN_entry(ppc_ptr_t<uint8_t> destination_ptr, u32 destina
   uint32_t copy_len = source_len >> 1;
   copy_len = copy_len < destination_len ? copy_len : destination_len;
 
-  // TODO(benvanik): maybe use UnicodeToMultiByte on Win32?
   for (uint32_t i = 0; i < copy_len; i++) {
     uint16_t c = source_ptr[i];
     destination_ptr[i] = c < 256 ? (uint8_t)c : '?';
@@ -555,17 +550,14 @@ u32 RtlComputeCrc32_entry(u32 seed, mapped_void buffer, u32 length) {
 }
 
 void RtlCaptureContext_entry() {
-  // TODO(tomc): do we even need this?
   REXKRNL_WARN("[STUB] RtlCaptureContext called - not implemented");
 }
 
 void RtlUnwind_entry() {
-  // TODO(tomc): do we even need this?
   REXKRNL_WARN("[STUB] RtlUnwind called - not implemented");
 }
 
 void __C_specific_handler_entry() {
-  // TODO(tomc): do we even need this?
   REXKRNL_WARN("[STUB] __C_specific_handler called - not implemented");
 }
 
