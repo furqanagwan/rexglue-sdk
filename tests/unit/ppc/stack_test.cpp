@@ -1,6 +1,4 @@
-/**
- * Tests for rex::ppc stack push/pop/guard operations.
- */
+
 
 #include <cstdint>
 #include <cstring>
@@ -10,7 +8,6 @@
 #include <rex/ppc/context.h>
 #include <rex/ppc/stack.h>
 
-// 64KB test memory, aligned
 alignas(64) static uint8_t g_mem[0x10000] = {};
 
 TEST_CASE("stack_push scalar decrements r1 and writes byte-swapped value", "[ppc][stack]") {

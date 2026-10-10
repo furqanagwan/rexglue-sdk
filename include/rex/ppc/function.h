@@ -32,11 +32,6 @@
 
 namespace rex::ppc {
 
-//=============================================================================
-// Global PPC Function Registry (for runtime ordinal lookup)
-//=============================================================================
-// Populated by static constructors from XAM_EXPORT / XBOXKRNL_EXPORT macros.
-
 inline std::vector<std::pair<const char*, PPCFunc*>>& GetPPCFuncRegistry() {
   static std::vector<std::pair<const char*, PPCFunc*>> registry;
   return registry;
@@ -56,13 +51,8 @@ struct PPCFuncRegistrar {
     GetPPCFuncRegistry().emplace_back(name, func);
   }
 };
-}  // namespace detail
+}
 
-//=============================================================================
-// Type Traits (additional, types.h has is_be_type)
-//=============================================================================
-
-// Function argument helpers
 template <typename R, typename... T>
 constexpr std::tuple<T...> function_args(R (*)(T...)) noexcept {
   return std::tuple<T...>();
@@ -74,10 +64,6 @@ static constexpr decltype(V) constant_v = V;
 template <typename T>
 static constexpr bool is_precise_v = std::is_same_v<T, float> || std::is_same_v<T, double>;
 
-//=============================================================================
-// Concepts for Type Constraints
-//=============================================================================
-
 template <typename T>
 concept BigEndianType = is_be_type_v<T>;
 
@@ -87,7 +73,6 @@ concept MappedPtrType = is_mapped_ptr_v<T>;
 template <typename T>
 concept PreciseType = is_precise_v<T>;
 
-// A "plain" type: not a pointer, not be<T>, not MappedPtr
 template <typename T>
 concept PlainType = !std::is_pointer_v<T> && !BigEndianType<T> && !MappedPtrType<T>;
 
@@ -96,12 +81,7 @@ struct arg_count_t {
   static constexpr size_t value = std::tuple_size_v<decltype(function_args(Func))>;
 };
 
-//=============================================================================
-// Argument Translator
-//=============================================================================
-
 struct ArgTranslator {
-  // Get integer argument value from register or stack
   static constexpr uint64_t GetIntegerArgumentValue(const PPCContext& ctx, uint8_t* base,
                                                     size_t arg) noexcept {
     if (arg <= 7) {
@@ -126,12 +106,11 @@ struct ArgTranslator {
           break;
       }
     }
-    // Stack arguments at r1 + 0x54 + ((arg - 8) * 8)
+
     return __builtin_bswap32(
         *rex::memory::GuestPtr<uint32_t*>(base, ctx.r1.u32 + 0x54 + ((arg - 8) * 8)));
   }
 
-  // Get float/double argument value from FPR
   static double GetPrecisionArgumentValue(const PPCContext& ctx, [[maybe_unused]] uint8_t* base,
                                           size_t arg) noexcept {
     switch (arg) {
@@ -167,7 +146,6 @@ struct ArgTranslator {
     return 0;
   }
 
-  // Set integer argument value
   static constexpr void SetIntegerArgumentValue(PPCContext& ctx, uint8_t* base, size_t arg,
                                                 uint64_t value) noexcept {
     if (arg <= 7) {
@@ -200,12 +178,11 @@ struct ArgTranslator {
           break;
       }
     }
-    // Stack-passed arguments (mirrors GetIntegerArgumentValue layout)
+
     *rex::memory::GuestPtr<uint32_t*>(base, ctx.r1.u32 + 0x54 + ((arg - 8) * 8)) =
         __builtin_bswap32(static_cast<uint32_t>(value));
   }
 
-  // Set float/double argument value
   static void SetPrecisionArgumentValue(PPCContext& ctx, [[maybe_unused]] uint8_t* base, size_t arg,
                                         double value) noexcept {
     switch (arg) {
@@ -253,7 +230,6 @@ struct ArgTranslator {
     }
   }
 
-  // Get typed value (be<T> types)
   template <BigEndianType T>
   static constexpr T GetValue(PPCContext& ctx, uint8_t* base, size_t idx) noexcept {
     T result;
@@ -261,7 +237,6 @@ struct ArgTranslator {
     return result;
   }
 
-  // Get typed value (MappedPtr<T>)
   template <MappedPtrType T>
   static T GetValue(PPCContext& ctx, uint8_t* base, size_t idx) noexcept {
     using inner_t = typename mapped_ptr_inner_type<T>::type;
@@ -274,7 +249,6 @@ struct ArgTranslator {
     return T(host_ptr, guest_addr);
   }
 
-  // Get typed value (non-pointer, non-be<T>, non-MappedPtr)
   template <PlainType T>
   static constexpr T GetValue(PPCContext& ctx, uint8_t* base, size_t idx) noexcept {
     if constexpr (is_precise_v<T>) {
@@ -284,7 +258,6 @@ struct ArgTranslator {
     }
   }
 
-  // Get typed value (pointer - translates guest address to host pointer)
   template <typename T>
     requires std::is_pointer_v<T>
   static constexpr T GetValue(PPCContext& ctx, uint8_t* base, size_t idx) noexcept {
@@ -296,7 +269,6 @@ struct ArgTranslator {
     return rex::memory::GuestPtr<T>(base, guest_addr);
   }
 
-  // Set typed value
   template <typename T>
   static constexpr void SetValue(PPCContext& ctx, uint8_t* base, size_t idx, T value) noexcept {
     if constexpr (is_precise_v<T>) {
@@ -313,22 +285,16 @@ struct ArgTranslator {
   }
 };
 
-//=============================================================================
-// Argument Gathering
-//=============================================================================
-
 struct Argument {
-  int type{};     // 0 = integer, 1 = float
-  int ordinal{};  // Position in integer or float argument list
+  int type{};
+  int ordinal{};
 };
 
-// Helper to detect precise types
 template <typename T>
 constexpr bool is_precise_type() {
   return is_precise_v<T>;
 }
 
-// Type-only gather helper - doesn't require constexpr-constructible types
 template <typename... Args>
 constexpr std::array<Argument, sizeof...(Args)> GatherFunctionArgumentsFromTypes() {
   std::array<Argument, sizeof...(Args)> args{};
@@ -350,7 +316,6 @@ constexpr std::array<Argument, sizeof...(Args)> GatherFunctionArgumentsFromTypes
   return args;
 }
 
-// Helper to extract args tuple types and call GatherFunctionArgumentsFromTypes
 template <typename R, typename... Args>
 constexpr auto GatherFromSignature(R (*)(Args...)) {
   return GatherFunctionArgumentsFromTypes<Args...>();
@@ -365,10 +330,6 @@ template <auto Func, size_t I>
 struct arg_ordinal_t {
   static constexpr size_t value = GatherFunctionArguments<Func>()[I].ordinal;
 };
-
-//=============================================================================
-// Argument Translation
-//=============================================================================
 
 template <auto Func, int I = 0, typename... TArgs>
   requires(I >= sizeof...(TArgs))
@@ -397,18 +358,13 @@ void _translate_args_to_guest(PPCContext& ctx, uint8_t* base, std::tuple<TArgs..
   _translate_args_to_guest<I + 1>(ctx, base, tpl);
 }
 
-//=============================================================================
-// Host To PPC Function Wrapper
-//=============================================================================
-// Calls a native C++ function with arguments extracted from PPC context
-
 template <auto Func>
 __attribute__((noinline)) void HostToGuestFunction(PPCContext& ctx, uint8_t* base) {
   using ret_t = decltype(std::apply(Func, function_args(Func)));
 
   auto args = function_args(Func);
   _translate_args_to_host<Func>(ctx, base, args);
-  // The export runs in the host's FP mode, not the guest's (RG-GDK-056).
+
   HostFpScope host_fp(ctx.fpscr);
 
   if constexpr (std::is_same_v<ret_t, void>) {
@@ -416,7 +372,6 @@ __attribute__((noinline)) void HostToGuestFunction(PPCContext& ctx, uint8_t* bas
   } else {
     auto v = std::apply(Func, args);
 
-    // Memory barrier to ensure compiler doesn't reorder
     asm volatile("" ::: "memory");
 
     if constexpr (std::is_pointer<ret_t>()) {
@@ -433,11 +388,6 @@ __attribute__((noinline)) void HostToGuestFunction(PPCContext& ctx, uint8_t* bas
     }
   }
 }
-
-//=============================================================================
-// PPC To Host Function Wrapper
-//=============================================================================
-// Calls a PPC function from host code with proper context setup
 
 template <typename T, typename TFunction, typename... TArgs>
 T GuestToHostFunction(const TFunction& func, TArgs&&... argv) {
@@ -465,7 +415,7 @@ T GuestToHostFunction(const TFunction& func, TArgs&&... argv) {
 
   PPCContext newCtx{};
   newCtx.r1 = currentCtx->r1;
-  newCtx.r1.u32 -= 0x70;  // PPC64 minimum frame: linkage + param save
+  newCtx.r1.u32 -= 0x70;
   newCtx.r13 = currentCtx->r13;
   newCtx.fpscr = currentCtx->fpscr;
 
@@ -496,7 +446,6 @@ T GuestToHostFunction(const TFunction& func, TArgs&&... argv) {
   }
 }
 
-}  // namespace rex::ppc
+}
 
-/// Maximum size of the loaded image name buffer (255 chars + NUL).
 constexpr size_t kExLoadedImageNameSize = 255 + 1;

@@ -1,7 +1,4 @@
-/**
- * Tests for the PowerPC floating-point rules in rex/ppc/fp.h that the PPC
- * corpus doesn't cover (RG-GDK-055). The corpus covers the arithmetic.
- */
+
 
 #include <cstdint>
 #include <cmath>
@@ -41,10 +38,9 @@ TEST_CASE("FPSCR result classes match PowerPC FPRF encodings", "[ppc][fp]") {
 }
 
 TEST_CASE("lfs and stfs keep a signalling NaN signalling", "[ppc][fp]") {
-  // Single SNaN 0x7F800001 widens to 0x7FF0000020000000, quiet bit clear.
   CHECK(fp::bits(fp::load_single(0x7F800001u)) == 0x7FF0000020000000ull);
   CHECK(fp::store_single(fp::from_bits(0x7FF0000020000000ull)) == 0x7F800001u);
-  // A quiet NaN stays quiet, and ordinary values convert as before.
+
   CHECK(fp::bits(fp::load_single(0x7FC00001u)) == 0x7FF8000020000000ull);
   CHECK(fp::bits(fp::load_single(0x3F800000u)) == 0x3FF0000000000000ull);
   CHECK(fp::store_single(1.0) == 0x3F800000u);
@@ -123,13 +119,13 @@ TEST_CASE("integer-to-double conversion tracks FPRF FR and FI", "[ppc][fp]") {
 TEST_CASE("Record forms set CR1 from what the operation raised", "[ppc][fp]") {
   rex::ppc::CRRegister cr1{};
   auto add = [](double a, double b, double) { return fp::add(a, b); };
-  // 1 + 2 is exact: nothing raised.
+
   CHECK(fp::recorded(cr1, add, false, false, 1.0, 2.0) == 3.0);
   CHECK(cr1.raw() == 0);
-  // 0.1 + 0.2 is inexact: FX alone.
+
   fp::recorded(cr1, add, false, false, 0.1, 0.2);
   CHECK(cr1.raw() == 0x8);
-  // inf - inf is invalid: FX and VX, and the default QNaN.
+
   auto sub = [](double a, double b, double) { return fp::sub(a, b); };
   const double inf = fp::from_bits(fp::kInfinity);
   CHECK(fp::bits(fp::recorded(cr1, sub, false, false, inf, inf)) == fp::kDefaultNaN);
@@ -142,7 +138,6 @@ TEST_CASE("Scalar arithmetic accumulates FPSCR exception causes and summaries", 
   const uint32_t original_csr = rex::ppc::FPSCRRegister::Platform::getcsr();
   fpscr.csr = original_csr;
 
-  // Inexact is sticky and sets FX when the cause flag first changes.
   CHECK(fp::tracked(fpscr, nullptr, add, 0, false, false, fp::TrackedOp::kAdd, 0.1, 0.2) != 0.0);
   CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX)) ==
         (rex::ppc::FPSCRRegister::kFX | rex::ppc::FPSCRRegister::kXX));
@@ -151,7 +146,6 @@ TEST_CASE("Scalar arithmetic accumulates FPSCR exception causes and summaries", 
   CHECK((fpscr.guest_bits & (rex::ppc::FPSCRRegister::kFR | rex::ppc::FPSCRRegister::kFI)) ==
         (rex::ppc::FPSCRRegister::kFR | rex::ppc::FPSCRRegister::kFI));
 
-  // An invalid operation records its PowerPC subcause and invalid summary.
   fpscr.guest_bits = 0;
   const double infinity = fp::from_bits(fp::kInfinity);
   auto sub = [](double a, double b, double) { return fp::sub(a, b); };
@@ -163,14 +157,12 @@ TEST_CASE("Scalar arithmetic accumulates FPSCR exception causes and summaries", 
          rex::ppc::FPSCRRegister::kVXISI));
   CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFPRF) == 0x11000);
 
-  // An enabled invalid exception leaves the result fields unchanged.
   fpscr.guest_bits = rex::ppc::FPSCRRegister::kVE | rex::ppc::FPSCRRegister::kFPCCGreater;
   fp::tracked(fpscr, nullptr, sub, fp::sub_invalid_causes(infinity, infinity), false, false,
               fp::TrackedOp::kSub, infinity, infinity);
   CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFPRF) ==
         rex::ppc::FPSCRRegister::kFPCCGreater);
 
-  // FEX reflects the corresponding enable and clears when the enabled cause is cleared.
   fpscr.storeFromGuest(rex::ppc::FPSCRRegister::kVE);
   CHECK((fpscr.guest_bits & rex::ppc::FPSCRRegister::kFEX) == 0);
   fpscr.recordExceptions(rex::ppc::FPSCRRegister::kVXSNAN);
@@ -260,7 +252,6 @@ TEST_CASE("Host code runs in the host FP mode, guest code in its own", "[ppc][fp
   constexpr uint32_t kGuestBits = rex::ppc::FPSCRRegister::GuestMask;
   const uint32_t original = Platform::getcsr();
 
-  // Guest code with VMX flush on and rounding toward zero calls an export.
   rex::ppc::FPSCRRegister guest{};
   guest.csr = original & ~kGuestBits;
   guest.storeFromGuest(rex::ppc::kRoundTowardZero);
@@ -270,15 +261,13 @@ TEST_CASE("Host code runs in the host FP mode, guest code in its own", "[ppc][fp
     rex::ppc::HostFpScope host(guest);
     CHECK((Platform::getcsr() & kGuestBits) == 0);
     {
-      // The export calls back into guest code, which switches to rounding
-      // down.
       rex::ppc::GuestFpScope callback(guest);
       CHECK(Platform::getcsr() == guest_mode);
       guest.storeFromGuest(rex::ppc::kRoundDown);
     }
     CHECK((Platform::getcsr() & kGuestBits) == 0);
   }
-  // Back in guest code: the callback's rounding mode, and the cache agrees.
+
   CHECK(Platform::getcsr() == guest.csr);
   CHECK(guest.loadFromHost() == rex::ppc::kRoundDown);
   CHECK((guest.csr & rex::ppc::FPSCRRegister::FlushMask) == rex::ppc::FPSCRRegister::FlushMask);

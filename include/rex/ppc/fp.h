@@ -33,11 +33,6 @@
 
 namespace rex::ppc::fp {
 
-//=============================================================================
-// Scalar classification
-//=============================================================================
-
-/// PowerPC's default QNaN is positive; x86's is negative.
 inline constexpr uint64_t kDefaultNaN = 0x7FF8000000000000ull;
 inline constexpr uint64_t kQuietBit = 0x0008000000000000ull;
 inline constexpr uint64_t kMagnitude = 0x7FFFFFFFFFFFFFFFull;
@@ -71,8 +66,6 @@ inline double quiet(double x) noexcept {
   return from_bits(bits(x) | kQuietBit);
 }
 
-/// A NaN result is the first NaN operand, quieted with its sign kept, or the
-/// default QNaN when the operation itself was invalid.
 inline double nan_result(double a, double b) noexcept {
   if (is_nan(a))
     return quiet(a);
@@ -87,12 +80,6 @@ inline double nan_result(double a, double b, double c) noexcept {
   return nan_result(b, c);
 }
 
-/// Single-precision arithmetic answers the default QNaN when every operand is
-/// finite and one is a denormalized double. Divide and square root don't.
-/// It sits on every single-precision op, so the hot path is one subtract and
-/// compare per operand (a zero wraps to the top and never reads as
-/// denormal), with the finite check only once one hits (as xenia-edge
-/// 078a07b53 does).
 inline bool single_denormal(double a, double b, double c) noexcept {
   if (__builtin_expect(is_denormal(a) | is_denormal(b) | is_denormal(c), 0))
     return is_finite(a) && is_finite(b) && is_finite(c);
@@ -105,11 +92,6 @@ inline bool single_denormal(double a, double b) noexcept {
 inline double to_single(double x) noexcept {
   return double(float(x));
 }
-
-//=============================================================================
-// Scalar arithmetic
-//=============================================================================
-// The host result is kept unless it is a NaN, which costs one compare.
 
 inline double add(double a, double b) noexcept {
   double r = a + b;
@@ -132,8 +114,6 @@ inline double sqrt(double b) noexcept {
   return r == r ? r : nan_result(b, b);
 }
 
-// Multiply-add takes frA, frC, frB, but a NaN is chosen in A, B, C order. The
-// negated forms leave a NaN result's sign alone.
 inline double madd(double a, double c, double b) noexcept {
   double r = std::fma(a, c, b);
   return r == r ? r : nan_result(a, b, c);
@@ -151,16 +131,12 @@ inline double nmsub(double a, double c, double b) noexcept {
   return r == r ? -r : nan_result(a, b, c);
 }
 
-// The single-precision forms keep the host result unless it is a NaN or an
-// operand is a denormalized double; both are rare, so one unlikely branch
-// covers them and the exact answer is worked out out of line.
-
 [[gnu::cold, gnu::noinline]] inline double SingleSlow(double r, double a, double b) noexcept {
   if (single_denormal(a, b))
     return from_bits(kDefaultNaN);
   return to_single(r == r ? r : nan_result(a, b));
 }
-// r is the multiply-add result (negated for the negated forms).
+
 [[gnu::cold, gnu::noinline]] inline double SingleSlow(double r, double a, double c,
                                                       double b) noexcept {
   if (single_denormal(a, c, b))
@@ -187,7 +163,7 @@ inline double muls(double a, double b) noexcept {
   const double r = a * b;
   return Suspect(r, a, b) ? SingleSlow(r, a, b) : to_single(r);
 }
-// A denormalized operand keeps the double quotient and root, unrounded.
+
 inline double divs(double a, double b) noexcept {
   const double r = div(a, b);
   return single_denormal(a, b) ? r : to_single(r);
@@ -213,26 +189,24 @@ inline double nmsubs(double a, double c, double b) noexcept {
   return Suspect(r, a, c, b) ? SingleSlow(r, a, c, b) : to_single(r);
 }
 
-/// frsqrte: the Xenon's estimate, 5 bits from a 16-entry table indexed by the
-/// exponent's parity and the top 3 mantissa bits (xenia-edge's frsqrte helper).
 inline double rsqrte(double x) noexcept {
   static constexpr uint8_t kTable[16] = {241, 216, 192, 168, 152, 136, 128, 112,
                                          96,  76,  60,  48,  32,  24,  16,  8};
   uint64_t u = bits(x);
   if ((u & kMagnitude) == 0)
-    return from_bits((u & ~kMagnitude) | kInfinity);  // +-0 -> +-inf
+    return from_bits((u & ~kMagnitude) | kInfinity);
   if ((u & kInfinity) == kInfinity) {
     if (u == kInfinity)
       return 0.0;
     if (u & 0x000FFFFFFFFFFFFFull)
-      return from_bits(u | kQuietBit);  // NaN, quieted
-    return from_bits(kDefaultNaN);      // -inf
+      return from_bits(u | kQuietBit);
+    return from_bits(kDefaultNaN);
   }
   if (u >> 63)
     return from_bits(kDefaultNaN);
   int32_t exponent = int32_t(u >> 52);
   uint64_t mantissa = u & 0x000FFFFFFFFFFFFFull;
-  if (exponent == 0) {  // denormal: normalise
+  if (exponent == 0) {
     const int leading = __builtin_clzll(mantissa);
     mantissa <<= leading - 11;
     exponent = 12 - leading;
@@ -242,25 +216,21 @@ inline double rsqrte(double x) noexcept {
   return from_bits((result_exponent << 52) | (uint64_t(kTable[index]) << 44));
 }
 
-/// The vrsqrtefp table (src/system/ppc_fp.cpp).
 const uint32_t* VRsqrteTable();
 
-/// vrsqrtefp on one element, with VSCR[NJ] set (denormals as zero).
 inline uint32_t vrsqrte(uint32_t u) noexcept {
   const uint32_t exponent = (u >> 23) & 0xFF;
-  if (!(u >> 31) && exponent - 1 < 254)  // positive normal
+  if (!(u >> 31) && exponent - 1 < 254)
     return VRsqrteTable()[(u >> 9) & 0x7FFF] - (((u >> 24) - 63) << 23);
   if ((u & 0x7FFFFFFFu) > 0x7F800000u)
-    return u | 0x00400000u;  // NaN, quieted
+    return u | 0x00400000u;
   if (u == 0x7F800000u)
-    return 0;  // +inf
+    return 0;
   if ((u & 0x7F800000u) == 0)
-    return (u & 0x80000000u) | 0x7F800000u;  // +-0 and denormals -> +-inf
-  return 0x7FC00000u;                        // negative: the default QNaN
+    return (u & 0x80000000u) | 0x7F800000u;
+  return 0x7FC00000u;
 }
 
-/// fctiw/fctiwz: a NaN or too-negative value gives the sign-extended most
-/// negative word, a too-positive one the most positive.
 inline int64_t to_int32(double x, bool truncate) noexcept {
   if (is_nan(x))
     return int64_t(INT32_MIN);
@@ -272,7 +242,6 @@ inline int64_t to_int32(double x, bool truncate) noexcept {
   return int64_t(int32_t(r));
 }
 
-/// fctid/fctidz: as to_int32, on a doubleword.
 inline int64_t to_int64(double x, bool truncate) noexcept {
   if (is_nan(x))
     return INT64_MIN;
@@ -284,8 +253,6 @@ inline int64_t to_int64(double x, bool truncate) noexcept {
   return int64_t(r);
 }
 
-/// lfs: widening a single never quiets it on PowerPC, where the host convert
-/// sets a signalling NaN's quiet bit.
 inline double load_single(uint32_t u) noexcept {
   float f;
   std::memcpy(&f, &u, sizeof(f));
@@ -295,7 +262,6 @@ inline double load_single(uint32_t u) noexcept {
   return d;
 }
 
-/// stfs: as load_single, narrowing.
 inline uint32_t store_single(double d) noexcept {
   const float f = float(d);
   uint32_t u;
@@ -305,16 +271,6 @@ inline uint32_t store_single(double d) noexcept {
   return u;
 }
 
-//=============================================================================
-// Record forms (fadd. ...): CR1 is FX, FEX, VX, OX
-//=============================================================================
-// FX summarises every exception the instruction raised, VX the invalid ones
-// and OX overflow. FEX needs the exception enables, which nothing sets. The
-// host status flags supply what the arithmetic raised; `invalid` adds what
-// the host doesn't report (a signalling operand it quieted, or 0 x inf with a
-// quiet NaN addend). The flags are read per instruction rather than kept
-// sticky in the FPSCR.
-
 inline bool any_snan(double a, double b = 0.0, double c = 0.0) noexcept {
   return is_snan(a) || is_snan(b) || is_snan(c);
 }
@@ -323,7 +279,6 @@ inline uint32_t snan_causes(double a, double b = 0.0, double c = 0.0) noexcept {
   return any_snan(a, b, c) ? FPSCRRegister::kVXSNAN : 0;
 }
 
-/// Compare operands and record the invalid causes specified by fcmpu/fcmpo.
 inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
                     bool ordered) noexcept {
   cr.compare(a, b);
@@ -335,8 +290,6 @@ inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
   }
   fpscr.recordExceptions(causes);
 
-  // Compare updates FPCC, but preserves C, FR, and FI. An ordered compare
-  // that raises an enabled invalid exception still reports unordered FPCC.
   uint32_t fpcc = FPSCRRegister::kFPCCUnordered;
   if (!has_nan) {
     fpcc = a < b ? FPSCRRegister::kFPCCLess
@@ -345,7 +298,6 @@ inline void compare(FPSCRRegister& fpscr, CRRegister& cr, double a, double b,
   fpscr.guest_bits = (fpscr.guest_bits & ~FPSCRRegister::kFPCC) | fpcc;
 }
 
-/// Return the PowerPC FPRF encoding for a floating-point result.
 inline uint32_t bits32(float x) noexcept;
 
 inline uint32_t result_class(double result, bool single_precision = false) noexcept {
@@ -430,7 +382,6 @@ inline uint32_t sqrt_invalid_causes(double a) noexcept {
   return causes;
 }
 
-/// x86 skips the invalid signal for 0 x inf when the addend is a quiet NaN.
 inline uint32_t madd_invalid_causes(double a, double c, double b,
                                     bool subtract_addend = false) noexcept {
   const uint64_t ma = bits(a) & kMagnitude, mc = bits(c) & kMagnitude;
@@ -452,10 +403,10 @@ inline uint32_t msub_invalid_causes(double a, double c, double b) noexcept {
 
 inline void set_cr1(CRRegister& cr1, int raised, bool invalid) noexcept {
   const bool vx = invalid || (raised & FE_INVALID);
-  cr1.lt = vx || (raised & (FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT));  // FX
-  cr1.gt = 0;                                                                          // FEX
-  cr1.eq = vx;                                                                         // VX
-  cr1.so = (raised & FE_OVERFLOW) != 0;                                                // OX
+  cr1.lt = vx || (raised & (FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT));
+  cr1.gt = 0;
+  cr1.eq = vx;
+  cr1.so = (raised & FE_OVERFLOW) != 0;
 }
 
 inline void set_cr1_from_fpscr(CRRegister& cr1, const FPSCRRegister& fpscr) noexcept {
@@ -495,9 +446,6 @@ inline double sum_residual(double a, double b, double rounded) noexcept {
   return error + (sum - rounded);
 }
 
-/// Return the sign of exact-result minus rounded-result. This uses an
-/// error-free residual for addition and fused multiply-add to avoid comparing
-/// only the already-rounded host result.
 inline double rounding_residual(TrackedOp op, double a, double b, double c,
                                 double rounded) noexcept {
   switch (op) {
@@ -537,8 +485,6 @@ inline bool fraction_incremented(TrackedOp op, double a, double b, double c,
   return residual != 0.0 && std::signbit(residual) != std::signbit(rounded);
 }
 
-/// Execute a scalar floating-point instruction, record its sticky FPSCR state,
-/// and optionally update CR1 for the record form.
 template <typename Op>
 inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t invalid_causes,
                       bool quiet, bool single_precision, TrackedOp tracked_op, double a,
@@ -555,8 +501,6 @@ inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t inv
   if (invalid || (raised & FE_DIVBYZERO)) {
     set_rounding_flags(fpscr, false, false);
   } else if (raised & FE_OVERFLOW) {
-    // FR is architecturally undefined for overflow; FI still reports the
-    // overflowed, inexact result.
     set_rounding_flags(fpscr, false, (raised & FE_INEXACT) != 0);
   } else {
     const bool inexact = (raised & FE_INEXACT) != 0;
@@ -567,10 +511,6 @@ inline double tracked(FPSCRRegister& fpscr, CRRegister* cr1, Op op, uint32_t inv
   return vr;
 }
 
-/// Runs `op` on the operands with the host status flags cleared and sets CR1
-/// from what it raised. The operands and result go through volatiles so the
-/// arithmetic stays between the flag calls. `quiet` reports nothing raised
-/// (a single-precision denormal operand).
 template <typename Op>
 inline double recorded(CRRegister& cr1, Op op, bool invalid, bool quiet, double a, double b = 0.0,
                        double c = 0.0) noexcept {
@@ -597,7 +537,6 @@ inline uint64_t double_integer_magnitude(double value) noexcept {
   return shift >= 0 ? significand << shift : significand >> -shift;
 }
 
-/// Convert a signed guest integer to double and track its rounding fields.
 inline double tracked_from_integer(FPSCRRegister& fpscr, CRRegister* cr1, int64_t value) noexcept {
   volatile int64_t source = value;
   volatile double result = double(source);
@@ -613,7 +552,6 @@ inline double tracked_from_integer(FPSCRRegister& fpscr, CRRegister* cr1, int64_
   return result;
 }
 
-/// Convert to an integer and accumulate the guest FPSCR exception state.
 inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, bool truncate,
                                bool to_doubleword) noexcept {
   const double limit = to_doubleword ? 9223372036854775808.0 : 2147483648.0;
@@ -635,11 +573,6 @@ inline int64_t tracked_convert(FPSCRRegister& fpscr, CRRegister* cr1, double x, 
   return to_doubleword ? to_int64(x, truncate) : to_int32(x, truncate);
 }
 
-/// Execute fres/frsqrte and accumulate the exception state defined by the
-/// operand. These estimate instructions do not report inexact, and FR/FI are
-/// architecturally undefined for them, so both are left unchanged. FPRF takes
-/// the result class (single precision for fres) unless an enabled invalid or
-/// zero-divide exception suppresses the result.
 inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
                                bool sqrt_estimate) noexcept {
   const uint64_t magnitude = bits(x) & kMagnitude;
@@ -650,7 +583,7 @@ inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
     causes |= FPSCRRegister::kZX;
   if (!sqrt_estimate && magnitude != 0 && magnitude < 0x37F0000000000000ull)
     causes |= FPSCRRegister::kOX;
-  // |x| > 2^126 makes 1/x tiny in single precision.
+
   if (!sqrt_estimate && magnitude > 0x47D0000000000000ull && magnitude < kInfinity)
     causes |= FPSCRRegister::kUX;
   fpscr.recordExceptions(causes);
@@ -664,13 +597,6 @@ inline double tracked_estimate(FPSCRRegister& fpscr, CRRegister* cr1, double x,
     set_cr1_from_fpscr(*cr1, fpscr);
   return result;
 }
-
-//=============================================================================
-// Vector (VMX) NaN rules
-//=============================================================================
-// A NaN element is the first NaN operand element, quieted, or the positive
-// default QNaN (x86 makes it negative). Results without a NaN element return
-// after one compare.
 
 inline constexpr uint32_t kDefaultNaN32 = 0x7FC00000u;
 
@@ -693,7 +619,6 @@ inline uint32_t nan_element(uint32_t a, uint32_t b, uint32_t c) noexcept {
   return kDefaultNaN32;
 }
 
-/// Replaces r's NaN elements; `negate` flips the sign of the others.
 inline simde__m128 vnan(simde__m128 r, simde__m128 a, simde__m128 b, simde__m128 c,
                         bool negate) noexcept {
   const simde__m128 sign = simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0x80000000u)));
@@ -713,8 +638,6 @@ inline simde__m128 vnan(simde__m128 r, simde__m128 a, simde__m128 b, simde__m128
   return simde_mm_load_ps(reinterpret_cast<const float*>(ur));
 }
 
-/// Replaces the elements where a or b is a NaN (min and max return the other
-/// operand there, so the result can't be tested).
 inline simde__m128 vnan_operands(simde__m128 r, simde__m128 a, simde__m128 b) noexcept {
   if (simde_mm_movemask_ps(simde_mm_cmpunord_ps(a, b)) == 0)
     return r;
@@ -729,9 +652,6 @@ inline simde__m128 vnan_operands(simde__m128 r, simde__m128 a, simde__m128 b) no
   return simde_mm_load_ps(reinterpret_cast<const float*>(ur));
 }
 
-/// VMX flushes a denormal element to zero, keeping its sign. The host's
-/// denormals-are-zero mode does so for arithmetic but not for min and max,
-/// which return the operand's own bits.
 inline simde__m128 vflush(simde__m128 x) noexcept {
   const simde__m128i xi = simde_mm_castps_si128(x);
   const simde__m128i exponent = simde_mm_and_si128(xi, simde_mm_set1_epi32(0x7F800000));
@@ -739,13 +659,6 @@ inline simde__m128 vflush(simde__m128 x) noexcept {
   return simde_mm_castsi128_ps(
       simde_mm_andnot_si128(simde_mm_and_si128(denormal, simde_mm_set1_epi32(0x7FFFFFFF)), xi));
 }
-
-//-----------------------------------------------------------------------------
-// Fused multiply-add. vmaddfp and vnmsubfp round once, so a separate multiply
-// and add can be an ulp out, or lose the sign of a product that flushes to
-// zero. FMA3 does it in one instruction where the CPU has it (checked once);
-// otherwise the elements go through double, where the product is exact.
-//-----------------------------------------------------------------------------
 
 #if defined(__x86_64__) || defined(_M_X64)
 __attribute__((target("xsave"))) inline bool DetectFma() noexcept {
@@ -756,9 +669,6 @@ __attribute__((target("xsave"))) inline bool DetectFma() noexcept {
 }
 inline const bool kHasFma = DetectFma();
 
-// Inline assembly rather than a target("fma") function, which can't be
-// inlined into the SSE4.1 title code. VEX.128 clears the upper halves, so
-// mixing it with the legacy SSE code costs no transition.
 inline simde__m128 FusedMulAdd(simde__m128 a, simde__m128 c, simde__m128 b) noexcept {
   __m128 r = b;
   __asm__("vfmadd231ps %2, %1, %0" : "+x"(r) : "x"(__m128(a)), "x"(__m128(c)));
@@ -771,7 +681,6 @@ inline simde__m128 FusedMulSub(simde__m128 a, simde__m128 c, simde__m128 b) noex
 }
 #endif
 
-/// a x c + b (or - b), rounded once to single.
 inline simde__m128 vfused(simde__m128 a, simde__m128 c, simde__m128 b, bool subtract) noexcept {
 #if defined(__x86_64__) || defined(_M_X64)
   if (kHasFma)
@@ -799,16 +708,15 @@ inline simde__m128 vsub(simde__m128 a, simde__m128 b) noexcept {
 inline simde__m128 vmul(simde__m128 a, simde__m128 b) noexcept {
   return vnan(simde_mm_mul_ps(a, b), a, b, b, false);
 }
-/// vmaddfp: A x C + B, NaN in A, B, C order.
+
 inline simde__m128 vmadd(simde__m128 a, simde__m128 c, simde__m128 b) noexcept {
   return vnan(vfused(a, c, b, false), a, b, c, false);
 }
-/// vnmsubfp: -(A x C - B), a NaN element not negated.
+
 inline simde__m128 vnmsub(simde__m128 a, simde__m128 c, simde__m128 b) noexcept {
   return vnan(vfused(a, c, b, true), a, b, c, true);
 }
 
-/// vmaxfp/vminfp: denormals flushed, +0 above -0, and a NaN element quieted.
 inline simde__m128 vmax(simde__m128 a, simde__m128 b) noexcept {
   const simde__m128 fa = vflush(a), fb = vflush(b);
   const simde__m128 eq = simde_mm_cmpeq_ps(fa, fb);
@@ -824,7 +732,6 @@ inline simde__m128 vmin(simde__m128 a, simde__m128 b) noexcept {
   return vnan_operands(r, a, b);
 }
 
-/// vrsqrtefp on each element.
 inline simde__m128 vrsqrte(simde__m128 x) noexcept {
   alignas(16) uint32_t u[4];
   simde_mm_store_ps(reinterpret_cast<float*>(u), x);
@@ -832,10 +739,6 @@ inline simde__m128 vrsqrte(simde__m128 x) noexcept {
     e = vrsqrte(e);
   return simde_mm_load_ps(reinterpret_cast<const float*>(u));
 }
-
-// vexptefp and vlogefp: minimax polynomials snapped onto the guest's 2^-11
-// estimate grid, which keeps 2^0 == 1 and log2(2^n) == n exact (xenia-edge
-// fb225d975 coefficients).
 
 inline simde__m128 EstPoly(simde__m128 x, const float* coefficients, int count) noexcept {
   simde__m128 p = simde_mm_set1_ps(coefficients[count - 1]);
@@ -854,7 +757,6 @@ inline simde__m128 BlendMask(simde__m128 a, simde__m128 b, simde__m128 mask) noe
   return simde_mm_or_ps(simde_mm_andnot_ps(mask, a), simde_mm_and_ps(mask, b));
 }
 
-/// vexptefp: 2^x estimate.
 inline simde__m128 vexpte(simde__m128 x) noexcept {
   static constexpr float kExp2[6] = {0.9999999266823865f,   0.6931530239113992f,
                                      0.24015381838022493f,  0.055826172900559086f,
@@ -864,7 +766,7 @@ inline simde__m128 vexpte(simde__m128 x) noexcept {
   const simde__m128i scale = simde_mm_add_epi32(simde_mm_slli_epi32(simde_mm_cvtps_epi32(n), 23),
                                                 simde_mm_set1_epi32(0x3F800000));
   r = simde_mm_mul_ps(r, simde_mm_castsi128_ps(scale));
-  // Out-of-range and non-finite inputs never reach the estimator.
+
   r = BlendMask(r, simde_mm_castsi128_ps(simde_mm_set1_epi32(0x7F800000)),
                 simde_mm_cmpge_ps(x, simde_mm_set1_ps(128.0f)));
   r = BlendMask(r, simde_mm_setzero_ps(), simde_mm_cmplt_ps(x, simde_mm_set1_ps(-126.0f)));
@@ -873,7 +775,6 @@ inline simde__m128 vexpte(simde__m128 x) noexcept {
   return BlendMask(r, quieted, simde_mm_cmpunord_ps(x, x));
 }
 
-/// vlogefp: log2(x) estimate.
 inline simde__m128 vloge(simde__m128 x) noexcept {
   static constexpr float kLog2[7] = {
       1.8456866772102942e-06f, 1.4424953159391898f,  -0.7177910762015521f,  0.4565216600899004f,
@@ -891,7 +792,7 @@ inline simde__m128 vloge(simde__m128 x) noexcept {
   r = BlendMask(r, inf, simde_mm_cmpeq_ps(x, inf));
   r = BlendMask(r, simde_mm_castsi128_ps(simde_mm_set1_epi32(int(kDefaultNaN32))),
                 simde_mm_castsi128_ps(simde_mm_srai_epi32(xi, 31)));
-  // Zero and denormals reach the estimator as zero: -inf.
+
   const simde__m128 zero_exponent = simde_mm_castsi128_ps(simde_mm_cmpeq_epi32(
       simde_mm_and_si128(xi, simde_mm_set1_epi32(0x7F800000)), simde_mm_setzero_si128()));
   r = BlendMask(r, simde_mm_castsi128_ps(simde_mm_set1_epi32(int(0xFF800000u))), zero_exponent);
@@ -900,7 +801,6 @@ inline simde__m128 vloge(simde__m128 x) noexcept {
   return BlendMask(r, quieted, simde_mm_cmpunord_ps(x, x));
 }
 
-/// vcmpbfp: bit 31 when a > b, bit 30 when a < -b, both for a NaN element.
 inline simde__m128 vcmpb(simde__m128 a, simde__m128 b) noexcept {
   const simde__m128 nan = simde_mm_cmpunord_ps(a, b);
   const simde__m128 gt = simde_mm_or_ps(simde_mm_cmpgt_ps(a, b), nan);
@@ -912,4 +812,4 @@ inline simde__m128 vcmpb(simde__m128 a, simde__m128 b) noexcept {
       simde_mm_and_ps(lt, simde_mm_castsi128_ps(simde_mm_set1_epi32(0x40000000))));
 }
 
-}  // namespace rex::ppc::fp
+}

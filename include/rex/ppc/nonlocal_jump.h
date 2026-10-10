@@ -10,9 +10,6 @@
 
 namespace rex::ppc {
 
-// Windows native non-local jumps only. setjmp MUST execute in the generated
-// caller, never inside a helper that returns. Generated callers keep all guest
-// registers in ctx: native automatic locals are not restored by longjmp.
 class NonlocalJumpFrame {
   struct State;
   struct Saved {
@@ -57,7 +54,7 @@ class NonlocalJumpFrame {
     auto* saved = state_->resumed;
     if (!saved)
       throw std::runtime_error("Guest setjmp resumed without a saved context");
-    // Restore AFTER the native unwind: skipped frame destructors may modify ctx.
+
     ctx = saved->guest;
     ctx.r3.s64 = saved->result;
     state_->resumed = nullptr;
@@ -70,14 +67,11 @@ class NonlocalJumpFrame {
     auto* saved = it->second;
     saved->result = value ? value : 1;
     saved->owner->resumed = saved;
-    // Generated callers restore from heap state after resuming, so setjmp is
-    // a controlling expression, with no modified native local result.
+
     std::longjmp(saved->native, 1);
   }
 
  private:
-  // Keep mutable snapshots off the native stack. Multiple buffers saved by the
-  // same generated function must not overwrite a shared automatic PPCContext.
   const std::unique_ptr<State> state_;
 };
-}  // namespace rex::ppc
+}
