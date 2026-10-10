@@ -180,7 +180,8 @@ int lzxdelta_apply_patch(rex::xex2_delta_patch* patch, size_t patch_len, uint32_
     }
 
     cur_patch++;
-    cur_patch = (rex::xex2_delta_patch*)((char*)cur_patch + patch_sz);
+    cur_patch =
+        reinterpret_cast<rex::xex2_delta_patch*>(reinterpret_cast<char*>(cur_patch) + patch_sz);
   }
 
   return 0;

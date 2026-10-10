@@ -80,6 +80,10 @@ Use the compile database for editor navigation and focused Clang-Tidy checks.
 `.clang-tidy` exists, but a repository-wide clean static-analysis baseline is
 not established. Do not claim it passes or auto-fix all legacy findings.
 
+Typed kernel-export entry functions retain the guest-facing PascalCase name
+with the `_entry` suffix used by their export registration. Clang-Tidy permits
+that specific spelling; ordinary functions still follow PascalCase.
+
 Pull-request lint runs Clang-Tidy on added or modified lines in compiled C++
 files, with findings treated as errors. The runner uses native absolute paths
 so its line filters match Windows diagnostics. Headers without their own
