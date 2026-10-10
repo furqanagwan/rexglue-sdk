@@ -23,7 +23,7 @@
 
 #include <toml++/toml.hpp>
 
-using namespace rex::codegen;  // NOLINT
+using namespace rex::codegen;
 namespace fs = std::filesystem;
 
 namespace {
@@ -46,7 +46,6 @@ const CodePatch& Named(const RecompilerConfig& cfg, std::string_view name) {
   return cfg.patches.front();
 }
 
-// One executable section: li r3,1 ; blr ; then padding.
 class Image : public TestModule {
  public:
   std::vector<uint8_t> bytes;
@@ -77,7 +76,7 @@ CodePatch Patch(std::string name, uint32_t address, std::vector<uint8_t> bytes,
   return patch;
 }
 
-}  // namespace
+}
 
 TEST_CASE("[[patch]] writes are big-endian at their width", "[codegen][patch]") {
   auto cfg = Parse(R"(
@@ -170,7 +169,7 @@ TEST_CASE("Enabled patches are written into the code, disabled ones are not", "[
   CHECK(*applied == std::vector<std::string>{"on"});
   CHECK(WordAt(binary, kBase) == 0x38600002);
   CHECK(WordAt(binary, kBase + 4) == 0x4E800020);
-  CHECK(image.bytes[3] == 0x01);  // the module's own image is untouched
+  CHECK(image.bytes[3] == 0x01);
 }
 
 TEST_CASE("Patches that cannot reach the running code are refused", "[codegen][patch]") {
@@ -210,7 +209,6 @@ TEST_CASE("Nothing is written when enabled patches overlap or one is malformed",
   CHECK(result.error().message.find("broken") != std::string::npos);
   CHECK(WordAt(binary, kBase + 4) == 0x4E800020);
 
-  // A disabled overlapping or broken patch doesn't matter.
   broken.enabled = false;
   CHECK(ApplyCodePatches(binary, {Patch("good", kBase, {0x60, 0, 0, 0}), broken}));
 }
@@ -220,15 +218,13 @@ TEST_CASE("Analysis patches the image before anything else", "[codegen][patch]")
   RecompilerConfig config;
   config.patches.push_back(Patch("li 2", kBase, {0x38, 0x60, 0x00, 0x02}));
   auto ctx = CodegenContext::Create(BinaryView::fromModule(image), std::move(config));
-  // This synthetic image has no exception directory, so analysis stops in
-  // registration, after the patches were applied.
+
   auto analyzed = Analyze(ctx);
   REQUIRE_FALSE(analyzed);
   CHECK(analyzed.error().message.find("Exception DataDirectory") != std::string::npos);
   CHECK(ctx.appliedPatches() == std::vector<std::string>{"li 2"});
   CHECK(WordAt(ctx.binary(), kBase) == 0x38600002);
 
-  // A refused patch stops analysis before it starts.
   RecompilerConfig bad;
   bad.patches.push_back(Patch("far", kBase + 0x1000, {0}));
   auto badCtx = CodegenContext::Create(BinaryView::fromModule(image), std::move(bad));
@@ -257,7 +253,7 @@ value = 2
 TEST_CASE("Switchable patches keep the image original and list both words", "[codegen][patch]") {
   Image image;
   auto binary = BinaryView::fromModule(image);
-  CodePatch patch = Patch("Two", kBase + 3, {0x02}, /*enabled=*/false);
+  CodePatch patch = Patch("Two", kBase + 3, {0x02}, false);
   patch.switchable = true;
   std::vector<CodePatch> patches = {patch};
   auto applied = ApplyCodePatches(binary, patches);
@@ -276,7 +272,6 @@ TEST_CASE("Switchable patches keep the image original and list both words", "[co
   CHECK(word.patched == 0x38600002);
   CHECK(word.patch_index == 0);
 
-  // Writing the byte already there switches nothing.
   CodePatch same = Patch("Same", kBase + 3, {0x01});
   same.switchable = true;
   auto unchanged = PrepareSwitchablePatches(binary, {same});
@@ -288,13 +283,13 @@ TEST_CASE("Switchable patches keep the image original and list both words", "[co
 TEST_CASE("Switchable patches may not touch branches", "[codegen][patch]") {
   Image image;
   auto binary = BinaryView::fromModule(image);
-  // The second word is blr.
+
   CodePatch patch = Patch("Return", kBase + 4, {0x60, 0x00, 0x00, 0x00});
   patch.switchable = true;
   auto switchable = PrepareSwitchablePatches(binary, {patch});
   REQUIRE_FALSE(switchable);
   CHECK(switchable.error().message.find("branch") != std::string::npos);
-  // Nor turn another instruction into one.
+
   CodePatch jump = Patch("Jump", kBase, {0x48, 0x00, 0x00, 0x08});
   jump.switchable = true;
   CHECK_FALSE(PrepareSwitchablePatches(binary, {jump}));
@@ -320,7 +315,7 @@ description = "Walther PPK and Fast Switch"
 )");
   REQUIRE(cfg.cheats.size() == 2);
   CHECK(cfg.cheats[0].name == "007 Pack");
-  CHECK(cfg.cheats[0].description == "Walther PPK and Fast Switch");  // the later entry wins
+  CHECK(cfg.cheats[0].description == "Walther PPK and Fast Switch");
   CHECK(cfg.cheats[0].where.empty());
   CHECK(cfg.cheats[1].code == "l3g3nds");
 }
@@ -341,7 +336,7 @@ id = "D4C83E1F-243B-4A68-AD70-ABF3C0FBF372"
 package_name = "SKYFALL"
 )");
   REQUIRE(cfg.dlc.size() == 2);
-  // Ids are compared upper case, so the later entry replaces the first.
+
   CHECK(cfg.dlc[0].id == "D4C83E1F-243B-4A68-AD70-ABF3C0FBF372");
   CHECK(cfg.dlc[0].package_name == "SKYFALL");
   CHECK(cfg.dlc[0].requires_title_update == 0);
@@ -385,8 +380,8 @@ value = 1
   CHECK(god.sets[0].reg == 11);
   CHECK(god.sets[0].value == 30000);
   CHECK(god.sets[0].lr == kBase);
-  CHECK(god.category == "mod");  // "cheat" is the earlier name for "mod"
-  // A switchable patch may be a flag alone; a fixed one may not set registers.
+  CHECK(god.category == "mod");
+
   CHECK(Named(cfg, "Flag only").error.empty());
   CHECK_FALSE(Named(cfg, "Fixed set").error.empty());
   CHECK_FALSE(Named(cfg, "Bad register").error.empty());
@@ -401,9 +396,8 @@ value = 1
   REQUIRE(prepared->sets.count(kBase + 4) == 1);
   CHECK(prepared->sets.find(kBase + 4)->second.patch_index == 0);
 
-  // An lr test needs the link register, which skip_lr drops.
-  CHECK_FALSE(PrepareSwitchablePatches(binary, usable, /*keeps_lr=*/false));
-  // Sets go on instructions in code.
+  CHECK_FALSE(PrepareSwitchablePatches(binary, usable, false));
+
   CodePatch far = god;
   far.sets[0].address = kBase + 0x1000;
   CHECK_FALSE(PrepareSwitchablePatches(binary, {far}));

@@ -36,10 +36,6 @@ using rex::memory::load_and_swap;
 
 namespace rex::codegen {
 
-//=============================================================================
-// Utility
-//=============================================================================
-
 const char* AuthorityName(FunctionAuthority auth) {
   switch (auth) {
     case FunctionAuthority::GAP_FILL:
@@ -61,31 +57,18 @@ const char* AuthorityName(FunctionAuthority auth) {
   }
 }
 
-//=============================================================================
-// FunctionNode
-//=============================================================================
-
 FunctionNode::FunctionNode(uint32_t base, uint32_t size, FunctionAuthority authority)
     : base_(base), size_(size), authority_(authority), state_(FunctionState::kRegistered) {
-  // Generate default name
   char buf[32];
   snprintf(buf, sizeof(buf), "sub_%08X", base);
   name_ = buf;
-
-  // All functions start kRegistered - waiting for discover() to assign blocks.
-  // Authority prevents merging via vacancy checks, not via initial state.
 }
-
-//=============================================================================
-// State Machine Methods
-//=============================================================================
 
 void FunctionNode::discover(std::vector<Block> blocks,
                             std::vector<rex::codegen::ppc::Instruction*> instructions,
                             std::set<uint32_t> labels) {
   assert(canDiscover() && "Invalid state transition: must be kRegistered");
 
-  // Non-imports must have blocks
   if (!isImport()) {
     assert(!blocks.empty() && "Non-import function must have blocks");
   }
@@ -94,7 +77,6 @@ void FunctionNode::discover(std::vector<Block> blocks,
   instructions_ = std::move(instructions);
   labels_ = std::move(labels);
 
-  // Update size based on blocks
   for (const auto& block : blocks_) {
     uint32_t blockEnd = block.base + block.size;
     if (blockEnd > base_ + size_) {
@@ -112,7 +94,6 @@ void FunctionNode::discoverAsImport() {
   assert(canDiscover() && "Invalid state transition: must be kRegistered");
   assert(isImport() && "Only imports can use discoverAsImport()");
 
-  // blocks_ and instructions_ remain empty for imports
   state_ = FunctionState::kDiscovered;
   REXCODEGEN_DEBUG("FunctionNode 0x{:08X} ({}): DISCOVERED as import", base_, name_);
 }
@@ -121,11 +102,11 @@ bool FunctionNode::canSeal() const {
   if (state_ != FunctionState::kDiscovered)
     return false;
   if (isImport())
-    return true;  // Imports can seal without blocks
+    return true;
   if (blocks_.empty())
-    return false;  // Non-imports must have blocks
+    return false;
   if (!unresolvedJumps_.empty())
-    return false;  // All branches must be resolved
+    return false;
   return true;
 }
 
@@ -138,7 +119,6 @@ const FunctionAnalysis& FunctionNode::analysis() const {
 void FunctionNode::addBlock(Block block) {
   blocks_.push_back(block);
 
-  // Extend size if block extends past current end
   uint32_t blockEnd = block.base + block.size;
   if (blockEnd > base_ + size_) {
     size_ = blockEnd - base_;
@@ -146,27 +126,22 @@ void FunctionNode::addBlock(Block block) {
 }
 
 bool FunctionNode::containsAddress(uint32_t addr) const {
-  // First check overall bounds
   if (addr < base_ || addr >= base_ + size_) {
     return false;
   }
 
-  // If no blocks defined, use linear range
   if (blocks_.empty()) {
     return true;
   }
 
-  // Check individual blocks
   for (const auto& block : blocks_) {
     if (block.contains(addr)) {
       return true;
     }
   }
 
-  // For CONFIG and PDATA functions, trust the declared size even if blocks don't cover it
-  // This handles out-of-line switch cases where compiler places code after epilogue
   if (authority_ == FunctionAuthority::CONFIG || authority_ == FunctionAuthority::PDATA) {
-    return true;  // Already passed bounds check above
+    return true;
   }
 
   return false;
@@ -185,7 +160,6 @@ void FunctionNode::addTailCall(uint32_t site, CallTarget target) {
 }
 
 void FunctionNode::addJumpTable(JumpTable jt) {
-  // All jump table targets become labels
   for (uint32_t target : jt.targets) {
     labels_.insert(target);
   }
@@ -211,15 +185,12 @@ bool FunctionNode::tryResolveAgainst(FunctionNode* newFunction) {
 
   bool anyResolved = false;
 
-  // Check each unresolved jump
   for (auto it = unresolvedJumps_.begin(); it != unresolvedJumps_.end();) {
     if (it->target == newFunction->base()) {
-      // Target matches new function's entry point -> external call/tail call
       REXCODEGEN_TRACE(
           "FunctionNode 0x{:08X}: resolved jump 0x{:08X} -> 0x{:08X} as external to {}", base_,
           it->site, it->target, newFunction->name());
 
-      // Add as tail call (unconditional branch to another function)
       addTailCall(it->site, CallTarget::function(newFunction));
 
       it = unresolvedJumps_.erase(it);
@@ -243,7 +214,6 @@ bool FunctionNode::tryResolveAgainstImport(uint32_t importAddr, const std::strin
       REXCODEGEN_TRACE("FunctionNode 0x{:08X}: resolved jump 0x{:08X} -> 0x{:08X} as import {}",
                        base_, it->site, it->target, importName);
 
-      // Add as tail call to import
       addTailCall(it->site, CallTarget::import(importAddr, importName));
 
       it = unresolvedJumps_.erase(it);
@@ -257,12 +227,10 @@ bool FunctionNode::tryResolveAgainstImport(uint32_t importAddr, const std::strin
 }
 
 bool FunctionNode::tryResolveAsInternalLabel(uint32_t target) {
-  // Check if target is within our blocks
   if (!containsAddress(target)) {
     return false;
   }
 
-  // It's internal - add as label
   addLabel(target);
   return true;
 }
@@ -270,7 +238,6 @@ bool FunctionNode::tryResolveAsInternalLabel(uint32_t target) {
 void FunctionNode::absorbRegion(uint32_t regionBase, uint32_t regionSize) {
   assert(state_ != FunctionState::kSealed && "Cannot absorb into SEALED function");
 
-  // Add as a new block
   addBlock({regionBase, regionSize});
 
   REXCODEGEN_DEBUG("FunctionNode 0x{:08X}: absorbed region 0x{:08X}-0x{:08X}, new size=0x{:X}",
@@ -280,12 +247,9 @@ void FunctionNode::absorbRegion(uint32_t regionBase, uint32_t regionSize) {
 void FunctionNode::seal() {
   assert(canSeal() && "Cannot seal: invariants not met");
 
-  // Sort blocks by address for correct emission order
   std::sort(blocks_.begin(), blocks_.end(),
             [](const Block& a, const Block& b) { return a.base < b.base; });
 
-  // Merge overlapping blocks - can happen when multiple paths reach the same code
-  // (e.g., jump table targets and unconditional branches both targeting an epilogue)
   if (blocks_.size() > 1) {
     std::vector<Block> merged;
     merged.reserve(blocks_.size());
@@ -295,9 +259,7 @@ void FunctionNode::seal() {
       Block& last = merged.back();
       const Block& curr = blocks_[i];
 
-      // Check for overlap or adjacency
       if (curr.base <= last.end()) {
-        // Extend last block to cover both
         uint32_t newEnd = std::max(last.end(), curr.end());
         last.size = newEnd - last.base;
         REXCODEGEN_TRACE(
@@ -316,7 +278,6 @@ void FunctionNode::seal() {
     }
   }
 
-  // Compute function analysis
   FunctionAnalysis analysis;
   analysis_ = std::move(analysis);
   state_ = FunctionState::kSealed;
@@ -326,13 +287,8 @@ void FunctionNode::seal() {
       base_, name_, blocks_.size(), labels_.size(), calls_.size(), tailCalls_.size());
 }
 
-//=============================================================================
-// FunctionNode - C++ Code Emission
-//=============================================================================
-
 namespace {
 
-// Helper: append formatted text to a raw string (matches Recompiler::println pattern)
 template <class... Args>
 void emit_println(std::string& out, fmt::format_string<Args...> fmt, Args&&... args) {
   fmt::vformat_to(std::back_inserter(out), fmt.get(), fmt::make_format_args(args...));
@@ -344,14 +300,14 @@ void emit_print(std::string& out, fmt::format_string<Args...> fmt, Args&&... arg
   fmt::vformat_to(std::back_inserter(out), fmt.get(), fmt::make_format_args(args...));
 }
 
-}  // namespace
+}
 
 namespace {
-// Disassemble reads guest-order (big-endian) words from memory.
+
 uint32_t ByteSwapWord(uint32_t v) {
   return (v >> 24) | ((v >> 8) & 0xFF00) | ((v << 8) & 0xFF0000) | (v << 24);
 }
-}  // namespace
+}
 
 std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
   if (authority() == FunctionAuthority::IMPORT) {
@@ -360,7 +316,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
 
   std::string out;
 
-  // --- Empty stub for functions with no blocks ---
   if (blocks().empty()) {
     REXCODEGEN_WARN("Function 0x{:08X} has no blocks - generating stub", base());
 
@@ -380,7 +335,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     return out;
   }
 
-  // --- Check for SEH exception info ---
   const SehExceptionInfo* sehInfo = nullptr;
   if (hasExceptionInfo()) {
     sehInfo = exceptionInfo()->asSeh();
@@ -389,7 +343,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     }
   }
 
-  // --- First pass: collect labels from all blocks ---
   std::unordered_set<size_t> labels;
   labels.reserve(64);
 
@@ -409,14 +362,12 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
           labels.emplace(addr + PPC_BD(instruction));
       }
 
-      // Labels from config switch tables
       auto stIt = ctx.config.switchTables.find(static_cast<uint32_t>(addr));
       if (stIt != ctx.config.switchTables.end()) {
         for (auto label : stIt->second.targets)
           labels.emplace(label);
       }
 
-      // Labels and extern declarations from mid-asm hooks
       auto hookIt = ctx.config.midAsmHooks.find(static_cast<uint32_t>(addr));
       if (hookIt != ctx.config.midAsmHooks.end()) {
         if (hookIt->second.returnOnFalse || hookIt->second.returnOnTrue ||
@@ -468,14 +419,12 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     }
   }
 
-  // Collect labels from auto-detected jump tables
   for (const auto& jt : jumpTables()) {
     for (auto label : jt.targets) {
       labels.emplace(label);
     }
   }
 
-  // --- Function name ---
   std::string name;
   if (base() == ctx.entryPoint) {
     name = "xstart";
@@ -485,12 +434,9 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     name = fmt::format("sub_{:08X}", base());
   }
 
-  // Function signature with weak/alias pattern
   emit_println(out, "DEFINE_REX_FUNC({}) {{", name);
   emit_println(out, "\tREX_FUNC_PROLOGUE();");
 
-  // Taking setjmp's address cannot preserve its native caller's continuation.
-  // Fail explicitly instead of emitting an ordinary returning PPC substitute.
   if (base() == ctx.config.setJmpAddress) {
     emit_println(out, "\tthrow std::runtime_error(\"Indirect guest setjmp is not supported\");");
     emit_println(out, "}}\n");
@@ -502,13 +448,11 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     return out;
   }
 
-  // --- Second pass: emit instruction code ---
   const JumpTable* activeJt = nullptr;
   bool allRecompiled = true;
   CSRState csrState = CSRState::Unknown;
   RecompilerLocalVariables localVariables;
 
-  // Local map for late-detected jump tables (can't mutate const config)
   std::unordered_map<uint32_t, JumpTable> lateJumpTables;
 
   std::string body;
@@ -528,13 +472,11 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     }
 
     while (blockBase < blockEnd) {
-      // Only emit each label once
       if (labels.find(blockBase) != labels.end() && emittedLabels.insert(blockBase).second) {
         emit_println(body, "loc_{:X}:", blockBase);
         csrState = CSRState::Unknown;
       }
 
-      // Look up switch table for this address
       activeJt = nullptr;
       auto stIt = ctx.config.switchTables.find(blockBase);
       if (stIt != ctx.config.switchTables.end()) {
@@ -546,7 +488,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
         }
       }
 
-      // A switchable patch's register sets run before this instruction.
       if (ctx.switched_sets) {
         auto [first, last] = ctx.switched_sets->equal_range(static_cast<uint32_t>(blockBase));
         for (auto it = first; it != last; ++it) {
@@ -565,7 +506,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
         }
       }
 
-      // A switchable patch's word: both versions, chosen by its flag.
       if (ctx.switched) {
         if (auto sw = ctx.switched->find(static_cast<uint32_t>(blockBase));
             sw != ctx.switched->end()) {
@@ -593,7 +533,7 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
               emit_println(body, "\t}}");
             }
           }
-          // Either version may have run: forget what is known of the CSR.
+
           csrState = CSRState::Unknown;
           blockBase += 4;
           ++data;
@@ -608,10 +548,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
         if (*data != 0)
           REXCODEGEN_WARN("Unable to decode instruction {:X} at {:X}", *data, blockBase);
       } else {
-        // Late jump table detection for bctr
-        // Discovery already resolved this branch's table. A second scan may
-        // infer a different index register from the same PPC address setup;
-        // keep the graph's validated table as the source of truth.
         if (insn.opcode->id == PPC_INST_BCTR && !activeJt &&
             std::none_of(jumpTables().begin(), jumpTables().end(),
                          [&](const JumpTable& jt) { return jt.bctrAddress == blockBase; })) {
@@ -650,15 +586,12 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
           }
         }
 
-        // Emit comment with instruction disassembly
         emit_println(body, "\t// {} {}", insn.opcode->name, insn.op_str);
 
-        // Check for mid-asm hook BEFORE instruction
         auto hookIt = ctx.config.midAsmHooks.find(blockBase);
         bool hasHookBefore =
             (hookIt != ctx.config.midAsmHooks.end() && !hookIt->second.afterInstruction);
 
-        // Dispatch instruction to builder
         int id = insn.opcode->id;
         BuilderContext builderCtx{body,           ctx,      *this,   insn, blockBase, data,
                                   localVariables, csrState, activeJt};
@@ -672,7 +605,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
           allRecompiled = false;
         }
 
-        // Check for mid-asm hook AFTER instruction
         if (hookIt != ctx.config.midAsmHooks.end() && hookIt->second.afterInstruction) {
           builderCtx.emit_mid_asm_hook();
         }
@@ -683,7 +615,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     }
   }
 
-  // --- Close function body (or SEH try block) ---
   bool generateSeh = sehInfo && !sehInfo->scopes.empty() && ctx.config.generateExceptionHandlers;
   if (generateSeh) {
     emit_println(body, "\t\t}} SEH_CATCH_ALL {{");
@@ -717,7 +648,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
     emit_println(body, "}}\n");
   }
 
-  // --- Emit local variable declarations, then body ---
   if (localVariables.ctr)
     emit_println(out, "\tPPCRegister ctr{{}};");
   if (localVariables.xer)
@@ -756,7 +686,6 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
   if (localVariables.ea)
     emit_println(out, "\tuint32_t ea{{}};");
 
-  // If SEH, emit SEH_TRY and indent body
   if (generateSeh) {
     emit_println(out, "\tSEH_TRY {{");
     std::string indentedBody;
@@ -778,51 +707,21 @@ std::string FunctionNode::emitCpp(const EmitContext& ctx) const {
 void FunctionGraph::addCodeBuffer(uint32_t baseAddress, const uint8_t* data, size_t size) {
   assert_always("FunctionGraph::addCodeBuffer not implemented. Use Recompiler with builders");
   return;
-  // CodeBuffer buffer;
-  // buffer.baseAddress = baseAddress;
-  // buffer.data.assign(data, data + size);
-  // codeBuffers_.push_back(std::move(buffer));
-  // REXCODEGEN_DEBUG("FunctionGraph: added code buffer 0x{:08X}-0x{:08X} ({} bytes)",
-  //                 baseAddress, baseAddress + static_cast<uint32_t>(size), size);
 }
 
 const uint8_t* FunctionGraph::translateCode(uint32_t addr) const {
   assert_always("FunctionGraph::translateCode not implemented. Use Recompiler with builders");
   return nullptr;
-  // for (const auto& buffer : codeBuffers_) {
-  //     if (buffer.contains(addr)) {
-  //         return buffer.translate(addr);
-  //     }
-  // }
-  // return nullptr;
 }
 
-void FunctionGraph::updateFunctionCodePointers() {
-  // size_t updated = 0;
-  // for (auto& [base, node] : functions_) {
-  //     const uint8_t* code = translateCode(base);
-  //     if (code) {
-  //         node->setCode(code);
-  //         updated++;
-  //     } else {
-  //         REXCODEGEN_WARN("FunctionGraph: no code buffer for function 0x{:08X}", base);
-  //     }
-  // }
-  // REXCODEGEN_DEBUG("FunctionGraph: updated code pointers for {} functions", updated);
-}
-
-//=============================================================================
-// FunctionGraph - Function Management
-//=============================================================================
+void FunctionGraph::updateFunctionCodePointers() {}
 
 FunctionNode* FunctionGraph::addFunction(uint32_t base, uint32_t size, FunctionAuthority authority,
                                          bool hasXrefs) {
-  // Check for existing function at this address
   auto it = functions_.find(base);
   if (it != functions_.end()) {
     FunctionNode* existing = it->second.get();
 
-    // Higher authority wins
     if (existing->authority() >= authority) {
       REXCODEGEN_TRACE(
           "FunctionGraph: ignoring add of 0x{:08X} ({}) - existing has higher authority ({})", base,
@@ -830,21 +729,17 @@ FunctionNode* FunctionGraph::addFunction(uint32_t base, uint32_t size, FunctionA
       return existing;
     }
 
-    // Replace with higher authority
     REXCODEGEN_DEBUG("FunctionGraph: replacing 0x{:08X} ({}) with ({})", base,
                      AuthorityName(existing->authority()), AuthorityName(authority));
   }
 
-  // Create new node
   auto node = std::make_unique<FunctionNode>(base, size, authority);
   FunctionNode* nodePtr = node.get();
   functions_[base] = std::move(node);
   functionsByBase_[base] = nodePtr;
 
-  // Track xrefs for merge eligibility
   functionHasXrefs_[base] = hasXrefs;
 
-  // Notify all PENDING functions
   notifyFunctionAdded(nodePtr);
 
   return nodePtr;
@@ -860,7 +755,6 @@ FunctionNode* FunctionGraph::addFunction(uint32_t base, uint32_t size, FunctionA
 }
 
 FunctionNode* FunctionGraph::addImportFunction(uint32_t address, std::string_view resolvedName) {
-  // Add as function with IMPORT authority
   auto* node = addFunction(address, 4, FunctionAuthority::IMPORT, resolvedName, true);
   REXCODEGEN_TRACE("FunctionGraph: added import function 0x{:08X} -> {}", address, resolvedName);
   return node;
@@ -884,12 +778,11 @@ bool FunctionGraph::removeFunction(uint32_t entryPoint) {
   REXCODEGEN_TRACE("FunctionGraph: removing absorbed function 0x{:08X}", entryPoint);
   functionsByBase_.erase(entryPoint);
   functions_.erase(it);
-  functionHasXrefs_.erase(entryPoint);  // Clean up xref tracking
+  functionHasXrefs_.erase(entryPoint);
   return true;
 }
 
 FunctionNode* FunctionGraph::getFunctionContaining(uint32_t addr) {
-  // O(log f) lookup via sorted base index: find last function with base <= addr
   auto it = functionsByBase_.upper_bound(addr);
   if (it != functionsByBase_.begin()) {
     --it;
@@ -958,10 +851,6 @@ size_t FunctionGraph::sealedCount() const {
   return count;
 }
 
-//=============================================================================
-// Function Setup (called during Discover phase)
-//=============================================================================
-
 void FunctionGraph::setFunctionName(uint32_t entry, std::string name) {
   if (auto* node = getFunction(entry)) {
     node->setName(std::move(name));
@@ -1016,9 +905,7 @@ void FunctionGraph::addUnresolvedJumpToFunction(uint32_t entry, uint32_t site, u
   if (!node)
     return;
 
-  // Try immediate resolution against existing functions/imports
   if (auto* targetFn = getFunction(target)) {
-    // Target is a known function - resolve as call or tail call
     if (isCall) {
       node->addCall(site, CallTarget::function(targetFn));
     } else {
@@ -1030,7 +917,6 @@ void FunctionGraph::addUnresolvedJumpToFunction(uint32_t entry, uint32_t site, u
   }
 
   if (isImport(target)) {
-    // Target is an import - resolve as call or tail call to import
     auto* importNode = getFunction(target);
     const std::string& importName = importNode->name();
     if (isCall) {
@@ -1043,15 +929,10 @@ void FunctionGraph::addUnresolvedJumpToFunction(uint32_t entry, uint32_t site, u
     return;
   }
 
-  // Not resolvable yet - add as unresolved
   node->addUnresolvedJump(site, target, isCall, conditional);
   REXCODEGEN_TRACE("FunctionGraph: added unresolved {} 0x{:08X}->0x{:08X} to function 0x{:08X}",
                    isCall ? "call" : "jump", site, target, entry);
 }
-
-//=============================================================================
-// Resolution and Expansion (called during Merge phase)
-//=============================================================================
 
 size_t FunctionGraph::tryResolveFunction(uint32_t entry) {
   auto* node = getFunction(entry);
@@ -1060,14 +941,12 @@ size_t FunctionGraph::tryResolveFunction(uint32_t entry) {
 
   size_t resolved = 0;
 
-  // Get copy of unresolved jumps (list will be modified)
   auto jumps = node->unresolvedJumps();
 
   REXCODEGEN_TRACE("FunctionGraph::tryResolveFunction 0x{:08X}: {} unresolved jumps", entry,
                    jumps.size());
 
   for (const auto& jump : jumps) {
-    // Try internal label first
     if (node->tryResolveAsInternalLabel(jump.target)) {
       REXCODEGEN_TRACE("  0x{:08X}->0x{:08X}: resolved as internal label", jump.site, jump.target);
       node->removeUnresolvedJump(jump.site);
@@ -1075,7 +954,6 @@ size_t FunctionGraph::tryResolveFunction(uint32_t entry) {
       continue;
     }
 
-    // Try function entry
     if (auto* targetFn = getFunction(jump.target)) {
       REXCODEGEN_TRACE("  0x{:08X}->0x{:08X}: resolved as {} to function {}", jump.site,
                        jump.target, jump.isCall ? "call" : "tail call", targetFn->name());
@@ -1089,7 +967,6 @@ size_t FunctionGraph::tryResolveFunction(uint32_t entry) {
       continue;
     }
 
-    // Try import
     if (isImport(jump.target)) {
       auto* importNode = getFunction(jump.target);
       const std::string& importName = importNode->name();
@@ -1189,20 +1066,14 @@ void FunctionGraph::sealAll() {
   REXCODEGEN_TRACE("FunctionGraph::sealAll: all {} functions sealed", functions_.size());
 }
 
-//=============================================================================
-// Vacancy Checking
-//=============================================================================
-
 void FunctionGraph::registerChunk(uint32_t base, uint32_t size) {
   chunks_.emplace_back(base, size);
   REXCODEGEN_TRACE("FunctionGraph: registered chunk 0x{:08X}-0x{:08X}", base, base + size);
 }
 
 bool FunctionGraph::isVacant(uint32_t fromAddr, uint32_t targetAddr) const {
-  // Rule 1: Check for null dword at boundary
   if (memoryReader_) {
     if (targetAddr > fromAddr) {
-      // Check for null at target (typical inter-function padding)
       auto val = memoryReader_(targetAddr);
       if (val && *val == 0x00000000) {
         REXCODEGEN_TRACE("FunctionGraph::isVacant: null dword at 0x{:08X} blocks vacancy",
@@ -1212,7 +1083,6 @@ bool FunctionGraph::isVacant(uint32_t fromAddr, uint32_t targetAddr) const {
     }
   }
 
-  // Rule 2: Check if any chunk claims the target region
   for (const auto& [chunkBase, chunkSize] : chunks_) {
     if (targetAddr >= chunkBase && targetAddr < chunkBase + chunkSize) {
       REXCODEGEN_TRACE("FunctionGraph::isVacant: chunk 0x{:08X}-0x{:08X} claims 0x{:08X}",
@@ -1221,37 +1091,24 @@ bool FunctionGraph::isVacant(uint32_t fromAddr, uint32_t targetAddr) const {
     }
   }
 
-  // Rule 3: Check if target falls within any function's range
   for (const auto& [base, node] : functions_) {
     if (node->containsAddress(targetAddr)) {
-      // Target is within a function - check if it's mergeable
       if (isMergeableEntryPoint(targetAddr)) {
-        // GAP_FILL can be absorbed
         REXCODEGEN_TRACE("FunctionGraph::isVacant: 0x{:08X} is mergeable (GAP_FILL)", targetAddr);
-        continue;  // Don't block, it's mergeable
+        continue;
       }
-      // Protected function - blocks vacancy
+
       REXCODEGEN_TRACE("FunctionGraph::isVacant: 0x{:08X} is within protected function 0x{:08X}",
                        targetAddr, base);
       return false;
     }
   }
 
-  // green light for vacancy
   return true;
 }
 
 size_t FunctionGraph::markFuncletRegisterSharing() {
-  // MSVC compiles __finally / __except bodies as funclets that run on the
-  // owner's frame with its non-volatiles still live, and reaches an inline one
-  // by bl from the middle of the owner. Localizing the funclet's copies hands it
-  // a zero. The scope table names each funclet, which is the only reliable way
-  // to tell one from a real function: every prologue reads its non-volatiles in
-  // order to spill them, so "reads before writes" cannot distinguish them. C++
-  // EH cleanup and catch funclets run the same way, so they are claimed too. The
-  // owner stays localized and syncs across the call site instead, so it keeps
-  // its isolation from its own callers.
-  std::vector<std::pair<uint32_t, uint32_t>> ranges;  // funclet [base, end)
+  std::vector<std::pair<uint32_t, uint32_t>> ranges;
 
   for (auto& entry : functions_) {
     auto& node = entry.second;
@@ -1303,9 +1160,6 @@ size_t FunctionGraph::markFuncletRegisterSharing() {
     return it != ranges.begin() && addr < (--it)->second;
   };
 
-  // A funclet compiled with both an unwind entry and an inline bl entry lands in
-  // the graph as two nodes sharing one tail. The scope table names only the
-  // first, so sweep the extent for the rest.
   size_t marked = 0;
   for (const auto& [base, node] : functions_) {
     if (insideFunclet(base) && !node->sharesRegisters()) {
@@ -1318,61 +1172,42 @@ size_t FunctionGraph::markFuncletRegisterSharing() {
 }
 
 bool FunctionGraph::isMergeableEntryPoint(uint32_t addr) const {
-  // Only entry points can be mergeable
   auto it = functions_.find(addr);
   if (it == functions_.end()) {
-    return false;  // Not an entry point
+    return false;
   }
 
   const FunctionNode* node = it->second.get();
 
-  // Only GAP_FILL authority can be absorbed
-  // All other authorities represent immutable entry points
   return node->authority() == FunctionAuthority::GAP_FILL;
 }
 
 TargetKind FunctionGraph::classifyTarget(uint32_t target, uint32_t callerAddr,
                                          bool isCallInstruction, const FunctionNode* caller) const {
-  // Address lookup alone is ambiguous when a shared block also has its own entry.
   const FunctionNode* callerFn = caller ? caller : getFunctionContaining(callerAddr);
 
-  // Case 1: Target is an import - always a call/tail-call
   if (isImport(target)) {
     return TargetKind::Import;
   }
 
-  // Case 2: Target is the caller's own entry point
   if (callerFn && target == callerFn->base()) {
-    // bl to own base = recursive call (Function)
-    // b to own base = loop back to start (InternalLabel)
     return isCallInstruction ? TargetKind::Function : TargetKind::InternalLabel;
   }
 
-  // Case 3a: a branch (not a call) into the caller's own blocks stays local,
-  // even when another function also starts there. Discovery made it part of
-  // this body, so no tail call was recorded for it: a null check that returns
-  // 0 and otherwise falls into the virtual-call thunk after it, where the
-  // thunk is also its own entry (RG-FIX-002).
   if (!isCallInstruction && callerFn &&
       std::any_of(callerFn->blocks().begin(), callerFn->blocks().end(),
                   [target](const Block& block) { return block.contains(target); })) {
     return TargetKind::InternalLabel;
   }
 
-  // Case 3: Target is a DIFFERENT function's entry point - this is a call/tail-call
-  // This handles cases where a small thunk function branches to another function
-  // whose entry point happens to fall within the thunk's address range
   if (isEntryPoint(target)) {
     return TargetKind::Function;
   }
 
-  // Case 4: Target is inside caller's function -> InternalLabel
-  // For bl, this would be a rare PIC code pattern
   if (callerFn && callerFn->containsAddress(target)) {
     return TargetKind::InternalLabel;
   }
 
-  // Case 5: Unknown target
   return TargetKind::Unknown;
 }
 
@@ -1384,4 +1219,4 @@ void FunctionGraph::notifyFunctionAdded(FunctionNode* newFunction) {
   }
 }
 
-}  // namespace rex::codegen
+}

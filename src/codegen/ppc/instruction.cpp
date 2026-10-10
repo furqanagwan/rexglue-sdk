@@ -16,17 +16,8 @@
 
 namespace rex::codegen::ppc {
 
-//=============================================================================
-// Helper functions
-//=============================================================================
-
-// Special SPR numbers
-constexpr u32 SPR_LR = 8;   // Link Register
-constexpr u32 SPR_CTR = 9;  // Count Register
-
-//=============================================================================
-// Instruction helper methods implementation
-//=============================================================================
+constexpr u32 SPR_LR = 8;
+constexpr u32 SPR_CTR = 9;
 
 bool Instruction::is_branch() const {
   const auto& info = get_opcode_info(opcode);
@@ -49,9 +40,8 @@ bool Instruction::is_call() const {
 }
 
 bool Instruction::is_return() const {
-  // blr is bclr with BO=20 (unconditional)
   if (opcode == Opcode::bclr) {
-    return (raw == 0x4E800020);  // Specific encoding for blr
+    return (raw == 0x4E800020);
   }
   return false;
 }
@@ -90,7 +80,7 @@ bool Instruction::is_conditional() const {
     case Opcode::bclrl:
     case Opcode::bcctr:
     case Opcode::bcctrl:
-      // Check BO field - unconditional if BO=20
+
       return XL.BO != 20;
     default:
       return false;
@@ -159,7 +149,6 @@ Instruction::Semantics Instruction::get_semantics() const {
   sem.is_call = is_call();
   sem.is_return = is_return();
 
-  // Memory access
   const auto& info = get_opcode_info(opcode);
   if (info.group == OpcodeGroup::kMemory) {
     switch (opcode) {
@@ -188,7 +177,6 @@ Instruction::Semantics Instruction::get_semantics() const {
     }
   }
 
-  // Special register access
   if (opcode == Opcode::mfspr) {
     u32 spr = XFX.spr_num();
     if (spr == SPR_LR)
@@ -203,7 +191,6 @@ Instruction::Semantics Instruction::get_semantics() const {
       sem.writes_ctr = true;
   }
 
-  // Simplified mnemonics
   if (opcode == Opcode::mflr)
     sem.reads_lr = true;
   if (opcode == Opcode::mtlr)
@@ -213,7 +200,6 @@ Instruction::Semantics Instruction::get_semantics() const {
   if (opcode == Opcode::mtctr)
     sem.writes_ctr = true;
 
-  // Branch instructions
   if (opcode == Opcode::bclr || opcode == Opcode::bclrl) {
     sem.reads_lr = true;
   }
@@ -221,7 +207,6 @@ Instruction::Semantics Instruction::get_semantics() const {
     sem.reads_ctr = true;
   }
 
-  // Condition register
   if (opcode == Opcode::cmp || opcode == Opcode::cmpi || opcode == Opcode::cmpl ||
       opcode == Opcode::cmpli) {
     sem.writes_cr = true;
@@ -230,59 +215,42 @@ Instruction::Semantics Instruction::get_semantics() const {
   return sem;
 }
 
-//=============================================================================
-// Instruction decoding
-//=============================================================================
-
 Instruction decode_instruction(guest_addr_t address, u32 code) {
   Instruction instr;
   instr.address = address;
   instr.code = code;
-  instr.raw = code;  // Store in union
+  instr.raw = code;
 
-  // Lookup opcode
   instr.opcode = lookup_opcode(code);
 
-  // Get opcode info
   const auto& info = get_opcode_info(instr.opcode);
   instr.format = info.format;
 
-  // Compute branch target if applicable
   if (instr.is_branch()) {
     switch (instr.format) {
       case InstrFormat::kI: {
-        // Unconditional branch (b, ba, bl, bla)
-        // Use reliable XOR-subtract sign extension
         i32 offset = Instruction::get_i_offset(code);
-        bool aa = (code >> 1) & 1;  // AA bit (absolute address)
+        bool aa = (code >> 1) & 1;
         if (aa) {
-          // Absolute address
           instr.branch_target = static_cast<guest_addr_t>(offset & 0xFFFFFFFF);
         } else {
-          // Relative address
           instr.branch_target = address + offset;
         }
         break;
       }
 
       case InstrFormat::kB: {
-        // Conditional branch (bc, bca, bcl, bcla)
-        // Use reliable XOR-subtract sign extension
         i32 offset = Instruction::get_b_offset(code);
-        bool aa = (code >> 1) & 1;  // AA bit (absolute address)
+        bool aa = (code >> 1) & 1;
         if (aa) {
-          // Absolute address
           instr.branch_target = static_cast<guest_addr_t>(offset & 0xFFFF);
         } else {
-          // Relative address
           instr.branch_target = address + offset;
         }
         break;
       }
 
       case InstrFormat::kXL: {
-        // Indirect branch (bclr, bcctr)
-        // Target is runtime-dependent (in LR or CTR)
         instr.branch_target = std::nullopt;
         break;
       }
@@ -293,53 +261,42 @@ Instruction decode_instruction(guest_addr_t address, u32 code) {
     }
   }
 
-  // Handle simplified mnemonics
-  // blr = bclr with BO=20
   if (code == 0x4E800020) {
-    instr.opcode = Opcode::bclr;  // Already set, but ensure
+    instr.opcode = Opcode::bclr;
   }
 
-  // bctr = bcctr with BO=20
   if (code == 0x4E800420) {
     instr.opcode = Opcode::bcctr;
   }
 
-  // nop = ori 0,0,0
   if (code == 0x60000000) {
     instr.opcode = Opcode::nop;
   }
 
-  // li rD, value = addi rD, 0, value
   if (instr.opcode == Opcode::addi && instr.D.RA == 0) {
     instr.opcode = Opcode::li;
   }
 
-  // lis rD, value = addis rD, 0, value
   if (instr.opcode == Opcode::addis && instr.D.RA == 0) {
     instr.opcode = Opcode::lis;
   }
 
-  // mr rA, rS = or rA, rS, rS (both source operands are the same register)
   if (instr.opcode == Opcode::or_ && instr.X.RT == instr.X.RB) {
     instr.opcode = Opcode::mr;
   }
 
-  // mflr rD = mfspr rD, LR (SPR 8)
   if (instr.opcode == Opcode::mfspr && instr.XFX.spr_num() == SPR_LR) {
     instr.opcode = Opcode::mflr;
   }
 
-  // mtlr rS = mtspr LR, rS (SPR 8)
   if (instr.opcode == Opcode::mtspr && instr.XFX.spr_num() == SPR_LR) {
     instr.opcode = Opcode::mtlr;
   }
 
-  // mfctr rD = mfspr rD, CTR (SPR 9)
   if (instr.opcode == Opcode::mfspr && instr.XFX.spr_num() == SPR_CTR) {
     instr.opcode = Opcode::mfctr;
   }
 
-  // mtctr rS = mtspr CTR, rS (SPR 9)
   if (instr.opcode == Opcode::mtspr && instr.XFX.spr_num() == SPR_CTR) {
     instr.opcode = Opcode::mtctr;
   }
@@ -348,8 +305,7 @@ Instruction decode_instruction(guest_addr_t address, u32 code) {
 }
 
 std::string Instruction::to_string() const {
-  // Placeholder - will be implemented in ppc_disasm.cpp
   const auto& info = get_opcode_info(opcode);
   return std::string(info.name);
 }
-}  // namespace rex::codegen::ppc
+}

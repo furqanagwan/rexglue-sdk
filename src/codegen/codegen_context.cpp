@@ -27,7 +27,6 @@ Result<CodegenContext> CodegenContext::Create(const std::filesystem::path& confi
                                               Runtime& runtime) {
   CodegenContext ctx;
 
-  // Load configuration
   if (!ctx.config_.Load(configPath.string())) {
     return Err<CodegenContext>(ErrorCategory::Config,
                                fmt::format("Failed to load config: {}", configPath.string()));
@@ -36,7 +35,6 @@ Result<CodegenContext> CodegenContext::Create(const std::filesystem::path& confi
 
   std::filesystem::path xexPath = ctx.configDir_ / ctx.config_.filePath;
 
-  // Resolve path
   if (std::filesystem::exists(xexPath)) {
     xexPath = std::filesystem::canonical(xexPath);
   } else {
@@ -44,7 +42,6 @@ Result<CodegenContext> CodegenContext::Create(const std::filesystem::path& confi
                                fmt::format("XEX file not found: {}", xexPath.string()));
   }
 
-  // Load XEX via Runtime
   auto xexFilename = xexPath.filename();
   ctx.source_guest_path_ = xexFilename.generic_string();
   auto vfsPath = "game:\\" + xexFilename.string();
@@ -55,7 +52,6 @@ Result<CodegenContext> CodegenContext::Create(const std::filesystem::path& confi
         fmt::format("Failed to load XEX: {} (status {:#x})", xexPath.string(), status));
   }
 
-  // Get module and create BinaryView
   auto user_module = runtime.kernel_state()->GetExecutableModule();
   if (!user_module) {
     return Err<CodegenContext>(ErrorCategory::Format,
@@ -73,7 +69,6 @@ Result<CodegenContext> CodegenContext::Create(const std::filesystem::path& confi
   REXCODEGEN_TRACE("Loaded XEX: base=0x{:08X}, size=0x{:X}, entry=0x{:08X}",
                    ctx.binary_.baseAddress(), ctx.binary_.imageSize(), ctx.binary_.entryPoint());
 
-  // Initialize AnalysisState from binary
   ctx.analysisState_.format = "xex";
   ctx.analysisState_.loadAddress = ctx.binary_.baseAddress();
   ctx.analysisState_.entryPoint = ctx.binary_.entryPoint();
@@ -108,4 +103,4 @@ void CodegenContext::initDecoded() {
   decoded_->decode();
 }
 
-}  // namespace rex::codegen
+}

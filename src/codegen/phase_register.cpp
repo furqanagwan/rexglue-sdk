@@ -36,10 +36,6 @@ namespace rex::codegen {
 
 namespace {
 
-//=============================================================================
-// PE Structures
-//=============================================================================
-
 #pragma pack(push, 1)
 struct IMAGE_CE_RUNTIME_FUNCTION {
   uint32_t BeginAddress;
@@ -55,25 +51,18 @@ struct IMAGE_CE_RUNTIME_FUNCTION {
 };
 #pragma pack(pop)
 
-//=============================================================================
-// Exception Info Parsing
-//=============================================================================
-
 struct ParsedExceptionInfo {
   ExceptionInfo info;
   uint32_t maxAddress;
   std::vector<uint32_t> discoveredFuncs;
 };
 
-// Prolog info extracted from function prologue for SEH unwinding
 struct PrologInfo {
-  uint32_t frameSize = 0;   // From addi r31, r1, -N
-  uint32_t saveHelper = 0;  // From bl __savegprlr_N
-  bool valid = false;       // True if frame size was successfully detected
+  uint32_t frameSize = 0;
+  uint32_t saveHelper = 0;
+  bool valid = false;
 };
 
-// Scan function prolog to extract frame size and save helper
-// Only called for functions with ExceptionFlag set
 PrologInfo scanProlog(const BinaryView& binary, uint32_t funcAddr, uint32_t prologLength) {
   PrologInfo info;
 
@@ -89,7 +78,6 @@ PrologInfo scanProlog(const BinaryView& binary, uint32_t funcAddr, uint32_t prol
 
   const uint8_t* code = section->data + offset;
 
-  // Use pdata prolog length - if 0, we can't safely scan
   if (prologLength == 0) {
     REXCODEGEN_WARN("SEH function 0x{:08X}: PrologLength=0, cannot determine frame size", funcAddr);
     return info;
@@ -100,7 +88,6 @@ PrologInfo scanProlog(const BinaryView& binary, uint32_t funcAddr, uint32_t prol
     uint32_t addr = funcAddr + i * 4;
     auto decoded = decode_instruction(addr, raw);
 
-    // Check for addi r31, r1, -N (frame pointer setup)
     if (decoded.opcode == Opcode::addi && decoded.D.RT == 31 && decoded.D.RA == 1) {
       int16_t simm = decoded.D.SIMM();
       if (simm < 0) {
@@ -109,14 +96,11 @@ PrologInfo scanProlog(const BinaryView& binary, uint32_t funcAddr, uint32_t prol
       }
     }
 
-    // Check for bl - save helper call
     if (decoded.is_call() && decoded.branch_target.has_value()) {
       info.saveHelper = decoded.branch_target.value();
     }
   }
 
-  // NOTE(tomc): info.valid may be false for handler functions that receive frame in r12
-  // The caller should warn only if frameSize is actually needed (i.e., function has SEH scopes)
   return info;
 }
 
@@ -145,7 +129,6 @@ std::optional<ParsedExceptionInfo> parseSehScopeTable(uint32_t handlerThunk,
     scope.filter = byte_swap(entriesData[i * 4 + 2]);
     scope.handler = byte_swap(entriesData[i * 4 + 3]);
 
-    // __finally has layout [2]=handler, [3]=0; __except has [2]=filter, [3]=handler
     if (scope.handler == 0 && scope.filter != 0) {
       scope.handler = scope.filter;
       scope.filter = 0;
@@ -162,13 +145,11 @@ std::optional<ParsedExceptionInfo> parseSehScopeTable(uint32_t handlerThunk,
     if (scope.handler != 0 && scope.handler > maxAddr)
       maxAddr = scope.handler;
 
-    // For __finally (filter=0), handler is a separate function
-    // For __except (filter!=0), only filter is a separate function (handler is inline)
     if (scope.filter == 0 && scope.handler != 0) {
-      discoveredFuncs.push_back(scope.handler);  // __finally handler
+      discoveredFuncs.push_back(scope.handler);
     }
     if (scope.filter != 0) {
-      discoveredFuncs.push_back(scope.filter);  // __except filter
+      discoveredFuncs.push_back(scope.filter);
     }
   }
 
@@ -222,7 +203,6 @@ std::optional<ParsedExceptionInfo> parseCxxFuncInfo(uint32_t handlerThunk, uint3
   uint32_t maxAddr = functionBeginAddr;
   discoveredFuncs.push_back(handlerThunk);
 
-  // Parse UnwindMap
   if (pUnwindMap != 0 && cxxInfo.maxState > 0) {
     if (pUnwindMap >= rdataStart && pUnwindMap + cxxInfo.maxState * 8 <= rdataStart + rdataSize) {
       for (uint32_t i = 0; i < cxxInfo.maxState; i++) {
@@ -238,7 +218,6 @@ std::optional<ParsedExceptionInfo> parseCxxFuncInfo(uint32_t handlerThunk, uint3
     }
   }
 
-  // Parse TryBlockMap
   if (pTryBlockMap != 0 && nTryBlocks > 0) {
     if (pTryBlockMap >= rdataStart && pTryBlockMap + nTryBlocks * 20 <= rdataStart + rdataSize) {
       for (uint32_t i = 0; i < nTryBlocks; i++) {
@@ -273,7 +252,6 @@ std::optional<ParsedExceptionInfo> parseCxxFuncInfo(uint32_t handlerThunk, uint3
     }
   }
 
-  // Parse IPtoStateMap
   if (pIPtoStateMap != 0 && nIPMapEntries > 0) {
     if (pIPtoStateMap >= rdataStart &&
         pIPtoStateMap + nIPMapEntries * 8 <= rdataStart + rdataSize) {
@@ -350,10 +328,6 @@ std::optional<ParsedExceptionInfo> parseExceptionInfo(const BinaryView& binary,
   }
 }
 
-//=============================================================================
-// Helper Detection
-//=============================================================================
-
 void detectSaveRestoreHelpers(const BinaryView& binary, AnalysisState& state) {
   struct HelperPattern {
     uint32_t pattern;
@@ -414,10 +388,6 @@ void detectSaveRestoreHelpers(const BinaryView& binary, AnalysisState& state) {
   }
 }
 
-//=============================================================================
-// Register Phase: imports, helpers, PDATA, config functions
-//=============================================================================
-
 VoidResult registerEntryPoints(CodegenContext& ctx) {
   REXCODEGEN_TRACE("Analyze: registering entry points...");
 
@@ -427,7 +397,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
   auto& binary = ctx.binary();
   auto& ehDiscoveredFuncs = state.ehDiscoveredFuncs;
 
-  // Merge user hints into analysis state
   for (const auto& [addr, size] : config.invalidInstructionHints) {
     state.invalidInstructions[addr] = size;
   }
@@ -438,7 +407,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
     state.exceptionHandlerFuncs.push_back(addr);
   }
 
-  // Build chunksByParent from config.functions
   for (const auto& [addr, cfg] : config.functions) {
     if (cfg.isChunk()) {
       state.chunksByParent[cfg.parent].push_back(addr);
@@ -470,7 +438,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
                "localization options before regenerating");
   }
 
-  // Register imports
   {
     auto* resolver = ctx.resolver();
     if (!resolver) {
@@ -531,7 +498,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
         importCount, resolvedCount, unresolvedCount, variableCount);
   }
 
-  // Register save/restore helpers
   auto registerHelpers = [&](uint32_t base14, const char* prefix, size_t stride, size_t endReg,
                              size_t extraSize) {
     if (base14 == 0)
@@ -551,7 +517,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
   registerHelpers(state.restVmx14Address, "__restvmx_", 8, 31, 4);
   registerHelpers(state.saveVmx14Address, "__savevmx_", 8, 31, 4);
 
-  // VMX 64-127
   if (state.restVmx64Address != 0) {
     for (size_t i = 64; i < 128; i++) {
       uint32_t addr = state.restVmx64Address + static_cast<uint32_t>((i - 64) * 8);
@@ -569,7 +534,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
     }
   }
 
-  // Register CONFIG functions
   size_t configFuncs = 0, configChunks = 0;
   for (const auto& [address, cfg] : config.functions) {
     uint32_t size = cfg.getSize(address);
@@ -590,7 +554,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
     REXCODEGEN_DEBUG("Analyze: {} CONFIG functions, {} chunks", configFuncs, configChunks);
   }
 
-  // Register PDATA functions
   uint32_t pdataAddr = binary.exceptionDirectoryAddr();
   uint32_t pdataSize = binary.exceptionDirectorySize();
 
@@ -632,7 +595,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
     std::optional<ParsedExceptionInfo> exInfo;
     PrologInfo prologInfo;
     if (fn.ExceptionFlag) {
-      // Scan prolog to get frame size for SEH unwinding
       prologInfo = scanProlog(binary, beginAddr, fn.PrologLength);
 
       exInfo = parseExceptionInfo(binary, beginAddr);
@@ -646,20 +608,15 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
           ehDiscoveredFuncs.push_back(addr);
         }
 
-        // Populate SEH frame info for unwinding
         if (exInfo->info.isSeh()) {
-          // Need non-const access to set frame info
           auto& sehInfo = std::get<SehExceptionInfo>(exInfo->info.data);
           sehInfo.frameSize = prologInfo.frameSize;
 
-          // Warn if we have SEH scopes but couldn't determine frame size
           if (!prologInfo.valid && !sehInfo.scopes.empty()) {
             REXCODEGEN_WARN("SEH function 0x{:08X}: could not determine frame size from prolog",
                             beginAddr);
           }
 
-          // Compute restore helper from save helper
-          // Save helpers and restore helpers are at matching offsets from their base addresses
           if (prologInfo.saveHelper != 0 && state.restGpr14Address != 0 &&
               state.saveGpr14Address != 0) {
             sehInfo.restoreHelper =
@@ -679,7 +636,7 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
             graph.addLabelToFunction(beginAddr, scope.tryStart);
           if (scope.tryEnd != 0)
             graph.addLabelToFunction(beginAddr, scope.tryEnd);
-          // For __except (filter!=0), handler is inline code - add as label
+
           if (scope.filter != 0 && scope.handler != 0) {
             graph.addLabelToFunction(beginAddr, scope.handler);
           }
@@ -699,7 +656,6 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
 
   REXCODEGEN_TRACE("Analyze: added {} functions from PDATA", pdataAdded);
 
-  // Queue EH-discovered functions
   size_t ehFuncsQueued = 0;
   for (uint32_t addr : ehDiscoveredFuncs) {
     if (graph.getFunction(addr) != nullptr)
@@ -718,7 +674,7 @@ VoidResult registerEntryPoints(CodegenContext& ctx) {
   return Ok();
 }
 
-}  // anonymous namespace
+}
 
 namespace phases {
 
@@ -727,6 +683,6 @@ VoidResult Register(CodegenContext& ctx, ProgressReporter* reporter) {
   return registerEntryPoints(ctx);
 }
 
-}  // namespace phases
+}
 
-}  // namespace rex::codegen
+}

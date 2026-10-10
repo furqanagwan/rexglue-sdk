@@ -27,7 +27,6 @@ CodegenPipeline& CodegenPipeline::operator=(CodegenPipeline&&) noexcept = defaul
 Result<CodegenPipeline> CodegenPipeline::Create(const std::filesystem::path& configPath) {
   CodegenPipeline pipeline;
 
-  // Load config to get XEX path
   RecompilerConfig tempConfig;
   if (!tempConfig.Load(configPath.string())) {
     return Err<CodegenPipeline>(ErrorCategory::Config,
@@ -44,7 +43,6 @@ Result<CodegenPipeline> CodegenPipeline::Create(const std::filesystem::path& con
   }
   xexPath = std::filesystem::canonical(xexPath);
 
-  // Create Runtime
   auto xexDir = xexPath.parent_path();
   pipeline.runtime_ = std::make_unique<Runtime>(xexDir.string());
   auto status = pipeline.runtime_->Setup(rex::RuntimeConfig{
@@ -56,7 +54,6 @@ Result<CodegenPipeline> CodegenPipeline::Create(const std::filesystem::path& con
                                 fmt::format("Failed to initialize Runtime: {:#x}", status));
   }
 
-  // Create CodegenContext (AnalysisState is populated from binary there)
   auto ctxResult = CodegenContext::Create(configPath, *pipeline.runtime_);
   if (!ctxResult) {
     return Err<CodegenPipeline>(ctxResult.error());
@@ -89,4 +86,4 @@ Result<void> CodegenPipeline::RunWrite(bool force) {
   return Ok();
 }
 
-}  // namespace rex::codegen
+}

@@ -39,7 +39,7 @@ bool Contains(const std::string& text, const std::string& part) {
   return text.find(part) != std::string::npos;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A config from minimal identity names no service IDs", "[gameconfig]") {
   auto xml = RenderGameConfig(Minimal());
@@ -126,7 +126,7 @@ TEST_CASE("Identity that the GDK schema rejects is refused", "[gameconfig]") {
       "MSA app ID");
   check([](auto& id) { id.title_id = "1A2B3C4D"; }, "Title ID and MSA app ID");
   check([](auto& id) { id.msa_app_id = "123"; }, "Title ID and MSA app ID");
-  check([](auto& id) { id.store_id = "9NBLGGH4R31A"; }, "Store ID");  // 'A' is not allowed
+  check([](auto& id) { id.store_id = "9NBLGGH4R31A"; }, "Store ID");
 }
 
 TEST_CASE("Accepted identity variants", "[gameconfig]") {
@@ -148,7 +148,7 @@ TEST_CASE("Placeholder images are flat RGBA at the size the config names", "[gam
     REQUIRE(pixels);
     CHECK(width == int(image.width));
     CHECK(height == int(image.height));
-    // 24 bpp plus alpha, as the Store validator requires.
+
     CHECK(channels == 4);
     bool uniform = true;
     for (size_t i = 0; i < size_t(width) * height; ++i) {
@@ -157,8 +157,7 @@ TEST_CASE("Placeholder images are flat RGBA at the size the config names", "[gam
     }
     CHECK(uniform);
     stbi_image_free(pixels);
-    // A flat color compresses: under a tenth of the raw RGBA size plus the
-    // fixed PNG overhead (the 1920x1080 splash is about 20 KB, not 8 MB).
+
     CHECK(png.size() < size_t(image.width) * image.height * 4 / 10 + 100);
   }
 }

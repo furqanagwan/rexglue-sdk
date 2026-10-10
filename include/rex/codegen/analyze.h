@@ -17,21 +17,6 @@
 
 namespace rex::codegen {
 
-/**
- * Build and validate the complete FunctionGraph.
- *
- * This function consolidates all analysis phases:
- * - Register: imports, helpers, PDATA functions, config functions
- * - Scan: code regions (null boundaries), data regions
- * - Discover: function blocks, calls, jump tables (iterative to fixed point)
- * - VTable: discover functions via RTTI vtables
- * - GapFill: claim orphaned code regions
- * - Merge: resolve all jumps, seal functions
- * - Validate: verify all calls resolve
- *
- * @param ctx CodegenContext with binary and config loaded
- * @return Success if graph is valid, error otherwise
- */
 Result<void> Analyze(CodegenContext& ctx, ProgressReporter* reporter = nullptr);
 
-}  // namespace rex::codegen
+}

@@ -23,4 +23,4 @@ struct CodeRegion {
   uint32_t size() const { return end - start; }
 };
 
-}  // namespace rex::codegen
+}

@@ -24,26 +24,23 @@
 namespace rex::codegen {
 
 struct GameConfigIdentity {
-  // Identity: Name (3-50 of A-Z a-z 0-9 . -) and Publisher (an X.500 name,
-  // e.g. "CN=Example"). For a Store build both must equal Partner Center's.
   std::string name;
   std::string publisher;
   std::string version = "1.0.0.0";
-  // ShellVisuals.
+
   std::string display_name;
   std::string publisher_display_name;
   std::string description;
   std::string background_color = "#000000";
-  // The title executable, relative to the package root.
+
   std::string executable;
-  // Xbox services identity, both or neither (from Partner Center).
+
   std::optional<std::string> title_id;
   std::optional<std::string> msa_app_id;
-  // Microsoft Store product ID (12 characters).
+
   std::optional<std::string> store_id;
 };
 
-// A ShellVisuals image the config names, with the size GDK tools expect.
 struct GameConfigImage {
   const char* attribute;
   const char* file_name;
@@ -53,14 +50,10 @@ struct GameConfigImage {
 
 std::span<const GameConfigImage> GameConfigImages();
 
-// Checks every field; the error names the first bad one.
 Result<void> ValidateGameConfigIdentity(const GameConfigIdentity& identity);
 
-// The MicrosoftGame.config text (UTF-8 XML), or the validation error.
 Result<std::string> RenderGameConfig(const GameConfigIdentity& identity);
 
-// A single-color PNG, used for placeholder ShellVisuals images until the
-// title supplies its own art.
 std::vector<uint8_t> SolidColorPng(uint32_t width, uint32_t height, uint32_t rgb);
 
-}  // namespace rex::codegen
+}

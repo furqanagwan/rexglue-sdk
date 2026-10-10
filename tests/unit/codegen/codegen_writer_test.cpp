@@ -37,7 +37,6 @@ namespace {
 constexpr uint32_t kBaseAddress = 0x82000000;
 constexpr uint32_t kFunctionCount = 4;
 
-// Big-endian `blr` (0x4E800020), one instruction per test function.
 std::vector<uint8_t> MakeBlrBinary(uint32_t functionCount) {
   std::vector<uint8_t> data;
   data.reserve(functionCount * 4);
@@ -47,13 +46,11 @@ std::vector<uint8_t> MakeBlrBinary(uint32_t functionCount) {
   return data;
 }
 
-/// Whole-file contents, for asserting on emitted text.
 std::string ReadAll(const fs::path& path) {
   std::ifstream in(path, std::ios::binary);
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
-/// Fake module, context with a sealed function per `blr`, scratch output tree.
 struct WriterFixture {
   fs::path root;
   std::vector<uint8_t> data;
@@ -96,7 +93,7 @@ struct WriterFixture {
   fs::path outputDir() const { return root / "generated"; }
 };
 
-}  // namespace
+}
 
 TEST_CASE("Second write with unchanged inputs writes nothing", "[codegen_writer]") {
   WriterFixture fx("unchanged");
@@ -217,7 +214,6 @@ TEST_CASE("A changed function rewrites only the files that differ", "[codegen_wr
   auto initialCount = first.writtenFiles().size();
   REQUIRE(initialCount > 1);
 
-  // Touches init.h, init.cpp, register.cpp and one recomp file, not sources.cmake.
   fx.ctx->graph.setFunctionName(kBaseAddress + 4, "renamed_function");
 
   CodegenWriter second(*fx.ctx);
@@ -276,7 +272,6 @@ TEST_CASE("Every name a recomp file calls is declared in its header", "[codegen_
       declared.insert((*it)[1].str());
     }
 
-    // A call may precede its own definition, so being defined here is no excuse.
     for (std::sregex_iterator it(body.begin(), body.end(), callRe), end; it != end; ++it) {
       auto called = (*it)[1].str();
       INFO("file " << name << " calls " << called << " with no declaration");

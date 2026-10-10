@@ -24,8 +24,6 @@ SigScanner::SigScanner(const runtime::Module& module) : module_(module) {}
 std::vector<uint32_t> SigScanner::scan(const Signature& sig) {
   std::vector<uint32_t> matches;
 
-  // Scan all executable sections
-
   for (const auto& section : module_.binary_sections()) {
     if (!section.host_data)
       continue;
@@ -63,7 +61,6 @@ std::vector<uint32_t> SigScanner::scanRange(uint32_t start, uint32_t end,
     return matches;
   }
 
-  // Find section containing this range
   const auto* section = module_.FindSectionByAddress(start);
   if (!section || !section->host_data) {
     return matches;
@@ -80,7 +77,6 @@ std::vector<uint32_t> SigScanner::scanRange(uint32_t start, uint32_t end,
   const uint8_t* data = section->host_data;
   uint32_t sectionBase = section->virtual_address;
 
-  // Scan through the range (4-byte aligned for PPC)
   for (uint32_t addr = start; addr + patternBytes <= scanEnd; addr += 4) {
     bool matched = true;
     uint32_t offset = addr - sectionBase;
@@ -108,53 +104,13 @@ std::vector<uint32_t> SigScanner::scanRange(uint32_t start, uint32_t end,
 std::vector<Signature> SigScanner::helperSignatures() {
   std::vector<Signature> sigs;
 
-  // __savegprlr_14 pattern:
-  // The save helpers are a sequence of stw rN, offset(r12) instructions
-  // followed by stw r0, 8(r12) and blr
-  //
-  // stw rN, offset(r12) = 0x9180XXXX where XX encodes the offset
-  // For r14: stw r14, -0x48(r12) = 0x91CBFFB8
-  //
-  // We look for the first instruction of the sequence.
-  // stw r14, -0x48(r12) = 0x91CBFFB8
+  sigs.push_back({"__savegprlr_14", {0x91CBFFB8}, {0xFFFFFFFF}, 0, std::nullopt});
 
-  sigs.push_back({
-      "__savegprlr_14",
-      {0x91CBFFB8},  // stw r14, -0x48(r12)
-      {0xFFFFFFFF},  // Exact match
-      0,             // Entry at pattern start
-      std::nullopt   // Size computed from stride
-  });
+  sigs.push_back({"__restgprlr_14", {0x81CBFFB8}, {0xFFFFFFFF}, 0, std::nullopt});
 
-  // __restgprlr_14 pattern:
-  // lwz rN, offset(r12) followed by eventually mtlr r0 and blr
-  // lwz r14, -0x48(r12) = 0x81CBFFB8
+  sigs.push_back({"__savefpr_14", {0xD9CCFF68}, {0xFFFFFFFF}, 0, std::nullopt});
 
-  sigs.push_back({"__restgprlr_14",
-                  {0x81CBFFB8},  // lwz r14, -0x48(r12)
-                  {0xFFFFFFFF},  // Exact match
-                  0,
-                  std::nullopt});
-
-  // __savefpr_14 pattern:
-  // stfd frN, offset(r12)
-  // stfd fr14, -0x98(r12) = 0xD9CCFF68
-
-  sigs.push_back({"__savefpr_14",
-                  {0xD9CCFF68},  // stfd fr14, -0x98(r12)
-                  {0xFFFFFFFF},
-                  0,
-                  std::nullopt});
-
-  // __restfpr_14 pattern:
-  // lfd frN, offset(r12)
-  // lfd fr14, -0x98(r12) = 0xC9CCFF68
-
-  sigs.push_back({"__restfpr_14",
-                  {0xC9CCFF68},  // lfd fr14, -0x98(r12)
-                  {0xFFFFFFFF},
-                  0,
-                  std::nullopt});
+  sigs.push_back({"__restfpr_14", {0xC9CCFF68}, {0xFFFFFFFF}, 0, std::nullopt});
 
   return sigs;
 }
@@ -163,4 +119,4 @@ std::vector<Signature> SigScanner::hleSignatures() {
   return {};
 }
 
-}  // namespace rex::codegen
+}

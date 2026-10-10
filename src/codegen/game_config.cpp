@@ -19,8 +19,6 @@ namespace rex::codegen {
 
 namespace {
 
-// The ShellVisuals images and the sizes the GDK's config editor produces.
-// makepkg pack refuses a config without SplashScreenImage.
 constexpr std::array<GameConfigImage, 5> kImages = {{
     {"StoreLogo", "StoreLogo.png", 100, 100},
     {"Square150x150Logo", "Square150x150Logo.png", 150, 150},
@@ -47,13 +45,11 @@ bool HasControlCharacter(std::string_view value) {
   return false;
 }
 
-// ST_NonEmptyString: no leading or trailing whitespace.
 bool Trimmed(std::string_view value) {
   return !value.empty() && !std::isspace(static_cast<unsigned char>(value.front())) &&
          !std::isspace(static_cast<unsigned char>(value.back()));
 }
 
-// ST_VersionQuad: four parts, each 0-65535 without leading zeros.
 bool IsVersionQuad(const std::string& value) {
   static const char* kPart = "(0|[1-9][0-9]{0,4})";
   if (!Matches(value, fmt::format("{0}\\.{0}\\.{0}\\.{0}", kPart).c_str())) {
@@ -73,8 +69,6 @@ bool IsVersionQuad(const std::string& value) {
   return true;
 }
 
-// ST_Executable within ST_FileName: a relative path ending in .exe whose
-// parts neither start nor end with '.'.
 bool IsRelativeExecutable(std::string_view path) {
   if (path.size() < 5 || HasControlCharacter(path) ||
       path.find_first_of("<>\":%|?*") != std::string_view::npos) {
@@ -163,13 +157,11 @@ void PutChunk(std::vector<uint8_t>& out, const char type[4], const std::vector<u
   PutBe32(out, Crc32(out.data() + type_at, 4 + data.size()));
 }
 
-// One fixed-Huffman deflate block (RFC 1951 3.2.6) whose only back-references
-// are runs of the previous byte (distance 1). Enough for flat-color images.
 class RunLengthDeflater {
  public:
   std::vector<uint8_t> Compress(const std::vector<uint8_t>& data) {
-    PutBits(1, 1);  // BFINAL
-    PutBits(1, 2);  // BTYPE 01: fixed Huffman codes
+    PutBits(1, 1);
+    PutBits(1, 2);
     size_t i = 0;
     while (i < data.size()) {
       size_t run = 0;
@@ -180,13 +172,13 @@ class RunLengthDeflater {
       }
       if (run >= 3) {
         PutLength(uint32_t(run));
-        PutBits(0, 5);  // distance code 0: distance 1
+        PutBits(0, 5);
         i += run;
       } else {
         PutSymbol(data[i++]);
       }
     }
-    PutSymbol(256);  // end of block
+    PutSymbol(256);
     if (bit_count_) {
       out_.push_back(uint8_t(bits_));
     }
@@ -204,7 +196,6 @@ class RunLengthDeflater {
     }
   }
 
-  // Huffman codes are sent most significant bit first.
   void PutCode(uint32_t code, int length) {
     uint32_t reversed = 0;
     for (int b = 0; b < length; ++b) {
@@ -253,18 +244,17 @@ uint32_t Adler32(const std::vector<uint8_t>& data) {
   return (b << 16) | a;
 }
 
-}  // namespace
+}
 
 std::span<const GameConfigImage> GameConfigImages() {
   return kImages;
 }
 
 Result<void> ValidateGameConfigIdentity(const GameConfigIdentity& id) {
-  // ST_PackageName: ST_AsciiIdentifier ([-_. A-Za-z0-9] without '_' or ' '), 3-50.
   if (!Matches(id.name, "[-.A-Za-z0-9]{3,50}")) {
     return Invalid("Identity name", id.name, "3-50 characters from A-Z a-z 0-9 . -");
   }
-  // ST_DistinguishedName, restricted to the common attribute keys.
+
   if (id.publisher.size() > 8192 ||
       !Matches(id.publisher,
                "(CN|L|O|OU|E|C|S|STREET|T|G|I|SN|DC|SERIALNUMBER)=([^,+=\"<>#;]+|\"[^\"]*\")"
@@ -348,8 +338,7 @@ Result<std::string> RenderGameConfig(const GameConfigIdentity& id) {
     xml += fmt::format("\n    {}=\"{}\"", image.attribute, image.file_name);
   }
   xml += "/>\n";
-  // Titles link the dynamic MSVC runtime (rexruntime and the title itself), so
-  // a package must pull in the VC++ framework package (makepkg validator).
+
   xml += "  <DesktopRegistration>\n";
   xml += "    <DependencyList>\n";
   xml += "      <KnownDependency Name=\"VC14\"/>\n";
@@ -365,17 +354,15 @@ std::vector<uint8_t> SolidColorPng(uint32_t width, uint32_t height, uint32_t rgb
   std::vector<uint8_t> header;
   PutBe32(header, width);
   PutBe32(header, height);
-  // 8-bit RGBA: the Store validator wants 24 bpp plus alpha.
+
   header.insert(header.end(), {8, 6, 0, 0, 0});
   PutChunk(png, "IHDR", header);
 
-  // Each scanline uses the Sub filter: the first pixel is the color and the
-  // rest are zero differences, which compress to runs.
   const size_t row_bytes = 1 + size_t(width) * 4;
   std::vector<uint8_t> raw(row_bytes * height, 0);
   for (size_t row = 0; row < height; ++row) {
     uint8_t* line = raw.data() + row * row_bytes;
-    line[0] = 1;  // Sub
+    line[0] = 1;
     line[1] = uint8_t(rgb >> 16);
     line[2] = uint8_t(rgb >> 8);
     line[3] = uint8_t(rgb);
@@ -390,4 +377,4 @@ std::vector<uint8_t> SolidColorPng(uint32_t width, uint32_t height, uint32_t rgb
   return png;
 }
 
-}  // namespace rex::codegen
+}

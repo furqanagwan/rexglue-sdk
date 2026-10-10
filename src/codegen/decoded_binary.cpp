@@ -19,10 +19,6 @@ using rex::memory::load_and_swap;
 
 namespace rex::codegen {
 
-//=============================================================================
-// DecodedBinary Implementation
-//=============================================================================
-
 DecodedBinary::DecodedBinary(const BinaryView& binary) : binary_(binary) {}
 
 void DecodedBinary::decode() {
@@ -34,12 +30,9 @@ void DecodedBinary::decode() {
     sec.base = section.baseAddress;
     sec.size = section.size;
 
-    // Copy raw section data (needed for reading jump tables and other data)
     sec.data.assign(section.data, section.data + section.size);
 
-    // Only decode instructions for executable sections
     if (section.executable) {
-      // Reserve space for instructions
       size_t insnCount = section.size / 4;
       sec.instructions.reserve(insnCount);
 
@@ -55,11 +48,9 @@ void DecodedBinary::decode() {
     sections_.push_back(std::move(sec));
   }
 
-  // Sort sections by base address for binary search
   std::sort(sections_.begin(), sections_.end(),
             [](const Section& a, const Section& b) { return a.base < b.base; });
 
-  // Compute code regions
   computeCodeRegions();
 }
 
@@ -82,7 +73,6 @@ InsnRange DecodedBinary::range(uint32_t start, uint32_t end) {
   uint32_t startIdx = (start - sec->base) / 4;
   uint32_t endIdx = (end - sec->base) / 4;
 
-  // Clamp to section bounds
   endIdx = std::min(endIdx, static_cast<uint32_t>(sec->instructions.size()));
 
   return InsnRange(&sec->instructions[startIdx], &sec->instructions[endIdx]);
@@ -112,7 +102,6 @@ bool DecodedBinary::crossesNullBoundary(uint32_t from, uint32_t to) const {
   const CodeRegion* fromRegion = regionContaining(from);
   const CodeRegion* toRegion = regionContaining(to);
 
-  // If either is not in a code region, or they're in different regions
   return !fromRegion || !toRegion || fromRegion != toRegion;
 }
 
@@ -152,7 +141,6 @@ const DecodedBinary::Section* DecodedBinary::findSection(uint32_t addr) const {
 void DecodedBinary::computeCodeRegions() {
   codeRegions_.clear();
 
-  // Minimum consecutive nulls to consider as a boundary
   constexpr size_t kMinNullRun = 2;
 
   for (const auto& sec : sections_) {
@@ -171,7 +159,6 @@ void DecodedBinary::computeCodeRegions() {
       if (isNull) {
         nullRun++;
         if (inCode && nullRun >= kMinNullRun) {
-          // End of code region (at start of null run)
           current.end = sec.base + static_cast<uint32_t>((i - nullRun + 1) * 4);
           if (current.end > current.start) {
             codeRegions_.push_back(current);
@@ -180,7 +167,6 @@ void DecodedBinary::computeCodeRegions() {
         }
       } else {
         if (!inCode) {
-          // Start of new code region
           current.start = sec.base + static_cast<uint32_t>(i * 4);
           inCode = true;
         }
@@ -188,7 +174,6 @@ void DecodedBinary::computeCodeRegions() {
       }
     }
 
-    // Close final region if still in code
     if (inCode) {
       current.end = sec.base + sec.size;
       if (current.end > current.start) {
@@ -198,4 +183,4 @@ void DecodedBinary::computeCodeRegions() {
   }
 }
 
-}  // namespace rex::codegen
+}

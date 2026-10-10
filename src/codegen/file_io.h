@@ -45,12 +45,10 @@ inline bool WriteFileBytes(const std::filesystem::path& path, std::string_view c
 
 enum class WriteOutcome { Failed, Unchanged, Written };
 
-/// Leaves the file untouched when it already holds `content`, so an unchanged
-/// output keeps its mtime and does not retrigger a build.
 inline WriteOutcome WriteIfChanged(const std::filesystem::path& path, std::string_view content) {
   if (auto existing = ReadFileBytes(path); existing && *existing == content)
     return WriteOutcome::Unchanged;
   return WriteFileBytes(path, content) ? WriteOutcome::Written : WriteOutcome::Failed;
 }
 
-}  // namespace rex::codegen
+}

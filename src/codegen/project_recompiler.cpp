@@ -120,7 +120,7 @@ void ReportBinaryInfo(ProgressReporter* reporter, std::string_view display_name,
   reporter->binaryInfo(info);
 }
 
-}  // namespace
+}
 
 ProjectRecompiler::ProjectRecompiler(ManifestConfig manifest) : manifest_(std::move(manifest)) {}
 
@@ -149,8 +149,6 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     }
   }
 
-  // The build's codegen rule tracks one stamp and depfile, in the original's
-  // output, so every pass's inputs and fingerprints go into them.
   const auto buildDir = manifest_.manifestDir / manifest_.entrypoint.recompiler.outDirectoryPath;
   std::vector<fs::path> allInputs;
   std::vector<std::string> fingerprints;
@@ -178,7 +176,7 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
     return Err<void>(ErrorCategory::IO,
                      fmt::format("Failed to write {}", (buildDir / kDepfileName).string()));
   }
-  // Never WriteIfChanged: the build rule re-runs until this mtime passes its inputs.
+
   if (!WriteFileBytes(buildStamp, fmt::format("{}\n", fmt::join(fingerprints, "\n")))) {
     return Err<void>(ErrorCategory::IO, fmt::format("Failed to write {}", buildStamp.string()));
   }
@@ -251,9 +249,6 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
     }
   }
 
-  // Two binaries sharing an out_directory_path would clobber each other's
-  // sources.cmake on emit (the writer's cleanup sweep is unprefixed for
-  // that file).
   std::unordered_map<std::string, std::string> outDirOwner;
   for (const auto& m : targeted) {
     const auto& outDir = m.config.outDirectoryPath;
@@ -278,8 +273,6 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
   }
   entryXexPath = fs::canonical(entryXexPath);
 
-  // gameRoot anchors VFS root and DLL guest_path derivation. Honor the
-  // manifest override if set; otherwise default to the entrypoint's parent.
   fs::path gameRoot;
   if (manifest_.gameRoot && !manifest_.gameRoot->empty()) {
     fs::path resolved = configDir / *manifest_.gameRoot;
@@ -314,7 +307,6 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
   std::replace(entryRelStr.begin(), entryRelStr.end(), '/', '\\');
   auto entryVfsPath = "game:\\" + entryRelStr;
 
-  // A title update build loads the executable patched by that update.
   runtime->kernel_state()->set_title_update_version(pass.titleUpdateVersion);
   if (pass.titleUpdateVersion) {
     auto* vfs = runtime->kernel_state()->file_system();
@@ -434,7 +426,7 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
     auto inputs =
         CollectModuleInputs(entry.ctx.Config(), entry.ctx.configDir(), manifest_.manifestPath);
     if (i == 0 && !pass.updatePackage.empty()) {
-      inputs.push_back(pass.updatePackage);  // a changed update regenerates
+      inputs.push_back(pass.updatePackage);
       std::sort(inputs.begin(), inputs.end());
     }
     fingerprints[i] = FingerprintModule(entry.ctx.Config(), inputs, opts.sdkVersion);
@@ -488,7 +480,6 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
     }
   }
 
-  // Each module's dispatch table, clear of every module's image (RG-GDK-070).
   {
     std::vector<ModuleImage> images;
     for (const auto& entry : contexts) {
@@ -639,4 +630,4 @@ Result<void> ProjectRecompiler::RunPass(const ProjectRecompilerOptions& opts, Pa
   return Ok();
 }
 
-}  // namespace rex::codegen
+}

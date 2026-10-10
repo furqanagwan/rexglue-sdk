@@ -17,9 +17,6 @@
 
 namespace rex::codegen {
 
-/**
- * Collects errors during analysis. Replaces global g_validationState.
- */
 class AnalysisErrors {
  public:
   enum class Category {
@@ -55,4 +52,4 @@ class AnalysisErrors {
   std::vector<Entry> entries_;
 };
 
-}  // namespace rex::codegen
+}

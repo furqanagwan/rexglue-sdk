@@ -13,9 +13,7 @@
 
 namespace rex::codegen {
 
-/// Render with pre-parsed json. Avoids double-serialization for internal callers.
-/// Implementation lives in template_registry.cpp.
 std::string renderWithJson(TemplateRegistry& registry, const std::string& id,
                            const nlohmann::json& data);
 
-}  // namespace rex::codegen
+}

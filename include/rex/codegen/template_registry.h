@@ -17,7 +17,6 @@
 
 namespace rex::codegen {
 
-/// Exception thrown on template parse or render errors.
 class TemplateError : public std::runtime_error {
  public:
   TemplateError(const std::string& templateId, const std::string& message,
@@ -31,12 +30,6 @@ class TemplateError : public std::runtime_error {
   std::string source_;
 };
 
-/// Resolves and renders inja templates by canonical ID.
-/// Supports embedded defaults with optional filesystem overrides.
-///
-/// Uses pimpl to keep inja.hpp and nlohmann/json.hpp out of this header.
-/// The render() method accepts serialized JSON (const std::string&) to avoid
-/// exposing nlohmann::json in the public API.
 class TemplateRegistry {
  public:
   TemplateRegistry();
@@ -47,18 +40,12 @@ class TemplateRegistry {
   TemplateRegistry(TemplateRegistry&&) noexcept;
   TemplateRegistry& operator=(TemplateRegistry&&) noexcept;
 
-  /// Load overrides from a directory. Files that don't match
-  /// a known canonical ID produce a warning log.
   void loadOverrides(const std::filesystem::path& dir);
 
-  /// Render a template by canonical ID with JSON data (as serialized string).
-  /// @throws TemplateError on parse or render failure
   std::string render(const std::string& id, const std::string& jsonData);
 
-  /// Render from raw template string (for testing). Not tied to a canonical ID.
   std::string renderString(const std::string& templateContent, const std::string& jsonData);
 
-  /// List all registered canonical IDs.
   std::vector<std::string> registeredIds() const;
 
  private:
@@ -66,9 +53,6 @@ class TemplateRegistry {
   std::unique_ptr<Impl> impl_;
 };
 
-/// SHA256 over every embedded template, ordered by ID. Fold this into any
-/// cache key built from the SDK version: that version is stable across dev
-/// builds, so a template edit alone would not otherwise invalidate it.
 std::string EmbeddedTemplatesHash();
 
-}  // namespace rex::codegen
+}

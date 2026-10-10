@@ -16,7 +16,6 @@ void CodeEmitter::ensureCsrState(CsrState required) {
   if (csrState_ == required)
     return;
 
-  // Emit CSR mode change if needed
   if (required == CsrState::Vmx) {
     line("REX_SET_FLUSH_MODE(true);");
   } else if (required == CsrState::Fpu) {
@@ -26,4 +25,4 @@ void CodeEmitter::ensureCsrState(CsrState required) {
   csrState_ = required;
 }
 
-}  // namespace rex::codegen
+}

@@ -16,11 +16,9 @@
 
 #include <rex/cvar.h>
 
-// Codegen/Output
 REXCVAR_DECLARE(uint32_t, max_file_size_bytes);
 REXCVAR_DECLARE(uint32_t, progress_log_frequency);
 
-// Codegen/Analysis
 REXCVAR_DECLARE(uint32_t, max_discovery_iterations);
 REXCVAR_DECLARE(uint32_t, max_vtable_iterations);
 REXCVAR_DECLARE(uint32_t, max_resolve_iterations);
@@ -29,7 +27,6 @@ REXCVAR_DECLARE(uint32_t, max_eh_try_blocks);
 REXCVAR_DECLARE(uint32_t, max_eh_ip_map_entries);
 REXCVAR_DECLARE(uint32_t, max_seh_scope_entries);
 
-// Codegen/Discovery
 REXCVAR_DECLARE(uint32_t, backward_scan_limit);
 REXCVAR_DECLARE(uint32_t, max_jump_table_entries);
 REXCVAR_DECLARE(uint32_t, max_blocks_per_function);

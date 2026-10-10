@@ -30,34 +30,25 @@ class Runtime;
 namespace runtime {
 class ExportResolver;
 }
-}  // namespace rex
+}
 
 namespace rex::codegen {
 
-// Forward declarations
 class DecodedBinary;
 struct SectionInfo;
 struct FunctionEntry;
 struct FunctionConfig;
 
-/**
- * Analysis state holding binary-derived data and analysis results.
- * This data is populated during analysis and should not be mutated after.
- * Separates analysis state from user-provided config.
- */
 struct AnalysisState {
-  // Binary-derived (set once from BinaryView)
-  std::string format;        ///< "xex" or "elf"
-  uint64_t loadAddress = 0;  ///< Image base address
-  uint64_t entryPoint = 0;   ///< Entry point address
-  uint64_t imageSize = 0;    ///< Total image size
+  std::string format;
+  uint64_t loadAddress = 0;
+  uint64_t entryPoint = 0;
+  uint64_t imageSize = 0;
 
-  // Analysis results
-  std::vector<SectionInfo> sections;                                   ///< Sections from binary
-  std::vector<FunctionEntry> analyzedFunctions;                        ///< Discovered functions
-  std::unordered_map<uint32_t, std::vector<uint32_t>> chunksByParent;  ///< Chunk lookup
+  std::vector<SectionInfo> sections;
+  std::vector<FunctionEntry> analyzedFunctions;
+  std::unordered_map<uint32_t, std::vector<uint32_t>> chunksByParent;
 
-  // Auto-detected ABI helpers (0 = not found)
   uint32_t restGpr14Address = 0;
   uint32_t saveGpr14Address = 0;
   uint32_t restFpr14Address = 0;
@@ -67,81 +58,39 @@ struct AnalysisState {
   uint32_t restVmx64Address = 0;
   uint32_t saveVmx64Address = 0;
 
-  // Merged results (user hints + analysis-detected)
-  std::unordered_map<uint32_t, uint32_t> invalidInstructions;  ///< addr -> size
-  std::unordered_set<uint32_t> knownIndirectCalls;             ///< bctr addresses
-  std::vector<uint32_t> exceptionHandlerFuncs;                 ///< Handler addresses
-  std::vector<uint32_t> ehDiscoveredFuncs;                     ///< EH-discovered function addresses
+  std::unordered_map<uint32_t, uint32_t> invalidInstructions;
+  std::unordered_set<uint32_t> knownIndirectCalls;
+  std::vector<uint32_t> exceptionHandlerFuncs;
+  std::vector<uint32_t> ehDiscoveredFuncs;
 };
 
-/**
- * Unified context for the entire codegen pipeline.
- *
- * This class owns all the core data structures used throughout analysis
- * and code generation. It replaces the previous scattered ownership where
- * Recompiler owned some data and AnalysisContext owned other data.
- *
- * Single source of truth for:
- * - Binary data (BinaryView)
- * - Function graph (all functions including imports)
- * - Configuration
- * - Analysis errors
- * - Scan artifacts
- */
 class CodegenContext {
  public:
-  // === FACTORY ===
-  /**
-   * Create a CodegenContext from config file path and Runtime.
-   *
-   * This is the primary way to create a context. It:
-   * 1. Loads configuration from the TOML file
-   * 2. Loads the XEX via Runtime
-   * 3. Creates BinaryView from the loaded module
-   *
-   * @param configPath Path to the TOML config file
-   * @param runtime Runtime instance (must be set up with correct content_root)
-   * @return CodegenContext on success, error on failure
-   */
   static Result<CodegenContext> Create(const std::filesystem::path& configPath, Runtime& runtime);
 
-  /**
-   * Create a CodegenContext from pre-loaded binary and config.
-   * Primarily for testing where binary is loaded differently.
-   *
-   * @param binary Pre-loaded BinaryView (moved into context)
-   * @param config Pre-loaded RecompilerConfig (moved into context)
-   */
   static CodegenContext Create(BinaryView binary, RecompilerConfig config);
 
-  // Non-copyable, movable
   CodegenContext(const CodegenContext&) = delete;
   CodegenContext& operator=(const CodegenContext&) = delete;
   CodegenContext(CodegenContext&&);
   CodegenContext& operator=(CodegenContext&&);
   ~CodegenContext();
 
-  // === OWNED DATA (single source of truth) ===
-  FunctionGraph graph;    ///< All functions (including imports)
-  AnalysisErrors errors;  ///< Accumulated errors
+  FunctionGraph graph;
+  AnalysisErrors errors;
 
-  /// Scan phase artifacts (passed to Discover for scanner setup)
   struct {
-    std::vector<CodeRegion> codeRegions;  ///< Null-delimited code regions
+    std::vector<CodeRegion> codeRegions;
     std::vector<std::pair<uint32_t, uint32_t>> dataRegions;
-    std::unordered_map<uint32_t, uint32_t> pdataSizes;  // address -> size
+    std::unordered_map<uint32_t, uint32_t> pdataSizes;
   } scan;
 
-  // === ACCESSORS ===
   const BinaryView& binary() const { return binary_; }
   BinaryView& binary() { return binary_; }
 
-  /// Access the decoded binary (must call initDecoded() first)
   DecodedBinary& decoded();
   const DecodedBinary& decoded() const;
 
-  /// Initialize DecodedBinary after context is in final location
-  /// Call this once after Create() before accessing decoded()
   void initDecoded();
 
   bool hasDecoded() const { return decoded_ != nullptr; }
@@ -165,33 +114,31 @@ class CodegenContext {
 
   void setHasDllModules(bool has) { has_dll_modules_ = has; }
   bool hasDllModules() const { return has_dll_modules_; }
-  /// The function dispatch table's guest address (0: image base + size).
+
   void setFunctionTableBase(uint32_t base) { function_table_base_ = base; }
   uint32_t functionTableBase() const { return function_table_base_; }
 
-  /// Names of the guest code patches applied to this module's image.
   const std::vector<std::string>& appliedPatches() const { return applied_patches_; }
   void setAppliedPatches(std::vector<std::string> names) { applied_patches_ = std::move(names); }
 
-  /// Patches compiled with both instruction versions, switched at run time.
   const SwitchablePatches& switchablePatches() const { return switchable_patches_; }
   void setSwitchablePatches(SwitchablePatches patches) { switchable_patches_ = std::move(patches); }
 
  private:
   CodegenContext() = default;
 
-  BinaryView binary_;                       ///< Binary data + sections (owned)
-  RecompilerConfig config_;                 ///< User configuration (owned)
-  AnalysisState analysisState_;             ///< Analysis state (populated during analysis)
-  std::unique_ptr<DecodedBinary> decoded_;  ///< Decoded instructions (created via initDecoded())
-  runtime::ExportResolver* resolver_ = nullptr;  ///< For runtime resolution (borrowed)
-  std::filesystem::path configDir_;  ///< Directory containing config file (for relative paths)
+  BinaryView binary_;
+  RecompilerConfig config_;
+  AnalysisState analysisState_;
+  std::unique_ptr<DecodedBinary> decoded_;
+  runtime::ExportResolver* resolver_ = nullptr;
+  std::filesystem::path configDir_;
   std::string source_guest_path_;
-  bool is_dll_module_ = false;        ///< True if this module is a DLL (shared library output)
-  bool has_dll_modules_ = false;      ///< True if the project has DLL modules (multi-binary)
-  uint32_t function_table_base_ = 0;  ///< Dispatch table address; 0 for image base + size
+  bool is_dll_module_ = false;
+  bool has_dll_modules_ = false;
+  uint32_t function_table_base_ = 0;
   std::vector<std::string> applied_patches_;
-  SwitchablePatches switchable_patches_;  ///< Code patches applied before analysis
+  SwitchablePatches switchable_patches_;
 };
 
-}  // namespace rex::codegen
+}

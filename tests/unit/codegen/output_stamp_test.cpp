@@ -46,7 +46,7 @@ struct Scratch {
   }
 };
 
-}  // namespace
+}
 
 TEST_CASE("Identical inputs produce identical fingerprints", "[output_stamp]") {
   Scratch scratch("stable");
@@ -102,7 +102,6 @@ TEST_CASE("An unreadable input is not fingerprinted as empty content", "[output_
   auto readable = scratch.root / "a" / "input.bin";
   std::ofstream(readable, std::ios::binary);
 
-  // Same basename, so only the digest can separate the two fingerprints.
   std::vector<fs::path> asFile{readable};
   std::vector<fs::path> asDirectory{scratch.root / "b" / "input.bin"};
   std::vector<std::string> flags;

@@ -21,8 +21,6 @@ uint32_t Bl(uint32_t from, uint32_t to) {
   return 0x48000001 | ((to - from) & 0x03FFFFFC);
 }
 
-// Synthetic CRT-shaped routines assembled from the documented register layout.
-// Deliberately use different relocation values from every investigated title.
 std::vector<uint32_t> Save() {
   std::vector<uint32_t> w{D(15, 4, 0, 0x8200), D(32, 0, 4, 0), 0x2C000000, 0x7C0903A6,
                           0x4C820420,          0x7C0802A6,     0x7C800026};
@@ -84,7 +82,7 @@ class Fixture : public TestModule {
     return ScanCrtJumps(BinaryView::fromModule(*this));
   }
 };
-}  // namespace
+}
 
 TEST_CASE("CRT jump scanner recognizes a complete relocated pair", "[codegen][crt-jump]") {
   Fixture f;
@@ -92,10 +90,10 @@ TEST_CASE("CRT jump scanner recognizes a complete relocated pair", "[codegen][cr
   REQUIRE(found.uniquePair());
   CHECK(found.setjmp.front() == kBase);
   CHECK(found.longjmp.front() == kRestore);
-  // Negative signed low-half relocation; points back inside this image.
+
   f.words[0] = D(15, 4, 0, 0x8201);
   f.words[1] = D(32, 0, 4, 0x8000);
-  CHECK(f.Scan().setjmp.empty());  // unmapped hook pointer must be rejected
+  CHECK(f.Scan().setjmp.empty());
 }
 
 TEST_CASE("CRT jump scanner rejects every changed register-layout instruction",
