@@ -17,13 +17,13 @@
 
 namespace rex::kernel::xam {
 uint32_t XGetAudioFlags_entry();
-}  // namespace rex::kernel::xam
+}
 
 using rex::system::xam::ContentManager;
 
 TEST_CASE("XGetAudioFlags reports the console's XConfig audio flags", "[kernel][xam]") {
   CHECK(rex::kernel::xam::XGetAudioFlags_entry() == rex::kernel::xboxkrnl::kXConfigUserAudioFlags);
-  CHECK(rex::kernel::xboxkrnl::kXConfigUserAudioFlags == 0x00010001);  // analog stereo
+  CHECK(rex::kernel::xboxkrnl::kXConfigUserAudioFlags == 0x00010001);
 }
 
 TEST_CASE("license_mask grants licenses to opened content", "[kernel][content]") {
@@ -37,10 +37,9 @@ TEST_CASE("license_mask grants licenses to opened content", "[kernel][content]")
 
   uint32_t license = 0xFFFFFFFF;
   REQUIRE(content.OpenContent("lic", kXuid, data, license) == X_ERROR_SUCCESS);
-  CHECK(license == 0);  // no header licenses and no mask
+  CHECK(license == 0);
   REQUIRE(content.CloseContent("lic") == X_ERROR_SUCCESS);
 
-  // A mask of 1 applies too (Edge aac25ad0c; it used to need > 1).
   REQUIRE(rex::cvar::SetFlagByName("license_mask", "1"));
   REQUIRE(content.OpenContent("lic", kXuid, data, license) == X_ERROR_SUCCESS);
   CHECK(license == 1);

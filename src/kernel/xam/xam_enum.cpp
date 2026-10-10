@@ -29,7 +29,6 @@ namespace xam {
 using namespace rex::system;
 using namespace rex::system::xam;
 
-// https://github.com/LestaD/SourceEngine2007/blob/master/se2007/engine/xboxsystem.cpp#L518
 uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
                         uint32_t buffer_size, uint32_t* items_returned, uint32_t overlapped_ptr) {
   assert_true(flags == 0);
@@ -47,8 +46,7 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
     } else {
       result = e->WriteItems(buffer_ptr.guest_address(), buffer_ptr.as<uint8_t*>(), &item_count);
     }
-    // The item size tells the enumerator kinds apart (content, devices,
-    // achievements) when a title polls one.
+
     REXKRNL_DEBUG("XamEnumerate({:08X}): item size {}, {} written, result {:08X}", handle,
                   e->item_size(), item_count, result);
     extended_error = X_HRESULT_FROM_WIN32(result);
@@ -75,7 +73,6 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
 
 u32 XamEnumerate_entry(u32 handle, u32 flags, mapped_void buffer, u32 buffer_length,
                        mapped_u32 items_returned, ppc_ptr_t<XAM_OVERLAPPED> overlapped) {
-  // Zero when the enumeration fails before counting anything.
   uint32_t dummy = 0;
   auto result =
       xeXamEnumerate(handle, flags, buffer, buffer_length,
@@ -97,8 +94,6 @@ u32 XamGetPrivateEnumStructureFromHandle_entry(u32 handle, mapped_u32 out_object
     return X_STATUS_INVALID_HANDLE;
   }
 
-  // Caller takes the reference.
-  // It's released in ObDereferenceObject.
   e->RetainHandle();
 
   if (out_object_ptr.guest_address()) {
@@ -108,9 +103,9 @@ u32 XamGetPrivateEnumStructureFromHandle_entry(u32 handle, mapped_u32 out_object
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamEnumerate, rex::kernel::xam::XamEnumerate_entry)
 REX_EXPORT(__imp__XamCreateEnumeratorHandle, rex::kernel::xam::XamCreateEnumeratorHandle_entry)

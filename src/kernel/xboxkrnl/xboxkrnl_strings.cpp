@@ -25,10 +25,6 @@
 using namespace rex::system::format;
 using rex::memory::GuestPtr;
 
-//=============================================================================
-// DbgPrint / XamDbgPrint
-//=============================================================================
-
 REX_HOOK_RAW(__imp__DbgPrint) {
   uint32_t format_ptr = ctx.r3.u32;
   if (!format_ptr) {
@@ -43,14 +39,14 @@ REX_HOOK_RAW(__imp__DbgPrint) {
   int32_t count = format_core(base, data, args, false);
   if (count > 0) {
     auto str = data.str();
-    // Trim trailing whitespace
+
     while (!str.empty() && std::isspace(static_cast<unsigned char>(str.back()))) {
       str.pop_back();
     }
     REXKRNL_INFO("DbgPrint: {}", str);
   }
 
-  ctx.r3.u64 = 0;  // NTSTATUS success
+  ctx.r3.u64 = 0;
 }
 
 REX_HOOK_RAW(__imp__XamDbgPrint) {
@@ -75,10 +71,6 @@ REX_HOOK_RAW(__imp__XamDbgPrint) {
 
   ctx.r3.u64 = 0;
 }
-
-//=============================================================================
-// sprintf / _snprintf (narrow, stack varargs)
-//=============================================================================
 
 REX_HOOK_RAW(__imp__sprintf) {
   uint32_t buffer_ptr = ctx.r3.u32;
@@ -137,10 +129,6 @@ REX_HOOK_RAW(__imp___snprintf) {
   }
   ctx.r3.u64 = count;
 }
-
-//=============================================================================
-// swprintf / _snwprintf (wide, stack varargs)
-//=============================================================================
 
 REX_HOOK_RAW(__imp__swprintf) {
   uint32_t buffer_ptr = ctx.r3.u32;
@@ -203,10 +191,6 @@ REX_HOOK_RAW(__imp___snwprintf) {
   ctx.r3.u64 = count;
 }
 
-//=============================================================================
-// vsprintf / _vsnprintf (narrow, va_list from memory)
-//=============================================================================
-
 REX_HOOK_RAW(__imp__vsprintf) {
   uint32_t buffer_ptr = ctx.r3.u32;
   uint32_t format_ptr = ctx.r4.u32;
@@ -265,10 +249,6 @@ REX_HOOK_RAW(__imp___vsnprintf) {
   }
   ctx.r3.u64 = count;
 }
-
-//=============================================================================
-// vswprintf / _vsnwprintf / _vscwprintf (wide, va_list from memory)
-//=============================================================================
 
 REX_HOOK_RAW(__imp__vswprintf) {
   uint32_t buffer_ptr = ctx.r3.u32;
@@ -350,10 +330,6 @@ REX_HOOK_RAW(__imp___vscwprintf) {
   assert_true(count < 0 || data.count() == count);
   ctx.r3.u64 = count;
 }
-
-//=============================================================================
-// Export stubs
-//=============================================================================
 
 REX_EXPORT_STUB(__imp___scprintf);
 REX_EXPORT_STUB(__imp___scwprintf);

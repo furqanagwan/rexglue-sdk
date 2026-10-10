@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/kernel/xboxkrnl/private.h>
@@ -26,15 +25,10 @@ u32 HidReadKeys_entry(u32 unk1, u32 unk2, u32 unk3) {
 }
 
 u32 HidGetCapabilities_entry(u32 unk1, u32 caps_ptr) {
-  // HidGetCapabilities - ordinal 0x01EA
-  // Returns capabilities for HID device (keyboard/mouse)
-  // Not supported in rexglue - return unsuccessful
   return X_STATUS_UNSUCCESSFUL;
 }
 
 u32 HidGetLastInputTime_entry(mapped_u32 time_ptr) {
-  // HidGetLastInputTime - ordinal 0x01F1
-  // Returns the last time any HID input was received
   if (time_ptr) {
     *time_ptr = 0;
   }
@@ -42,19 +36,16 @@ u32 HidGetLastInputTime_entry(mapped_u32 time_ptr) {
 }
 
 u32 HidReadMouseChanges_entry(u32 unk1, u32 unk2) {
-  // HidReadMouseChanges - ordinal 0x0273
-  // Reads mouse input changes - not supported in rexglue
   return X_STATUS_UNSUCCESSFUL;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__HidReadKeys, rex::kernel::xboxkrnl::HidReadKeys_entry)
 REX_EXPORT(__imp__HidGetCapabilities, rex::kernel::xboxkrnl::HidGetCapabilities_entry)
 REX_EXPORT(__imp__HidGetLastInputTime, rex::kernel::xboxkrnl::HidGetLastInputTime_entry)
 REX_EXPORT(__imp__HidReadMouseChanges, rex::kernel::xboxkrnl::HidReadMouseChanges_entry)
 
-// XInputd stubs
 REX_EXPORT_STUB(__imp__XInputdGetCapabilities);
 REX_EXPORT_STUB(__imp__XInputdReadState);
 REX_EXPORT_STUB(__imp__XInputdWriteState);
@@ -88,7 +79,6 @@ REX_EXPORT_STUB(__imp__XInputdGetFailedConnectionOrBind);
 REX_EXPORT_STUB(__imp__XInputdSetFailedConnectionOrBindCallback);
 REX_EXPORT_STUB(__imp__XInputdSetMinMaxAuthDelay);
 
-// Drv stubs
 REX_EXPORT_STUB(__imp__DrvSetSysReqCallback);
 REX_EXPORT_STUB(__imp__DrvSetUserBindingCallback);
 REX_EXPORT_STUB(__imp__DrvSetContentStorageCallback);

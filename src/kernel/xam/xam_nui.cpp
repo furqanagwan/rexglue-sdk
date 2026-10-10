@@ -33,13 +33,10 @@ static_assert(sizeof(X_NUI_DEVICE_STATUS) == 24, "Size matters");
 
 void XamNuiGetDeviceStatus_entry(ppc_ptr_t<X_NUI_DEVICE_STATUS> status_ptr) {
   status_ptr.Zero();
-  status_ptr->status = 0;  // Not connected.
+  status_ptr->status = 0;
 }
 
 u32 XamShowNuiTroubleshooterUI_entry(u32 unk1, u32 unk2, u32 unk3) {
-  // unk1 is 0xFF - possibly user index?
-  // unk2, unk3 appear to always be zero.
-
   if (REXCVAR_GET(headless)) {
     return 0;
   }
@@ -47,9 +44,9 @@ u32 XamShowNuiTroubleshooterUI_entry(u32 unk1, u32 unk2, u32 unk3) {
   return 0;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamNuiGetDeviceStatus, rex::kernel::xam::XamNuiGetDeviceStatus_entry)
 REX_EXPORT(__imp__XamShowNuiTroubleshooterUI, rex::kernel::xam::XamShowNuiTroubleshooterUI_entry)

@@ -19,13 +19,12 @@ namespace xbdm {
 
 rex::runtime::Export* RegisterExport_xbdm(rex::runtime::Export* export_entry);
 
-// Registration functions, one per file.
 #define XE_MODULE_EXPORT_GROUP(m, n)                                       \
   void Register##n##Exports(rex::runtime::ExportResolver* export_resolver, \
                             system::KernelState* kernel_state);
 #include "module_export_groups.inc"
 #undef XE_MODULE_EXPORT_GROUP
 
-}  // namespace xbdm
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}

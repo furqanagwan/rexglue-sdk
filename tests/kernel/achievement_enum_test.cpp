@@ -28,7 +28,7 @@ u32 XamUserCreateAchievementEnumerator_entry(u32 title_id, u32 user_index, u32 x
                                              mapped_u32 handle_ptr);
 uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, mapped_void buffer_ptr,
                         uint32_t buffer_size, uint32_t* items_returned, uint32_t overlapped_ptr);
-}  // namespace rex::kernel::xam
+}
 
 namespace {
 
@@ -38,7 +38,7 @@ using rex::testing::Kernel;
 
 constexpr uint32_t kAchievementCount = 60;
 constexpr uint32_t kPageSize = 25;
-// X_ACHIEVEMENT_DETAILS without strings (flags 0): id first.
+
 constexpr uint32_t kDetailsSize = 36;
 
 struct Page {
@@ -68,7 +68,7 @@ Page ReadPage(uint32_t offset) {
   return page;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Achievement enumerators page from the title's offset", "[kernel][xam]") {
   std::vector<AchievementInfo> achievements;
@@ -90,14 +90,13 @@ TEST_CASE("Achievement enumerators page from the title's offset", "[kernel][xam]
   CHECK(second.items == kPageSize);
   CHECK(second.first_id == 26);
 
-  // The short last page tells the title it has them all.
   const Page last = ReadPage(50);
   CHECK(last.result == X_ERROR_SUCCESS);
   CHECK(last.items == kAchievementCount - 50);
   CHECK(last.first_id == 51);
 
   CHECK(ReadPage(60).result == X_ERROR_NO_MORE_FILES);
-  // Past the end: no underflow into a huge page.
+
   CHECK(ReadPage(1000).result == X_ERROR_NO_MORE_FILES);
 
   Kernel()->SetLoadedAchievements({});

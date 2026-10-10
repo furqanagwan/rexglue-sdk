@@ -44,7 +44,7 @@ using namespace rex::testing;  // NOLINT
 
 constexpr char kCrashChildEnv[] = "REXGLUE_CONTENT_CRASH_CHILD";
 
-}  // namespace
+}
 
 TEST_CASE("Content flush makes written saves durable and reports success", "[kernel][content]") {
   KernelState* kernel = Kernel();
@@ -58,7 +58,7 @@ TEST_CASE("Content flush makes written saves durable and reports success", "[ker
   WriteGuest(file.get(), "progress=42");
 
   CHECK(content.FlushContent("save") == X_ERROR_SUCCESS);
-  // Some titles flush with other casing than they created with.
+
   CHECK(content.FlushContent("SAVE") == X_ERROR_SUCCESS);
   CHECK(ReadHost(PackagePath(root.path, "SLOT1") / "profile.dat") == "progress=42");
 
@@ -97,7 +97,7 @@ TEST_CASE("Content flush restores a header lost before it was written", "[kernel
   TempDir root("rex_content_header_restore");
   ContentManager content(Kernel(), root.path);
   const auto data = SaveData("SLOT3");
-  // Created, but the process stopped before XamContentCreate wrote the header.
+
   REQUIRE(content.CreateContent("save3", kXuid, data) == X_ERROR_SUCCESS);
   REQUIRE_FALSE(std::filesystem::exists(HeaderPath(root.path, "SLOT3")));
 
@@ -119,7 +119,6 @@ TEST_CASE("Content headers are replaced whole, never left truncated", "[kernel][
   REQUIRE(content.WriteContentHeaderFile(kXuid, data, 0x1234) == X_ERROR_SUCCESS);
   CHECK(std::filesystem::file_size(header) == sizeof(XCONTENT_AGGREGATE_DATA) + 4);
 
-  // A torn header and a stray temporary from an earlier crash.
   std::filesystem::resize_file(header, 7);
   { std::ofstream(header.string() + ".tmp") << "junk"; }
   data.set_display_name(u"Slot 1 (renamed)");
@@ -133,8 +132,6 @@ TEST_CASE("Content headers are replaced whole, never left truncated", "[kernel][
   CHECK(read_back.display_name() == u"Slot 1 (renamed)");
 }
 
-// Runs in a child process: writes a save, flushes it and dies without any
-// cleanup, as a crash would.
 TEST_CASE("Content crash child", "[.content-crash-child]") {
   const char* dir = std::getenv(kCrashChildEnv);
   REQUIRE(dir);
@@ -170,9 +167,8 @@ TEST_CASE("A flushed save survives a crash and is listed after restart", "[kerne
   GetExitCodeProcess(process.hProcess, &exit_code);
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
-  REQUIRE(exit_code == 77);  // died where the crash was injected
+  REQUIRE(exit_code == 77);
 
-  // "Restart": a fresh content manager over the same root.
   ContentManager content(Kernel(), root.path);
   const auto listed = content.ListContent(1, kXuid, XContentType::kSavedGame, kTitleId);
   REQUIRE(listed.size() == 1);

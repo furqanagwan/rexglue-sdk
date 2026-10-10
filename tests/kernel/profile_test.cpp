@@ -26,11 +26,9 @@ using rex::system::xam::UserProfile;
 
 namespace {
 
-// Title-specific binary setting ids (XPROFILE_TITLE_SPECIFIC1-3).
 constexpr uint32_t kTitleSpecific1 = 0x63E83FFF;
 constexpr uint32_t kTitleSpecific2 = 0x63E83FFE;
 
-// A setting that reports when it is destroyed.
 struct TrackedSetting : UserProfile::BinarySetting {
   TrackedSetting(uint32_t id, std::vector<uint8_t> bytes, std::atomic<bool>* destroyed)
       : BinarySetting(id, bytes), destroyed(destroyed) {}
@@ -51,7 +49,7 @@ std::filesystem::path SettingPath(uint32_t id) {
          fmt::format("{:08X}", id);
 }
 
-}  // namespace
+}
 
 TEST_CASE("A setting a reader holds outlives its replacement", "[kernel][profile]") {
   UserProfile profile;
@@ -61,7 +59,7 @@ TEST_CASE("A setting a reader holds outlives its replacement", "[kernel][profile
 
   auto held = profile.GetSetting(0x10040002);
   REQUIRE(held);
-  // Another thread writes the same setting while the reader still uses it.
+
   profile.AddSetting(std::make_unique<UserProfile::BinarySetting>(0x10040002, Bytes({2})));
   CHECK_FALSE(destroyed);
   CHECK(ValueOf(held) == Bytes({1}));
@@ -110,7 +108,6 @@ TEST_CASE("Title-specific settings are saved whole and read back", "[kernel][pro
   CHECK(std::filesystem::file_size(path) == 3);
   CHECK_FALSE(std::filesystem::exists(path.string() + ".tmp"));
 
-  // A fresh profile (a relaunch) reads it back for the same title.
   UserProfile relaunched;
   relaunched.set_kernel_state(rex::testing::Kernel());
   auto setting = relaunched.GetSetting(kTitleSpecific1);
@@ -127,8 +124,6 @@ TEST_CASE("A title-specific setting does not leak into a title without one", "[k
   std::error_code ec;
   std::filesystem::remove(path, ec);
 
-  // Loaded for another title (as after a title switch); the running title
-  // has no saved copy.
   profile.AddSetting(std::make_unique<UserProfile::BinarySetting>(kTitleSpecific2, Bytes({5})));
   std::filesystem::remove(path, ec);
   profile.GetSetting(kTitleSpecific2)->loaded_title_id = 0x4D5307E6;
@@ -146,7 +141,6 @@ TEST_CASE("Closing content flushes it and reports a failed flush", "[kernel][con
   const auto data = rex::testing::SaveData("CLOSE1");
   REQUIRE(content.CreateContent("close1", rex::testing::kXuid, data) == X_ERROR_SUCCESS);
 
-  // No explicit flush: the header is still made durable on close.
   auto file = rex::testing::OpenGuestFile(kernel, "close1", "a.dat");
   rex::testing::WriteGuest(file.get(), "saved");
   file->ReleaseHandle();
@@ -160,7 +154,7 @@ TEST_CASE("Closing content flushes it and reports a failed flush", "[kernel][con
   auto real = rex::testing::OpenGuestFile(kernel, "close1", "b.dat");
   rex::system::object_ref<rex::system::XFile> failing(
       new rex::system::XFile(kernel, new rex::testing::FailingFlushFile(real->entry()), true));
-  // The failure is reported and the package is still closed.
+
   CHECK(content.CloseContent("close1") == X_ERROR_WRITE_FAULT);
   CHECK(content.FlushContent("close1") == X_ERROR_FILE_NOT_FOUND);
   failing.reset();

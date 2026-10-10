@@ -17,24 +17,16 @@
 
 namespace rex::kernel::xboxkrnl {
 
-// XECRYPT_MD5_STATE as titles allocate and read it: a 32-bit byte count, the
-// four MD5 words and the partial block, 0x54 bytes like XECRYPT_SHA_STATE.
-// Quantum of Solace calls XeCryptMd5Final with no output buffer and reads the
-// digest from the words at offsets 4-16 (its code at 0x8255B7xx), which fixes
-// the 32-bit count; Xenia Edge's 64-bit count would move them. The words hold
-// A, B, C and D as big-endian values, as the SHA state holds its words; what
-// hardware leaves there after Final is not verified.
 struct XECRYPT_MD5_STATE {
-  rex::be<uint32_t> count;     // 0x0, bytes hashed
-  rex::be<uint32_t> state[4];  // 0x4, A B C D
-  uint8_t buffer[64];          // 0x14, count % 64 bytes pending
+  rex::be<uint32_t> count;
+  rex::be<uint32_t> state[4];
+  uint8_t buffer[64];
 };
 static_assert(sizeof(XECRYPT_MD5_STATE) == 0x54);
 static_assert(offsetof(XECRYPT_MD5_STATE, state) == 0x4);
 
 namespace md5 {
 
-// RFC 1321.
 inline void Transform(uint32_t abcd[4], const uint8_t block[64]) {
   static constexpr uint32_t kK[64] = {
       0xD76AA478, 0xE8C7B756, 0x242070DB, 0xC1BDCEEE, 0xF57C0FAF, 0x4787C62A, 0xA8304613,
@@ -114,10 +106,7 @@ inline void Update(XECRYPT_MD5_STATE* state, const uint8_t* input, size_t size) 
   }
 }
 
-// Pads, leaves the final words in the state and writes up to 16 digest bytes
-// (A to D, each little-endian) to `out`.
 inline void Final(XECRYPT_MD5_STATE* state, uint8_t* out, size_t out_size) {
-  // The 32-bit count limits messages to 4 GB, like XECRYPT_SHA_STATE.
   uint64_t bits = uint64_t(uint32_t(state->count)) * 8;
   static constexpr uint8_t kPadding[64] = {0x80};
   size_t pending = state->count % 64;
@@ -139,6 +128,6 @@ inline void Final(XECRYPT_MD5_STATE* state, uint8_t* out, size_t out_size) {
   }
 }
 
-}  // namespace md5
+}
 
-}  // namespace rex::kernel::xboxkrnl
+}

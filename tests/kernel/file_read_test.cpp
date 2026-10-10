@@ -30,7 +30,7 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
                      mapped_void apc_context,
                      ppc_ptr_t<rex::system::X_IO_STATUS_BLOCK> io_status_block, mapped_void buffer,
                      u32 buffer_length, mapped_u64 byte_offset_ptr);
-}  // namespace rex::kernel::xboxkrnl
+}
 
 namespace {
 
@@ -43,13 +43,11 @@ using rex::system::XFile;
 using rex::system::XThread;
 using rex::testing::Kernel;
 
-// Clear of the other kernel tests' function tables.
 constexpr uint32_t kCodeBase = 0x82D00000;
 constexpr uint32_t kReaderAddress = kCodeBase + 0x100;
 constexpr uint32_t kApcAddress = kCodeBase + 0x200;
 constexpr uint32_t kApcContext = 0x1234;
-// A buffer running past the end of the address space: the read fails with
-// STATUS_ACCESS_VIOLATION, not end of file.
+
 constexpr uint32_t kBadBuffer = 0xFFFFF000;
 
 struct Request {
@@ -71,8 +69,6 @@ void Apc(PPCContext& ctx, uint8_t* base) {
   ++g_apcs;
 }
 
-// The guest side: one NtReadFile with an APC, then delivery of the thread's
-// user APCs, as an alertable wait would.
 void Reader(PPCContext& ctx, uint8_t* base) {
   (void)ctx;
   (void)base;
@@ -84,7 +80,7 @@ void Reader(PPCContext& ctx, uint8_t* base) {
       ppc_ptr_t<X_IO_STATUS_BLOCK>(memory->TranslateVirtual<X_IO_STATUS_BLOCK*>(r.status_block),
                                    r.status_block),
       mapped_void(memory->TranslateVirtual(r.buffer), r.buffer), r.length, nullptr);
-  // As the alertable wait exports do after the wait.
+
   XThread::GetCurrentThread()->DeliverAPCs();
   g_done = true;
 }
@@ -107,7 +103,6 @@ struct Outcome {
   int apcs;
 };
 
-// Runs one read on a guest thread and reports what the caller saw.
 Outcome RunRead(XFile* file, uint32_t buffer, uint32_t length) {
   RegisterFunctions();
   auto* memory = Kernel()->memory();
@@ -137,7 +132,6 @@ Outcome RunRead(XFile* file, uint32_t buffer, uint32_t length) {
   return out;
 }
 
-// A file of `bytes` in a fresh content root, opened as the guest would.
 struct TestFile {
   explicit TestFile(bool synchronous)
       : root("rex_file_read"), content(Kernel(), root.path), data(rex::testing::SaveData("READ")) {
@@ -165,12 +159,12 @@ struct TestFile {
   object_ref<XFile> file;
 };
 
-}  // namespace
+}
 
 TEST_CASE("An asynchronous read that fails still delivers its APC", "[kernel][file_read]") {
-  TestFile f(/*synchronous=*/false);
+  TestFile f(false);
   const Outcome out = RunRead(f.file.get(), kBadBuffer, 0x2000);
-  // The caller is told PENDING, so the APC is its only completion signal.
+
   CHECK(out.result == X_STATUS_PENDING);
   CHECK(out.status == X_STATUS_ACCESS_VIOLATION);
   CHECK(out.information == 0);
@@ -179,7 +173,7 @@ TEST_CASE("An asynchronous read that fails still delivers its APC", "[kernel][fi
 
 TEST_CASE("A failed read on a synchronous handle returns the error without an APC",
           "[kernel][file_read]") {
-  TestFile f(/*synchronous=*/true);
+  TestFile f(true);
   const Outcome out = RunRead(f.file.get(), kBadBuffer, 0x2000);
   CHECK(out.result == X_STATUS_ACCESS_VIOLATION);
   CHECK(out.status == X_STATUS_ACCESS_VIOLATION);
@@ -188,7 +182,7 @@ TEST_CASE("A failed read on a synchronous handle returns the error without an AP
 
 TEST_CASE("A successful asynchronous read reports its count and delivers its APC",
           "[kernel][file_read]") {
-  TestFile f(/*synchronous=*/false);
+  TestFile f(false);
   const uint32_t buffer = Kernel()->memory()->SystemHeapAlloc(16);
   REQUIRE(buffer);
   const Outcome out = RunRead(f.file.get(), buffer, 5);
@@ -202,12 +196,12 @@ TEST_CASE("A successful asynchronous read reports its count and delivers its APC
 
 TEST_CASE("The file's event stays signalled for every wait until the next request",
           "[kernel][file_read]") {
-  TestFile f(/*synchronous=*/false);
+  TestFile f(false);
   const uint32_t buffer = Kernel()->memory()->SystemHeapAlloc(16);
   REQUIRE(buffer);
   uint32_t bytes_read = 0;
   REQUIRE(f.file->Read(buffer, 5, 0, &bytes_read, 0) == X_STATUS_SUCCESS);
-  // A notification event: the first wait does not consume the completion.
+
   uint64_t no_wait = 0;
   CHECK(f.file->Wait(3, 1, 0, &no_wait) == X_STATUS_SUCCESS);
   CHECK(f.file->Wait(3, 1, 0, &no_wait) == X_STATUS_SUCCESS);

@@ -23,20 +23,13 @@ using namespace rex::system;
 
 XgiApp::XgiApp(KernelState* kernel_state) : App(kernel_state, 0xFB) {}
 
-// http://mb.mirage.org/bugzilla/xliveless/main.c
-
 X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
                                       uint32_t buffer_length) {
-  // NOTE: buffer_length may be zero or valid.
   auto buffer = memory_->TranslateVirtual(buffer_ptr);
   switch (message) {
     case 0x000B0006: {
       assert_true(!buffer_length || buffer_length == 24);
-      // dword r3 user index
-      // dword (unwritten?)
-      // qword 0
-      // dword r4 context enum
-      // dword r5 value
+
       uint32_t user_index = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t context_id = memory::load_and_swap<uint32_t>(buffer + 16);
       uint32_t context_value = memory::load_and_swap<uint32_t>(buffer + 20);
@@ -54,7 +47,6 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return X_E_SUCCESS;
     }
     case 0x000B0008: {
-      // Raw dump so we can confirm the actual buffer layout the game sends.
       uint32_t raw0 = buffer_length >= 4 ? memory::load_and_swap<uint32_t>(buffer + 0) : 0;
       uint32_t raw4 = buffer_length >= 8 ? memory::load_and_swap<uint32_t>(buffer + 4) : 0;
       REXKRNL_INFO("XGIUserWriteAchievements called: buf_len={} raw[0]={:08X} raw[4]={:08X}",
@@ -64,8 +56,6 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       uint32_t achievement_count = raw0;
       uint32_t achievements_ptr = raw4;
 
-      // Empirically confirmed from log: each entry is {u32 padding/user_index, u32 id, ...}.
-      // The achievement ID sits at offset 4, not 0. Stride 8 covers the observed fields.
       constexpr uint32_t kEntryIdOffset = 4;
       constexpr uint32_t kEntryStride = 8;
       constexpr uint32_t kMaxAchievements = 1000;
@@ -95,11 +85,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     }
     case 0x000B0010: {
       assert_true(!buffer_length || buffer_length == 28);
-      // Sequence:
-      // - XamSessionCreateHandle
-      // - XamSessionRefObjByHandle
-      // - [this]
-      // - CloseHandle
+
       uint32_t session_ptr = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t flags = memory::load_and_swap<uint32_t>(buffer + 4);
       uint32_t num_slots_public = memory::load_and_swap<uint32_t>(buffer + 8);
@@ -152,7 +138,6 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return X_STATUS_SUCCESS;
     }
     case 0x000B0015: {
-      // send high scores?
       assert_true(!buffer_length || buffer_length == 16);
 
       uint32_t obj_ptr = memory::load_and_swap<uint32_t>(buffer + 0);
@@ -197,7 +182,6 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     case 0x000B001C: {
       assert_true(!buffer_length || buffer_length == 36);
 
-      // session_search
       uint32_t proc_index = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t user_index = memory::load_and_swap<uint32_t>(buffer + 4);
       uint32_t num_results = memory::load_and_swap<uint32_t>(buffer + 8);
@@ -207,7 +191,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       uint32_t ctx_ptr = memory::load_and_swap<uint32_t>(buffer + 20);
       uint32_t results_buffer_size = memory::load_and_swap<uint32_t>(buffer + 24);
       uint32_t search_results_ptr = memory::load_and_swap<uint32_t>(buffer + 28);
-      //
+
       uint32_t num_users = memory::load_and_swap<uint32_t>(buffer + 32);
 
       REXKRNL_DEBUG("XSessionSearchEx({}, {}, {}, {}, {}, {:08X}, {:08X}, {}, {:08X}, {})",
@@ -263,7 +247,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       uint32_t obj_ptr = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t flags = memory::load_and_swap<uint32_t>(buffer + 4);
       uint64_t session_nonce = memory::load_and_swap<uint64_t>(buffer + 8);
-      uint32_t session_duration_sec = memory::load_and_swap<uint32_t>(buffer + 16);  // 300
+      uint32_t session_duration_sec = memory::load_and_swap<uint32_t>(buffer + 16);
       uint32_t results_buffer_size = memory::load_and_swap<uint32_t>(buffer + 20);
       uint32_t results_ptr = memory::load_and_swap<uint32_t>(buffer + 24);
 
@@ -359,10 +343,6 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return X_E_SUCCESS;
     }
     case 0x000B0036: {
-      // Called after opening xbox live arcade and clicking on xbox live v5759
-      // to 5787 and called after clicking xbox live in the game library from
-      // v6683 to v6717
-      // Does not get sent a buffer
       REXKRNL_DEBUG("XInvalidateGamerTileCache, unimplemented");
       return X_E_FAIL;
     }
@@ -381,7 +361,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     }
     case 0x000B0041: {
       assert_true(!buffer_length || buffer_length == 32);
-      // 00000000 2789fecc 00000000 00000000 200491e0 00000000 200491f0 20049340
+
       uint32_t user_index = memory::load_and_swap<uint32_t>(buffer + 0);
       uint32_t context_ptr = memory::load_and_swap<uint32_t>(buffer + 16);
       auto context = context_ptr ? memory_->TranslateVirtual(context_ptr) : nullptr;
@@ -453,7 +433,7 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
   return X_E_FAIL;
 }
 
-}  // namespace apps
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
+}

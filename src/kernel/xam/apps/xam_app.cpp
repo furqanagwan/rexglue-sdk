@@ -27,7 +27,6 @@ XamApp::XamApp(KernelState* kernel_state) : App(kernel_state, 0xFE) {}
 
 X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
                                       uint32_t buffer_length) {
-  // NOTE: buffer_length may be zero or valid.
   auto buffer = memory_->TranslateVirtual(buffer_ptr);
   switch (message) {
     case 0x0002C009: {
@@ -80,9 +79,9 @@ X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     case 0x00020021: {
       struct message_data {
         char unk_00[64];
-        rex::be<uint32_t> unk_40;  // KeGetCurrentProcessType() < 1 ? 1 : 0
-        rex::be<uint32_t> unk_44;  // ? output_ptr ?
-        rex::be<uint32_t> unk_48;  // ? overlapped_ptr ?
+        rex::be<uint32_t> unk_40;
+        rex::be<uint32_t> unk_44;
+        rex::be<uint32_t> unk_48;
       }* data = reinterpret_cast<message_data*>(buffer);
       assert_true(buffer_length == sizeof(message_data));
       auto unk = memory_->TranslateVirtual<rex::be<uint32_t>*>(data->unk_44);
@@ -97,8 +96,8 @@ X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
     }
     case 0x00022005: {
       struct message_data {
-        rex::be<uint32_t> unk_00;  // ? output_ptr ?
-        rex::be<uint32_t> unk_04;  // ? value/jump to? ?
+        rex::be<uint32_t> unk_00;
+        rex::be<uint32_t> unk_04;
       }* data = reinterpret_cast<message_data*>(buffer);
       assert_true(buffer_length == sizeof(message_data));
       auto unk = memory_->TranslateVirtual<rex::be<uint32_t>*>(data->unk_00);
@@ -115,7 +114,7 @@ X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
   return X_E_FAIL;
 }
 
-}  // namespace apps
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
+}

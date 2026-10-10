@@ -17,4 +17,4 @@ namespace rex::kernel::xboxkrnl {
 
 uint32_t xeRtlNtStatusToDosError(uint32_t source_status);
 
-}  // namespace rex::kernel::xboxkrnl
+}

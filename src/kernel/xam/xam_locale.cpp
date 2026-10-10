@@ -27,15 +27,13 @@ namespace rex {
 namespace kernel {
 namespace xam {
 uint32_t xeXGetGameRegion();
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 namespace rex {
 namespace kernel {
 namespace xam {
-
-// Table lookups.
 
 uint8_t xeXamGetOnlineCountryFromLocale(uint8_t id) {
   static uint8_t const table[] = {
@@ -181,34 +179,27 @@ uint8_t xeXamGetLocaleFromCountry(uint8_t id) {
   return id < rex::countof(table) ? table[id] : 0;
 }
 
-// Helpers.
-
 uint8_t xeXamGetLocaleEx(uint8_t max_country_id, uint8_t max_locale_id) {
   uint8_t country_id = static_cast<uint8_t>(REXCVAR_GET(user_country));
-  /*if (XSUCCEEDED(xboxkrnl::xeExGetXConfigSetting(
-          3, 14, &country_id, sizeof(country_id), nullptr))) {*/
+
   if (country_id <= max_country_id) {
     uint8_t locale_id = xeXamGetLocaleFromCountry(country_id);
     if (locale_id <= max_locale_id) {
       return locale_id;
     }
   }
-  /*}*/
 
-  // couldn't find locale, fallback from game region.
   auto game_region = xeXGetGameRegion();
   auto region = static_cast<uint8_t>((game_region & 0xFF00u) >> 8);
   if (region == 1) {
-    return game_region == 0x101 ? 20 /* JP */ : 21 /* KR */;
+    return game_region == 0x101 ? 20 : 21;
   }
-  return region == 2 ? 35 /* GB */ : 36 /* US */;
+  return region == 2 ? 35 : 36;
 }
 
 uint8_t xeXamGetLocale() {
   return xeXamGetLocaleEx(111, 43);
 }
-
-// Exports.
 
 u32 XamGetLocale_entry() {
   return static_cast<uint8_t>(xeXamGetLocale());
@@ -387,9 +378,9 @@ u32 XamGetLocaleEx_entry(u32 max_country_id, u32 max_locale_id) {
                           static_cast<uint8_t>(max_locale_id));
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamGetLocale, rex::kernel::xam::XamGetLocale_entry)
 REX_EXPORT(__imp__XamGetOnlineCountryFromLocale,

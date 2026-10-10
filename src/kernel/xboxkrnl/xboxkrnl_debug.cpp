@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/dbg.h>
@@ -29,7 +28,6 @@ void DbgBreakPoint_entry() {
   rex::debug::Break();
 }
 
-// https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
 typedef struct {
   rex::be<uint32_t> type;
   rex::be<uint32_t> name_ptr;
@@ -39,9 +37,6 @@ typedef struct {
 static_assert_size(X_THREADNAME_INFO, 0x10);
 
 void HandleSetThreadName(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
-  // SetThreadName. FFS.
-  // https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
-
   auto thread_info = reinterpret_cast<X_THREADNAME_INFO*>(&record->exception_information[0]);
 
   assert_true(thread_info->type == 0x1000);
@@ -51,19 +46,14 @@ void HandleSetThreadName(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
     return;
   }
 
-  // 4D5307D6 (and its demo) has a bug where it ends up passing freed memory for
-  // the name, so at the point of SetThreadName it's filled with junk.
-
   auto name =
       std::string(REX_KERNEL_MEMORY()->TranslateVirtual<const char*>(thread_info->name_ptr));
   std::replace_if(name.begin(), name.end(), [](auto c) { return c < 32 || c > 127; }, '?');
 
   object_ref<XThread> thread;
   if (thread_info->thread_id == -1) {
-    // Current thread.
     thread = retain_object(XThread::GetCurrentThread());
   } else {
-    // Lookup thread by ID.
     thread = REX_KERNEL_STATE()->GetThreadByID(thread_info->thread_id);
   }
 
@@ -100,11 +90,6 @@ typedef struct {
 } x_s__ThrowInfo;
 
 void HandleCppException(ppc_ptr_t<X_EXCEPTION_RECORD> record) {
-  // C++ exception.
-  // https://blogs.msdn.com/b/oldnewthing/archive/2010/07/30/10044061.aspx
-  // http://www.drdobbs.com/visual-c-exception-handling-instrumentat/184416600
-  // http://www.openrce.org/articles/full_view/21
-
   assert_true(record->number_parameters == 3);
   assert_true(record->exception_information[0] == 0x19930520);
 
@@ -147,7 +132,7 @@ void KeBugCheck_entry(u32 code) {
   KeBugCheckEx_entry(code, 0, 0, 0, 0);
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__DbgBreakPoint, rex::kernel::xboxkrnl::DbgBreakPoint_entry)
 REX_EXPORT(__imp__RtlRaiseException, rex::kernel::xboxkrnl::RtlRaiseException_entry)

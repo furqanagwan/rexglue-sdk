@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <cstring>
@@ -29,39 +28,6 @@ namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
 
 using rex::audio::XMA_CONTEXT_DATA;
-
-// See audio_system.cc for implementation details.
-//
-// XMA details:
-// https://devel.nuclex.org/external/svn/directx/trunk/include/xma2defs.h
-// https://github.com/gdawg/fsbext/blob/master/src/xma_header.h
-//
-// XMA is undocumented, but the methods are pretty simple.
-// Games do this sequence to decode (now):
-//   (not sure we are setting buffer validity/offsets right)
-// d> XMACreateContext(20656800)
-// d> XMAIsInputBuffer0Valid(000103E0)
-// d> XMAIsInputBuffer1Valid(000103E0)
-// d> XMADisableContext(000103E0, 0)
-// d> XMABlockWhileInUse(000103E0)
-// d> XMAInitializeContext(000103E0, 20008810)
-// d> XMASetOutputBufferValid(000103E0)
-// d> XMASetInputBuffer0Valid(000103E0)
-// d> XMAEnableContext(000103E0)
-// d> XMAGetOutputBufferWriteOffset(000103E0)
-// d> XMAGetOutputBufferReadOffset(000103E0)
-// d> XMAIsOutputBufferValid(000103E0)
-// d> XMAGetOutputBufferReadOffset(000103E0)
-// d> XMAGetOutputBufferWriteOffset(000103E0)
-// d> XMAIsInputBuffer0Valid(000103E0)
-// d> XMAIsInputBuffer1Valid(000103E0)
-// d> XMAIsInputBuffer0Valid(000103E0)
-// d> XMAIsInputBuffer1Valid(000103E0)
-// d> XMAReleaseContext(000103E0)
-//
-// XAudio2 uses XMA under the covers, and seems to map with the same
-// restrictions of frame/subframe/etc:
-// https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.xaudio2.xaudio2_buffer(v=vs.85).aspx
 
 u32 XMACreateContext_entry(mapped_u32 context_out_ptr) {
   REXKRNL_NOISY_DEBUG("XMACreateContext called!");
@@ -123,14 +89,12 @@ struct XMA_CONTEXT_INIT {
 static_assert_size(XMA_CONTEXT_INIT, 56);
 
 u32 XMAInitializeContext_entry(mapped_void context_ptr, ppc_ptr_t<XMA_CONTEXT_INIT> context_init) {
-  // Input buffers may be null (buffer 1 in 415607D4).
-  // Convert to host endianness.
   uint32_t input_buffer_0_guest_ptr = context_init->input_buffer_0_ptr;
   uint32_t input_buffer_0_physical_address = 0;
   if (input_buffer_0_guest_ptr) {
     input_buffer_0_physical_address =
         REX_KERNEL_MEMORY()->GetPhysicalAddress(input_buffer_0_guest_ptr);
-    // Xenia-specific safety check.
+
     assert_true(input_buffer_0_physical_address != UINT32_MAX);
     if (input_buffer_0_physical_address == UINT32_MAX) {
       REXKRNL_ERROR("XMAInitializeContext: Invalid input buffer 0 virtual address {:08X}",
@@ -173,7 +137,6 @@ u32 XMAInitializeContext_entry(mapped_void context_ptr, ppc_ptr_t<XMA_CONTEXT_IN
   context.output_buffer_ptr = output_buffer_physical_address;
   context.output_buffer_block_count = context_init->output_buffer_block_count;
 
-  // context.work_buffer = context_init->work_buffer;  // ?
   context.subframe_decode_count = context_init->subframe_decode_count;
   context.is_stereo = context_init->channel_count >= 1;
   context.sample_rate = context_init->sample_rate;
@@ -223,7 +186,6 @@ u32 XMASetInputBuffer0_entry(mapped_void context_ptr, mapped_void buffer, u32 pa
       REX_KERNEL_MEMORY()->GetPhysicalAddress(buffer.guest_address());
   assert_true(buffer_physical_address != UINT32_MAX);
   if (buffer_physical_address == UINT32_MAX) {
-    // Xenia-specific safety check.
     REXKRNL_ERROR("XMASetInputBuffer0: Invalid buffer virtual address {:08X}",
                   buffer.guest_address());
     return X_E_FALSE;
@@ -257,7 +219,6 @@ u32 XMASetInputBuffer1_entry(mapped_void context_ptr, mapped_void buffer, u32 pa
       REX_KERNEL_MEMORY()->GetPhysicalAddress(buffer.guest_address());
   assert_true(buffer_physical_address != UINT32_MAX);
   if (buffer_physical_address == UINT32_MAX) {
-    // Xenia-specific safety check.
     REXKRNL_ERROR("XMASetInputBuffer1: Invalid buffer virtual address {:08X}",
                   buffer.guest_address());
     return X_E_FALSE;
@@ -352,7 +313,7 @@ u32 XMABlockWhileInUse_entry(mapped_void context_ptr) {
   return 0;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__XMACreateContext, rex::kernel::xboxkrnl::XMACreateContext_entry)
 REX_EXPORT(__imp__XMAReleaseContext, rex::kernel::xboxkrnl::XMAReleaseContext_entry)

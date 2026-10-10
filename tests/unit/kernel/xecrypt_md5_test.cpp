@@ -43,7 +43,7 @@ std::string Md5(std::string_view message, size_t chunk = 0) {
   return Hex(digest, sizeof(digest));
 }
 
-}  // namespace
+}
 
 TEST_CASE("XeCryptMd5 matches the RFC 1321 test suite", "[kernel][xecrypt]") {
   CHECK(Md5("") == "d41d8cd98f00b204e9800998ecf8427e");
@@ -63,7 +63,7 @@ TEST_CASE("XeCryptMd5 updates in any split give the same digest", "[kernel][xecr
     message[i] = char(i * 7 + 3);
   }
   std::string whole = Md5(message);
-  // Block edges, the 56-byte padding edge and odd sizes.
+
   for (size_t chunk : {1, 3, 55, 56, 63, 64, 65, 128, 999}) {
     INFO("chunk " << chunk);
     CHECK(Md5(message, chunk) == whole);
@@ -71,16 +71,15 @@ TEST_CASE("XeCryptMd5 updates in any split give the same digest", "[kernel][xecr
 }
 
 TEST_CASE("XeCryptMd5 state has the layout titles read", "[kernel][xecrypt]") {
-  // Guest memory: the state as a title's stack holds it.
   uint8_t guest[0x54 + 4] = {};
-  guest[0x54] = 0xAB;  // Just past the state.
+  guest[0x54] = 0xAB;
   auto* state = reinterpret_cast<xboxkrnl::XECRYPT_MD5_STATE*>(guest);
   xboxkrnl::md5::Init(state);
   xboxkrnl::md5::Update(state, reinterpret_cast<const uint8_t*>("abc"), 3);
-  CHECK(guest[3] == 3);  // Big-endian byte count at 0.
-  // Quantum of Solace passes no output buffer and reads the words at 4-16.
+  CHECK(guest[3] == 3);
+
   xboxkrnl::md5::Final(state, nullptr, 0);
-  // A = 0x98500190 for "abc" (digest bytes 90 01 50 98), stored big-endian.
+
   CHECK(Hex(guest + 4, 4) == "98500190");
   CHECK(uint32_t(state->state[3]) == 0x727FE128);
   CHECK(guest[0x54] == 0xAB);

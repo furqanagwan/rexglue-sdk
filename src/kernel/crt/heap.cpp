@@ -27,15 +27,11 @@ REXCVAR_DEFINE_UINT32(rexcrt_heap_size_mb, 256, "crt", "Heap size in megabytes")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly)
     .range(1, 2048);
 
-// ---------------------------------------------------------------------------
-// Size header: prepended to every allocation so we can answer RtlSizeHeap
-// without o1heap exposing per-allocation usable size.
-// ---------------------------------------------------------------------------
 namespace {
 
 struct SizeHeader {
   uint64_t requested_size;
-  uint64_t reserved;  // padding to O1HEAP_ALIGNMENT
+  uint64_t reserved;
 };
 static_assert(sizeof(SizeHeader) == O1HEAP_ALIGNMENT,
               "SizeHeader must be exactly one O1HEAP_ALIGNMENT unit");
@@ -48,11 +44,7 @@ constexpr uint32_t kDefaultGrowthSegmentSize = 64u * 1024u * 1024u;
 constexpr uint32_t HEAP_ZERO_MEMORY = 0x00000008;
 #endif
 
-}  // namespace
-
-// ---------------------------------------------------------------------------
-// ReXHeap implementation
-// ---------------------------------------------------------------------------
+}
 
 namespace rex::kernel::crt {
 
@@ -141,7 +133,6 @@ uint32_t ReXHeap::Realloc(uint32_t guest_addr, uint32_t new_size, bool zero_new)
 
   auto* segment = FindSegmentByGuestLocked(guest_addr);
   if (!segment || guest_addr < segment->guest_base + kHeaderSize) {
-    // Pre-hook allocation outside our heap -- treat as fresh alloc.
     REXKRNL_WARN("rexcrt_RtlReAllocateHeap: OOB ptr 0x{:08X}, treating as new alloc({})",
                  guest_addr, new_size);
     return AllocLocked(new_size, zero_new);
@@ -153,7 +144,6 @@ uint32_t ReXHeap::Realloc(uint32_t guest_addr, uint32_t new_size, bool zero_new)
   uint32_t old_size = static_cast<uint32_t>(old_hdr->requested_size);
   void* new_ptr = o1heapReallocate(segment->heap, real_host, new_size + kHeaderSize);
   if (!new_ptr) {
-    // Cross-segment fallback: allocate a fresh block, copy, then free old.
     uint32_t new_guest = AllocLocked(new_size, false);
     if (!new_guest) {
       REXKRNL_WARN("rexcrt_RtlReAllocateHeap: o1heapReallocate({}) failed", new_size);
@@ -200,10 +190,6 @@ bool ReXHeap::AllocateSegmentLocked(uint32_t segment_size_bytes) {
 
   uint32_t guest_base = 0;
 
-  // Allocate from the regular virtual heap (top-down) instead of the system
-  // heap. The system heap range is shared with kernel bookkeeping allocations
-  // (KernelState globals, thread PCR/TLS, module headers, etc.) and cannot
-  // accommodate a large contiguous rexcrt segment alongside them.
   auto* vheap = mem->LookupHeapByType(false, 4096);
   if (!vheap ||
       !vheap->Alloc(segment_size_bytes, O1HEAP_ALIGNMENT,
@@ -325,10 +311,6 @@ HeapDiagnostics ReXHeap::GetDiagnosticsLocked() const {
   return diagnostics;
 }
 
-// ---------------------------------------------------------------------------
-// Global instance + RTL hooks
-// ---------------------------------------------------------------------------
-
 ReXHeap g_heap;
 
 u32 RtlAllocateHeap_entry(u32 hHeap, u32 dwFlags, u32 dwBytes) {
@@ -356,7 +338,7 @@ ReXHeap& GetHeap() {
   return g_heap;
 }
 
-}  // namespace rex::kernel::crt
+}
 
 REX_HOOK(rexcrt_RtlAllocateHeap, rex::kernel::crt::RtlAllocateHeap_entry)
 REX_HOOK(rexcrt_RtlFreeHeap, rex::kernel::crt::RtlFreeHeap_entry)

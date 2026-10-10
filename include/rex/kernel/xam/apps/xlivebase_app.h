@@ -26,7 +26,7 @@ class XLiveBaseApp : public system::xam::App {
                                 uint32_t buffer_length) override;
 };
 
-}  // namespace apps
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
+}

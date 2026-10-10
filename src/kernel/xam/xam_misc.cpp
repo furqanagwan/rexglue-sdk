@@ -12,7 +12,6 @@
 #include <rex/logging.h>
 #include <rex/hook.h>
 
-// kinda gross but oh well
 REX_EXPORT_STUB(__imp__CancelWaitableTimer);
 REX_EXPORT_STUB(__imp__ControlPackGetCursorPosition);
 REX_EXPORT_STUB(__imp__ControlPackGetHandleManager);

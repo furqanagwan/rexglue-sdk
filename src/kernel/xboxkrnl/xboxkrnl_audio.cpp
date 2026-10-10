@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <rex/audio/audio_system.h>
@@ -34,14 +33,11 @@ u32 XAudioGetVoiceCategoryVolumeChangeMask_entry(mapped_void driver_ptr, mapped_
 
   rex::thread::Sleep(std::chrono::microseconds(1));
 
-  // Checking these bits to see if any voice volume changed.
-  // I think.
   *out_ptr = 0;
   return X_ERROR_SUCCESS;
 }
 
 u32 XAudioGetVoiceCategoryVolume_entry(u32 unk, mapped_f32 out_ptr) {
-  // Expects a floating point single. Volume %?
   *out_ptr = 1.0f;
 
   return X_ERROR_SUCCESS;
@@ -105,7 +101,7 @@ u32 XAudioSubmitRenderDriverFrame_entry(mapped_void driver_ptr, mapped_void samp
   return X_ERROR_SUCCESS;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__XAudioGetSpeakerConfig, rex::kernel::xboxkrnl::XAudioGetSpeakerConfig_entry)
 REX_EXPORT(__imp__XAudioGetVoiceCategoryVolumeChangeMask,

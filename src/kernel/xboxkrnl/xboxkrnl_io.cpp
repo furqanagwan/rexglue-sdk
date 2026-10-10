@@ -9,7 +9,6 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-// Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 #include <atomic>
@@ -37,30 +36,26 @@ using namespace rex::system;
 
 namespace {
 
-// Low bit probably means do not queue to IO ports.
 bool QueuesApc(uint32_t apc_routine, uint32_t apc_context) {
   return (apc_routine & ~1u) && apc_context;
 }
 
-// Count first, then status: a caller polling the status for completion
-// must never read a stale count.
 void WriteIoStatus(X_IO_STATUS_BLOCK* status_block, X_STATUS status, uint32_t information) {
   status_block->information = information;
   std::atomic_thread_fence(std::memory_order_release);
   status_block->status = status;
 }
 
-}  // namespace
+}
 
 struct CreateOptions {
-  // https://processhacker.sourceforge.io/doc/ntioapi_8h.html
   static const uint32_t FILE_DIRECTORY_FILE = 0x00000001;
-  // Optimization - files access will be sequential, not random.
+
   static const uint32_t FILE_SEQUENTIAL_ONLY = 0x00000004;
   static const uint32_t FILE_SYNCHRONOUS_IO_ALERT = 0x00000010;
   static const uint32_t FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020;
   static const uint32_t FILE_NON_DIRECTORY_FILE = 0x00000040;
-  // Optimization - file access will be random, not sequential.
+
   static const uint32_t FILE_RANDOM_ACCESS = 0x00000800;
 };
 
@@ -71,12 +66,6 @@ static bool IsValidPath(const std::string_view s, bool is_pattern) {
       return false;
     }
     if (got_asterisk) {
-      // * must be followed by a . (*.)
-      //
-      // 4D530819 has a bug in its game code where it attempts to
-      // FindFirstFile() with filters of "Game:\\*_X3.rkv", "Game:\\m*_X3.rkv",
-      // and "Game:\\w*_X3.rkv" and will infinite loop if the path filter is
-      // allowed.
       if (c != '.') {
         return false;
       }
@@ -84,20 +73,18 @@ static bool IsValidPath(const std::string_view s, bool is_pattern) {
     }
     switch (c) {
       case '"':
-      // case '*':
+
       case '+':
       case ',':
-      // case ':':
-      // case ';':
+
       case '<':
-      // case '=':
+
       case '>':
-      // case '?':
+
       case '|': {
         return false;
       }
       case '*': {
-        // Pattern-specific (for NtQueryDirectoryFile)
         if (!is_pattern) {
           return false;
         }
@@ -105,7 +92,6 @@ static bool IsValidPath(const std::string_view s, bool is_pattern) {
         break;
       }
       case '?': {
-        // Pattern-specific (for NtQueryDirectoryFile)
         if (!is_pattern) {
           return false;
         }
@@ -124,14 +110,7 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
                        ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, mapped_u64 allocation_size_ptr,
                        u32 file_attributes, u32 share_access, u32 creation_disposition,
                        u32 create_options) {
-  // note used. maybe later
-  // uint64_t allocation_size = 0;  // is this correct???
-  // if (allocation_size_ptr) {
-  //  allocation_size = *allocation_size_ptr;
-  //}
-
   if (!object_attrs) {
-    // ..? Some games do this. This parameter is not optional.
     return X_STATUS_INVALID_PARAMETER;
   }
   assert_not_null(handle_out);
@@ -140,20 +119,17 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
 
   rex::filesystem::Entry* root_entry = nullptr;
 
-  // Compute path, possibly attrs relative.
   auto target_path = util::TranslateAnsiPath(REX_KERNEL_MEMORY(), object_name);
   REXKRNL_IMPORT_TRACE(
       "NtCreateFile", "path={} access={:#x} attrs={:#x} share={:#x} disp={:#x} options={:#x}",
       target_path, (uint32_t)desired_access, (uint32_t)file_attributes, (uint32_t)share_access,
       (uint32_t)creation_disposition, (uint32_t)create_options);
 
-  // Enforce that the path is ASCII.
   if (!IsValidPath(target_path, false)) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
 
-  if (object_attrs->root_directory != 0xFFFFFFFD &&  // ObDosDevices
-      object_attrs->root_directory != 0) {
+  if (object_attrs->root_directory != 0xFFFFFFFD && object_attrs->root_directory != 0) {
     auto root_file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(object_attrs->root_directory);
     assert_not_null(root_file);
     assert_true(root_file->type() == XObject::Type::File);
@@ -161,14 +137,11 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
     root_entry = root_file->entry();
   } else if (object_attrs->root_directory == 0xFFFFFFFD) {
     if (auto relative_path = rex::system::NormalizeDosDevicesRelativePath(target_path)) {
-      // ObDosDevices names without a device prefix are relative to the running
-      // title's game directory. Explicit device paths use the normal VFS path.
       root_entry = REX_KERNEL_FS()->ResolvePath("game:\\");
       target_path = std::move(*relative_path);
     }
   }
 
-  // Attempt open (or create).
   rex::filesystem::File* vfs_file;
   rex::filesystem::FileAction file_action;
   X_STATUS result = REX_KERNEL_FS()->OpenFile(
@@ -179,12 +152,10 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
 
   X_HANDLE handle = X_INVALID_HANDLE_VALUE;
   if (XSUCCEEDED(result)) {
-    // If true, desired_access SYNCHRONIZE flag must be set.
     bool synchronous = (create_options & CreateOptions::FILE_SYNCHRONOUS_IO_ALERT) ||
                        (create_options & CreateOptions::FILE_SYNCHRONOUS_IO_NONALERT);
     file = object_ref<XFile>(new XFile(REX_KERNEL_STATE(), vfs_file, synchronous));
 
-    // Handle ref is incremented, so return that.
     handle = file->handle();
   }
 
@@ -205,7 +176,6 @@ u32 NtOpenFile_entry(mapped_u32 handle_out, u32 desired_access,
                      ppc_ptr_t<X_OBJECT_ATTRIBUTES> object_attributes,
                      ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, u32 share_access,
                      u32 open_options) {
-  // The guest ABI passes ShareAccess in r7 and OpenOptions in r8 (Edge 887beea).
   return NtCreateFile_entry(
       handle_out, desired_access, object_attributes, io_status_block, nullptr, 0, share_access,
       static_cast<uint32_t>(rex::filesystem::FileDisposition::kOpen), open_options);
@@ -238,7 +208,6 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
 
   if (XSUCCEEDED(result)) {
     if (true || file->is_synchronous()) {
-      // Synchronous.
       uint32_t bytes_read = 0;
       result = file->Read(buffer.guest_address(), buffer_length,
                           byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
@@ -247,10 +216,6 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
         WriteIoStatus(io_status_block, result, bytes_read);
       }
 
-      // Queue the APC callback. It must be delivered via the APC mechanism even
-      // though were are completing immediately. A caller told PENDING (an
-      // asynchronous handle, short of end of file) always gets it, as on NT:
-      // it has no other way to learn the read finished, even when it failed.
       const bool pending = !file->is_synchronous() && result != X_STATUS_END_OF_FILE;
       if ((uint32_t)apc_routine_ptr & ~1) {
         if (QueuesApc(apc_routine_ptr.guest_address(), apc_context.guest_address()) &&
@@ -274,20 +239,8 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
         result = X_STATUS_PENDING;
       }
 
-      // Mark that we should signal the event now. We do this after
-      // we have written the info out.
       signal_event = true;
     } else {
-      // X_STATUS_PENDING if not returning immediately.
-      // XFile is waitable and signalled after each async req completes.
-      // reset the input event (->Reset())
-      /*xeNtReadFileState* call_state = new xeNtReadFileState();
-      XAsyncRequest* request = new XAsyncRequest(
-      state, file,
-      (XAsyncRequest::CompletionCallback)xeNtReadFileCompleted,
-      call_state);*/
-      // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
-      //                     request);
       if (io_status_block) {
         WriteIoStatus(io_status_block, X_STATUS_PENDING, 0);
       }
@@ -304,7 +257,6 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
     ev->Set(0, false);
   }
 
-  // Log detailed completion info for debugging async IO issues
   if (file) {
     REXKRNL_IMPORT_RESULT(
         "NtReadFile",
@@ -339,7 +291,6 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
 
   if (XSUCCEEDED(result)) {
     if (true || file->is_synchronous()) {
-      // Synchronous.
       uint32_t bytes_read = 0;
       result = file->ReadScatter(segment_array.guest_address(), length,
                                  byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
@@ -348,10 +299,6 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
         WriteIoStatus(io_status_block, result, bytes_read);
       }
 
-      // Queue the APC callback. It must be delivered via the APC mechanism even
-      // though were are completing immediately. An asynchronous handle is
-      // always told PENDING, and then always gets its APC; a synchronous one
-      // only when the read succeeded, as for NtReadFile.
       if ((uint32_t)apc_routine_ptr & ~1) {
         if (apc_context && (!file->is_synchronous() || result == X_STATUS_SUCCESS)) {
           auto thread = XThread::GetCurrentThread();
@@ -364,20 +311,8 @@ u32 NtReadFileScatter_entry(u32 file_handle, u32 event_handle, mapped_void apc_r
         result = X_STATUS_PENDING;
       }
 
-      // Mark that we should signal the event now. We do this after
-      // we have written the info out.
       signal_event = true;
     } else {
-      // X_STATUS_PENDING if not returning immediately.
-      // XFile is waitable and signalled after each async req completes.
-      // reset the input event (->Reset())
-      /*xeNtReadFileState* call_state = new xeNtReadFileState();
-      XAsyncRequest* request = new XAsyncRequest(
-      state, file,
-      (XAsyncRequest::CompletionCallback)xeNtReadFileCompleted,
-      call_state);*/
-      // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
-      //                     request);
       if (io_status_block) {
         WriteIoStatus(io_status_block, X_STATUS_PENDING, 0);
       }
@@ -402,23 +337,19 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
                       u32 buffer_length, mapped_u64 byte_offset_ptr) {
   X_STATUS result = X_STATUS_SUCCESS;
 
-  // Grab event to signal.
   bool signal_event = false;
   auto ev = REX_KERNEL_OBJECTS()->LookupObject<XEvent>(event_handle);
   if (event_handle && !ev) {
     result = X_STATUS_INVALID_HANDLE;
   }
 
-  // Grab file.
   auto file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(file_handle);
   if (!file) {
     result = X_STATUS_INVALID_HANDLE;
   }
 
-  // Execute write.
   if (XSUCCEEDED(result)) {
     if (true || file->is_synchronous()) {
-      // Synchronous request.
       uint32_t bytes_written = 0;
       result = file->Write(buffer.guest_address(), buffer_length,
                            byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
@@ -428,9 +359,6 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
         WriteIoStatus(io_status_block, result, static_cast<uint32_t>(bytes_written));
       }
 
-      // Queue the APC callback. It must be delivered via the APC mechanism even
-      // though were are completing immediately.
-      // Low bit probably means do not queue to IO ports.
       if ((uint32_t)apc_routine & ~1) {
         if (apc_context) {
           auto thread = XThread::GetCurrentThread();
@@ -443,11 +371,8 @@ u32 NtWriteFile_entry(u32 file_handle, u32 event_handle, u32 apc_routine, mapped
         result = X_STATUS_PENDING;
       }
 
-      // Mark that we should signal the event now. We do this after
-      // we have written the info out.
       signal_event = true;
     } else {
-      // X_STATUS_PENDING if not returning immediately.
       result = X_STATUS_PENDING;
 
       if (io_status_block) {
@@ -494,11 +419,9 @@ u32 NtSetIoCompletion_entry(u32 handle, u32 key_context, u32 apc_context, u32 co
   return X_STATUS_SUCCESS;
 }
 
-// Dequeues a packet from the completion port.
 u32 NtRemoveIoCompletion_entry(u32 handle, mapped_u32 key_context, mapped_u32 apc_context,
                                ppc_ptr_t<X_IO_STATUS_BLOCK> io_status_block, mapped_u64 timeout) {
   X_STATUS status = X_STATUS_SUCCESS;
-  // uint32_t info = 0;
 
   auto port = REX_KERNEL_OBJECTS()->LookupObject<XIOCompletion>(handle);
   if (!port) {
@@ -533,8 +456,7 @@ u32 NtQueryFullAttributesFile_entry(ppc_ptr_t<X_OBJECT_ATTRIBUTES> obj_attribs,
   REXKRNL_IMPORT_TRACE("NtQueryFullAttributesFile", "path={}", path_str);
 
   object_ref<XFile> root_file;
-  if (obj_attribs->root_directory != 0xFFFFFFFD &&  // ObDosDevices
-      obj_attribs->root_directory != 0) {
+  if (obj_attribs->root_directory != 0xFFFFFFFD && obj_attribs->root_directory != 0) {
     root_file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(obj_attribs->root_directory);
     assert_not_null(root_file);
     assert_true(root_file->type() == XObject::Type::File);
@@ -543,15 +465,12 @@ u32 NtQueryFullAttributesFile_entry(ppc_ptr_t<X_OBJECT_ATTRIBUTES> obj_attribs,
 
   auto target_path = util::TranslateAnsiPath(REX_KERNEL_MEMORY(), object_name);
 
-  // Enforce that the path is ASCII.
   if (!IsValidPath(target_path, false)) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
 
-  // Resolve the file using the virtual file system.
   auto entry = REX_KERNEL_FS()->ResolvePath(target_path);
   if (entry) {
-    // Found.
     file_info->creation_time = entry->create_timestamp();
     file_info->last_access_time = entry->access_timestamp();
     file_info->last_write_time = entry->write_timestamp();
@@ -583,13 +502,11 @@ u32 NtQueryDirectoryFile_entry(u32 file_handle, u32 event_handle, u32 apc_routin
   auto file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(file_handle);
   auto name = util::TranslateAnsiPath(REX_KERNEL_MEMORY(), file_name);
 
-  // Enforce that the path is ASCII.
   if (!IsValidPath(name, true)) {
     return X_STATUS_INVALID_PARAMETER;
   }
 
   if (file) {
-    // X_FILE_DIRECTORY_INFORMATION dir_info = {0};
     result = file->QueryDirectory(file_info_ptr, length, name, restart_scan != 0);
     if (XSUCCEEDED(result)) {
       info = length;
@@ -626,7 +543,6 @@ u32 NtFlushBuffersFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> io_st
   return result;
 }
 
-// https://docs.microsoft.com/en-us/windows/win32/devnotes/ntopensymboliclinkobject
 u32 NtOpenSymbolicLinkObject_entry(mapped_u32 handle_out,
                                    ppc_ptr_t<X_OBJECT_ATTRIBUTES> object_attrs) {
   if (!object_attrs) {
@@ -634,13 +550,12 @@ u32 NtOpenSymbolicLinkObject_entry(mapped_u32 handle_out,
   }
   assert_not_null(handle_out);
 
-  assert_true(object_attrs->attributes == 64);  // case insensitive
+  assert_true(object_attrs->attributes == 64);
 
   auto object_name = REX_KERNEL_MEMORY()->TranslateVirtual<X_ANSI_STRING*>(object_attrs->name_ptr);
 
   auto target_path = util::TranslateAnsiPath(REX_KERNEL_MEMORY(), object_name);
 
-  // Enforce that the path is ASCII.
   if (!IsValidPath(target_path, false)) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
@@ -650,7 +565,7 @@ u32 NtOpenSymbolicLinkObject_entry(mapped_u32 handle_out,
   }
 
   if (rex::string::utf8_starts_with(target_path, "\\??\\")) {
-    target_path = target_path.substr(4);  // Strip the full qualifier
+    target_path = target_path.substr(4);
   }
 
   std::string link_path;
@@ -666,7 +581,6 @@ u32 NtOpenSymbolicLinkObject_entry(mapped_u32 handle_out,
   return X_STATUS_SUCCESS;
 }
 
-// https://docs.microsoft.com/en-us/windows/win32/devnotes/ntquerysymboliclinkobject
 u32 NtQuerySymbolicLinkObject_entry(u32 handle, ppc_ptr_t<X_ANSI_STRING> target) {
   auto symlink = REX_KERNEL_OBJECTS()->LookupObject<XSymbolicLink>(handle);
   if (!symlink) {
@@ -686,8 +600,6 @@ u32 FscGetCacheElementCount_entry(u32 r3) {
 }
 
 u32 FscSetCacheElementCount_entry(u32 unk_0, u32 unk_1) {
-  // unk_0 = 0
-  // unk_1 looks like a count? in what units? 256 is a common value
   return X_STATUS_SUCCESS;
 }
 
@@ -695,9 +607,6 @@ u32 NtDeviceIoControlFile_entry(u32 handle, u32 event_handle, u32 apc_routine, u
                                 u32 io_status_block, u32 io_control_code, mapped_void input_buffer,
                                 u32 input_buffer_len, mapped_void output_buffer,
                                 u32 output_buffer_len) {
-  // Called by XMountUtilityDrive cache-mounting code
-  // (checks if the returned values look valid, values below seem to pass the
-  // checks)
   const uint32_t cache_size = 0xFF000;
 
   const uint32_t X_IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x70000;
@@ -727,18 +636,11 @@ u32 NtDeviceIoControlFile_entry(u32 handle, u32 event_handle, u32 apc_routine, u
 }
 
 u32 IoCreateDevice_entry(u32 device_struct, u32 r4, u32 r5, u32 r6, u32 r7, mapped_u32 out_struct) {
-  // Called from XMountUtilityDrive XAM-task code
-  // That code tries writing things to a pointer at out_struct+0x18
-  // We'll alloc some scratch space for it so it doesn't cause any exceptions
-
-  // 0x24 is guessed size from accesses to out_struct - likely incorrect
   auto out_guest = REX_KERNEL_MEMORY()->SystemHeapAlloc(0x24);
 
   auto out = REX_KERNEL_MEMORY()->TranslateVirtual<uint8_t*>(out_guest);
   memset(out, 0, 0x24);
 
-  // XMountUtilityDrive writes some kind of header here
-  // 0x1000 bytes should be enough to store it
   auto out_guest2 = REX_KERNEL_MEMORY()->SystemHeapAlloc(0x1000);
   memory::store_and_swap(out + 0x18, out_guest2);
 
@@ -766,7 +668,7 @@ u32 IoSynchronousDeviceIoControlRequest_entry(u32 ioctl, mapped_void device_obje
 
 u32 StfsCreateDevice_entry(mapped_void device_object, u32 flags, mapped_u32 out_device) {
   REXKRNL_WARN("StfsCreateDevice - stub");
-  // if (out_device) *out_device = 0;
+
   return X_STATUS_SUCCESS;
 }
 
@@ -776,7 +678,7 @@ u32 StfsControlDevice_entry(mapped_void device_object, u32 ioctl, mapped_void in
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}
 
 REX_EXPORT(__imp__NtCreateFile, rex::kernel::xboxkrnl::NtCreateFile_entry)
 REX_EXPORT(__imp__NtOpenFile, rex::kernel::xboxkrnl::NtOpenFile_entry)

@@ -36,7 +36,6 @@ using rex::system::XEvent;
 using rex::system::XThread;
 using rex::testing::Kernel;
 
-// A code range for the test's guest functions.
 constexpr uint32_t kCodeBase = 0x82F00000;
 constexpr uint32_t kCodeSize = 0x1000;
 constexpr uint32_t kImageSize = 0x10000;
@@ -46,11 +45,6 @@ std::atomic<int> g_started{0};
 std::atomic<int> g_returned{0};
 XEvent* g_event = nullptr;
 
-// The guest thread body: block in the kernel until termination stops it.
-// start_context picks how: 0 infinite wait, 1 alertable infinite wait,
-// 2 1 ms delay, 3 alertable 5 ms delay, 4 alertable 60 s delay (only a user
-// APC can end it), 5 60 s delay (only the termination event can end it, like
-// a guest Sleep(INFINITE)).
 void Waiter(PPCContext& ctx, uint8_t* base) {
   (void)base;
   const uint32_t mode = ctx.r3.u32 % 6;
@@ -77,9 +71,7 @@ void Waiter(PPCContext& ctx, uint8_t* base) {
         self->Delay(1, 0, uint64_t(-600000000));
         break;
     }
-    // Waits also wake for the contention thread; loop until terminated.
-    // Termination exits the thread inside the kernel call, so this function
-    // never returns; g_returned counts any that do.
+
     if (g_event == nullptr) {
       ++g_returned;
       return;
@@ -97,14 +89,12 @@ void RegisterWaiter() {
   (void)registered;
 }
 
-}  // namespace
+}
 
 TEST_CASE("TerminateTitle stops guest threads blocked in waits and delays, repeatedly",
           "[kernel][termination]") {
   RegisterWaiter();
-  // With precise timers every kind of block ends at termination. Without
-  // them a non-alertable 60 s delay (mode 5) sleeps on and is left running,
-  // a documented limitation, so that mode is left out.
+
   auto precise = GENERATE(true, false);
   INFO("guest_precise_timers " << precise);
   REQUIRE(rex::cvar::SetFlagByName("guest_precise_timers", precise ? "true" : "false"));
@@ -130,7 +120,6 @@ TEST_CASE("TerminateTitle stops guest threads blocked in waits and delays, repea
     }
     REQUIRE(g_started == kThreads);
 
-    // Contention: the event keeps flipping while termination runs.
     std::atomic<bool> stop{false};
     std::thread flipper([&] {
       while (!stop) {
@@ -139,14 +128,12 @@ TEST_CASE("TerminateTitle stops guest threads blocked in waits and delays, repea
       }
     });
 
-    // Watchdog: TerminateTitle must return, not wait forever.
     auto terminated = std::async(std::launch::async, [] { Kernel()->TerminateTitle(); });
     bool returned = terminated.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
     stop = true;
     flipper.join();
     REQUIRE(returned);
 
-    // Every guest thread reached a termination point and exited.
     deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     auto running = [&] {
       int count = 0;

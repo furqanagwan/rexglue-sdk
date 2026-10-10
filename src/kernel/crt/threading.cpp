@@ -33,7 +33,6 @@ namespace {
 
 std::atomic<uint32_t> unique_fiber_count;
 
-/// get KTHREAD and PCR pointers from the current thread's context.
 struct GuestThreadPtrs {
   X_KTHREAD* kthread;
   X_KPCR* pcr;
@@ -50,7 +49,6 @@ GuestThreadPtrs GetGuestThreadPtrs(XThread* thread) {
   return {kthread, pcr, ctx, mem};
 }
 
-/// update KTHREAD/PCR/ctx stack pointers
 void UpdateGuestStackPointers(X_KTHREAD* kthread, X_KPCR* pcr, PPCContext* ctx, uint32_t sp,
                               uint32_t stack_alloc_base, uint32_t stack_base,
                               uint32_t stack_limit) {
@@ -61,10 +59,6 @@ void UpdateGuestStackPointers(X_KTHREAD* kthread, X_KPCR* pcr, PPCContext* ctx, 
   pcr->stack_end_ptr = stack_limit;
   ctx->r1.u64 = sp;
 }
-
-//-----------------------------------------------------------------------------
-// FiberEntryPoint -- host fiber entry for CreateFiber fibers
-//-----------------------------------------------------------------------------
 
 struct FiberEntryArgs {
   PPCFunc* start_fn;
@@ -78,14 +72,11 @@ static void FiberEntryPoint(void* raw_arg) {
   auto* mem = args->kernel_state->memory();
   PPCContext& ctx = *thread->thread_state()->context();
 
-  // Read fiber_data (lpParameter) from guest context buffer
   auto* fiber = mem->TranslateVirtual<X_FIBER_CONTEXT*>(args->guest_fiber_addr);
   ctx.r3.u64 = static_cast<uint32_t>(fiber->fiber_data);
 
-  // Call the fiber function
   args->start_fn(ctx, mem->virtual_membase());
 
-  // Fiber returned (shouldn't per XDK) -- safe fallback
   if (thread->main_fiber()) {
     PROFILE_FIBER_LEAVE;
     rex::thread::Fiber::SwitchTo(thread->main_fiber());
@@ -94,15 +85,13 @@ static void FiberEntryPoint(void* raw_arg) {
   std::terminate();
 }
 
-/// Helper for ConvertFiberToThread logic, shared by ConvertFiberToThread_entry
-/// and DeleteFiber_entry (self-delete case).
 u32 ConvertFiberToThread_impl(XThread* thread) {
   auto* ks = thread->kernel_state();
   auto [kthread, pcr, ctx, mem] = GetGuestThreadPtrs(thread);
 
   uint32_t fiber_addr = kthread->fiber_ptr;
   if (!fiber_addr) {
-    kthread->last_error = 0x501;  // ERROR_ALREADY_THREAD
+    kthread->last_error = 0x501;
     return 0;
   }
 
@@ -113,19 +102,14 @@ u32 ConvertFiberToThread_impl(XThread* thread) {
   }
 
   kthread->fiber_ptr = 0u;
-  // Must null main_fiber_ AFTER Destroy() above to avoid double-free
-  // in ~XThread, which also calls main_fiber_->Destroy() if non-null.
+
   thread->set_main_fiber(nullptr);
   mem->SystemHeapFree(fiber_addr);
 
-  return 1;  // TRUE
+  return 1;
 }
 
-}  // namespace
-
-//=============================================================================
-// XAPI Fiber Function Implementations
-//=============================================================================
+}
 
 u32 ConvertThreadToFiber_entry(mapped_void lpParameter) {
   auto* thread = XThread::GetCurrentThread();
@@ -133,20 +117,18 @@ u32 ConvertThreadToFiber_entry(mapped_void lpParameter) {
   auto [kthread, pcr, ctx, mem] = GetGuestThreadPtrs(thread);
 
   if (kthread->fiber_ptr) {
-    kthread->last_error = 0x500;  // ERROR_ALREADY_FIBER
+    kthread->last_error = 0x500;
     return 0;
   }
 
-  // Allocate guest fiber context buffer
   uint32_t buf_addr = mem->SystemHeapAlloc(sizeof(X_FIBER_CONTEXT));
   if (!buf_addr) {
-    kthread->last_error = 8;  // ERROR_NOT_ENOUGH_MEMORY
+    kthread->last_error = 8;
     return 0;
   }
   auto* fiber = mem->TranslateVirtual<X_FIBER_CONTEXT*>(buf_addr);
   std::memset(fiber, 0, sizeof(X_FIBER_CONTEXT));
 
-  // Populate from current KTHREAD stack state
   fiber->fiber_data = lpParameter.guest_address();
   fiber->stack_alloc_base = kthread->stack_alloc_base;
   fiber->stack_base = kthread->stack_base;
@@ -155,8 +137,6 @@ u32 ConvertThreadToFiber_entry(mapped_void lpParameter) {
 
   kthread->fiber_ptr = buf_addr;
 
-  // Reuse existing host fiber from XThread::Execute() if available;
-  // otherwise create one (should not happen in normal flow).
   auto* host_fiber = thread->main_fiber();
   if (!host_fiber) {
     host_fiber = rex::thread::Fiber::ConvertCurrentThread();
@@ -184,16 +164,13 @@ u32 CreateFiber_entry(u32 dwStackSize, u32 lpStartAddress, mapped_void lpParamet
   auto* ks = thread->kernel_state();
   auto* mem = ks->memory();
 
-  // Determine guest stack size
   uint32_t guest_stack_size = dwStackSize;
   if (guest_stack_size == 0)
-    guest_stack_size = 0x10000;                            // 64KB default
-  guest_stack_size = (guest_stack_size + 0xFFF) & ~0xFFF;  // page-align
+    guest_stack_size = 0x10000;
+  guest_stack_size = (guest_stack_size + 0xFFF) & ~0xFFF;
   if (guest_stack_size < 0x4000)
-    guest_stack_size = 0x4000;  // 16KB minimum
+    guest_stack_size = 0x4000;
 
-  // Allocate guest kernel stack (for PPC stack variables via ctx.r1).
-  // guest_stack_size is already page-aligned.
   uint32_t stack_alignment = (guest_stack_size & 0xF000) ? 0x1000 : 0x10000;
   uint32_t stack_address = 0;
   mem->LookupHeap(0x70000000)
@@ -202,20 +179,17 @@ u32 CreateFiber_entry(u32 dwStackSize, u32 lpStartAddress, mapped_void lpParamet
                    memory::kMemoryProtectRead | memory::kMemoryProtectWrite, false, &stack_address);
   if (!stack_address) {
     auto [kthread, pcr, ctx, _mem] = GetGuestThreadPtrs(thread);
-    kthread->last_error = 8;  // ERROR_NOT_ENOUGH_MEMORY
+    kthread->last_error = 8;
     return 0;
   }
   uint32_t stack_top = stack_address + guest_stack_size;
   uint32_t stack_bottom = stack_address;
   uint32_t initial_sp = stack_top - 0x50;
 
-  // Zero the initial 80-byte frame
   std::memset(mem->TranslateVirtual(initial_sp), 0, 0x50);
 
-  // Resolve start address to host function pointer
   PPCFunc* start_fn = ks->function_dispatcher()->GetFunction(lpStartAddress);
 
-  // Allocate guest fiber context buffer
   uint32_t buf_addr = mem->SystemHeapAlloc(sizeof(X_FIBER_CONTEXT));
   if (!buf_addr) {
     mem->LookupHeap(0x70000000)->Release(stack_address);
@@ -228,11 +202,10 @@ u32 CreateFiber_entry(u32 dwStackSize, u32 lpStartAddress, mapped_void lpParamet
 
   fiber->fiber_data = lpParameter.guest_address();
   fiber->stack_alloc_base = stack_top;
-  fiber->stack_base = stack_top;  // = alloc_base initially
+  fiber->stack_base = stack_top;
   fiber->stack_limit = stack_bottom;
   fiber->sp_save = initial_sp;
 
-  // Create host fiber
   size_t host_stack =
       std::max(static_cast<size_t>(guest_stack_size), static_cast<size_t>(256u * 1024u));
   auto args_owner = std::make_unique<FiberEntryArgs>(FiberEntryArgs{
@@ -242,7 +215,7 @@ u32 CreateFiber_entry(u32 dwStackSize, u32 lpStartAddress, mapped_void lpParamet
   });
   auto* host_fiber = rex::thread::Fiber::Create(host_stack, FiberEntryPoint, args_owner.get());
   if (host_fiber) {
-    args_owner.release();  // FiberEntryPoint takes ownership
+    args_owner.release();
   }
 
   ks->RegisterFiber(buf_addr, FiberInfo{host_fiber, unique_fiber_count++, buf_addr, stack_top,
@@ -260,12 +233,11 @@ void DeleteFiber_entry(mapped_void lpFiber) {
   auto [kthread, pcr, ctx, _mem] = GetGuestThreadPtrs(thread);
   uint32_t fiber_addr = lpFiber.guest_address();
 
-  // Self-delete: ConvertFiberToThread + ExitThread
   if (static_cast<uint32_t>(kthread->fiber_ptr) == fiber_addr) {
     REXKRNL_DEBUG("DeleteFiber: self-delete fiber={:#010x}", fiber_addr);
     PROFILE_FIBER_LEAVE;
     ConvertFiberToThread_impl(thread);
-    thread->Exit(1);  // does not return
+    thread->Exit(1);
     return;
   }
 
@@ -291,14 +263,12 @@ void SwitchToFiber_entry(mapped_void lpFiber) {
   auto [kthread, pcr, ctx, _mem] = GetGuestThreadPtrs(thread);
   uint32_t target_addr = lpFiber.guest_address();
 
-  // Validate target
   auto* target_info = ks->LookupFiber(target_addr);
   if (!target_info || !target_info->host_fiber) {
     REXKRNL_WARN("SwitchToFiber: no valid fiber for {:#010x}, skipping", target_addr);
     return;
   }
 
-  // Save outgoing fiber's non-volatile registers and SP
   uint32_t current_addr = static_cast<uint32_t>(kthread->fiber_ptr);
   if (current_addr) {
     auto* current_fiber = mem->TranslateVirtual<X_FIBER_CONTEXT*>(current_addr);
@@ -306,10 +276,8 @@ void SwitchToFiber_entry(mapped_void lpFiber) {
     current_fiber->sp_save = ctx->r1.u64;
   }
 
-  // Set target as active
   kthread->fiber_ptr = target_addr;
 
-  // Restore target's non-volatile registers and guest stack state
   auto* target_fiber = mem->TranslateVirtual<X_FIBER_CONTEXT*>(target_addr);
   ctx->RestoreNonVolatiles(target_fiber->register_save_area);
   UpdateGuestStackPointers(kthread, pcr, ctx, static_cast<uint32_t>(target_fiber->sp_save),
@@ -317,23 +285,16 @@ void SwitchToFiber_entry(mapped_void lpFiber) {
                            static_cast<uint32_t>(target_fiber->stack_base),
                            static_cast<uint32_t>(target_fiber->stack_limit));
 
-  // profiling
   if (target_info->host_fiber == thread->main_fiber()) {
     PROFILE_FIBER_LEAVE;
   } else {
     PROFILE_FIBER_ENTER(ks->GetOrCreateFiberName(target_info->uid, thread->name().c_str()));
   }
 
-  // Host fiber switch -- suspends here, resumes when switched back
   rex::thread::Fiber::SwitchTo(target_info->host_fiber);
-  // Resumed: non-volatile regs and stack state already restored by the fiber that switched back.
 }
 
-}  // namespace rex::kernel::crt
-
-//=============================================================================
-// REXCRT_EXPORT wiring
-//=============================================================================
+}
 
 REX_HOOK(rexcrt_ConvertThreadToFiber, rex::kernel::crt::ConvertThreadToFiber_entry)
 REX_HOOK(rexcrt_ConvertFiberToThread, rex::kernel::crt::ConvertFiberToThread_entry)

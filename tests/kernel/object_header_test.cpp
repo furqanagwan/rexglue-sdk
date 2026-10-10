@@ -37,7 +37,6 @@ using rex::testing::Kernel;
 constexpr X_STATUS kSuccess = 0;
 constexpr X_STATUS kTimeout = 0x00000102;
 
-// Polls: a zero timeout never blocks.
 X_STATUS Poll(XObject* object) {
   uint64_t timeout = 0;
   return object->Wait(3, 1, 0, &timeout);
@@ -59,8 +58,6 @@ uint32_t SignalState(XObject* object) {
   return object->guest_object<X_DISPATCH_HEADER>()->signal_state;
 }
 
-// Guest memory holding a dispatch object the guest initialized inline, as the
-// XDK's inlined KeInitializeEvent/KeInitializeSemaphore do.
 struct GuestObject {
   explicit GuestObject(uint32_t size) {
     address = Kernel()->memory()->SystemHeapAlloc(size);
@@ -75,24 +72,24 @@ struct GuestObject {
   uint32_t address = 0;
 };
 
-}  // namespace
+}
 
 TEST_CASE("A created notification event keeps its type and state in the header",
           "[kernel][object_header]") {
   auto event = CreateEvent(true, false);
   auto* header = &event->guest_object<X_KEVENT>()->header;
-  CHECK(header->type == 0);  // EventNotificationObject
+  CHECK(header->type == 0);
   CHECK(header->signal_state == 0);
 
   uint32_t type = 99, state = 99;
   event->Query(&type, &state);
-  // Before RG-GDK-014 Initialize dropped manual_reset and this reported 1.
+
   CHECK(type == 0);
   CHECK(state == 0);
 
   event->Set(0, false);
   CHECK(header->signal_state == 1);
-  // A notification event stays signaled through waits.
+
   CHECK(Poll(event.get()) == kSuccess);
   CHECK(Poll(event.get()) == kSuccess);
   CHECK(header->signal_state == 1);
@@ -105,14 +102,14 @@ TEST_CASE("A created notification event keeps its type and state in the header",
 TEST_CASE("A synchronization event clears its header when a wait takes it",
           "[kernel][object_header]") {
   auto event = CreateEvent(false, true);
-  CHECK(event->guest_object<X_KEVENT>()->header.type == 1);  // EventSynchronizationObject
+  CHECK(event->guest_object<X_KEVENT>()->header.type == 1);
   CHECK(SignalState(event.get()) == 1);
   CHECK(Poll(event.get()) == kSuccess);
   CHECK(SignalState(event.get()) == 0);
   CHECK(Poll(event.get()) == kTimeout);
 
   event->Set(0, false);
-  // KePulseEvent returns the previous state and leaves the event reset.
+
   CHECK(event->Pulse(0, false) == 1);
   CHECK(SignalState(event.get()) == 0);
   CHECK(event->Pulse(0, false) == 0);
@@ -123,7 +120,7 @@ TEST_CASE("A synchronization event clears its header when a wait takes it",
 TEST_CASE("A semaphore header holds the count and limit", "[kernel][object_header]") {
   auto semaphore = CreateSemaphore(2, 5);
   auto* guest = semaphore->guest_object<X_KSEMAPHORE>();
-  CHECK(guest->header.type == 5);  // SemaphoreObject
+  CHECK(guest->header.type == 5);
   CHECK(guest->header.signal_state == 2);
   CHECK(guest->limit == 5);
 
@@ -133,7 +130,7 @@ TEST_CASE("A semaphore header holds the count and limit", "[kernel][object_heade
   CHECK(semaphore->ReleaseSemaphore(3, &previous));
   CHECK(previous == 1);
   CHECK(guest->header.signal_state == 4);
-  // Over the limit: nothing changes.
+
   CHECK_FALSE(semaphore->ReleaseSemaphore(2, nullptr));
   CHECK(guest->header.signal_state == 4);
   semaphore->ReleaseHandle();
@@ -143,21 +140,19 @@ TEST_CASE("A guest write to an event header is picked up on the next lookup",
           "[kernel][object_header]") {
   GuestObject memory(sizeof(X_KEVENT));
   auto* header = &memory.get<X_KEVENT>()->header;
-  header->type = 1;  // Synchronization, not signaled.
+  header->type = 1;
 
   auto event = XObject::GetNativeObject<XEvent>(Kernel(), header);
   REQUIRE(event);
   CHECK(event->guest_object() == memory.address);
   CHECK(Poll(event.get()) == kTimeout);
 
-  // The guest signals it in place, without calling the kernel.
   header->signal_state = 1;
   auto again = XObject::GetNativeObject<XEvent>(Kernel(), header);
   CHECK(again.get() == event.get());
   CHECK(Poll(event.get()) == kSuccess);
   CHECK(header->signal_state == 0);
 
-  // And resets it in place after the kernel set it.
   event->Set(0, false);
   header->signal_state = 0;
   XObject::GetNativeObject<XEvent>(Kernel(), header);
@@ -186,17 +181,12 @@ TEST_CASE("An in-place semaphore re-initialize moves the host count both ways",
   CHECK(Poll(semaphore.get()) == kTimeout);
   CHECK(guest->header.signal_state == 0);
 
-  // Past the limit the host keeps its count, and says so in the header.
   guest->header.signal_state = 9;
   XObject::GetNativeObject<XSemaphore>(Kernel(), guest);
   CHECK(guest->header.signal_state == 0);
   semaphore->ReleaseHandle();
 }
 
-// Canary #1225's Guitar Hero 5 trace, synthetically: the guest dereferences
-// an object the kernel created over its memory, the object dies, its handle
-// goes to the next object, and the signature left in guest memory names that
-// unrelated object.
 TEST_CASE("A signature left by a dead object never resolves to the handle's next owner",
           "[kernel][object_header]") {
   GuestObject memory(sizeof(X_KEVENT));
@@ -208,13 +198,11 @@ TEST_CASE("A signature left by a dead object never resolves to the handle's next
     auto first = XObject::GetNativeObject<XEvent>(Kernel(), header);
     REQUIRE(first);
     dead_handle = first->handle();
-    // ObDereferenceObject on it: the last handle goes and the object dies.
+
     first->ReleaseHandle();
   }
   CHECK(header->wait_list_blink == dead_handle);
 
-  // The table reuses the lowest free slot, so the next object takes the
-  // handle, like the thread in the Guitar Hero 5 trace.
   auto next_owner = CreateSemaphore(0, 1);
   INFO("handle reused: " << (next_owner->handle() == dead_handle));
 
@@ -224,7 +212,7 @@ TEST_CASE("A signature left by a dead object never resolves to the handle's next
   CHECK(looked_up->type() == XObject::Type::Event);
   CHECK(looked_up->guest_object() == memory.address);
   CHECK(header->wait_list_blink == looked_up->handle());
-  // Releasing the new event leaves the semaphore alone.
+
   looked_up->ReleaseHandle();
   CHECK(Kernel()->object_table()->LookupObject<XSemaphore>(next_owner->handle()));
   next_owner->ReleaseHandle();
@@ -239,8 +227,6 @@ TEST_CASE("SignalAndWait updates the signaled object's header", "[kernel][object
   CHECK(Poll(signal.get()) == kSuccess);
   CHECK(SignalState(signal.get()) == 0);
 
-  // A semaphore at its limit is not released: the host call fails and the
-  // header keeps the count.
   auto full = CreateSemaphore(1, 1);
   XObject::SignalAndWait(full.get(), wait.get(), 3, 1, 0, &timeout);
   CHECK(SignalState(full.get()) == 1);
@@ -275,7 +261,7 @@ TEST_CASE("Concurrent releases and waits leave the semaphore header equal to the
   }
   int32_t expected = kThreads * kReleasesPerThread - taken;
   CHECK(static_cast<int32_t>(SignalState(semaphore.get())) == expected);
-  // And the host agrees: exactly that many waits succeed.
+
   int32_t drained = 0;
   while (Poll(semaphore.get()) == kSuccess) {
     ++drained;
@@ -305,7 +291,7 @@ TEST_CASE("Concurrent set, reset, pulse and wait end with header and event in ag
           event->Pulse(0, false);
       }
     }
-    // End signaled, so the waiters race the last Set too.
+
     event->Set(0, false);
     stop = true;
   });
@@ -319,9 +305,7 @@ TEST_CASE("Concurrent set, reset, pulse and wait end with header and event in ag
   for (auto& thread : threads) {
     thread.join();
   }
-  // Quiescent: the guest header says what a wait finds. A waiter's callback
-  // can run after a later Set, so it must read the host state, not assume a
-  // reset.
+
   bool header_signaled = SignalState(event.get()) != 0;
   bool host_signaled = Poll(event.get()) == kSuccess;
   CHECK(header_signaled == host_signaled);

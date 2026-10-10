@@ -103,8 +103,6 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
   uint64_t userxuid = REX_KERNEL_STATE()->user_profile()->xuid();
 
   if (!device_info || device_info->device_type == DeviceType::HDD) {
-    // Fetch any alternate title IDs defined in the XEX header
-    // (used by games to load saves from other titles, etc)
     std::vector<uint32_t> title_ids{kCurrentlyRunningTitleId};
     auto exe_module = REX_KERNEL_STATE()->GetExecutableModule();
     if (exe_module && exe_module->xex_module()) {
@@ -113,7 +111,6 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
     }
 
     for (auto& title_id : title_ids) {
-      // Get user-specific content
       auto content_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
           static_cast<uint32_t>(DummyDeviceId::HDD), xuid, content_type_enum, title_id);
       for (const auto& content_data : content_datas) {
@@ -124,7 +121,6 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
         }
       }
 
-      // Also get common content (xuid=0)
       if (userxuid != 0) {
         auto common_datas = REX_KERNEL_STATE()->content_manager()->ListContent(
             static_cast<uint32_t>(DummyDeviceId::HDD), 0, content_type_enum, title_id);
@@ -150,9 +146,9 @@ u32 XamContentAggregateCreateEnumerator_entry(u64 xuid, u32 device_id, u32 conte
   return X_ERROR_SUCCESS;
 }
 
-}  // namespace xam
-}  // namespace kernel
-}  // namespace rex
+}
+}
+}
 
 REX_EXPORT(__imp__XamContentAggregateCreateEnumerator,
            rex::kernel::xam::XamContentAggregateCreateEnumerator_entry)

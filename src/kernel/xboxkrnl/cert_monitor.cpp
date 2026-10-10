@@ -30,4 +30,4 @@ void KeCertMonitorCallback(PPCContext* ppc_context, rex::system::KernelState* ke
   REXKRNL_DEBUG("KeCertMonitorCallback({}, {:08X})", id, arg);
 }
 
-}  // namespace rex::kernel::xboxkrnl
+}

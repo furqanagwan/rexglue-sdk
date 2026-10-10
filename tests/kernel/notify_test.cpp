@@ -25,13 +25,10 @@ using rex::system::xam::LaunchKind;
 
 namespace {
 
-// Notification ids pack mask_index:6, version:9 and local_id:16.
 XNotificationID Id(uint32_t mask_index, uint32_t version, uint32_t local_id) {
   return XNotificationID((mask_index << 25) | (version << 16) | local_id);
 }
 
-// Mask bit 0 is left out: the kernel sends its startup notifications to the
-// first listener with that bit, which only the dedicated case below creates.
 rex::system::object_ref<XNotifyListener> Listen(uint64_t mask, uint32_t max_version = 10) {
   auto listener =
       rex::system::object_ref<XNotifyListener>(new XNotifyListener(rex::testing::Kernel()));
@@ -49,15 +46,15 @@ std::vector<std::pair<uint32_t, uint32_t>> Drain(XNotifyListener* listener) {
   return out;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Notify listeners receive only their mask and version", "[kernel][notify]") {
-  auto listener = Listen(1ull << 2, /*max_version=*/3);
+  auto listener = Listen(1ull << 2, 3);
   auto* kernel = rex::testing::Kernel();
-  kernel->BroadcastNotification(Id(2, 1, 0x10), 1);  // matching
-  kernel->BroadcastNotification(Id(3, 1, 0x11), 2);  // other mask bit
-  kernel->BroadcastNotification(Id(2, 4, 0x12), 3);  // newer than max_version
-  kernel->BroadcastNotification(Id(2, 3, 0x13), 4);  // exactly max_version
+  kernel->BroadcastNotification(Id(2, 1, 0x10), 1);
+  kernel->BroadcastNotification(Id(3, 1, 0x11), 2);
+  kernel->BroadcastNotification(Id(2, 4, 0x12), 3);
+  kernel->BroadcastNotification(Id(2, 3, 0x13), 4);
   CHECK(Drain(listener.get()) == std::vector<std::pair<uint32_t, uint32_t>>{
                                      {uint32_t(Id(2, 1, 0x10)), 1}, {uint32_t(Id(2, 3, 0x13)), 4}});
   listener->ReleaseHandle();
@@ -75,7 +72,7 @@ TEST_CASE("Notifications arrive in broadcast order; a matched dequeue keeps the 
 
   uint32_t data = 0;
   REQUIRE(listener->DequeueNotification(b, &data));
-  CHECK(data == 20);  // the first b
+  CHECK(data == 20);
   CHECK(Drain(listener.get()) == std::vector<std::pair<uint32_t, uint32_t>>{
                                      {uint32_t(a), 10}, {uint32_t(c), 30}, {uint32_t(b), 21}});
   CHECK_FALSE(listener->DequeueNotification(b, &data));
@@ -88,7 +85,6 @@ TEST_CASE("A listener the guest closed stops receiving broadcasts", "[kernel][no
   kernel->BroadcastNotification(Id(7, 0, 1), 1);
   CHECK(Drain(listener.get()).size() == 1);
 
-  // XCloseHandle on the listener: the kernel stops holding and feeding it.
   REQUIRE(kernel->object_table()->ReleaseHandle(listener->handle()) == X_STATUS_SUCCESS);
   kernel->BroadcastNotification(Id(7, 0, 2), 2);
   CHECK(Drain(listener.get()).empty());
@@ -99,7 +95,7 @@ TEST_CASE("Only the first listener for system notifications gets the startup set
   auto first = Listen(1ull << 0);
   auto second = Listen(1ull << 0);
   const auto startup = Drain(first.get());
-  // XN_SYS_UI on/off, XN_SYS_SIGNINCHANGED x2, input device changed/config x2 each.
+
   REQUIRE(startup.size() == 8);
   CHECK(startup[0] == std::pair<uint32_t, uint32_t>{0x9, 1});
   CHECK(startup[1] == std::pair<uint32_t, uint32_t>{0x9, 0});
