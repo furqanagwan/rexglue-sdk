@@ -34,8 +34,8 @@ cmake --build --preset win-amd64-gdk-fuzz-release
 ctest --preset win-amd64-gdk-fuzz-release --output-on-failure
 ```
 
-Each `fuzz.<parser>` test runs for `REXGLUE_FUZZ_SECONDS` (60 by default). New
-inputs are saved to `out/build/win-amd64-gdk-fuzz/tests/fuzz/corpus/<parser>`.
+The build preset builds only the `fuzzers` target. Each `fuzz.<parser>` test
+runs for `REXGLUE_FUZZ_SECONDS` (60 by default). New inputs are saved to `out/build/win-amd64-gdk-fuzz/tests/fuzz/corpus/<parser>`.
 Crashing inputs are saved to `artifacts/<parser>`. To run one target longer:
 
 ```powershell
@@ -54,6 +54,12 @@ cmake --preset win-amd64-gdk-asan
 cmake --build --preset win-amd64-gdk-asan-release --target unit_tests
 ctest --preset win-amd64-gdk-asan-release -L unit --output-on-failure
 ```
+
+## Continuous integration
+
+The `AddressSanitizer and parser fuzzing` job in
+`.github/workflows/gdk-validation.yaml` runs the ASan unit tests and then
+each fuzz target for 30 seconds on every push and pull request.
 
 ## Results
 

@@ -33,20 +33,40 @@ targets within seconds. Each fix has a unit test built from the failing case.
 
 ## Recorded runs
 
-2026-10-10, 60 seconds per target, seeds from `fuzz_seeds`, after the fixes
-above:
+2026-10-10, `win-amd64-gdk-fuzz` Release, after the fixes above. Each target
+ran twice for 60 seconds; the second run started from the first run's corpus.
+The table shows the second run. No run found a failure.
 
-| Target | Edges | Features | Executions | Corpus | Result |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `xex_fuzzer` | 435 | 630 | 2,202 | 65 | No failures |
-| `xdbf_fuzzer` | 88 | 227 | 27,813,303 | 98 | No failures |
-| `xdvdfs_fuzzer` | 381 | 597 | 1,207,937 | 59 | No failures |
-| `stfs_fuzzer` | 428 | 592 | 798,089 | 10 | No failures |
+| Target | Edges | Features | Executions | Corpus |
+| --- | ---: | ---: | ---: | ---: |
+| `xex_fuzzer` | 429 | 616 | 918 | 59 |
+| `xdbf_fuzzer` | 106 | 272 | 18,154,345 | 99 |
+| `xdvdfs_fuzzer` | 388 | 616 | 1,002,233 | 58 |
+| `stfs_fuzzer` | 446 | 613 | 523,378 | 15 |
+| `xui_fuzzer` | 313 | 1,131 | 2,452,690 | 255 |
 
-`xex_fuzzer` runs about 36 inputs a second. Each input resets and maps the
+The first run of `xui_fuzzer` was in the Xbox repository's own fuzz build:
+2,414,370 executions, 308 edges, no failures.
+
+`xex_fuzzer` runs 14 to 36 inputs a second. Each input resets and maps the
 guest heap, so it needs much longer runs than the others to go deep. The
 image readers behind encrypted or compressed XEX files are mostly unreached:
 a block must match its SHA-1 before it is decompressed.
+
+## AddressSanitizer unit tests
+
+`win-amd64-gdk-asan` Release, `ctest -L unit`: 607 tests. The first run had
+14 audio tests exit with an access violation and no ASan report. ASan on
+Windows commits shadow memory on demand from its own vectored exception
+handler. The SDK's guest-memory handler was registered to run first, and it
+is instrumented code, so the likely cause is a shadow fault inside it
+faulting again until the stack ran out. No debugger was available to confirm
+it. Under ASan the SDK handler now runs after the other handlers
+(`src/core/exception_handler_win.cpp`), and the audio tests then passed.
+
+One more test, `OpenExisting read-only handle reads`, failed only when cases
+ran in parallel. Every CTest process named its temp file
+`rexglue_filesystem_test_0.bin`; the name now includes the process ID.
 
 ## Limits
 
