@@ -36,33 +36,26 @@ class Module {
 
   virtual bool ContainsAddress(uint32_t address);
 
-  // Binary introspection interface (virtual with defaults for backwards compat)
   virtual uint32_t base_address() const { return 0; }
   virtual uint32_t image_size() const { return 0; }
   virtual uint32_t entry_point() const { return 0; }
   virtual uint32_t export_table_address() const { return 0; }
 
-  // Exception DataDirectory accessors (for PDATA table)
-  // These return the correct PDATA location from the PE Optional Header.
   virtual uint32_t exception_directory_rva() const { return 0; }
   virtual uint32_t exception_directory_size() const { return 0; }
   virtual uint32_t exception_directory_address() const { return 0; }
 
-  // Check if address is in an executable section
   bool isExecutableSection(uint32_t address) const;
 
-  // Section access - default implementations return empty
   virtual std::span<const BinarySection> binary_sections() const;
   virtual const BinarySection* FindSectionByName(std::string_view name) const;
   virtual const BinarySection* FindSectionByAddress(uint32_t address) const;
 
-  // Symbol access - default implementations return empty
   virtual std::span<const BinarySymbol> binary_symbols() const;
   virtual const BinarySymbol* FindSymbolByName(std::string_view name) const;
   virtual const BinarySymbol* FindSymbolByAddress(uint32_t address) const;
   virtual const BinarySymbol* FindSymbolContainingAddress(uint32_t address) const;
 
-  // Symbol manipulation helpers (for external symbol loading, e.g., from map files)
   void AddBinarySymbol(BinarySymbol symbol);
   void ClearBinarySymbols();
 
@@ -70,9 +63,8 @@ class Module {
   FunctionDispatcher* function_dispatcher_ = nullptr;
   memory::Memory* memory_ = nullptr;
 
-  // Storage for binary introspection (populated by derived classes)
   std::vector<BinarySection> binary_sections_;
   std::vector<BinarySymbol> binary_symbols_;
 };
 
-}  // namespace rex::runtime
+}

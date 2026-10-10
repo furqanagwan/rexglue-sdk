@@ -44,4 +44,4 @@ class Symbol {
   std::string name_;
 };
 
-}  // namespace rex::runtime
+}

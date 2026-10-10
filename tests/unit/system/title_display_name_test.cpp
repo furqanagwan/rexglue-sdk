@@ -13,7 +13,6 @@
 using rex::system::util::TitleDisplayName;
 
 TEST_CASE("Title display names drop trademark signs", "[system][xdbf]") {
-  // The XDBF names of the 007 titles.
   CHECK(TitleDisplayName("Quantum of Solace") == "Quantum of Solace");
   CHECK(TitleDisplayName("007: Blood Stone") == "007: Blood Stone");
   CHECK(TitleDisplayName("007\xE2\x84\xA2 Legends") == "007 Legends");

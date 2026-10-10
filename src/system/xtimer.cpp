@@ -24,10 +24,10 @@ XTimer::~XTimer() = default;
 void XTimer::Initialize(uint32_t timer_type) {
   assert_false(timer_);
   switch (timer_type) {
-    case 0:  // NotificationTimer
+    case 0:
       timer_ = rex::thread::Timer::CreateManualResetTimer();
       break;
-    case 1:  // SynchronizationTimer
+    case 1:
       timer_ = rex::thread::Timer::CreateSynchronizationTimer();
       break;
     default:
@@ -41,7 +41,7 @@ X_STATUS XTimer::SetTimer(int64_t due_time, uint32_t period_ms, uint32_t routine
                           uint32_t routine_arg, bool resume) {
   using rex::chrono::WinSystemClock;
   using rex::chrono::XSystemClock;
-  // Caller is checking for STATUS_TIMER_RESUME_IGNORED.
+
   if (resume) {
     return X_STATUS_TIMER_RESUME_IGNORED;
   }
@@ -49,25 +49,19 @@ X_STATUS XTimer::SetTimer(int64_t due_time, uint32_t period_ms, uint32_t routine
   period_ms = chrono::Clock::ScaleGuestDurationMillis(period_ms);
   WinSystemClock::time_point due_tp;
   if (due_time < 0) {
-    // Any timer implementation uses absolute times eventually, convert as early
-    // as possible for increased accuracy
     auto after = rex::chrono::hundrednanoseconds(-due_time);
     due_tp = std::chrono::clock_cast<WinSystemClock>(XSystemClock::now() + after);
   } else {
     due_tp = std::chrono::clock_cast<WinSystemClock>(XSystemClock::from_file_time(due_time));
   }
 
-  // Stash routine for callback.
   callback_thread_ = XThread::GetCurrentThread();
   callback_routine_ = routine;
   callback_routine_arg_ = routine_arg;
 
-  // This callback will only be issued when the timer is fired.
   std::function<void()> callback = nullptr;
   if (callback_routine_) {
     callback = [this]() {
-      // Queue APC to call back routine with (arg, low, high).
-      // It'll be executed on the thread that requested the timer.
       uint64_t time = rex::chrono::Clock::QueryGuestSystemTime();
       uint32_t time_low = static_cast<uint32_t>(time);
       uint32_t time_high = static_cast<uint32_t>(time >> 32);
@@ -92,4 +86,4 @@ X_STATUS XTimer::Cancel() {
   return timer_->Cancel() ? X_STATUS_SUCCESS : X_STATUS_UNSUCCESSFUL;
 }
 
-}  // namespace rex::system
+}

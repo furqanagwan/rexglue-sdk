@@ -44,10 +44,9 @@ FunctionDispatcher* GetBoundFunctionDispatcher() {
   return runtime ? runtime->function_dispatcher() : nullptr;
 }
 
-}  // namespace
+}
 
 bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_address) {
-  // Keep the targets earlier runs recorded: each run stops at its first one.
   std::set<uint32_t> targets{guest_address};
   {
     std::ifstream in(path);
@@ -73,7 +72,7 @@ bool AppendIndirectTrace(const std::filesystem::path& path, uint32_t guest_addre
   return bool(out);
 }
 
-static void InvalidFunctionTrap(PPCContext& ctx, uint8_t* /*base*/) {
+static void InvalidFunctionTrap(PPCContext& ctx, uint8_t*) {
   if (const std::string& trace = REXCVAR_GET(indirect_trace); !trace.empty()) {
     if (AppendIndirectTrace(trace, ctx.last_indirect_target)) {
       REXCPU_ERROR("Indirect target 0x{:08X} recorded in {}", ctx.last_indirect_target, trace);
@@ -116,17 +115,14 @@ bool FunctionDispatcher::Execute(ThreadState* thread_state, uint32_t address) {
   auto* ctx = thread_state->context();
   auto* previous_thread_state = ThreadState::Get();
 
-  // Rebind the active guest thread for cross-module callbacks.
   ThreadState::Bind(thread_state);
 
-  // Pad out stack a bit, as some games seem to overwrite the caller by about 16 to 32b.
   ctx->r1.u64 -= 64 + 112;
 
   uint64_t previous_lr = ctx->lr;
   ctx->lr = 0xBCBCBCBC;
 
   {
-    // Guest code finds its own FP mode, and the host gets its own back.
     rex::ppc::GuestFpScope guest_fp(ctx->fpscr);
     fn(*ctx, memory_->virtual_membase());
   }
@@ -193,7 +189,6 @@ uint64_t FunctionDispatcher::ExecuteInterrupt(ThreadState* thread_state, uint32_
   SCOPE_profile_cpu_f("cpu");
   PROFILE_INTERRUPT_DISPATCHED();
 
-  // Hold the global lock during interrupt dispatch.
   auto global_lock = global_critical_region_.Acquire();
 
   auto* ctx = thread_state->context();
@@ -210,8 +205,6 @@ uint64_t FunctionDispatcher::ExecuteInterrupt(ThreadState* thread_state, uint32_
   if (arg_count > 4)
     ctx->r7.u64 = args[4];
 
-  // TLS ptr must be zero during interrupts. Some games check this and early-exit
-  // routines when under interrupts.
   auto pcr_address = memory_->TranslateVirtual(static_cast<uint32_t>(ctx->r13.u64));
   uint32_t old_tls_ptr = memory::load_and_swap<uint32_t>(pcr_address);
   memory::store_and_swap<uint32_t>(pcr_address, 0);
@@ -220,13 +213,10 @@ uint64_t FunctionDispatcher::ExecuteInterrupt(ThreadState* thread_state, uint32_
     return 0xDEADBABE;
   }
 
-  // Restore TLS ptr.
   memory::store_and_swap<uint32_t>(pcr_address, old_tls_ptr);
 
   return ctx->r3.u64;
 }
-
-// rexglue function table management
 
 bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t code_size,
                                                  uint32_t image_base, uint32_t image_size,
@@ -253,7 +243,7 @@ bool FunctionDispatcher::InitializeFunctionTable(uint32_t code_base, uint32_t co
         uint64_t(existing.table_base) + (existing.code_size + kThunkReserveSize) * 2;
     const uint64_t existing_image_end = uint64_t(existing.image_base) + existing.image_size;
     const uint32_t existing_code_end = existing.code_base + existing.code_size + kThunkReserveSize;
-    // Images and tables may not overlap one another, in any pairing.
+
     if (overlap(image_base, new_image_end, existing.image_base, existing_image_end) ||
         overlap(image_base, new_image_end, existing.table_base, existing_table_end) ||
         overlap(table_base, new_table_end, existing.image_base, existing_image_end) ||
@@ -479,4 +469,4 @@ std::optional<std::pair<uint32_t, uint32_t>> FunctionDispatcher::UnregisterModul
   return cleared_range;
 }
 
-}  // namespace rex::runtime
+}

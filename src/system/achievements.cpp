@@ -50,12 +50,10 @@ bool IsAchievementUnlocked(uint32_t id) {
   return ks->achievements().IsUnlocked(id);
 }
 
-}  // namespace rex::system
+}
 
 namespace {
 
-// Shows an achievement's unlock notification without unlocking it, to check
-// how the notification looks.
 void ConsoleAchievementNotify(std::string_view args) {
   auto* ks = rex::system::kernel_state();
   if (!ks) {
@@ -63,7 +61,7 @@ void ConsoleAchievementNotify(std::string_view args) {
   }
   auto& achievements = ks->achievements();
   const auto list = achievements.ListAchievements();
-  // No id: the title's first achievement.
+
   uint32_t id = list.empty() ? 0 : list.front().id;
   if (args.find_first_not_of(' ') != std::string_view::npos) {
     id = uint32_t(std::strtoul(std::string(args).c_str(), nullptr, 10));
@@ -77,7 +75,7 @@ void ConsoleAchievementNotify(std::string_view args) {
   }
 }
 
-}  // namespace
+}
 
 REXCVAR_DEFINE_COMMAND_ARGS(achievement_notify, ConsoleAchievementNotify, "Console",
                             "Show achievement <id>'s unlock notification without unlocking it");

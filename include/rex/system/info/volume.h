@@ -29,7 +29,6 @@ enum X_FILE_DEVICE_TYPE : uint32_t {
 
 #pragma pack(push, 1)
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_fs_volume_information
 struct X_FILE_FS_VOLUME_INFORMATION {
   be<uint64_t> creation_time;
   be<uint32_t> serial_number;
@@ -40,7 +39,6 @@ struct X_FILE_FS_VOLUME_INFORMATION {
 };
 static_assert_size(X_FILE_FS_VOLUME_INFORMATION, 24);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_fs_size_information
 struct X_FILE_FS_SIZE_INFORMATION {
   be<uint64_t> total_allocation_units;
   be<uint64_t> available_allocation_units;
@@ -49,7 +47,6 @@ struct X_FILE_FS_SIZE_INFORMATION {
 };
 static_assert_size(X_FILE_FS_SIZE_INFORMATION, 24);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_fs_attribute_information
 struct X_FILE_FS_ATTRIBUTE_INFORMATION {
   be<uint32_t> attributes;
   be<int32_t> component_name_max_length;
@@ -67,5 +64,5 @@ static_assert_size(X_FILE_FS_DEVICE_INFORMATION, 8);
 
 #pragma pack(pop)
 
-}  // namespace system
-}  // namespace rex
+}
+}

@@ -21,7 +21,7 @@
 
 namespace rex::stream {
 class ByteStream;
-}  // namespace rex::stream
+}
 
 namespace rex::system::util {
 
@@ -41,8 +41,6 @@ class ObjectTable {
   bool Save(stream::ByteStream* stream);
   bool Restore(stream::ByteStream* stream);
 
-  // Restores a XObject reference with a handle. Mainly for internal use - do
-  // not use.
   X_STATUS RestoreHandle(X_HANDLE handle, XObject* object);
 
   template <typename T>
@@ -76,7 +74,7 @@ class ObjectTable {
   }
 
   std::vector<object_ref<XObject>> GetAllObjects();
-  void PurgeAllObjects();  // Purges the object table of all guest objects
+  void PurgeAllObjects();
 
  private:
   struct ObjectTableEntry {
@@ -103,8 +101,7 @@ class ObjectTable {
   std::unordered_map<string::string_key_case, X_HANDLE> name_table_;
 };
 
-// Generic lookup
 template <>
 object_ref<XObject> ObjectTable::LookupObject<XObject>(X_HANDLE handle);
 
-}  // namespace rex::system::util
+}

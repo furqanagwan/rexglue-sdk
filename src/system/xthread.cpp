@@ -71,12 +71,9 @@ XThread::XThread(KernelState* kernel_state, uint32_t stack_size, uint32_t xapi_t
   creation_params_.start_address = start_address;
   creation_params_.start_context = start_context;
 
-  // top 8 bits = processor ID (or 0 for default)
-  // bit 0 = 1 to create suspended
   creation_params_.creation_flags = creation_flags;
   creation_params_.guest_process = guest_process;
 
-  // Adjust stack size - min of 16k.
   if (creation_params_.stack_size < 16 * 1024) {
     creation_params_.stack_size = 16 * 1024;
   }
@@ -85,7 +82,6 @@ XThread::XThread(KernelState* kernel_state, uint32_t stack_size, uint32_t xapi_t
     host_object_ = true;
   }
 
-  // The kernel does not take a reference. We must unregister in the dtor.
   kernel_state_->RegisterThread(this);
 }
 
@@ -95,7 +91,6 @@ XThread::~XThread() {
     main_fiber_ = nullptr;
   }
 
-  // Unregister first to prevent lookups while deleting.
   kernel_state_->UnregisterThread(this);
 
   thread_.reset();
@@ -118,7 +113,7 @@ XThread* GetBoundCurrentXThread() {
   return current_xthread_tls_;
 }
 
-}  // namespace
+}
 
 bool XThread::IsInThread() {
   return GetBoundCurrentXThread() != nullptr;
@@ -140,7 +135,6 @@ void XThread::CheckTitleTermination() {
   XThread* self = GetBoundCurrentXThread();
   if (self && self->is_guest_thread() && self->is_running() &&
       self->kernel_state()->is_terminating_title()) {
-    // Unwind cleanly at this safe point. Does not return.
     self->Exit(0);
   }
 }
@@ -178,18 +172,15 @@ void XThread::set_name(const std::string_view name) {
   thread_name_ = fmt::format("{} ({:08X})", name, handle());
 
   if (thread_) {
-    // May be getting set before the thread is created.
-    // One the thread is ready it will handle it.
     thread_->set_name(thread_name_);
   }
 }
 
 static uint8_t next_cpu = 0;
 static uint8_t GetFakeCpuNumber(uint8_t proc_mask) {
-  // NOTE: proc_mask is logical processors, not physical processors or cores.
   if (!proc_mask) {
     next_cpu = (next_cpu + 1) % 6;
-    return next_cpu;  // is this reasonable?
+    return next_cpu;
   }
   assert_false(proc_mask & 0xC0);
 
@@ -203,10 +194,9 @@ void XThread::InitializeGuestObject() {
   auto guest_thread = guest_object<X_KTHREAD>();
   uint32_t guest_ptr = guest_object();
 
-  guest_thread->header.type = 6;  // ThreadObject
+  guest_thread->header.type = 6;
   guest_thread->suspend_count = (creation_params_.creation_flags & X_CREATE_SUSPENDED) ? 1 : 0;
 
-  // Self-referencing pointers for wait timeout timer/block
   guest_thread->unk_10 = guest_ptr + 0x010;
   guest_thread->unk_14 = guest_ptr + 0x010;
 
@@ -223,26 +213,21 @@ void XThread::InitializeGuestObject() {
   guest_thread->tls_address = tls_dynamic_address_;
   guest_thread->thread_state = 0;
 
-  // Initialize APC lists (kernel + user mode)
   guest_thread->apc_lists[0].Initialize(memory());
   guest_thread->apc_lists[1].Initialize(memory());
 
-  // Set process pointer - use guest_process if provided, else default to title process.
   uint32_t process_ptr = creation_params_.guest_process
                              ? creation_params_.guest_process
                              : kernel_state_->process_info_block_address();
   guest_thread->process = process_ptr;
   guest_thread->may_queue_apcs = 1;
 
-  // Set PRCB pointers (derived from this thread's PCR).
   uint32_t kpcrb = pcr_address_ + offsetof(X_KPCR, prcb_data);
   guest_thread->a_prcb_ptr = kpcrb;
   guest_thread->another_prcb_ptr = kpcrb;
 
-  // PPCContext for spinlock helpers (valid before thread runs; r13 set at construction).
   auto* ctx = thread_state_->context();
 
-  // Set per-thread process type and link into process thread list.
   if (process_ptr) {
     auto target_process = memory()->TranslateVirtual<X_KPROCESS*>(process_ptr);
     guest_thread->process_type = target_process->process_type;
@@ -259,18 +244,16 @@ void XThread::InitializeGuestObject() {
   }
 
   guest_thread->msr_mask = 0xFDFFD7FF;
-  // current_cpu is expected to be initialized externally via SetActiveCpu.
+
   guest_thread->stack_alloc_base = stack_base_;
   guest_thread->create_time = chrono::Clock::QueryGuestSystemTime();
 
-  // Initialize timer_list as self-referencing
   guest_thread->timer_list.flink_ptr = guest_ptr + offsetof(X_KTHREAD, timer_list);
   guest_thread->timer_list.blink_ptr = guest_ptr + offsetof(X_KTHREAD, timer_list);
 
   guest_thread->thread_id = thread_id_;
   guest_thread->start_address = creation_params_.start_address;
 
-  // Initialize unk_154 list as self-referencing
   guest_thread->unk_154.flink_ptr = guest_ptr + offsetof(X_KTHREAD, unk_154);
   guest_thread->unk_154.blink_ptr = guest_ptr + offsetof(X_KTHREAD, unk_154);
 
@@ -283,7 +266,7 @@ bool XThread::AllocateStack(uint32_t size) {
   auto heap = memory()->LookupHeap(kStackAddressRangeBegin);
 
   auto alignment = heap->page_size();
-  auto padding = heap->page_size() * 2;  // Guard page size * 2
+  auto padding = heap->page_size() * 2;
   size = rex::round_up(size, alignment);
   auto actual_size = size + padding;
 
@@ -300,10 +283,8 @@ bool XThread::AllocateStack(uint32_t size) {
   stack_limit_ = address + (padding / 2);
   stack_base_ = stack_limit_ + size;
 
-  // Initialize the stack with junk
   memory()->Fill(stack_alloc_base_, actual_size, 0xBE);
 
-  // Setup the guard pages
   heap->Protect(stack_alloc_base_, padding / 2, memory::kMemoryProtectNoAccess);
   heap->Protect(stack_base_, padding / 2, memory::kMemoryProtectNoAccess);
 
@@ -323,24 +304,18 @@ void XThread::FreeStack() {
 }
 
 X_STATUS XThread::Create() {
-  // Thread kernel object.
   if (!CreateNative<X_KTHREAD>()) {
     REXSYS_WARN("Unable to allocate thread object");
     return X_STATUS_NO_MEMORY;
   }
 
-  // Allocate a stack.
   if (!AllocateStack(creation_params_.stack_size)) {
     return X_STATUS_NO_MEMORY;
   }
 
-  // Allocate thread scratch.
-  // This is used by interrupts/APCs/etc so we can round-trip pointers through.
   scratch_size_ = 4 * 16;
   scratch_address_ = memory()->SystemHeapAlloc(scratch_size_);
 
-  // Allocate TLS block.
-  // Games will specify a certain number of 4b slots that each thread will get.
   xex2_opt_tls_info* tls_header = nullptr;
   auto module = kernel_state_->GetExecutableModule();
   if (module) {
@@ -355,9 +330,6 @@ X_STATUS XThread::Create() {
     tls_extended_size = tls_header->data_size;
   }
 
-  // Allocate both the slots and the extended data.
-  // Some TLS is compiled with the binary (declspec(thread)) vars. The game
-  // will directly access those through 0(r13).
   uint32_t tls_slot_size = tls_slots * 4;
   tls_total_size_ = tls_slot_size + tls_extended_size;
   tls_static_address_ = memory()->SystemHeapAlloc(tls_total_size_);
@@ -367,36 +339,18 @@ X_STATUS XThread::Create() {
     return X_STATUS_NO_MEMORY;
   }
 
-  // Zero all of TLS.
   memory()->Fill(tls_static_address_, tls_total_size_, 0);
   if (tls_extended_size) {
-    // If game has extended data, copy in the default values.
     assert_not_zero(tls_header->raw_data_address);
     memory()->Copy(tls_static_address_, tls_header->raw_data_address, tls_header->raw_data_size);
   }
 
-  // Allocate thread state block from heap.
-  // https://web.archive.org/web/20170704035330/https://www.microsoft.com/msj/archive/S2CE.aspx
-  // This is set as r13 for user code and some special inlined Win32 calls
-  // (like GetLastError/etc) will poke it directly.
-  // We try to use it as our primary store of data just to keep things all
-  // consistent.
-  // 0x000: pointer to tls data
-  // 0x100: pointer to TEB(?)
-  // 0x10C: Current CPU(?)
-  // 0x150: if >0 then error states don't get set (DPC active bool?)
-  // TEB:
-  // 0x14C: thread id
-  // 0x160: last error
-  // So, at offset 0x100 we have a 4b pointer to offset 200, then have the
-  // structure.
   pcr_address_ = memory()->SystemHeapAlloc(0x2D8);
   if (!pcr_address_) {
     REXSYS_WARN("Unable to allocate thread state block");
     return X_STATUS_NO_MEMORY;
   }
 
-  // Create thread state - needed for interrupt callbacks and kernel exports
   thread_state_ =
       std::make_unique<runtime::ThreadState>(thread_id_, stack_base_, pcr_address_, memory());
 
@@ -405,7 +359,6 @@ X_STATUS XThread::Create() {
 
   uint8_t cpu_index = GetFakeCpuNumber(static_cast<uint8_t>(creation_params_.creation_flags >> 24));
 
-  // Initialize the KTHREAD object.
   InitializeGuestObject();
 
   X_KPCR* pcr = memory()->TranslateVirtual<X_KPCR*>(pcr_address_);
@@ -422,26 +375,22 @@ X_STATUS XThread::Create() {
 
   pcr->prcb_data.dpc_active = 0;
 
-  // Always retain when starting - the thread owns itself until exited.
   RetainHandle();
 
   rex::thread::Thread::CreationParameters params;
-  params.stack_size = 16_MiB;  // Allocate a big host stack.
+  params.stack_size = 16_MiB;
   params.create_suspended = true;
   thread_ = rex::thread::Thread::Create(params, [this]() {
     rex::initialize_seh_thread();
     runtime::ThreadState::Bind(thread_state_.get());
 
-    // Set thread ID override. This is used by logging.
     rex::thread::set_current_thread_id(handle());
 
-    // Set name immediately, if we have one.
     thread_->set_name(thread_name_);
 
     PROFILE_THREAD_ENTER(thread_name_.c_str());
     PROFILE_THREAD_CREATED();
 
-    // Execute user code.
     current_xthread_tls_ = this;
     running_ = true;
     Execute();
@@ -451,7 +400,6 @@ X_STATUS XThread::Create() {
     PROFILE_THREAD_EXITED();
     PROFILE_THREAD_EXIT();
 
-    // Release the self-reference to the thread.
     ReleaseHandle();
   });
 
@@ -460,7 +408,6 @@ X_STATUS XThread::Create() {
     return X_STATUS_NO_MEMORY;
   }
 
-  // Set the thread name based on host ID (for easier debugging).
   if (thread_name_.empty()) {
     set_name(fmt::format("XThread{:04X}", thread_->system_id()));
   }
@@ -469,12 +416,9 @@ X_STATUS XThread::Create() {
     thread_->set_priority(creation_params_.creation_flags & 0x20 ? 1 : 0);
   }
 
-  // Assign the newly created thread to the logical processor, and also set up
-  // the current CPU in KPCR and KTHREAD.
   SetActiveCpu(cpu_index);
 
   if ((creation_params_.creation_flags & X_CREATE_SUSPENDED) == 0) {
-    // Start the thread now that we're all setup.
     thread_->Resume();
   }
 
@@ -482,25 +426,19 @@ X_STATUS XThread::Create() {
 }
 
 X_STATUS XThread::Exit(int exit_code) {
-  // This may only be called on the thread itself.
   assert_true(XThread::GetCurrentThread() == this);
-  // Keep the object alive until Thread::Exit() transitions the host thread
-  // into pthread_exit(). Otherwise ReleaseHandle() below may delete `this`
-  // while this method is still running.
+
   auto self = retain_object(this);
 
-  // Mark as terminated before running down APCs.
   auto kthread = guest_object<X_KTHREAD>();
   kthread->terminated = 1;
 
   RundownAPCs();
 
-  // Set exit code.
   X_KTHREAD* thread = guest_object<X_KTHREAD>();
   thread->header.signal_state = 1;
   thread->exit_status = exit_code;
 
-  // Unlink thread from process thread list.
   uint32_t process_guest = thread->process;
   if (process_guest) {
     auto* ctx = thread_state_->context();
@@ -513,34 +451,25 @@ X_STATUS XThread::Exit(int exit_code) {
 
   kernel_state_->OnThreadExit(this);
 
-  // The guest stack belongs to the thread's execution lifetime, not the handle
-  // lifetime. Games can keep thread handles after exit; holding the stack until
-  // object destruction leaks the reserved stack range and eventually makes
-  // ExCreateThread fail even though the old threads are no longer running.
   FreeStack();
 
-  // NOTE: unless PlatformExit fails, expect it to never return!
   current_xthread_tls_ = nullptr;
   PROFILE_THREAD_EXIT();
 
   running_ = false;
   ReleaseHandle();
 
-  // NOTE: this does not return!
   rex::thread::Thread::Exit(exit_code);
   return X_STATUS_SUCCESS;
 }
 
 X_STATUS XThread::Terminate(int exit_code) {
-  // Set exit code.
   X_KTHREAD* thread = guest_object<X_KTHREAD>();
   thread->header.signal_state = 1;
   thread->exit_status = exit_code;
 
   running_ = false;
   if (XThread::IsInThread(this)) {
-    // Same lifetime rule as Exit(): don't allow ReleaseHandle() to destroy
-    // the thread object before Thread::Exit() reaches pthread_exit().
     auto self = retain_object(this);
     FreeStack();
     ReleaseHandle();
@@ -558,10 +487,8 @@ void XThread::Execute() {
   REXSYS_NOISY_DEBUG("Execute thid {} (handle={:08X}, '{}', native={:08X})", thread_id_, handle(),
                      thread_name_, thread_->system_id());
 
-  // Let the kernel know we are starting.
   kernel_state_->OnThreadExecute(this);
 
-  // Dispatch any APCs that were queued before the thread was created first.
   DeliverAPCs();
 
   uint32_t address;
@@ -569,24 +496,17 @@ void XThread::Execute() {
   bool want_exit_code;
   int exit_code = 0;
 
-  // If a XapiThreadStartup value is present, we use that as a trampoline.
-  // Otherwise, we are a raw thread.
   if (creation_params_.xapi_thread_startup) {
     address = creation_params_.xapi_thread_startup;
     args.push_back(creation_params_.start_address);
     args.push_back(creation_params_.start_context);
     want_exit_code = false;
   } else {
-    // Run user code.
     address = creation_params_.start_address;
     args.push_back(creation_params_.start_context);
     want_exit_code = true;
   }
 
-  // NOTE(tomc): JIT execution replaced with direct function calls
-  // In rexglue, guest code is compiled ahead of time and called directly.
-  // The start_address points to a 32bit guest address, for which the function
-  // dispatcher maintains a lookup table to retrieve the host function pointer.
   auto* runtime = Runtime::instance();
   if (!runtime || !runtime->function_dispatcher()) {
     REXSYS_ERROR("XThread::Execute - Runtime not initialized");
@@ -604,7 +524,6 @@ void XThread::Execute() {
   auto* ctx = thread_state_->context();
   uint8_t* base = memory->virtual_membase();
 
-  // Pass arguments in r3, r4, ... per PPC calling convention
   if (args.size() > 0)
     ctx->r3.u64 = args[0];
   if (args.size() > 1)
@@ -624,19 +543,13 @@ void XThread::Execute() {
 
   ctx->fpscr.InitHost();
 
-  // Convert this host thread to a fiber so SwitchTo works bidirectionally.
-  // Required on Windows before any CreateFiber; provides the fallback handle
-  // when another fiber switches back to the main execution context.
   main_fiber_ = rex::thread::Fiber::ConvertCurrentThread();
 
-  // Execute the function
   REXSYS_NOISY_DEBUG("XThread::Execute - Calling function at {:08X}", address);
   func(*ctx, base);
 
   exit_code = static_cast<int>(ctx->r3.u32);
 
-  // If we got here it means the execute completed without an exit being called.
-  // Treat the return code as an implicit exit code (if desired).
   Exit(!want_exit_code ? 0 : exit_code);
 }
 
@@ -647,10 +560,7 @@ void XThread::EnterCriticalRegion() {
 void XThread::LeaveCriticalRegion() {
   auto kthread = guest_object<X_KTHREAD>();
   auto apc_disable_count = ++kthread->apc_disable_count;
-  if (apc_disable_count == 0) {
-    // NOTE: intentionally not calling CheckApcs() here.
-    // Delivering APCs here can cause them to fire in wrong contexts.
-  }
+  if (apc_disable_count == 0) {}
 }
 
 void XThread::LockApc() {
@@ -666,8 +576,6 @@ void XThread::UnlockApc(bool queue_delivery) {
   kernel::xboxkrnl::xeKeKfReleaseSpinLock(thread_state_->context(), &kthread->apc_lock,
                                           apc_lock_old_irql_);
   if (needs_apc && queue_delivery) {
-    // Match Edge/Canary behavior: callback is only a wakeup hint.
-    // User APC execution happens on alertable wait return paths.
     thread_->QueueUserCallback([]() {});
   }
 }
@@ -682,11 +590,9 @@ void XThread::EnqueueApc(uint32_t normal_routine, uint32_t normal_context, uint3
   }
   auto apc = memory()->TranslateVirtual<XAPC*>(apc_ptr);
   kernel::xboxkrnl::xeKeInitializeApc(apc, guest_object(), XAPC::kDummyKernelRoutine,
-                                      XAPC::kDummyRundownRoutine, normal_routine,
-                                      1 /* user apc mode */, normal_context);
+                                      XAPC::kDummyRundownRoutine, normal_routine, 1,
+                                      normal_context);
 
-  // Important: use the caller PPC context when queuing to another thread.
-  // Using the target thread context here can corrupt APC lock/IRQL bookkeeping.
   PPCContext* queue_ctx =
       runtime::ThreadState::Get() ? runtime::current_ppc_context() : thread_state_->context();
 
@@ -698,8 +604,7 @@ void XThread::EnqueueApc(uint32_t normal_routine, uint32_t normal_context, uint3
         thread_id_, normal_routine, normal_context, arg1, arg2);
     return;
   }
-  // Match Edge/Canary behavior: callback is only a wakeup hint.
-  // APCs are delivered via alertable wait handling.
+
   thread_->QueueUserCallback([]() {});
 }
 
@@ -777,7 +682,6 @@ void XThread::RundownAPCs() {
   auto kthread = guest_object<X_KTHREAD>();
   auto* ctx = thread_state_->context();
 
-  // Rundown both user (1) and kernel (0) APC lists.
   for (int mode = 1; mode >= 0; --mode) {
     auto old_irql = kernel::xboxkrnl::xeKeKfAcquireSpinLock(ctx, &kthread->apc_lock);
     auto& apc_queue = kthread->apc_lists[mode];
@@ -793,7 +697,6 @@ void XThread::RundownAPCs() {
       kernel::xboxkrnl::xeKeKfReleaseSpinLock(ctx, &kthread->apc_lock, old_irql);
 
       if (apc->rundown_routine == XAPC::kDummyRundownRoutine) {
-        // No-op.
       } else if (apc->rundown_routine) {
         auto* dispatcher = kernel_state_->function_dispatcher();
         if (dispatcher->GetFunction(apc->rundown_routine)) {
@@ -823,7 +726,6 @@ int32_t XThread::QueryPriority() {
 void XThread::SetPriority(int32_t increment) {
   priority_ = increment;
 
-  // Write priority to guest X_KTHREAD struct.
   auto kthread = guest_object<X_KTHREAD>();
   kthread->priority = static_cast<uint8_t>(std::clamp(increment, 0, 31));
 
@@ -849,9 +751,6 @@ void XThread::SetAffinity(uint32_t affinity) {
 }
 
 uint8_t XThread::active_cpu() const {
-  // Prefer reading from guest KTHREAD (always available for guest threads,
-  // kept in sync by SetActiveCpu). Avoids dependency on pcr_address_ which
-  // may not be set yet if the thread is mid-creation.
   if (is_guest_thread()) {
     auto* kthread = memory()->TranslateVirtual<const X_KTHREAD*>(guest_object());
     return kthread->current_cpu;
@@ -864,17 +763,13 @@ uint8_t XThread::active_cpu() const {
 }
 
 void XThread::SetActiveCpu(uint8_t cpu_index) {
-  // May be called during thread creation - don't skip if current == new.
-
   assert_true(cpu_index < 6);
 
-  // Write to guest KTHREAD (always available for guest threads).
   if (is_guest_thread()) {
     X_KTHREAD& thread_object = *memory()->TranslateVirtual<X_KTHREAD*>(guest_object());
     thread_object.current_cpu = cpu_index;
   }
 
-  // Write to PCR if allocated (may not be during early creation).
   if (pcr_address_) {
     X_KPCR& pcr = *memory()->TranslateVirtual<X_KPCR*>(pcr_address_);
     pcr.prcb_data.current_cpu = cpu_index;
@@ -934,7 +829,7 @@ X_STATUS XThread::Suspend(uint32_t* out_suspend_count) {
   }
 
   uint32_t unused_host_suspend_count = 0;
-  // Wrapped to 0 - treat as not suspended.
+
   if (guest_thread->suspend_count == 0) {
     return X_STATUS_SUCCESS;
   }
@@ -952,7 +847,6 @@ X_STATUS XThread::Delay(uint32_t processor_mode, uint32_t alertable, uint64_t in
       CheckTitleTermination();
       return result == rex::thread::SleepResult::kAlerted ? X_STATUS_USER_APC : X_STATUS_SUCCESS;
     }
-    // An absolute time that already passed: a zero delay, below.
   }
   uint32_t timeout_ms = chrono::Clock::ScaleGuestDurationMillis(TimeoutTicksToMs(timeout_ticks));
   CheckTitleTermination();
@@ -984,7 +878,7 @@ X_STATUS XThread::Delay(uint32_t processor_mode, uint32_t alertable, uint64_t in
 
 struct ThreadSavedState {
   uint32_t thread_id;
-  bool is_main_thread;  // Is this the main thread?
+  bool is_main_thread;
   bool is_running;
 
   uint32_t apc_head;
@@ -992,12 +886,11 @@ struct ThreadSavedState {
   uint32_t tls_dynamic_address;
   uint32_t tls_total_size;
   uint32_t pcr_address;
-  uint32_t stack_base;        // High address
-  uint32_t stack_limit;       // Low address
-  uint32_t stack_alloc_base;  // Allocation address
-  uint32_t stack_alloc_size;  // Allocation size
+  uint32_t stack_base;
+  uint32_t stack_limit;
+  uint32_t stack_alloc_base;
+  uint32_t stack_alloc_size;
 
-  // Context (invalid if not running)
   struct {
     uint64_t lr;
     uint64_t ctr;
@@ -1016,12 +909,10 @@ struct ThreadSavedState {
   } context;
 };
 
-// Save PPCContext to ThreadSavedState
 static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   state.context.lr = ctx->lr;
   state.context.ctr = ctx->ctr.u64;
 
-  // GPRs - copy individually since PPCContext uses named registers
   state.context.r[0] = ctx->r0.u64;
   state.context.r[1] = ctx->r1.u64;
   state.context.r[2] = ctx->r2.u64;
@@ -1036,10 +927,9 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   state.context.r[11] = ctx->r11.u64;
   state.context.r[12] = ctx->r12.u64;
   state.context.r[13] = ctx->r13.u64;
-  // r14-r31: contiguous in PPCContext and state array
+
   std::memcpy(&state.context.r[14], &ctx->r14, 18 * sizeof(uint64_t));
 
-  // FPRs
   state.context.f[0] = ctx->f0.f64;
   state.context.f[1] = ctx->f1.f64;
   state.context.f[2] = ctx->f2.f64;
@@ -1054,10 +944,9 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   state.context.f[11] = ctx->f11.f64;
   state.context.f[12] = ctx->f12.f64;
   state.context.f[13] = ctx->f13.f64;
-  // f14-f31: contiguous in PPCContext and state array
+
   std::memcpy(&state.context.f[14], &ctx->f14, 18 * sizeof(double));
 
-  // VRs (v0-v127)
   std::memcpy(&state.context.v[0], &ctx->v0, sizeof(vec128_t));
   std::memcpy(&state.context.v[1], &ctx->v1, sizeof(vec128_t));
   std::memcpy(&state.context.v[2], &ctx->v2, sizeof(vec128_t));
@@ -1072,7 +961,7 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   std::memcpy(&state.context.v[11], &ctx->v11, sizeof(vec128_t));
   std::memcpy(&state.context.v[12], &ctx->v12, sizeof(vec128_t));
   std::memcpy(&state.context.v[13], &ctx->v13, sizeof(vec128_t));
-  // v14-v31: contiguous in PPCContext and state array
+
   std::memcpy(&state.context.v[14], &ctx->v14, 18 * sizeof(vec128_t));
   std::memcpy(&state.context.v[32], &ctx->v32, sizeof(vec128_t));
   std::memcpy(&state.context.v[33], &ctx->v33, sizeof(vec128_t));
@@ -1106,10 +995,9 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   std::memcpy(&state.context.v[61], &ctx->v61, sizeof(vec128_t));
   std::memcpy(&state.context.v[62], &ctx->v62, sizeof(vec128_t));
   std::memcpy(&state.context.v[63], &ctx->v63, sizeof(vec128_t));
-  // v64-v127: contiguous in PPCContext and state array
+
   std::memcpy(&state.context.v[64], &ctx->v64, 64 * sizeof(vec128_t));
 
-  // CR fields
   state.context.cr[0] = ctx->cr0.raw();
   state.context.cr[1] = ctx->cr1.raw();
   state.context.cr[2] = ctx->cr2.raw();
@@ -1119,7 +1007,6 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   state.context.cr[6] = ctx->cr6.raw();
   state.context.cr[7] = ctx->cr7.raw();
 
-  // Other state
   state.context.fpscr = ctx->fpscr.csr;
   state.context.guest_fpscr = ctx->fpscr.guest_bits;
   state.context.xer_ca = ctx->xer.ca;
@@ -1129,12 +1016,10 @@ static void SaveContext(const PPCContext* ctx, ThreadSavedState& state) {
   state.context.vscr_nj = ctx->vscr_nj;
 }
 
-// Load ThreadSavedState into PPCContext
 static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   ctx->lr = state.context.lr;
   ctx->ctr.u64 = state.context.ctr;
 
-  // GPRs
   ctx->r0.u64 = state.context.r[0];
   ctx->r1.u64 = state.context.r[1];
   ctx->r2.u64 = state.context.r[2];
@@ -1149,10 +1034,9 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   ctx->r11.u64 = state.context.r[11];
   ctx->r12.u64 = state.context.r[12];
   ctx->r13.u64 = state.context.r[13];
-  // r14-r31: contiguous in PPCContext and state array
+
   std::memcpy(&ctx->r14, &state.context.r[14], 18 * sizeof(uint64_t));
 
-  // FPRs
   ctx->f0.f64 = state.context.f[0];
   ctx->f1.f64 = state.context.f[1];
   ctx->f2.f64 = state.context.f[2];
@@ -1167,10 +1051,9 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   ctx->f11.f64 = state.context.f[11];
   ctx->f12.f64 = state.context.f[12];
   ctx->f13.f64 = state.context.f[13];
-  // f14-f31: contiguous in PPCContext and state array
+
   std::memcpy(&ctx->f14, &state.context.f[14], 18 * sizeof(double));
 
-  // VRs (v0-v127)
   std::memcpy(&ctx->v0, &state.context.v[0], sizeof(vec128_t));
   std::memcpy(&ctx->v1, &state.context.v[1], sizeof(vec128_t));
   std::memcpy(&ctx->v2, &state.context.v[2], sizeof(vec128_t));
@@ -1185,7 +1068,7 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   std::memcpy(&ctx->v11, &state.context.v[11], sizeof(vec128_t));
   std::memcpy(&ctx->v12, &state.context.v[12], sizeof(vec128_t));
   std::memcpy(&ctx->v13, &state.context.v[13], sizeof(vec128_t));
-  // v14-v31: contiguous in PPCContext and state array
+
   std::memcpy(&ctx->v14, &state.context.v[14], 18 * sizeof(vec128_t));
   std::memcpy(&ctx->v32, &state.context.v[32], sizeof(vec128_t));
   std::memcpy(&ctx->v33, &state.context.v[33], sizeof(vec128_t));
@@ -1219,10 +1102,9 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   std::memcpy(&ctx->v61, &state.context.v[61], sizeof(vec128_t));
   std::memcpy(&ctx->v62, &state.context.v[62], sizeof(vec128_t));
   std::memcpy(&ctx->v63, &state.context.v[63], sizeof(vec128_t));
-  // v64-v127: contiguous in PPCContext and state array
+
   std::memcpy(&ctx->v64, &state.context.v[64], 64 * sizeof(vec128_t));
 
-  // CR fields
   ctx->cr0.set_raw(state.context.cr[0]);
   ctx->cr1.set_raw(state.context.cr[1]);
   ctx->cr2.set_raw(state.context.cr[2]);
@@ -1232,7 +1114,6 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
   ctx->cr6.set_raw(state.context.cr[6]);
   ctx->cr7.set_raw(state.context.cr[7]);
 
-  // Other state
   ctx->fpscr.csr = state.context.fpscr;
   ctx->fpscr.guest_bits = state.context.guest_fpscr;
   ctx->xer.ca = state.context.xer_ca;
@@ -1244,7 +1125,6 @@ static void LoadContext(PPCContext* ctx, const ThreadSavedState& state) {
 
 bool XThread::Save(stream::ByteStream* stream) {
   if (!guest_thread_) {
-    // Host XThreads are expected to be recreated on their own.
     return false;
   }
 
@@ -1267,7 +1147,7 @@ bool XThread::Save(stream::ByteStream* stream) {
   state.thread_id = thread_id_;
   state.is_main_thread = main_thread_;
   state.is_running = running_;
-  state.apc_head = 0;  // APCs now live in guest-memory typed lists
+  state.apc_head = 0;
   state.tls_static_address = tls_static_address_;
   state.tls_dynamic_address = tls_dynamic_address_;
   state.tls_total_size = tls_total_size_;
@@ -1288,8 +1168,6 @@ bool XThread::Save(stream::ByteStream* stream) {
 }
 
 object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStream* stream) {
-  // Kind-of a hack, but we need to set the kernel state outside of the object
-  // constructor so it doesn't register a handle with the object table.
   auto thread = new XThread(nullptr);
   thread->kernel_state_ = kernel_state;
 
@@ -1311,7 +1189,7 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
   thread->thread_id_ = state.thread_id;
   thread->main_thread_ = state.is_main_thread;
   thread->running_ = state.is_running;
-  // state.apc_head is ignored - APCs live in guest-memory typed lists
+
   thread->tls_static_address_ = state.tls_static_address;
   thread->tls_dynamic_address_ = state.tls_dynamic_address;
   thread->tls_total_size_ = state.tls_total_size;
@@ -1321,10 +1199,8 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
   thread->stack_alloc_base_ = state.stack_alloc_base;
   thread->stack_alloc_size_ = state.stack_alloc_size;
 
-  // Register now that we know our thread ID.
   kernel_state->RegisterThread(thread);
 
-  // Create thread state
   thread->thread_state_ = std::make_unique<runtime::ThreadState>(
       thread->thread_id_, thread->stack_base_, thread->pcr_address_, kernel_state->memory());
 
@@ -1332,25 +1208,21 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
     auto context = thread->thread_state_->context();
     LoadContext(context, state);
 
-    // Always retain when starting - the thread owns itself until exited.
     thread->RetainHandle();
 
     rex::thread::Thread::CreationParameters params;
-    params.create_suspended = true;  // Not done restoring yet.
+    params.create_suspended = true;
     params.stack_size = 16_MiB;
     thread->thread_ = rex::thread::Thread::Create(params, [thread, state]() {
-      // Set thread ID override. This is used by logging.
       rex::thread::set_current_thread_id(thread->handle());
       runtime::ThreadState::Bind(thread->thread_state_.get());
 
-      // Set name immediately, if we have one.
       thread->thread_->set_name(thread->name());
 
       PROFILE_THREAD_ENTER(thread->name().c_str());
 
       current_xthread_tls_ = thread;
 
-      // Acquire any mutants
       for (auto mutant : thread->pending_mutant_acquires_) {
         uint64_t timeout = 0;
         auto status = mutant->Wait(0, 0, 0, &timeout);
@@ -1358,7 +1230,6 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
       }
       thread->pending_mutant_acquires_.clear();
 
-      // Execute user code.
       thread->running_ = true;
 
       REXSYS_ERROR("Thread restore not implemented");
@@ -1368,13 +1239,9 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
 
       PROFILE_THREAD_EXIT();
 
-      // Release the self-reference to the thread.
       thread->ReleaseHandle();
     });
     assert_not_null(thread->thread_);
-
-    // NOTE(tomc): if this is kept and processor notification dispatch is implemented,
-    //             this needs to send a signal to the processor that a thread was started
   }
 
   return object_ref<XThread>(thread);
@@ -1382,21 +1249,17 @@ object_ref<XThread> XThread::Restore(KernelState* kernel_state, stream::ByteStre
 
 XHostThread::XHostThread(KernelState* kernel_state, uint32_t stack_size, uint32_t creation_flags,
                          std::function<int()> host_fn)
-    : XThread(kernel_state, stack_size, 0, 0, 0, creation_flags, false), host_fn_(host_fn) {
-  // NOTE(tomc): there was a start suspended check here before but I don't think we need it.
-}
+    : XThread(kernel_state, stack_size, 0, 0, 0, creation_flags, false), host_fn_(host_fn) {}
 
 void XHostThread::Execute() {
   REXSYS_DEBUG("XThread::Execute thid {} (handle={:08X}, '{}', native={:08X}, <host>)", thread_id_,
                handle(), thread_name_, thread_->system_id());
 
-  // Let the kernel know we are starting.
   kernel_state_->OnThreadExecute(this);
 
   int ret = host_fn_();
 
-  // Exit.
   Exit(ret);
 }
 
-}  // namespace rex::system
+}

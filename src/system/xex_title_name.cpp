@@ -1,8 +1,5 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
-// The display name in a game executable's XDBF resource, for naming the game
-// a mismatched source holds. The bytes are whatever file the player chose, so
-// every offset is bounds-checked; the runtime's XEX loader and XDBF reader
-// trust a title already loaded and are not used here.
+
 #include <rex/system/game_source.h>
 
 #include <algorithm>
@@ -13,14 +10,12 @@
 #include <fmt/format.h>
 #include <rex/system/lzx.h>
 
-// xex_module.cpp: AES-128-CBC with a zero IV, as XEX2 images use.
 void aes_decrypt_buffer(const uint8_t* session_key, const uint8_t* input_buffer,
                         const size_t input_size, uint8_t* output_buffer, const size_t output_size);
 
 namespace rex::system {
 namespace {
 
-// The XEX2 retail and development kit keys (public, as in xex_module.cpp).
 constexpr uint8_t kRetailKey[16] = {0x20, 0xB1, 0x85, 0xA5, 0x9D, 0x28, 0xFD, 0xC3,
                                     0x40, 0x58, 0x3F, 0xBB, 0x08, 0x96, 0xBF, 0x91};
 constexpr uint8_t kDevKitKey[16] = {};
@@ -53,7 +48,6 @@ class Bytes {
   std::span<const uint8_t> bytes_;
 };
 
-// An optional header's value (key ending 00 or 01) or offset (otherwise).
 std::optional<uint32_t> OptHeader(const Bytes& xex, uint32_t key) {
   const uint32_t count = xex.Be32(0x14);
   for (uint32_t i = 0; i < count && xex.Has(0x18 + size_t(i) * 8, 8); ++i)
@@ -69,7 +63,6 @@ std::vector<uint8_t> Decrypt(std::span<const uint8_t> data, const uint8_t* sessi
   return out;
 }
 
-// The loaded image, as XexModule::ReadImage lays it out.
 std::vector<uint8_t> DecodeImage(const Bytes& xex, uint32_t format, const uint8_t* key) {
   const uint32_t header_size = xex.Be32(0x08);
   const uint32_t security = xex.Be32(0x10);
@@ -85,11 +78,11 @@ std::vector<uint8_t> DecodeImage(const Bytes& xex, uint32_t format, const uint8_
   std::vector<uint8_t> plain = encrypted ? Decrypt(payload, session_key)
                                          : std::vector<uint8_t>(payload.begin(), payload.end());
   std::vector<uint8_t> image;
-  if (compression == 0) {  // none
+  if (compression == 0) {
     plain.resize(std::min<size_t>(plain.size(), image_size));
     return plain;
   }
-  if (compression == 1) {  // basic: data blocks, each followed by zeros
+  if (compression == 1) {
     const uint32_t info_size = xex.Be32(format);
     const uint32_t blocks = info_size >= 8 ? (info_size - 8) / 8 : 0;
     size_t from = 0;
@@ -104,10 +97,9 @@ std::vector<uint8_t> DecodeImage(const Bytes& xex, uint32_t format, const uint8_
     }
     return image;
   }
-  if (compression != 2)  // normal (LZX); delta patches carry no resources
+  if (compression != 2)
     return {};
-  // Blocks: a 4-byte size and 20-byte hash for the next block, then 2-byte
-  // sized chunks of LZX data ending with a zero size.
+
   const uint32_t window_size = xex.Be32(size_t(format) + 8);
   uint32_t block_size = xex.Be32(size_t(format) + 12);
   Bytes blocks(plain);
@@ -137,10 +129,9 @@ std::vector<uint8_t> DecodeImage(const Bytes& xex, uint32_t format, const uint8_
   return image;
 }
 
-// The title string (0x8000) in the XDBF's default language, else English.
 std::string XdbfTitle(std::span<const uint8_t> resource) {
   const Bytes xdbf(resource);
-  if (xdbf.Be32(0) != 0x58444246)  // 'XDBF'
+  if (xdbf.Be32(0) != 0x58444246)
     return {};
   const uint32_t entry_count = xdbf.Be32(8), entry_used = xdbf.Be32(12), free_count = xdbf.Be32(16);
   const size_t content = 24 + size_t(entry_count) * 18 + size_t(free_count) * 8;
@@ -154,12 +145,12 @@ std::string XdbfTitle(std::span<const uint8_t> resource) {
     }
     return {};
   };
-  uint32_t language = 1;                                                         // English
-  if (const auto xstc = Bytes(find(1, 0x58535443)); xstc.Be32(0) == 0x58535443)  // 'XSTC'
+  uint32_t language = 1;
+  if (const auto xstc = Bytes(find(1, 0x58535443)); xstc.Be32(0) == 0x58535443)
     language = xstc.Be32(12);
   for (const uint32_t candidate : {language, 1u}) {
     const Bytes table(find(3, candidate));
-    if (table.Be32(0) != 0x58535452)  // 'XSTR'
+    if (table.Be32(0) != 0x58535452)
       continue;
     const uint16_t count = table.Be16(12);
     size_t at = 14;
@@ -176,7 +167,7 @@ std::string XdbfTitle(std::span<const uint8_t> resource) {
   return {};
 }
 
-}  // namespace
+}
 
 std::string XexTitleName(std::span<const uint8_t> bytes) {
   const Bytes xex(bytes);
@@ -201,7 +192,7 @@ std::string XexTitleName(std::span<const uint8_t> bytes) {
     base = *image_base;
   if (resource->first < base)
     return {};
-  // Retail images first; a wrong key decodes to bytes without an XDBF.
+
   for (const uint8_t* key : {kRetailKey, kDevKitKey}) {
     const auto image = DecodeImage(xex, *format, key);
     const Bytes view(image);
@@ -212,4 +203,4 @@ std::string XexTitleName(std::span<const uint8_t> bytes) {
   return {};
 }
 
-}  // namespace rex::system
+}

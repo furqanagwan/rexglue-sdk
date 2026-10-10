@@ -1,0 +1,98 @@
+# File: system source notes
+
+This record preserves technical and API notes moved from `include/rex/system/info/file.h`.
+Names and executable tokens are unchanged; licence and attribution headers
+remain in the source. Historical explanations are retained as source evidence,
+not newly validated hardware claims. Unanswered task notes are tracked by
+[#229](https://github.com/furqanagwan/rexglue-sdk/issues/229) and its topic issues.
+
+Part of [#230](https://github.com/furqanagwan/rexglue-sdk/issues/230).
+Source pin: `bf367e7`.
+
+## Source note 1, line 19
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L19)
+
+```text
+// https://github.com/oukiar/vdash/blob/master/vdash/include/kernel.h
+```
+
+## Source note 2, line 62
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L62)
+
+```text
+// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_basic_information
+```
+
+## Source note 3, line 72
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L72)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_internal_information
+```
+
+## Source note 4, line 78
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L78)
+
+```text
+// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information
+```
+
+## Source note 5, line 86
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L86)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information
+```
+
+## Source note 6, line 92
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L92)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_position_information
+```
+
+## Source note 7, line 98
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L98)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_end_of_file_information
+```
+
+## Source note 8, line 104
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L104)
+
+```text
+// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_allocation_information
+```
+
+## Source note 9, line 115
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L115)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_completion_information
+```
+
+## Source note 10, line 122
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L122)
+
+```text
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_network_open_information
+```
+
+## Source note 11, line 129
+
+[Pinned source](https://github.com/furqanagwan/rexglue-sdk/blob/bf367e7/include/rex/system/info/file.h#L129)
+
+```text
+// size in bytes
+```

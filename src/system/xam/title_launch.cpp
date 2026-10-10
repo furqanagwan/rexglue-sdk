@@ -28,4 +28,4 @@ LaunchRequest ClassifyLaunch(std::string_view running_module_path,
   return {same ? LaunchKind::kRelaunchSelf : LaunchKind::kOtherModule, std::move(path)};
 }
 
-}  // namespace rex::system::xam
+}

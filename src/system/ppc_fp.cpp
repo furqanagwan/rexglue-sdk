@@ -30,8 +30,6 @@ constexpr uint32_t kVRsqrteCoefficients[32] = {
     0x021D6881, 0x01FD6665, 0x01E16468, 0x01C76287, 0x01AF60C1, 0x01995F12, 0x01855D79, 0x01735BF4,
 };
 
-// The estimate for a positive normal single: a coefficient picked by the
-// exponent's parity and the top mantissa bits, then linear interpolation.
 uint32_t NormalVRsqrte(uint32_t input) {
   const uint32_t mantissa = input & 0x7FFFFF;
   const uint32_t index = (((input >> 23) & 1) << 4) | (mantissa >> 19);
@@ -50,11 +48,9 @@ uint32_t NormalVRsqrte(uint32_t input) {
   return (0x3F800000 + uint32_t(exponent_adjustment) * 0x00800000) | ((estimate >> 2) & 0x7FFFFF);
 }
 
-}  // namespace
+}
 
 const uint32_t* VRsqrteTable() {
-  // Indexed by exponent parity and the top 14 mantissa bits, built for
-  // exponent 126 or 127; vrsqrte() corrects for the actual exponent.
   alignas(64) static const std::array<uint32_t, 1 << 15> table = [] {
     std::array<uint32_t, 1 << 15> values{};
     for (uint32_t index = 0; index < values.size(); ++index) {
@@ -66,4 +62,4 @@ const uint32_t* VRsqrteTable() {
   return table.data();
 }
 
-}  // namespace rex::ppc::fp
+}

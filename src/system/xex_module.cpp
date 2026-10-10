@@ -45,12 +45,10 @@ void aes_decrypt_buffer(const uint8_t* session_key, const uint8_t* input_buffer,
   const uint8_t* ct = input_buffer;
   uint8_t* pt = output_buffer;
   for (size_t n = 0; n < input_size; n += 16, ct += 16, pt += 16) {
-    // Decrypt 16 uint8_ts from input -> output.
     rijndaelDecrypt(rk, Nr, ct, pt);
     for (size_t i = 0; i < 16; i++) {
-      // XOR with previous.
       pt[i] ^= ivec[i];
-      // Set previous.
+
       ivec[i] = ct[i];
     }
   }
@@ -72,19 +70,14 @@ bool XexModule::GetOptHeader(const xex2_header* header, xex2_header_keys key, vo
   for (uint32_t i = 0; i < header->header_count; i++) {
     const xex2_opt_header& opt_header = header->headers[i];
     if (opt_header.key == key) {
-      // Match!
       switch (key & 0xFF) {
         case 0x00: {
-          // We just return the value of the optional header.
-          // Assume that the output pointer points to a uint32_t.
           *reinterpret_cast<uint32_t*>(out_ptr) = static_cast<uint32_t>(opt_header.value);
         } break;
         case 0x01: {
-          // Pointer to the value on the optional header.
           *out_ptr = const_cast<void*>(reinterpret_cast<const void*>(&opt_header.value));
         } break;
         default: {
-          // Pointer to the header.
           *out_ptr = reinterpret_cast<void*>(uintptr_t(header) + opt_header.offset);
         } break;
       }
@@ -114,7 +107,6 @@ const PESection* XexModule::GetPESection(const char* name) {
 }
 
 uint32_t XexModule::GetProcAddress(uint16_t ordinal) const {
-  // First: Check the xex2 export table.
   if (xex_security_info()->export_table) {
     auto export_table =
         memory()->TranslateVirtual<const xex2_export_table*>(xex_security_info()->export_table);
@@ -131,7 +123,6 @@ uint32_t XexModule::GetProcAddress(uint16_t ordinal) const {
     return ordinal_offset;
   }
 
-  // Second: Check the PE exports.
   assert_not_zero(base_address_);
 
   xex2_opt_data_directory* pe_export_directory = 0;
@@ -155,7 +146,6 @@ uint32_t XexModule::GetProcAddress(const std::string_view name) const {
 
   xex2_opt_data_directory* pe_export_directory = 0;
   if (!GetOptHeader(XEX_HEADER_EXPORTS_BY_NAME, &pe_export_directory)) {
-    // No exports by name.
     return 0;
   }
 
@@ -163,13 +153,10 @@ uint32_t XexModule::GetProcAddress(const std::string_view name) const {
                                                                        pe_export_directory->offset);
   assert_not_null(e);
 
-  // e->AddressOfX RVAs are relative to the IMAGE_EXPORT_DIRECTORY!
   uint32_t* function_table = reinterpret_cast<uint32_t*>(uintptr_t(e) + e->AddressOfFunctions);
 
-  // Names relative to directory
   uint32_t* name_table = reinterpret_cast<uint32_t*>(uintptr_t(e) + e->AddressOfNames);
 
-  // Table of ordinals (by name)
   uint16_t* ordinal_table = reinterpret_cast<uint16_t*>(uintptr_t(e) + e->AddressOfNameOrdinals);
 
   for (uint32_t i = 0; i < e->NumberOfNames; i++) {
@@ -177,27 +164,22 @@ uint32_t XexModule::GetProcAddress(const std::string_view name) const {
     uint16_t ordinal = ordinal_table[i];
     uint32_t addr = base_address_ + function_table[ordinal];
     if (name == std::string_view(fn_name)) {
-      // We have a match!
       return addr;
     }
   }
 
-  // No match
   return 0;
 }
 
 int XexModule::ApplyPatch(XexModule* module) {
   if (!is_patch()) {
-    // This isn't a XEX2 patch.
     return 1;
   }
 
-  // Grab the delta descriptor and get to work.
   xex2_opt_delta_patch_descriptor* patch_header = nullptr;
   GetOptHeader(XEX_HEADER_DELTA_PATCH_DESCRIPTOR, reinterpret_cast<void**>(&patch_header));
   assert_not_null(patch_header);
 
-  // Compare hash inside delta descriptor to base XEX signature
   uint8_t digest[0x14];
   sha1::SHA1 s;
   s.processBytes(module->xex_security_info()->rsa_signature, 0x100);
@@ -229,11 +211,9 @@ int XexModule::ApplyPatch(XexModule* module) {
   uint32_t delta_target_size =
       patch_header->size_of_target_headers - patch_header->delta_headers_target_offset;
   if (patch_header->delta_headers_source_size > delta_target_size) {
-    return 5;  // ? unsure what the point of this test is, kernel checks for it
-               // though
+    return 5;
   }
 
-  // Patch base XEX header
   uint32_t original_image_size = module->image_size();
   uint32_t header_target_size = patch_header->size_of_target_headers;
 
@@ -244,22 +224,18 @@ int XexModule::ApplyPatch(XexModule* module) {
 
   size_t mem_size = module->xex_header_mem_.size();
 
-  // Increase xex header buffer length if needed
   if (header_target_size > module->xex_header_mem_.size()) {
     module->xex_header_mem_.resize(header_target_size);
   }
 
   auto header_ptr = (uint8_t*)module->xex_header();
 
-  // If headers_source_offset is set, copy [source_offset:source_size] to
-  // target_offset
   if (patch_header->delta_headers_source_offset) {
     memmove(header_ptr + patch_header->delta_headers_target_offset,
             header_ptr + patch_header->delta_headers_source_offset,
             patch_header->delta_headers_source_size);
   }
 
-  // If new size is smaller than original, null out the difference
   if (header_target_size < module->xex_header_mem_.size()) {
     memset(header_ptr + header_target_size, 0, module->xex_header_mem_.size() - header_target_size);
   }
@@ -267,7 +243,6 @@ int XexModule::ApplyPatch(XexModule* module) {
   auto file_format_header = opt_file_format_info();
   assert_not_null(file_format_header);
 
-  // Apply header patch...
   uint32_t headerpatch_size = patch_header->info.compressed_len + 0xC;
 
   int result_code =
@@ -278,17 +253,14 @@ int XexModule::ApplyPatch(XexModule* module) {
     return result_code;
   }
 
-  // Decrease xex header buffer length if needed (but only after patching)
   if (module->xex_header_mem_.size() > header_target_size) {
     module->xex_header_mem_.resize(header_target_size);
   }
 
-  // Update security info context with latest security info data
   module->ReadSecurityInfo();
 
   uint32_t new_image_size = module->image_size();
 
-  // Check if we need to alloc new memory for the patched xex
   if (new_image_size > original_image_size) {
     uint32_t size_delta = new_image_size - original_image_size;
     uint32_t addr_new_mem = module->base_address_ + original_image_size;
@@ -311,19 +283,14 @@ int XexModule::ApplyPatch(XexModule* module) {
   uint8_t orig_session_key[0x10];
   memcpy(orig_session_key, module->session_key_, 0x10);
 
-  // Header patch updated the base XEX key, need to redecrypt it
   aes_decrypt_buffer(module->is_dev_kit_ ? xe_xex2_devkit_key : xe_xex2_retail_key,
                      reinterpret_cast<const uint8_t*>(module->xex_security_info()->aes_key), 16,
                      module->session_key_, 16);
 
-  // Decrypt the patch XEX's key using base XEX key
   aes_decrypt_buffer(module->session_key_,
                      reinterpret_cast<const uint8_t*>(xex_security_info()->aes_key), 16,
                      session_key_, 16);
 
-  // Test delta key against our decrypted keys
-  // (kernel doesn't seem to check this, but it's the one use for the
-  // image_key_source field I can think of...)
   uint8_t test_delta_key[0x10];
   aes_decrypt_buffer(module->session_key_, patch_header->image_key_source, 0x10, test_delta_key,
                      0x10);
@@ -333,7 +300,6 @@ int XexModule::ApplyPatch(XexModule* module) {
     return 7;
   }
 
-  // Decrypt (if needed).
   bool free_input = false;
   const uint8_t* patch_buffer = xexp_data_mem_.data();
   const size_t patch_length = xexp_data_mem_.size();
@@ -342,7 +308,7 @@ int XexModule::ApplyPatch(XexModule* module) {
 
   switch (file_format_header->encryption_type) {
     case XEX_ENCRYPTION_NONE:
-      // No-op.
+
       break;
     case XEX_ENCRYPTION_NORMAL:
 
@@ -362,8 +328,6 @@ int XexModule::ApplyPatch(XexModule* module) {
   const uint8_t* p = input_buffer;
   uint8_t* base_exe = memory()->TranslateVirtual(module->base_address_);
 
-  // If image_source_offset is set, copy [source_offset:source_size] to
-  // target_offset
   if (patch_header->delta_image_source_offset) {
     memmove(base_exe + patch_header->delta_image_target_offset,
             base_exe + patch_header->delta_image_source_offset,
@@ -373,16 +337,13 @@ int XexModule::ApplyPatch(XexModule* module) {
   uint32_t image_target_size =
       patch_header->delta_image_target_offset + patch_header->delta_image_source_size;
 
-  // If new size is smaller than original, null out the difference
   if (image_target_size < original_image_size) {
     memset(base_exe + image_target_size, 0, original_image_size - image_target_size);
   }
 
-  // Now loop through each block and apply the delta patches inside
   while (cur_block->block_size) {
     const auto* next_block = (const xex2_compressed_block_info*)p;
 
-    // Compare block hash, if no match we probably used wrong decrypt key
     s.reset();
     s.processBytes(p, cur_block->block_size);
     s.finalize(digest);
@@ -393,13 +354,11 @@ int XexModule::ApplyPatch(XexModule* module) {
       break;
     }
 
-    // skip block info
     p += 20;
     p += 4;
 
     uint32_t block_data_size = cur_block->block_size - 20 - 4;
 
-    // Apply delta patch
     result_code =
         lzxdelta_apply_patch((xex2_delta_patch*)p, block_data_size,
                              file_format_header->compression_info.normal.window_size, base_exe);
@@ -412,7 +371,6 @@ int XexModule::ApplyPatch(XexModule* module) {
   }
 
   if (!result_code) {
-    // Decommit unused pages if new image size is smaller than original
     if (original_image_size > new_image_size) {
       uint32_t size_delta = original_image_size - new_image_size;
       uint32_t addr_free_mem = module->base_address_ + new_image_size;
@@ -452,7 +410,6 @@ int XexModule::ReadImage(const void* xex_addr, size_t xex_length, bool use_dev_k
   is_dev_kit_ = use_dev_key;
 
   if (is_patch()) {
-    // Make a copy of patch data for other XEX's to use with ApplyPatch()
     const uint32_t data_len = static_cast<uint32_t>(xex_length - xex_header()->header_size);
     xexp_data_mem_.resize(data_len);
     std::memcpy(xexp_data_mem_.data(), (uint8_t*)xex_addr + xex_header()->header_size, data_len);
@@ -489,12 +446,10 @@ int XexModule::ReadImage(const void* xex_addr, size_t xex_length, bool use_dev_k
     return 0;
   }
 
-  // Not a patch and image doesn't have proper PE header, return 3
   return 3;
 }
 
 int XexModule::ReadImageUncompressed(const void* xex_addr, size_t xex_length) {
-  // Allocate in-place the XEX memory.
   const uint32_t exe_length = static_cast<uint32_t>(xex_length - xex_header()->header_size);
 
   uint32_t uncompressed_size = exe_length;
@@ -539,7 +494,6 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
 
   auto heap = memory()->LookupHeap(base_address_);
 
-  // Calculate uncompressed length.
   uint32_t uncompressed_size = 0;
 
   auto* file_info = opt_file_format_info();
@@ -552,17 +506,14 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
     uncompressed_size += data_size + zero_size;
   }
 
-  // Calculate the total size of the XEX image from its headers.
   uint32_t total_size = 0;
   for (uint32_t i = 0; i < xex_security_info()->page_descriptor_count; i++) {
-    // Byteswap the bitfield manually.
     xex2_page_descriptor desc;
     desc.value = rex::byte_swap(xex_security_info()->page_descriptors[i].value);
 
     total_size += desc.page_count * heap->page_size();
   }
 
-  // Allocate in-place the XEX memory.
   bool alloc_result =
       heap->AllocFixed(base_address_, total_size, 4096,
                        rex::memory::kMemoryAllocationReserve | rex::memory::kMemoryAllocationCommit,
@@ -574,7 +525,7 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
   }
 
   uint8_t* buffer = memory()->TranslateVirtual(base_address_);
-  std::memset(buffer, 0, total_size);  // Quickly zero the contents.
+  std::memset(buffer, 0, total_size);
   uint8_t* d = buffer;
 
   uint32_t rk[4 * (MAXNR + 1)];
@@ -588,7 +539,6 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
     switch (opt_file_format_info()->encryption_type) {
       case XEX_ENCRYPTION_NONE:
         if (data_size > uncompressed_size - (d - buffer)) {
-          // Overflow.
           return 1;
         }
         memcpy(d, p, data_size);
@@ -597,12 +547,10 @@ int XexModule::ReadImageBasicCompressed(const void* xex_addr, size_t xex_length)
         const uint8_t* ct = p;
         uint8_t* pt = d;
         for (size_t m = 0; m < data_size; m += 16, ct += 16, pt += 16) {
-          // Decrypt 16 uint8_ts from input -> output.
           rijndaelDecrypt(rk, Nr, ct, pt);
           for (size_t i = 0; i < 16; i++) {
-            // XOR with previous.
             pt[i] ^= ivec[i];
-            // Set previous.
+
             ivec[i] = ct[i];
           }
         }
@@ -623,27 +571,18 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
   const uint32_t exe_length = static_cast<uint32_t>(xex_length - xex_header()->header_size);
   const uint8_t* exe_buffer = (const uint8_t*)xex_addr + xex_header()->header_size;
 
-  // src -> dest:
-  // - decrypt (if encrypted)
-  // - de-block:
-  //    4b total size of next block in uint8_ts
-  //   20b hash of entire next block (including size/hash)
-  //    Nb block uint8_ts
-  // - decompress block contents
-
   uint8_t* compress_buffer = NULL;
   const uint8_t* p = NULL;
   uint8_t* d = NULL;
   sha1::SHA1 s;
 
-  // Decrypt (if needed).
   bool free_input = false;
   const uint8_t* input_buffer = exe_buffer;
   size_t input_size = exe_length;
 
   switch (opt_file_format_info()->encryption_type) {
     case XEX_ENCRYPTION_NONE:
-      // No-op.
+
       break;
     case XEX_ENCRYPTION_NORMAL:
 
@@ -664,7 +603,6 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
   p = input_buffer;
   d = compress_buffer;
 
-  // De-block.
   int result_code = 0;
 
   uint8_t block_calced_digest[0x14];
@@ -672,7 +610,6 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
     const uint8_t* pnext = p + cur_block->block_size;
     const auto* next_block = (const xex2_compressed_block_info*)p;
 
-    // Compare block hash, if no match we probably used wrong decrypt key
     s.reset();
     s.processBytes(p, cur_block->block_size);
     s.finalize(block_calced_digest);
@@ -681,7 +618,6 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
       break;
     }
 
-    // skip block info
     p += 4;
     p += 20;
 
@@ -704,7 +640,6 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
   if (!result_code) {
     uint32_t uncompressed_size = image_size();
 
-    // Allocate in-place the XEX memory.
     bool alloc_result =
         memory()
             ->LookupHeap(base_address_)
@@ -717,7 +652,6 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
       uint8_t* buffer = memory()->TranslateVirtual(base_address_);
       std::memset(buffer, 0, uncompressed_size);
 
-      // Decompress into XEX base
       result_code = lzx_decompress(compress_buffer, d - compress_buffer, buffer, uncompressed_size,
                                    compression_info->normal.window_size, nullptr, 0);
     } else {
@@ -739,68 +673,45 @@ int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
 int XexModule::ReadPEHeaders() {
   const uint8_t* p = memory()->TranslateVirtual(base_address_);
 
-  // Verify DOS signature (MZ).
   auto doshdr = reinterpret_cast<const IMAGE_DOS_HEADER*>(p);
   if (doshdr->e_magic != IMAGE_DOS_SIGNATURE) {
     REXLOG_ERROR("PE signature mismatch; likely bad decryption/decompression");
     return 1;
   }
 
-  // Move to the NT header offset from the DOS header.
   p += doshdr->e_lfanew;
 
-  // Verify NT signature (PE\0\0).
   auto nthdr = reinterpret_cast<const IMAGE_NT_HEADERS32*>(p);
   if (nthdr->Signature != IMAGE_NT_SIGNATURE) {
     return 1;
   }
 
-  // Verify matches an Xbox PE.
   const IMAGE_FILE_HEADER* filehdr = &nthdr->FileHeader;
   if ((filehdr->Machine != IMAGE_FILE_MACHINE_POWERPCBE) ||
       !(filehdr->Characteristics & IMAGE_FILE_32BIT_MACHINE)) {
     return 1;
   }
-  // Verify the expected size.
+
   if (filehdr->SizeOfOptionalHeader != IMAGE_SIZEOF_NT_OPTIONAL_HEADER) {
     return 1;
   }
 
-  // Verify optional header is 32bit.
   const IMAGE_OPTIONAL_HEADER32* opthdr = &nthdr->OptionalHeader;
   if (opthdr->Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
     return 1;
   }
-  // Verify subsystem.
+
   if (opthdr->Subsystem != IMAGE_SUBSYSTEM_XBOX) {
     return 1;
   }
 
   pe_time_date_stamp_ = filehdr->TimeDateStamp;
 
-// Linker version - likely 8+
-// Could be useful for recognizing certain patterns
-// opthdr->MajorLinkerVersion; opthdr->MinorLinkerVersion;
-
-// Data directories of interest:
-// EXPORT           IMAGE_EXPORT_DIRECTORY
-// IMPORT           IMAGE_IMPORT_DESCRIPTOR[]
-// EXCEPTION        IMAGE_CE_RUNTIME_FUNCTION_ENTRY[]
-// BASERELOC
-// DEBUG            IMAGE_DEBUG_DIRECTORY[]
-// ARCHITECTURE     /IMAGE_ARCHITECTURE_HEADER/ ----- import thunks!
-// TLS              IMAGE_TLS_DIRECTORY
-// IAT              Import Address Table ptr
-// opthdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_X].VirtualAddress / .Size
-
-// The macros in pe_image.h don't work with clang, for some reason.
-// offsetof seems to be unable to find OptionalHeader.
 #define offsetof1(type, member) ((std::size_t)&(((type*)0)->member))
 #define IMAGE_FIRST_SECTION1(ntheader)                                                        \
   ((PIMAGE_SECTION_HEADER)((uint8_t*)ntheader + offsetof1(IMAGE_NT_HEADERS, OptionalHeader) + \
                            ((PIMAGE_NT_HEADERS)(ntheader))->FileHeader.SizeOfOptionalHeader))
 
-  // Quick scan to determine bounds of sections.
   size_t upper_address = 0;
   const IMAGE_SECTION_HEADER* sechdr = IMAGE_FIRST_SECTION1(nthdr);
   for (size_t n = 0; n < filehdr->NumberOfSections; n++, sechdr++) {
@@ -808,7 +719,6 @@ int XexModule::ReadPEHeaders() {
     upper_address = std::max(upper_address, physical_address + sechdr->Misc.VirtualSize);
   }
 
-  // Setup/load sections.
   sechdr = IMAGE_FIRST_SECTION1(nthdr);
   for (size_t n = 0; n < filehdr->NumberOfSections; n++, sechdr++) {
     PESection section;
@@ -822,15 +732,9 @@ int XexModule::ReadPEHeaders() {
     pe_sections_.push_back(section);
   }
 
-  // Extract Exception DataDirectory (PDATA table location)
-  // This is the authoritative source for PDATA location, not the .pdata section header.
-  // The .pdata section's VirtualAddress may differ from the DataDirectory entry.
-  // NOTE: PE headers are little-endian (PE spec), no byte-swap needed.
   exception_dir_rva_ = opthdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress;
   exception_dir_size_ = opthdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size;
 
-  // DumpTLSDirectory(pImageBase, pNTHeader, (PIMAGE_TLS_DIRECTORY32)0);
-  // DumpExportsSection(pImageBase, pNTHeader);
   return 0;
 }
 
@@ -877,30 +781,23 @@ bool XexModule::Load(const std::string_view name, const std::string_view path, c
   assert_false(loaded_);
   loaded_ = true;
 
-  // Read in XEX headers
   xex_header_mem_.resize(src_header->header_size);
   std::memcpy(xex_header_mem_.data(), src_header, src_header->header_size);
 
-  // Read/convert XEX1/XEX2 security info to a common format
   ReadSecurityInfo();
 
   auto sec_header = xex_security_info();
 
-  // Try setting our base_address based on XEX_HEADER_IMAGE_BASE_ADDRESS, fall
-  // back to xex_security_info otherwise
   base_address_ = xex_security_info()->load_address;
   rex::be<uint32_t>* base_addr_opt = nullptr;
   if (GetOptHeader(XEX_HEADER_IMAGE_BASE_ADDRESS, &base_addr_opt))
     base_address_ = *base_addr_opt;
 
-  // Setup debug info.
   name_ = name;
   path_ = path;
 
   uint8_t* data = memory()->TranslateVirtual(base_address_);
 
-  // Load in the XEX basefile
-  // We'll try using both XEX2 keys to see if any give a valid PE
   int result_code = ReadImage(xex_addr, xex_length, false);
   if (result_code) {
     REXLOG_WARN("XEX load failed with code {}, trying with devkit encryption key...", result_code);
@@ -912,14 +809,10 @@ bool XexModule::Load(const std::string_view name, const std::string_view path, c
     }
   }
 
-  // Note: caller will have to call LoadContinue once it's determined whether a
-  // patch file exists or not!
   return true;
 }
 
 bool XexModule::LoadContinue() {
-  // Second part of image load
-  // Split from Load() so that we can patch the XEX before loading this data
   assert_false(finished_load_);
   if (finished_load_) {
     return true;
@@ -932,7 +825,6 @@ bool XexModule::LoadContinue() {
     return false;
   }
 
-  // Parse any "unsafe" headers into safer variants
   xex2_opt_generic_u32* alternate_titleids;
   if (GetOptHeader(xex2_header_keys::XEX_HEADER_ALTERNATE_TITLE_IDS, &alternate_titleids)) {
     auto count = alternate_titleids->count();
@@ -941,8 +833,6 @@ bool XexModule::LoadContinue() {
     }
   }
 
-  // Scan and find the low/high addresses.
-  // All code sections are continuous, so this should be easy.
   auto heap = memory()->LookupHeap(base_address_);
   auto page_size = heap->page_size();
 
@@ -951,7 +841,6 @@ bool XexModule::LoadContinue() {
 
   auto sec_header = xex_security_info();
   for (uint32_t i = 0, page = 0; i < sec_header->page_descriptor_count; i++) {
-    // Byteswap the bitfield manually.
     xex2_page_descriptor desc;
     desc.value = rex::byte_swap(sec_header->page_descriptors[i].value);
 
@@ -965,10 +854,6 @@ bool XexModule::LoadContinue() {
     page += desc.page_count;
   }
 
-  // NOTE(tomc): Backend notification not needed - no JIT in rexglue
-  // processor_->backend()->CommitExecutableRange(low_address_, high_address_);
-
-  // Add all imports (variables/functions).
   xex2_opt_import_libraries* opt_import_libraries = nullptr;
   GetOptHeader(XEX_HEADER_IMPORT_LIBRARIES, &opt_import_libraries);
 
@@ -976,7 +861,6 @@ bool XexModule::LoadContinue() {
     const char* string_table[32];
     std::memset(string_table, 0, sizeof(string_table));
 
-    // Parse the string table
     for (size_t i = 0, o = 0; i < opt_import_libraries->string_table.size &&
                               o < opt_import_libraries->string_table.count;
          ++o) {
@@ -986,7 +870,6 @@ bool XexModule::LoadContinue() {
       string_table[o] = str;
       i += std::strlen(str) + 1;
 
-      // Padding
       if ((i % 4) != 0) {
         i += 4 - (i % 4);
       }
@@ -1008,9 +891,7 @@ bool XexModule::LoadContinue() {
     }
   }
 
-  // Setup memory protection.
   for (uint32_t i = 0, page = 0; i < sec_header->page_descriptor_count; i++) {
-    // Byteswap the bitfield manually.
     xex2_page_descriptor desc;
     desc.value = rex::byte_swap(sec_header->page_descriptors[i].value);
 
@@ -1029,7 +910,6 @@ bool XexModule::LoadContinue() {
     page += desc.page_count;
   }
 
-  // Populate binary introspection data
   PopulateBinaryData();
 
   return true;
@@ -1041,7 +921,6 @@ bool XexModule::Unload() {
   }
   loaded_ = false;
 
-  // If this isn't a patch, just deallocate the memory occupied by the exe
   if (!is_patch()) {
     assert_not_zero(base_address_);
 
@@ -1055,13 +934,8 @@ bool XexModule::Unload() {
 
 bool XexModule::SetupLibraryImports(const std::string_view name,
                                     const xex2_import_library* library) {
-  // NOTE(tomc): import resolution is done at compile time.
-  // however, we still need to patch variable imports in guest memory
-  // since they are accessed via memory loads, not function calls.
-
   auto base_name = rex::string::utf8_find_base_name_from_guest_path(name);
 
-  // Get export resolver for variable import patching
   auto* export_resolver = kernel_state_->emulator()->export_resolver();
 
   ImportLibrary library_info;
@@ -1070,9 +944,6 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
   library_info.version.value = library->version().value;
   library_info.min_version.value = library->version_min().value;
 
-  // Use a map to properly pair type 0 (variable) and type 1 (thunk) records by ordinal.
-  // Import table entries alternate: type 0 has ordinal info, type 1 has thunk address.
-  // They may not come in immediate succession, so we pair by ordinal.
   std::unordered_map<uint16_t, ImportLibraryFn> import_map;
 
   for (uint32_t i = 0; i < library->count; i++) {
@@ -1090,20 +961,16 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
     import_info.ordinal = ordinal;
 
     if (record_type == 0) {
-      // Variable import - value_address is where the variable value is stored
       import_info.value_address = record_addr;
 
-      // Patch variable imports in guest memory with the actual address
       if (export_resolver) {
         auto kernel_export = export_resolver->GetExportByOrdinal(base_name, ordinal);
         if (kernel_export && kernel_export->type == runtime::Export::Type::kVariable) {
           if (kernel_export->is_implemented() && kernel_export->variable_ptr) {
-            // Write the variable address to guest memory
             *record_slot = kernel_export->variable_ptr;
             REXLOG_DEBUG("Patched variable import {}:{:#x} ({}) -> {:#x}", base_name, ordinal,
                          kernel_export->name, kernel_export->variable_ptr);
           } else {
-            // write garbage value if we don't have it implemented
             *record_slot = 0xD000BEEF | (kernel_export->ordinal & 0xFFF) << 16;
             REXLOG_WARN("Variable import {}:{:#x} ({}) not implemented", base_name, ordinal,
                         kernel_export->name);
@@ -1111,13 +978,10 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
         }
       }
     } else if (record_type == 1) {
-      // Thunk import - thunk_address is the function pointer location
-      // This is the address we need for function table registration
       import_info.thunk_address = record_addr;
     }
   }
 
-  // Convert map to vector (sorted by ordinal for consistent output)
   std::vector<uint16_t> ordinals;
   ordinals.reserve(import_map.size());
   for (const auto& [ordinal, _] : import_map) {
@@ -1140,12 +1004,10 @@ bool XexModule::ContainsAddress(uint32_t address) {
   return address >= low_address_ && address < high_address_;
 }
 
-// Binary introspection implementation
 void XexModule::PopulateBinaryData() {
   binary_sections_.clear();
   binary_symbols_.clear();
 
-  // Populate sections from existing PE sections
   for (const auto& pe_sec : pe_sections_) {
     BinarySection sec;
     sec.name = pe_sec.name;
@@ -1157,13 +1019,12 @@ void XexModule::PopulateBinaryData() {
     binary_sections_.push_back(std::move(sec));
   }
 
-  // Populate symbols from import libraries
   for (const auto& lib : import_libs_) {
     for (const auto& import : lib.imports) {
       BinarySymbol sym;
       sym.name = fmt::format("{}@{}", lib.name, import.ordinal);
       sym.address = import.thunk_address;
-      sym.size = 16;  // Thunk size: 2 ordinal words + mtctr + bctr
+      sym.size = 16;
       sym.type = BinarySymbolType::Import;
       binary_symbols_.push_back(std::move(sym));
     }
@@ -1186,4 +1047,4 @@ std::span<const BinarySymbol> XexModule::binary_symbols() const {
   return binary_symbols_;
 }
 
-}  // namespace rex::runtime
+}

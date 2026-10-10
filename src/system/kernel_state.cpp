@@ -49,9 +49,6 @@ namespace rex::system {
 
 constexpr uint32_t kDeferredOverlappedDelayMillis = 100;
 
-// This is a global object initialized with the XboxkrnlModule.
-// It references the current kernel state object that all kernel methods should
-// be using to stash their variables.
 KernelState* shared_kernel_state_ = nullptr;
 
 KernelState* kernel_state() {
@@ -82,12 +79,10 @@ KernelState::KernelState(Runtime* emulator)
   }
   shared_kernel_state_ = this;
 
-  // Allocate KernelGuestGlobals early so xboxkrnl module can wire exports.
   kernel_guest_globals_ = memory_->SystemHeapAlloc(sizeof(KernelGuestGlobals));
   auto globals = memory_->TranslateVirtual<KernelGuestGlobals*>(kernel_guest_globals_);
   std::memset(globals, 0, sizeof(KernelGuestGlobals));
 
-  // Initialize object type pool tags
   globals->ExThreadObjectType.pool_tag = memory::make_fourcc('T', 'h', 'r', 'd');
   globals->ExEventObjectType.pool_tag = memory::make_fourcc('E', 'v', 'n', 't');
   globals->ExMutantObjectType.pool_tag = memory::make_fourcc('M', 'u', 't', 'a');
@@ -99,12 +94,10 @@ KernelState::KernelState(Runtime* emulator)
   globals->ObDirectoryObjectType.pool_tag = memory::make_fourcc('O', 'b', 'D', 'r');
   globals->ObSymbolicLinkObjectType.pool_tag = memory::make_fourcc('O', 'b', 'S', 'l');
 
-  // Initialize UsbdBootEnumerationDoneEvent as a signaled manual-reset event
   auto* usbd_event = reinterpret_cast<X_DISPATCH_HEADER*>(&globals->UsbdBootEnumerationDoneEvent);
-  usbd_event->type = 1;  // NotificationEvent
+  usbd_event->type = 1;
   usbd_event->signal_state = 1;
 
-  // Initialize OddObj self-referencing pointer
   uint32_t oddobject_offset = kernel_guest_globals_ + offsetof(KernelGuestGlobals, OddObj);
   globals->OddObj.field0 = 0x1000000;
   globals->OddObj.field4 = 1;
@@ -112,16 +105,12 @@ KernelState::KernelState(Runtime* emulator)
       oddobject_offset + offsetof(X_UNKNOWN_TYPE_REFED, points_to_self);
   globals->OddObj.points_to_prior = globals->OddObj.points_to_self;
 
-  // Initialize process structs
   InitializeProcess(&globals->idle_process, X_PROCTYPE_IDLE, 0, 0, 0);
   globals->idle_process.quantum = 0x7F;
 
   InitializeProcess(&globals->system_process, X_PROCTYPE_SYSTEM, 2, 5, 9);
   SetProcessTLSVars(&globals->system_process, 32, 0, 0);
 
-  // Title process needs minimal initialization here so threads created before
-  // SetExecutableModule() (e.g. XMA decoder) can link into its thread_list.
-  // SetExecutableModule() will re-initialize it fully with XEX header values.
   InitializeProcess(&globals->title_process, X_PROCTYPE_USER, 0, 0, 0);
 }
 
@@ -147,8 +136,6 @@ void KernelState::SetProcessTLSVars(X_KPROCESS* process, uint32_t num_slots, uin
   process->tls_slot_size = static_cast<uint16_t>(4 * slots_padded);
   process->tls_static_data_address = tls_raw_data_address;
 
-  // Initialize TLS bitmap - mark used slots with 1s in HIGH bits (matching xenia).
-  // Xenia formula: bitmap[count_div32] = -1 << (32 - ((num_slots + 3) & 0x1C))
   uint32_t bitmap_slots = slots_padded / 32;
   for (uint32_t i = 0; i < 8; i++) {
     if (i < bitmap_slots) {
@@ -165,18 +152,15 @@ void KernelState::SetProcessTLSVars(X_KPROCESS* process, uint32_t num_slots, uin
 KernelState::~KernelState() {
   app_manager_.reset();
 
-  // Stop the dispatch thread before touching the object table
   if (dispatch_thread_running_) {
     dispatch_thread_running_ = false;
     dispatch_cond_.notify_all();
     dispatch_thread_->Wait(0, 0, 0, nullptr);
   }
 
-  // Unload through UnloadUserModule so the recompiled-DLL teardown runs.
-  // call_entry=false because guest DllMain is unsafe at shutdown.
   while (!user_modules_.empty()) {
     object_ref<UserModule> module = user_modules_.back();
-    UnloadUserModule(module, /*call_entry=*/false);
+    UnloadUserModule(module, false);
   }
   executable_module_.reset();
   kernel_modules_.clear();
@@ -186,14 +170,10 @@ KernelState::~KernelState() {
     module_libraries_.clear();
   }
 
-  // Unregister all notify listeners.
   notify_listeners_.clear();
 
-  // Safe to reset now: Runtime::Shutdown() has already stopped graphics,
-  // audio, and input before destroying KernelState.
   object_table_.Reset();
 
-  // Destroy any host fibers that were not explicitly cleaned up.
   for (auto& [guest_addr, info] : fiber_map_) {
     if (info.host_fiber) {
       info.host_fiber->Destroy();
@@ -218,7 +198,6 @@ KernelState::~KernelState() {
     REXSYS_ERROR("~KernelState: shared_kernel_state_ does not match this instance");
   }
 
-  // Drain last: FreeLibrary runs the DLL's host static dtors.
   deferred_unload_libraries_.clear();
 }
 
@@ -227,7 +206,6 @@ KernelState* KernelState::shared() {
 }
 
 uint32_t KernelState::title_id() const {
-  // No title loaded yet (or a tool/test runtime without an image).
   if (!executable_module_) {
     return 0;
   }
@@ -309,7 +287,6 @@ void KernelState::LoadAchievementsData() {
     achievement_manager_.LoadMetadataFile(*metadata_path);
   }
 
-  // Set up the unlock save path and restore persisted state.
   const auto user_root = emulator_->user_data_root();
   if (!user_root.empty()) {
     achievement_manager_.SetUnlockSavePath(user_root / "achievements" /
@@ -464,7 +441,6 @@ bool KernelState::RegisterUserModule(object_ref<UserModule> module) {
 
   for (auto user_module : user_modules_) {
     if (user_module->path() == module->path()) {
-      // Already loaded.
       return false;
     }
   }
@@ -486,10 +462,9 @@ void KernelState::UnregisterUserModule(UserModule* module) {
 
 bool KernelState::IsKernelModule(const std::string_view name) {
   if (name.empty()) {
-    // Executing module isn't a kernel module.
     return false;
   }
-  // NOTE: no global lock required as the kernel module list is static.
+
   for (auto kernel_module : kernel_modules_) {
     if (kernel_module->Matches(name)) {
       return true;
@@ -512,15 +487,11 @@ object_ref<KernelModule> KernelState::GetKernelModule(const std::string_view nam
 
 object_ref<XModule> KernelState::GetModule(const std::string_view name, bool user_only) {
   if (name.empty()) {
-    // NULL name = self.
-
     return GetExecutableModule();
   } else if (rex::string::utf8_equal_case(name, "kernel32.dll")) {
-    // Some games request this, for some reason. wtf.
     return nullptr;
   }
 
-  // Search kernel modules under lock
   if (!user_only) {
     auto global_lock = global_critical_region_.Acquire();
     for (auto kernel_module : kernel_modules_) {
@@ -530,14 +501,12 @@ object_ref<XModule> KernelState::GetModule(const std::string_view name, bool use
     }
   }
 
-  // Resolve path WITHOUT lock
   auto path(name);
   auto entry = file_system_->ResolvePath(name);
   if (entry) {
     path = entry->absolute_path();
   }
 
-  // Search user modules under lock
   {
     auto global_lock = global_critical_region_.Acquire();
     for (auto user_module : user_modules_) {
@@ -557,12 +526,9 @@ object_ref<XThread> KernelState::PrepareModuleLaunch(object_ref<UserModule> modu
   SetExecutableModule(module);
   REXSYS_DEBUG("KernelState: Preparing module launch...");
 
-  // Create a thread to run in.
-  // We start suspended so the caller can inspect/attach before resume.
   auto thread = object_ref<XThread>(new XThread(
       this, module->stack_size(), 0, module->entry_point(), 0, X_CREATE_SUSPENDED, true, true));
 
-  // We know this is the 'main thread'.
   thread->set_name("Main XThread");
 
   X_STATUS result = thread->Create();
@@ -598,17 +564,12 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
     return;
   }
 
-  // Update title process fields from the executable module.
-  // Do NOT call InitializeProcess() again - it was already called in the
-  // constructor, and threads (XMA decoder, dispatch) may already be linked
-  // into the thread_list. Reinitializing would orphan them.
   auto globals = memory_->TranslateVirtual<KernelGuestGlobals*>(kernel_guest_globals_);
   auto* pib = &globals->title_process;
   pib->unk_18 = 10;
   pib->unk_19 = 13;
   pib->unk_1A = 17;
 
-  // Read default stack size from XEX header, align to 4KB, clamp to min 16KB.
   uint32_t default_stack_size = 0;
   executable_module_->GetOptHeader(XEX_HEADER_DEFAULT_STACK_SIZE, &default_stack_size);
   if (default_stack_size) {
@@ -619,7 +580,6 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
     pib->kernel_stack_size = default_stack_size;
   }
 
-  // Update title process TLS info from the executable module.
   xex2_opt_tls_info* tls_header = nullptr;
   executable_module_->GetOptHeader(XEX_HEADER_TLS_INFO, &tls_header);
   if (tls_header) {
@@ -629,24 +589,20 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
                       tls_header->raw_data_address);
   }
 
-  // Setup the kernel's XexExecutableModuleHandle field.
   auto export_entry = emulator_->function_dispatcher()->export_resolver()->GetExportByOrdinal(
-      "xboxkrnl.exe", 0x0193 /* XexExecutableModuleHandle */);
+      "xboxkrnl.exe", 0x0193);
   if (export_entry) {
     assert_not_zero(export_entry->variable_ptr);
     auto variable_ptr = memory_->TranslateVirtual<be<uint32_t>*>(export_entry->variable_ptr);
     *variable_ptr = executable_module_->hmodule_ptr();
   }
 
-  // Setup the kernel's ExLoadedImageName field
   export_entry = emulator_->function_dispatcher()->export_resolver()->GetExportByOrdinal(
-      "xboxkrnl.exe", 0x01AF /* ExLoadedImageName */);
+      "xboxkrnl.exe", 0x01AF);
   if (export_entry) {
     char* variable_ptr = memory_->TranslateVirtual<char*>(export_entry->variable_ptr);
     rex::string::copy_truncating(variable_ptr, executable_module_->path(), kExLoadedImageNameSize);
   }
-
-  // Spin up deferred dispatch worker.
 
   if (!dispatch_thread_running_) {
     dispatch_thread_running_ = true;
@@ -667,8 +623,6 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
                            dispatch_queue_.size());
         global_lock.unlock();
 
-        // Throws out of fn leave the originating overlapped uncompleted and
-        // the waiting guest thread stuck; fail visibly rather than swallow.
         try {
           fn();
         } catch (const std::exception& e) {
@@ -699,7 +653,6 @@ void KernelState::LoadKernelModule(object_ref<KernelModule> kernel_module) {
 
 object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_name,
                                                    bool call_entry) {
-  // Some games try to load relative to launch module, others specify full path.
   auto name = rex::string::utf8_find_name_from_guest_path(raw_name);
   std::string path(raw_name);
   if (name == raw_name) {
@@ -708,8 +661,6 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
         rex::string::utf8_find_base_guest_path(executable_module_->path()), name);
   }
 
-  // loading_paths_ serializes concurrent loaders of the same path; we
-  // can't hold the global lock across LoadFromFile or DllMain ATTACH.
   {
     auto global_lock = global_critical_region_.Acquire();
     for (auto& existing_module : user_modules_) {
@@ -744,8 +695,6 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
 
   module->Dump();
 
-  // Wire recompiled code (if any) before publishing to user_modules_, so a
-  // failure in this block leaves no half-loaded entry behind.
   auto recomp = FindRecompiledModule(path);
   bool wired_recomp = false;
   if (recomp && !recomp->shared_lib_name.empty()) {
@@ -790,8 +739,7 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
               xex->base_address() + xex->image_size());
         } else if (!function_dispatcher_->InitializeFunctionTable(
                        image_info->code_base, image_info->code_size, image_info->image_base,
-                       image_info->image_size, /*is_entrypoint=*/false,
-                       image_info->function_table_base)) {
+                       image_info->image_size, false, image_info->function_table_base)) {
           REXSYS_ERROR("InitializeFunctionTable failed for module '{}'", recomp->pe_name);
         } else {
           function_dispatcher_->RegisterModule(lib_key, image_info->code_base, register_func);
@@ -823,14 +771,14 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
                   module->name());
     } else {
       auto* thread = XThread::GetCurrentThread();
-      uint64_t args[] = {module->hmodule_ptr(), 1 /* DLL_PROCESS_ATTACH */, 0};
+      uint64_t args[] = {module->hmodule_ptr(), 1, 0};
       uint64_t dllmain_ret =
           function_dispatcher_->Execute(thread->thread_state(), module->entry_point(), args, 3);
       if (static_cast<uint32_t>(dllmain_ret) == 0) {
         REXSYS_ERROR("DllMain(DLL_PROCESS_ATTACH) returned FALSE for '{}'; rolling back load",
                      module->name());
-        // call_entry=false: the guest already declined ATTACH, so don't run DETACH.
-        UnloadUserModule(module, /*call_entry=*/false);
+
+        UnloadUserModule(module, false);
         return nullptr;
       }
     }
@@ -840,15 +788,13 @@ object_ref<UserModule> KernelState::LoadUserModule(const std::string_view raw_na
 }
 
 void KernelState::UnloadUserModule(const object_ref<UserModule>& module, bool call_entry) {
-  // Run guest DllMain DETACH outside the global lock to avoid deadlock with
-  // subsystem mutexes acquired from inside the guest callback.
   if (module->is_dll_module() && module->entry_point() && call_entry) {
     if (!XThread::IsInThread()) {
       REXSYS_WARN("DllMain(DLL_PROCESS_DETACH) skipped for '{}': not on a guest thread",
                   module->name());
     } else {
       auto* thread = XThread::GetCurrentThread();
-      uint64_t args[] = {module->hmodule_ptr(), 0 /* DLL_PROCESS_DETACH */, 0};
+      uint64_t args[] = {module->hmodule_ptr(), 0, 0};
       function_dispatcher_->Execute(thread->thread_state(), module->entry_point(), args, 3);
     }
   }
@@ -923,10 +869,7 @@ std::optional<KernelState::RecompiledModuleInfo> KernelState::FindRecompiledModu
     if (info.guest_path == normalized)
       return info;
   }
-  // A module loaded by a bare name is joined to the executable's own path,
-  // the game partition's device path (\Device\Harddisk0\Partition1\...),
-  // which keeps its device in the key; registered paths are relative to the
-  // game root, so they match as the key's trailing segments.
+
   for (const auto& info : recompiled_modules_) {
     if (GuestPathEndsWithModule(normalized, info.guest_path)) {
       return info;
@@ -946,8 +889,6 @@ void KernelState::SignalAllWaitableObjects() {
         break;
       }
       case XObject::Type::Mutant: {
-        // ReleaseMutant reads the current thread; skip on non-kernel threads
-        // (host UI shutdown), where GetCurrentThread asserts.
         if (XThread::IsInThread()) {
           static_cast<XMutant*>(obj.get())->ReleaseMutant(0, false, false);
         }
@@ -994,12 +935,9 @@ void KernelState::TerminateTitle() {
 
   constexpr uint32_t kCooperativeExitTimeoutMs = 200;
 
-  // Guest threads poll this flag in the kernel wait primitives
-  // (XThread::CheckTitleTermination) and self-exit.
   terminating_title_.store(true, std::memory_order_release);
   termination_event_->Set();
 
-  // Retained so a thread that wakes and exits below can't be freed mid-drain.
   std::vector<object_ref<XThread>> target_threads;
   {
     auto global_lock = global_critical_region_.Acquire();
@@ -1010,8 +948,6 @@ void KernelState::TerminateTitle() {
     }
   }
 
-  // Wake blocked waiters: signal objects (non-alertable waiters) and a bare user
-  // callback per target (alertable waits/delays).
   SignalAllWaitableObjects();
   for (auto& thread : target_threads) {
     thread->thread()->QueueUserCallback([] {});
@@ -1019,11 +955,6 @@ void KernelState::TerminateTitle() {
 
   WaitForThreadsToExit(target_threads, kCooperativeExitTimeoutMs);
 
-  // Stragglers are deliberately left running, never force-killed: TerminateThread
-  // orphans whatever host lock the thread holds (CRT heap, mutexes) and deadlocks
-  // teardown. Window close hard-exits and lets the OS reap them.
-
-  // Drop guest threads from the map.
   {
     auto global_lock = global_critical_region_.Acquire();
     for (auto it = threads_by_id_.begin(); it != threads_by_id_.end();) {
@@ -1035,13 +966,10 @@ void KernelState::TerminateTitle() {
     }
   }
 
-  // Drop refs before the self-terminate below (which does not return) so they
-  // aren't leaked; reset the flag for relaunch.
   target_threads.clear();
   termination_event_->Reset();
   terminating_title_.store(false, std::memory_order_release);
 
-  // Self-terminate if called from a guest thread (e.g. XamLoaderTerminateTitle).
   if (XThread::IsInThread()) {
     {
       auto global_lock = global_critical_region_.Acquire();
@@ -1054,9 +982,6 @@ void KernelState::TerminateTitle() {
 void KernelState::RegisterThread(XThread* thread) {
   auto global_lock = global_critical_region_.Acquire();
   threads_by_id_[thread->thread_id()] = thread;
-
-  // Thread count is now managed via thread-process linking in
-  // XThread::InitializeGuestObject and XThread::Exit.
 }
 
 void KernelState::UnregisterThread(XThread* thread) {
@@ -1070,7 +995,6 @@ void KernelState::UnregisterThread(XThread* thread) {
 void KernelState::OnThreadExecute(XThread* thread) {
   auto global_lock = global_critical_region_.Acquire();
 
-  // Must be called on executing thread.
   assert_true(XThread::GetCurrentThread() == thread);
 
   (void)thread;
@@ -1079,7 +1003,6 @@ void KernelState::OnThreadExecute(XThread* thread) {
 void KernelState::OnThreadExit(XThread* thread) {
   auto global_lock = global_critical_region_.Acquire();
 
-  // Must be called on executing thread.
   assert_true(XThread::GetCurrentThread() == thread);
 
   (void)thread;
@@ -1099,21 +1022,18 @@ void KernelState::RegisterNotifyListener(XNotifyListener* listener) {
   auto global_lock = global_critical_region_.Acquire();
   notify_listeners_.push_back(retain_object(listener));
 
-  // Games seem to expect a few notifications on startup, only for the first
-  // listener.
-  // https://cs.rin.ru/forum/viewtopic.php?f=38&t=60668&hilit=resident+evil+5&start=375
   if (!has_notified_startup_ && listener->mask() & 0x00000001) {
     has_notified_startup_ = true;
-    // XN_SYS_UI (on, off)
+
     listener->EnqueueNotification(0x00000009, 1);
     listener->EnqueueNotification(0x00000009, 0);
-    // XN_SYS_SIGNINCHANGED x2
+
     listener->EnqueueNotification(0x0000000A, 1);
     listener->EnqueueNotification(0x0000000A, 1);
-    // XN_SYS_INPUTDEVICESCHANGED x2
+
     listener->EnqueueNotification(0x00000012, 0);
     listener->EnqueueNotification(0x00000012, 0);
-    // XN_SYS_INPUTDEVICECONFIGCHANGED x2
+
     listener->EnqueueNotification(0x00000013, 0);
     listener->EnqueueNotification(0x00000013, 0);
   }
@@ -1149,7 +1069,7 @@ void KernelState::CompleteOverlapped(uint32_t overlapped_ptr, X_RESULT result) {
 void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
                                        uint32_t extended_error, uint32_t length) {
   auto ptr = memory()->TranslateVirtual(overlapped_ptr);
-  // Result last, so a caller polling it for completion reads a valid length.
+
   XOverlappedSetExtendedError(ptr, extended_error);
   XOverlappedSetLength(ptr, length);
   std::atomic_thread_fence(std::memory_order_release);
@@ -1166,7 +1086,6 @@ void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
     X_HANDLE thread_handle = XOverlappedGetContext(ptr);
     auto thread = object_table()->LookupObject<XThread>(thread_handle);
     if (thread) {
-      // Queue APC on the thread that requested the overlapped operation.
       uint32_t routine = XOverlappedGetCompletionRoutine(ptr);
       thread->EnqueueApc(routine, result, length, overlapped_ptr);
     }
@@ -1277,14 +1196,10 @@ bool KernelState::Save(stream::ByteStream* stream) {
   REXSYS_DEBUG("Serializing the kernel...");
   stream->Write(kKernelSaveSignature);
 
-  // Save the object table
   object_table_.Save(stream);
 
-  // Legacy save-state field (global TLS bitmap) no longer used.
   stream->Write(uint32_t(0));
 
-  // We save XThreads absolutely first, as they will execute code upon save
-  // (which could modify the kernel state)
   auto threads = object_table_.GetObjectsByType<XThread>();
   uint32_t* num_threads_ptr = reinterpret_cast<uint32_t*>(stream->data() + stream->offset());
   stream->Write(static_cast<uint32_t>(threads.size()));
@@ -1293,7 +1208,6 @@ bool KernelState::Save(stream::ByteStream* stream) {
   REXSYS_DEBUG("Serializing {} threads...", threads.size());
   for (auto thread : threads) {
     if (!thread->is_guest_thread()) {
-      // Don't save host threads. They can be reconstructed on startup.
       num_threads--;
       continue;
     }
@@ -1306,7 +1220,6 @@ bool KernelState::Save(stream::ByteStream* stream) {
 
   *num_threads_ptr = static_cast<uint32_t>(num_threads);
 
-  // Save all other objects
   auto objects = object_table_.GetAllObjects();
   uint32_t* num_objects_ptr = reinterpret_cast<uint32_t*>(stream->data() + stream->offset());
   stream->Write(static_cast<uint32_t>(objects.size()));
@@ -1317,7 +1230,6 @@ bool KernelState::Save(stream::ByteStream* stream) {
     auto prev_offset = stream->offset();
 
     if (object->is_host_object() || object->type() == XObject::Type::Thread) {
-      // Don't save host objects or save XThreads again
       num_objects--;
       continue;
     }
@@ -1327,7 +1239,6 @@ bool KernelState::Save(stream::ByteStream* stream) {
       REXSYS_DEBUG("Did not save object of type {}", object->type());
       assert_always();
 
-      // Revert backwards and overwrite if a save failed.
       stream->set_offset(prev_offset);
       num_objects--;
     }
@@ -1338,15 +1249,12 @@ bool KernelState::Save(stream::ByteStream* stream) {
 }
 
 bool KernelState::Restore(stream::ByteStream* stream) {
-  // Check the magic value.
   if (stream->Read<uint32_t>() != kKernelSaveSignature) {
     return false;
   }
 
-  // Restore the object table
   object_table_.Restore(stream);
 
-  // Global TLS bitmap field is kept for old save-state compatibility.
   auto num_bitmap_entries = stream->Read<uint32_t>();
   for (uint32_t i = 0; i < num_bitmap_entries; i++) {
     stream->Read<uint64_t>();
@@ -1357,7 +1265,6 @@ bool KernelState::Restore(stream::ByteStream* stream) {
   for (uint32_t i = 0; i < num_threads; i++) {
     auto thread = XObject::Restore(this, XObject::Type::Thread, stream);
     if (!thread) {
-      // Can't continue the restore or we risk misalignment.
       assert_always();
       return false;
     }
@@ -1370,7 +1277,6 @@ bool KernelState::Restore(stream::ByteStream* stream) {
 
     auto obj = XObject::Restore(this, XObject::Type(type), stream);
     if (!obj) {
-      // Can't continue the restore or we risk misalignment.
       assert_always();
       return false;
     }
@@ -1409,4 +1315,4 @@ const char* KernelState::GetOrCreateFiberName(uint32_t guest_addr, const char* t
   return ptr;
 }
 
-}  // namespace rex::system
+}

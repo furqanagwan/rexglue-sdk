@@ -51,8 +51,6 @@ uint32_t UserModule::title_id() const {
 X_STATUS UserModule::LoadFromFile(const std::string_view path) {
   X_STATUS result = X_STATUS_UNSUCCESSFUL;
 
-  // Resolve the file to open.
-
   auto fs_entry = kernel_state_->file_system()->ResolvePath(path);
   if (!fs_entry) {
     REXSYS_ERROR("File not found: {}", path);
@@ -62,54 +60,40 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
   path_ = fs_entry->absolute_path();
   name_ = rex::string::utf8_find_base_name_from_guest_path(path_);
 
-  // If the FS supports mapping, map the file in and load from that.
   if (fs_entry->can_map()) {
-    // Map.
     auto mmap = fs_entry->OpenMapped(memory::MappedMemory::Mode::kRead);
     if (!mmap) {
       return result;
     }
 
-    // Load the module.
     result = LoadFromMemory(mmap->data(), mmap->size());
   } else {
     std::vector<uint8_t> buffer(fs_entry->size());
 
-    // Open file for reading.
     rex::filesystem::File* file = nullptr;
     result = fs_entry->Open(rex::filesystem::FileAccess::kGenericRead, &file);
     if (XFAILED(result)) {
       return result;
     }
 
-    // Read entire file into memory.
-    // Ugh.
     size_t bytes_read = 0;
     result = file->ReadSync(std::span<uint8_t>(buffer), 0, &bytes_read);
     if (XFAILED(result)) {
       return result;
     }
 
-    // Load the module.
     result = LoadFromMemory(buffer.data(), bytes_read);
 
-    // Close the file.
     file->Destroy();
   }
 
-  // Only XEX returns X_STATUS_PENDING
   if (result != X_STATUS_PENDING) {
     return result;
   }
 
-  // XEX patches come from the title update the code was built for, and only
-  // then: an original build must load the original image, whatever lies beside
-  // it. The update holds <name>p at the module's path relative to the game
-  // (data\webkit\EAWebkit.xexp), or at its root.
   rex::filesystem::Entry* patch_entry = nullptr;
   const std::string file_name(rex::string::utf8_find_name_from_guest_path(path_));
   if (xex_module()->is_patch()) {
-    // A patch is not patched itself.
   } else if (kernel_state_->title_update_version()) {
     constexpr std::string_view kGameDevice = "\\Device\\Harddisk0\\Partition1\\";
     auto* fs = kernel_state_->file_system();
@@ -153,7 +137,6 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
 X_STATUS UserModule::LoadFromMemory(const void* addr, const size_t length) {
   auto* dispatcher = kernel_state_->function_dispatcher();
 
-  // Detect format by magic bytes
   be<memory::fourcc_t> magic;
   magic.value = memory::load<memory::fourcc_t>(addr);
 
@@ -167,7 +150,6 @@ X_STATUS UserModule::LoadFromMemory(const void* addr, const size_t length) {
   }
 
   if (module_format_ == kModuleFormatXex) {
-    // Create XexModule to parse and load the XEX image into guest memory
     auto xex_module = new runtime::XexModule(dispatcher, kernel_state_);
     if (!xex_module->Load(name_, path_, addr, length)) {
       delete xex_module;
@@ -176,11 +158,9 @@ X_STATUS UserModule::LoadFromMemory(const void* addr, const size_t length) {
 
     processor_module_ = xex_module;
 
-    // Continue to LoadXexContinue (returns X_STATUS_PENDING per Xenia convention)
     return X_STATUS_PENDING;
 
   } else if (module_format_ == kModuleFormatElf) {
-    // Create ElfModule to parse and load the ELF image into guest memory
     auto elf_module = new runtime::ElfModule(dispatcher, kernel_state_);
     if (!elf_module->Load(name_, path_, addr, length)) {
       delete elf_module;
@@ -188,36 +168,30 @@ X_STATUS UserModule::LoadFromMemory(const void* addr, const size_t length) {
     }
 
     entry_point_ = elf_module->entry_point();
-    stack_size_ = 1024 * 1024;  // 1 MB default stack
+    stack_size_ = 1024 * 1024;
     is_dll_module_ = false;
 
     processor_module_ = elf_module;
     OnLoad();
-    return X_STATUS_SUCCESS;  // ELF doesn't need LoadXexContinue
+    return X_STATUS_SUCCESS;
   }
 
   return X_STATUS_UNSUCCESSFUL;
 }
 
 X_STATUS UserModule::LoadXexContinue() {
-  // LoadXexContinue: finishes loading XEX after a patch has been applied (or
-  // patch wasn't found)
-
   if (!this->xex_module()) {
     return X_STATUS_UNSUCCESSFUL;
   }
 
-  // If guest_xex_header is set we must have already loaded the XEX
   if (guest_xex_header_) {
     return X_STATUS_SUCCESS;
   }
 
-  // Finish XexModule load (PE sections/imports/symbols...)
   if (!xex_module()->LoadContinue()) {
     return X_STATUS_UNSUCCESSFUL;
   }
 
-  // Copy the xex2 header into guest memory.
   auto header = this->xex_module()->xex_header();
   auto security_header = this->xex_module()->xex_security_info();
   guest_xex_header_ = memory()->SystemHeapAlloc(header->header_size);
@@ -225,15 +199,13 @@ X_STATUS UserModule::LoadXexContinue() {
   uint8_t* xex_header_ptr = memory()->TranslateVirtual(guest_xex_header_);
   std::memcpy(xex_header_ptr, header, header->header_size);
 
-  // Cache some commonly used headers...
   this->xex_module()->GetOptHeader(XEX_HEADER_ENTRY_POINT, &entry_point_);
   this->xex_module()->GetOptHeader(XEX_HEADER_DEFAULT_STACK_SIZE, &stack_size_);
   is_dll_module_ = !!(header->module_flags & XEX_MODULE_DLL_MODULE);
 
-  // Setup the loader data entry
   auto ldr_data = memory()->TranslateVirtual<X_LDR_DATA_TABLE_ENTRY*>(hmodule_ptr_);
 
-  ldr_data->dll_base = 0;  // GetProcAddress will read this.
+  ldr_data->dll_base = 0;
   ldr_data->xex_header_base = guest_xex_header_;
   ldr_data->full_image_size = security_header->image_size;
   ldr_data->image_base = this->xex_module()->base_address();
@@ -246,7 +218,6 @@ X_STATUS UserModule::LoadXexContinue() {
 
 X_STATUS UserModule::Unload() {
   if (module_format_ == kModuleFormatXex && (!processor_module_ || !xex_module()->loaded())) {
-    // Quick abort.
     return X_STATUS_SUCCESS;
   }
 
@@ -281,14 +252,12 @@ X_STATUS UserModule::GetSection(const std::string_view name, uint32_t* out_secti
                                 uint32_t* out_section_size) {
   xex2_opt_resource_info* resource_header = nullptr;
   if (!runtime::XexModule::GetOptHeader(xex_header(), XEX_HEADER_RESOURCE_INFO, &resource_header)) {
-    // No resources.
     return X_STATUS_NOT_FOUND;
   }
   uint32_t count = (resource_header->size - 4) / sizeof(xex2_resource);
   for (uint32_t i = 0; i < count; i++) {
     auto& res = resource_header->resources[i];
     if (rex::string::utf8_equal_z(name, std::string_view(res.name, 8))) {
-      // Found!
       *out_section_data = res.address;
       *out_section_size = res.size;
       return X_STATUS_SUCCESS;
@@ -302,7 +271,6 @@ X_STATUS UserModule::GetOptHeader(xex2_header_keys key, void** out_ptr) {
   assert_not_null(out_ptr);
 
   if (module_format_ == kModuleFormatElf) {
-    // Quick die.
     return X_STATUS_UNSUCCESSFUL;
   }
 
@@ -316,7 +284,6 @@ X_STATUS UserModule::GetOptHeader(xex2_header_keys key, void** out_ptr) {
 
 X_STATUS UserModule::GetOptHeader(xex2_header_keys key, uint32_t* out_header_guest_ptr) {
   if (module_format_ == kModuleFormatElf) {
-    // Quick die.
     return X_STATUS_UNSUCCESSFUL;
   }
 
@@ -340,15 +307,15 @@ X_STATUS UserModule::GetOptHeader(const memory::Memory* memory, const xex2_heade
     field_found = true;
     switch (opt_header.key & 0xFF) {
       case 0x00:
-        // Return data stored in header value.
+
         field_value = opt_header.value;
         break;
       case 0x01:
-        // Return pointer to data stored in header value.
+
         field_value = memory->HostToGuestVirtual(&opt_header.value);
         break;
       default:
-        // Data stored at offset to header.
+
         field_value = memory->HostToGuestVirtual(header) + opt_header.offset;
         break;
     }
@@ -366,17 +333,12 @@ bool UserModule::Save(stream::ByteStream* stream) {
     return false;
   }
 
-  // A lot of the information stored on this class can be reconstructed at
-  // runtime.
-
   return true;
 }
 
 object_ref<UserModule> UserModule::Restore(KernelState* kernel_state, stream::ByteStream* stream,
                                            const std::string_view path) {
   auto module = new UserModule(kernel_state);
-
-  // XModule::Save took care of this earlier...
 
   if (!module->RestoreObject(stream)) {
     return nullptr;
@@ -389,7 +351,6 @@ object_ref<UserModule> UserModule::Restore(KernelState* kernel_state, stream::By
   }
 
   if (!kernel_state->RegisterUserModule(retain_object(module))) {
-    // Already loaded?
     assert_always();
   }
 
@@ -398,4 +359,4 @@ object_ref<UserModule> UserModule::Restore(KernelState* kernel_state, stream::By
 
 void UserModule::Dump() {}
 
-}  // namespace rex::system
+}

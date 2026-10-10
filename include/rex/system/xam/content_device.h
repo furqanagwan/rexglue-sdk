@@ -36,6 +36,6 @@ struct DummyDeviceInfo {
 
 const DummyDeviceInfo* GetDummyDeviceInfo(uint32_t device_id);
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}

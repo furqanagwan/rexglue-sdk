@@ -25,4 +25,4 @@ struct AchievementInfo {
   uint32_t flags = 0;
 };
 
-}  // namespace rex::system
+}

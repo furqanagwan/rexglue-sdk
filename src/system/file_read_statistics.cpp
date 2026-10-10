@@ -43,7 +43,7 @@ void ReportWhenIntervalEnds(FileReadStatistics& statistics) {
   REXSYS_INFO("{}", FileReadStatistics::Describe(statistics.TakeSummary(), elapsed));
 }
 
-}  // namespace
+}
 
 FileReadStatistics& FileReadStatistics::Global() {
   static FileReadStatistics statistics;
@@ -107,4 +107,4 @@ ScopedFileReadTimer::~ScopedFileReadTimer() {
   ReportWhenIntervalEnds(statistics);
 }
 
-}  // namespace rex::system
+}

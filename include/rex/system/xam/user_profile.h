@@ -32,8 +32,6 @@ namespace system {
 namespace xam {
 
 struct X_USER_PROFILE_SETTING_DATA {
-  // UserProfile::Setting::Type. Appears to be 8-in-32 field, and the upper 24
-  // are not always zeroed by the game.
   uint8_t type;
   uint8_t unk_1[3];
   rex::be<uint32_t> unk_4;
@@ -111,12 +109,11 @@ class UserProfile {
     size_t size;
     bool is_set;
     uint32_t loaded_title_id;
-    // Whether loaded_title_id names the title this value belongs to; the
-    // defaults a profile starts with belong to none.
+
     bool title_loaded = false;
     Setting(uint32_t setting_id, Type type, size_t size, bool is_set)
         : setting_id(setting_id), type(type), size(size), is_set(is_set), loaded_title_id(0) {}
-    // Settings are owned through the base; derived ones hold vectors.
+
     virtual ~Setting() = default;
     virtual void Append(X_USER_PROFILE_SETTING_DATA* data, SettingByteStream* stream) {
       (void)stream;
@@ -224,35 +221,30 @@ class UserProfile {
   uint64_t xuid() const { return xuid_; }
   std::string name() const { return name_; }
   uint32_t signin_state() const { return 1; }
-  uint32_t type() const { return 1 | 2; /* local | online profile? */ }
+  uint32_t type() const { return 1 | 2; }
 
   void set_kernel_state(KernelState* ks) { kernel_state_ = ks; }
 
-  // Adds or replaces a setting; a title-specific one is also saved to disk.
-  // Returns false if that save failed (the setting is still replaced).
   bool AddSetting(std::unique_ptr<Setting> setting);
-  // The setting, kept alive while the caller holds it even if another thread
-  // replaces it (xenia-canary #5, #981). Null if unknown.
+
   std::shared_ptr<Setting> GetSetting(uint32_t setting_id);
 
  private:
   uint64_t xuid_;
   std::string name_;
-  // Guest threads read and write settings concurrently.
+
   std::mutex settings_mutex_;
   std::unordered_map<uint32_t, std::shared_ptr<Setting>> settings_;
   KernelState* kernel_state_ = nullptr;
 
-  // With settings_mutex_ held.
   std::shared_ptr<Setting> LoadSetting(uint32_t setting_id);
   bool SaveSetting(UserProfile::Setting*);
 };
 
-}  // namespace xam
-}  // namespace system
-}  // namespace rex
+}
+}
+}
 
-// fmt formatter for UserProfile::Setting::Type
 template <>
 struct fmt::formatter<rex::system::xam::UserProfile::Setting::Type> : fmt::formatter<int> {
   template <typename FormatContext>

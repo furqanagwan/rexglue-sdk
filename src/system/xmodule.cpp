@@ -23,10 +23,8 @@ XModule::XModule(KernelState* kernel_state, ModuleType module_type)
       module_type_(module_type),
       processor_module_(nullptr),
       hmodule_ptr_(0) {
-  // Loader data (HMODULE)
   hmodule_ptr_ = memory()->SystemHeapAlloc(sizeof(X_LDR_DATA_TABLE_ENTRY));
 
-  // Hijack the checksum field to store our kernel object handle.
   auto ldr_data = memory()->TranslateVirtual<X_LDR_DATA_TABLE_ENTRY*>(hmodule_ptr_);
   ldr_data->checksum = handle();
 }
@@ -34,7 +32,6 @@ XModule::XModule(KernelState* kernel_state, ModuleType module_type)
 XModule::~XModule() {
   kernel_state_->UnregisterModule(this);
 
-  // Destroy the loader data.
   memory()->SystemHeapFree(hmodule_ptr_);
 }
 
@@ -42,7 +39,7 @@ bool XModule::Matches(const std::string_view name) const {
   return rex::string::utf8_equal_case(rex::string::utf8_find_name_from_guest_path(path()), name) ||
          rex::string::utf8_equal_case(this->name(), name) ||
          rex::string::utf8_equal_case(path(), name);
-}  // namespace system
+}
 
 void XModule::OnLoad() {
   kernel_state_->RegisterModule(this);
@@ -58,7 +55,6 @@ X_STATUS XModule::GetSection(const std::string_view name, uint32_t* out_section_
 }
 
 object_ref<XModule> XModule::GetFromHModule(KernelState* kernel_state, void* hmodule) {
-  // Grab the object from our stashed kernel handle
   return kernel_state->object_table()->LookupObject<XModule>(GetHandleFromHModule(hmodule));
 }
 
@@ -90,8 +86,6 @@ object_ref<XModule> XModule::Restore(KernelState* kernel_state, stream::ByteStre
   auto path = stream->Read<std::string>();
   auto hmodule_ptr = stream->Read<uint32_t>();
 
-  // Can only save user modules at the moment, so just redirect.
-
   auto module = UserModule::Restore(kernel_state, stream, path);
   if (!module) {
     return nullptr;
@@ -103,4 +97,4 @@ object_ref<XModule> XModule::Restore(KernelState* kernel_state, stream::ByteStre
   return module;
 }
 
-}  // namespace rex::system
+}

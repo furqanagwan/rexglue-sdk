@@ -24,7 +24,7 @@ bool XSemaphore::Initialize(int32_t initial_count, int32_t maximum_count) {
 
   CreateNative(sizeof(X_KSEMAPHORE));
   auto* semaphore = guest_object<X_KSEMAPHORE>();
-  semaphore->header.type = 0x05;  // SemaphoreObject
+  semaphore->header.type = 0x05;
   semaphore->header.signal_state = initial_count;
   semaphore->limit = maximum_count;
 
@@ -74,7 +74,6 @@ void XSemaphore::WaitCallback() {
 }
 
 void XSemaphore::BeginSignal() {
-  // SignalAndWait releases one count.
   std::lock_guard<std::mutex> lock(count_lock_);
   ++host_count_;
   WriteGuestCount();
@@ -95,18 +94,14 @@ void XSemaphore::SyncFromGuest() {
   if (guest_count == host_count_) {
     return;
   }
-  // The header holds what this kernel last wrote, so a different count came
-  // from the guest (an in-place KeInitializeSemaphore).
+
   if (guest_count > host_count_) {
     int32_t delta = guest_count - host_count_;
-    // Over the limit the host keeps its count, and the header is corrected
-    // to it below (Canary leaves the guest's value there).
+
     if (semaphore_->Release(delta, nullptr)) {
       host_count_ += delta;
     }
   } else {
-    // Take back the counts the guest dropped, never blocking for one a waiter
-    // has already claimed.
     int32_t delta = host_count_ - guest_count;
     int32_t drained = 0;
     while (drained < delta &&
@@ -124,7 +119,6 @@ bool XSemaphore::Save(stream::ByteStream* stream) {
     return false;
   }
 
-  // Get the free number of slots from the semaphore.
   uint32_t free_count = 0;
   while (rex::thread::Wait(semaphore_.get(), false, std::chrono::milliseconds(0)) ==
          rex::thread::WaitResult::kSuccess) {
@@ -133,7 +127,6 @@ bool XSemaphore::Save(stream::ByteStream* stream) {
 
   REXSYS_DEBUG("XSemaphore {:08X} (count {}/{})", handle(), free_count, maximum_count_);
 
-  // Restore the semaphore back to its previous count.
   semaphore_->Release(free_count, nullptr);
 
   stream->Write(maximum_count_);
@@ -161,4 +154,4 @@ object_ref<XSemaphore> XSemaphore::Restore(KernelState* kernel_state, stream::By
   return object_ref<XSemaphore>(sem);
 }
 
-}  // namespace rex::system
+}

@@ -55,4 +55,4 @@ class Function : public Symbol {
   Behavior behavior_ = Behavior::kDefault;
 };
 
-}  // namespace rex::runtime
+}

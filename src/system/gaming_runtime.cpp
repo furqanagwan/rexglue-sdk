@@ -25,7 +25,6 @@ namespace rex::system {
 
 namespace {
 
-// XGameErr.h, restated so this file needs no GDK header in standard builds.
 constexpr uint32_t kDllNotFound = 0x89240101;
 constexpr uint32_t kVersionMismatch = 0x89240102;
 constexpr uint32_t kMissingDependency = 0x89240107;
@@ -33,10 +32,10 @@ constexpr uint32_t kOptionsMismatch = 0x89240109;
 constexpr uint32_t kOptionsNotSupported = 0x8924010A;
 constexpr uint32_t kGameConfigBadFormat = 0x8924010B;
 constexpr uint32_t kServiceNotAvailable = 0x8924010D;
-// E_GAMEPACKAGE_CONFIG_NO_ROOT_NODE .. E_GAMEPACKAGE_CONFIG_x64_EXECUTABLE_REQUIRED
+
 constexpr uint32_t kPackageConfigFirst = 0x89245209;
 constexpr uint32_t kPackageConfigLast = 0x89245212;
-constexpr uint32_t kModNotFound = 0x8007007E;  // HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND)
+constexpr uint32_t kModNotFound = 0x8007007E;
 constexpr uint32_t kFileNotFound = 0x80070002;
 constexpr uint32_t kPathNotFound = 0x80070003;
 
@@ -46,7 +45,7 @@ constexpr int kEdition = REXGLUE_GDK_EDITION;
 constexpr int kEdition = 0;
 #endif
 
-}  // namespace
+}
 
 struct GamingRuntime::Attempt {
   std::mutex mutex;
@@ -223,7 +222,7 @@ GamingRuntimeResult GamingRuntime::Initialize(std::chrono::milliseconds timeout,
       std::lock_guard lock(attempt->mutex);
       attempt->hresult = hresult;
       attempt->done = true;
-      // Nobody will uninitialize a success the caller already gave up on.
+
       balance = attempt->abandoned && hresult >= 0;
     }
     attempt->done_cv.notify_all();
@@ -247,7 +246,7 @@ GamingRuntimeResult GamingRuntime::Initialize(std::chrono::milliseconds timeout,
   const int32_t hresult = attempt->hresult;
   GamingRuntimeState state = ClassifyGamingRuntimeResult(hresult);
   std::string message = DescribeGamingRuntimeResult(hresult);
-  // File errors are reported unchanged, so a missing config file surfaces here.
+
   if (!config_path.empty() &&
       (uint32_t(hresult) == kFileNotFound || uint32_t(hresult) == kPathNotFound)) {
     state = GamingRuntimeState::kConfigError;
@@ -268,4 +267,4 @@ void GamingRuntime::Uninitialize() {
   result_ = {};
 }
 
-}  // namespace rex::system
+}

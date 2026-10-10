@@ -18,7 +18,6 @@ namespace rex::runtime {
 
 class ThreadState;
 
-// Represents a thread that runs guest code.
 class Thread {
  public:
   Thread();
@@ -29,9 +28,6 @@ class Thread {
   static uint32_t GetCurrentThreadId();
   ThreadState* thread_state() const { return thread_state_; }
 
-  // True if the thread should be paused by the debugger.
-  // All threads that can run guest code must be stopped for the debugger to
-  // work properly.
   bool can_debugger_suspend() const { return can_debugger_suspend_; }
   void set_can_debugger_suspend(bool value) { can_debugger_suspend_ = value; }
 
@@ -48,4 +44,4 @@ class Thread {
   std::string thread_name_;
 };
 
-}  // namespace rex::runtime
+}

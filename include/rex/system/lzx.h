@@ -17,7 +17,7 @@
 
 namespace rex {
 struct xex2_delta_patch;
-}  // namespace rex
+}
 
 int lzx_decompress(const void* lzx_data, size_t lzx_len, void* dest, size_t dest_len,
                    uint32_t window_size, void* window_data, size_t window_data_len);

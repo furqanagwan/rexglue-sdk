@@ -74,4 +74,4 @@ enum class XContentType : uint32_t {
   kCommunityGame = 0x02000000,
 };
 
-}  // namespace rex::system
+}

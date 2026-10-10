@@ -51,7 +51,7 @@ GameInfoWrapper::GameInfoWrapper(const uint8_t* data, size_t data_size)
         data_offset += block_header->block_size;
         break;
       default:
-        // Unsupported headers
+
         data_ = nullptr;
         return;
     }
@@ -76,6 +76,6 @@ std::string GameInfo::module_name() const {
   return std::string(exec_.module_name, exec_.module_name + module_name_length);
 }
 
-}  // namespace util
-}  // namespace system
-}  // namespace rex
+}
+}
+}

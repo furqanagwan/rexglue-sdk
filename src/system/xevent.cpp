@@ -25,8 +25,8 @@ void XEvent::Initialize(bool manual_reset, bool initial_state) {
   manual_reset_ = manual_reset;
   this->CreateNative<X_KEVENT>();
   auto* kevent = guest_object<X_KEVENT>();
-  // Leave the wait list alone: it holds the stashed handle.
-  kevent->header.type = manual_reset ? 0x00 : 0x01;  // Notification : Synchronization
+
+  kevent->header.type = manual_reset ? 0x00 : 0x01;
   kevent->header.signal_state = initial_state ? 1 : 0;
   host_signaled_ = initial_state;
 
@@ -42,10 +42,10 @@ void XEvent::InitializeNative(void* native_ptr, X_DISPATCH_HEADER* header) {
   assert_false(event_);
 
   switch (header->type) {
-    case 0x00:  // EventNotificationObject (manual reset)
+    case 0x00:
       manual_reset_ = true;
       break;
-    case 0x01:  // EventSynchronizationObject (auto reset)
+    case 0x01:
       manual_reset_ = false;
       break;
     default:
@@ -68,7 +68,6 @@ void XEvent::Query(uint32_t* out_type, uint32_t* out_state) {
     *out_type = manual_reset_ ? 0x00 : 0x01;
   }
   if (out_state) {
-    // The live host event; reading it doesn't satisfy a wait.
     *out_state = event_->IsSignaled() ? 1 : 0;
   }
 }
@@ -81,7 +80,6 @@ void XEvent::SetSignalState(bool signaled) {
 }
 
 int32_t XEvent::Set(uint32_t priority_increment, bool wait) {
-  // Held across the host Set so a waiter it releases clears the state after.
   std::lock_guard<std::mutex> lock(state_lock_);
   SetSignalState(true);
   event_->Set();
@@ -90,7 +88,7 @@ int32_t XEvent::Set(uint32_t priority_increment, bool wait) {
 
 int32_t XEvent::Pulse(uint32_t priority_increment, bool wait) {
   std::lock_guard<std::mutex> lock(state_lock_);
-  // KePulseEvent returns the state before the pulse and leaves it reset.
+
   int32_t previous = host_signaled_ ? 1 : 0;
   event_->Pulse();
   SetSignalState(false);
@@ -111,9 +109,6 @@ void XEvent::Clear() {
 }
 
 void XEvent::WaitCallback() {
-  // A satisfied wait resets a synchronization event; a notification event
-  // stays signaled. The callback runs after the wait returns, possibly after
-  // another Set, so it records the host state rather than assuming a reset.
   if (!manual_reset_) {
     std::lock_guard<std::mutex> lock(state_lock_);
     SetSignalState(event_->IsSignaled());
@@ -162,7 +157,6 @@ bool XEvent::Save(stream::ByteStream* stream) {
   }
 
   if (signaled) {
-    // Reset the event in-case it's an auto-reset.
     event_->Set();
   }
 
@@ -194,4 +188,4 @@ object_ref<XEvent> XEvent::Restore(KernelState* kernel_state, stream::ByteStream
   return object_ref<XEvent>(evt);
 }
 
-}  // namespace rex::system
+}

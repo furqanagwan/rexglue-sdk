@@ -30,4 +30,4 @@ uint32_t Thread::GetCurrentThreadId() {
   return Thread::GetCurrentThread()->thread_state()->thread_id();
 }
 
-}  // namespace rex::runtime
+}

@@ -41,27 +41,22 @@ enum class ExportCategory : uint8_t {
 struct ExportTag {
   using type = uint32_t;
 
-  // packed like so:
-  // ll...... cccccccc ........ ..bihssi
-
   static const int CategoryShift = 16;
 
-  // Export is implemented in some form and can be used.
   static const type kImplemented = 1u << 0;
-  // Export is a stub and is probably bad.
+
   static const type kStub = 1u << 1;
-  // Export is known to cause problems, or may not be complete.
+
   static const type kSketchy = 1u << 2;
-  // Export is called *a lot*.
+
   static const type kHighFrequency = 1u << 3;
-  // Export is important and should always be logged.
+
   static const type kImportant = 1u << 4;
-  // Export blocks the calling thread
+
   static const type kBlocking = 1u << 5;
 
-  // Export will be logged on each call.
   static const type kLog = 1u << 30;
-  // Export's result will be logged on each call.
+
   static const type kLogResult = 1u << 31;
 };
 
@@ -87,13 +82,9 @@ class Export {
   }
 
   union {
-    // Variable data. Only valid when type == kVariable.
-    // This is an address in the guest memory space where the variable can
-    // be found at.
     uint32_t variable_ptr;
 
     struct {
-      // Function data (not used in recompiled builds, but kept for structure)
       uint64_t call_count;
     } function_data;
   };
@@ -130,4 +121,4 @@ class ExportResolver {
   std::vector<Export*> all_exports_by_name_;
 };
 
-}  // namespace rex::runtime
+}

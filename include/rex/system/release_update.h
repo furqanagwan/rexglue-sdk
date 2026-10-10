@@ -84,4 +84,4 @@ std::wstring BuildUpdateHelperCommandLine(const UpdateHelperLaunch& launch,
 bool StartUpdateHelper(const UpdateHelperLaunch& launch, const std::filesystem::path& helper_copy,
                        std::string* error);
 
-}  // namespace rex::system::update
+}

@@ -40,14 +40,12 @@ struct N_XSOCKADDR {
 struct XSOCKADDR_IN {
   rex::be<uint16_t> sin_family;
 
-  // Always big-endian!
   rex::be<uint16_t> sin_port;
   rex::be<uint32_t> sin_addr;
-  // sin_zero is defined as __pad on Android, so prefixed here.
+
   char x_sin_zero[8];
 };
 
-// Xenia native sockaddr_in
 struct N_XSOCKADDR_IN {
   N_XSOCKADDR_IN() {}
   N_XSOCKADDR_IN(const XSOCKADDR_IN* other) { *this = *other; }
@@ -63,7 +61,7 @@ struct N_XSOCKADDR_IN {
   uint16_t sin_family;
   rex::be<uint16_t> sin_port;
   rex::be<uint32_t> sin_addr;
-  // sin_zero is defined as __pad on Android, so prefixed here.
+
   char x_sin_zero[8];
 };
 
@@ -84,9 +82,6 @@ class XSocket : public XObject {
     X_IPPROTO_TCP = 6,
     X_IPPROTO_UDP = 17,
 
-    // LIVE Voice and Data Protocol
-    // https://blog.csdn.net/baozi3026/article/details/4277227
-    // Format: [cbGameData][GameData(encrypted)][VoiceData(unencrypted)]
     X_IPPROTO_VDP = 254,
   };
 
@@ -116,7 +111,6 @@ class XSocket : public XObject {
   int SendTo(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_IN* to, uint32_t to_len);
 
   struct packet {
-    // These values are in network byte order.
     rex::be<uint16_t> src_port;
     rex::be<uint32_t> src_ip;
 
@@ -124,19 +118,18 @@ class XSocket : public XObject {
     uint8_t data[1];
   };
 
-  // Queue a packet into our internal buffer.
   bool QueuePacket(uint32_t src_ip, uint16_t src_port, const uint8_t* buf, size_t len);
 
  private:
   XSocket(KernelState* kernel_state, uint64_t native_handle);
   uint64_t native_handle_ = -1;
 
-  AddressFamily af_;    // Address family
-  Type type_;           // Type (DGRAM/Stream/etc)
-  Protocol proto_;      // Protocol (TCP/UDP/etc)
-  bool secure_ = true;  // Secure socket (encryption enabled)
+  AddressFamily af_;
+  Type type_;
+  Protocol proto_;
+  bool secure_ = true;
 
-  bool bound_ = false;  // Explicitly bound to an IP address?
+  bool bound_ = false;
   uint16_t bound_port_ = 0;
 
   bool broadcast_socket_ = false;
@@ -146,4 +139,4 @@ class XSocket : public XObject {
   std::queue<uint8_t*> incoming_packets_;
 };
 
-}  // namespace rex::system
+}

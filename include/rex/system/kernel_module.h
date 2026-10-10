@@ -33,9 +33,6 @@ class KernelModule : public XModule {
   uint32_t GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller_address = 0) override;
   uint32_t GetProcAddressByName(const std::string_view name) override;
 
-  /**
-   * Erase any cached thunks whose guest address falls in [lo, hi).
-   */
   void InvalidateThunkCacheInRange(uint32_t lo, uint32_t hi);
 
  protected:
@@ -48,7 +45,6 @@ class KernelModule : public XModule {
 
   rex::thread::global_critical_region global_critical_region_;
 
-  // Cache of (caller_module_base, ordinal) -> thunk guest address.
   struct ThunkKey {
     uint32_t caller_module_base;
     uint16_t ordinal;
@@ -64,5 +60,5 @@ class KernelModule : public XModule {
   std::unordered_map<ThunkKey, uint32_t, ThunkKeyHash> thunk_cache_;
 };
 
-}  // namespace system
-}  // namespace rex
+}
+}

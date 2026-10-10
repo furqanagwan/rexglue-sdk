@@ -43,9 +43,7 @@ Entry::Status EntryTable::GetOrCreate(uint32_t address, Entry** out_entry) {
   Entry* entry = it != map_.end() ? it->second : nullptr;
   Entry::Status status;
   if (entry) {
-    // If we aren't ready yet spin and wait.
     if (entry->status == Entry::STATUS_COMPILING) {
-      // Still compiling, so spin.
       do {
         global_lock.unlock();
 
@@ -55,7 +53,6 @@ Entry::Status EntryTable::GetOrCreate(uint32_t address, Entry** out_entry) {
     }
     status = entry->status;
   } else {
-    // Create and return for initialization.
     entry = new Entry();
     entry->address = address;
     entry->end_address = 0;
@@ -83,5 +80,4 @@ std::vector<Function*> EntryTable::FindWithAddress(uint32_t address) {
   return fns;
 }
 
-}  // namespace rex::runtime
-// (removed orphan xe namespace)
+}

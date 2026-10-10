@@ -29,7 +29,7 @@ using rex::testing::GetTestMemory;
 
 void DummyFn(PPCContext&, uint8_t*) {}
 
-}  // namespace
+}
 
 TEST_CASE("FunctionDispatcher: caller_address routes thunk to caller's module pool",
           "[runtime][dispatcher]") {
@@ -60,9 +60,6 @@ TEST_CASE("FunctionDispatcher: caller_address routes thunk to caller's module po
 
 TEST_CASE("FunctionDispatcher: AllocateThunk(0) uses the entrypoint pool only when explicit",
           "[runtime][dispatcher]") {
-  // caller_address=0 is reserved for host-initiated allocations that have no
-  // guest caller (the entrypoint wiring its own __imp__* exports during
-  // setup). It must land in the entrypoint module's pool.
   auto& memory = GetTestMemory();
   rex::runtime::ExportResolver resolver;
   rex::runtime::FunctionDispatcher dispatcher(&memory, &resolver);
@@ -71,8 +68,7 @@ TEST_CASE("FunctionDispatcher: AllocateThunk(0) uses the entrypoint pool only wh
   constexpr uint32_t kCodeSize = 0x10000u;
   constexpr uint32_t kImageSize = 0x100000u;
 
-  REQUIRE(dispatcher.InitializeFunctionTable(kModA, kCodeSize, kModA, kImageSize,
-                                             /*is_entrypoint=*/true));
+  REQUIRE(dispatcher.InitializeFunctionTable(kModA, kCodeSize, kModA, kImageSize, true));
 
   uint32_t thunk = dispatcher.AllocateThunk(&DummyFn, 0);
   CHECK(thunk >= kModA + kCodeSize);
@@ -106,9 +102,6 @@ TEST_CASE("FunctionDispatcher: AllocateThunk rejects caller_address outside any 
 
   REQUIRE(dispatcher.InitializeFunctionTable(kModA, kCodeSize, kModA, kImageSize));
 
-  // A non-zero caller_address that doesn't fall inside any module is a bug
-  // in the caller: the right answer is to refuse, not to silently route the
-  // thunk to the entrypoint pool.
   uint32_t thunk = dispatcher.AllocateThunk(&DummyFn, 0xDEADBEEFu);
   CHECK(thunk == 0);
 }
@@ -134,7 +127,7 @@ constexpr uint32_t kRegisterModBase = 0x85000000u;
 void RegisterOne(rex::runtime::IModuleRegistrar* registrar) {
   registrar->SetFunction(kRegisterModBase + 0x10, &DummyFn);
 }
-}  // namespace
+}
 
 TEST_CASE("FunctionDispatcher: UnregisterModule clears pool and slots", "[runtime][dispatcher]") {
   auto& memory = GetTestMemory();
@@ -161,8 +154,6 @@ TEST_CASE("FunctionDispatcher: UnregisterModule clears pool and slots", "[runtim
   CHECK(dispatcher.GetFunction(kRegisterModBase + 0x10) == nullptr);
   CHECK(dispatcher.GetFunction(thunk) == nullptr);
 
-  // Re-init must succeed: UnregisterModule destroys the per-module table so the
-  // same code range can be reloaded without tripping the overlap check.
   REQUIRE(dispatcher.InitializeFunctionTable(kRegisterModBase, kCodeSize, kRegisterModBase,
                                              kImageSize));
   uint32_t thunk_after = dispatcher.AllocateThunk(&DummyFn, kRegisterModBase + 0x100);
@@ -191,7 +182,7 @@ void ScribbleFn(PPCContext& ctx, uint8_t*) {
   ctx.v14.u32[0] = 0xAAAA;
 }
 
-}  // namespace
+}
 
 TEST_CASE("FunctionDispatcher: ExecuteTrap restores the interrupted register state",
           "[runtime][dispatcher]") {
@@ -285,14 +276,14 @@ TEST_CASE("PPCContext: restoring a zeroed fpscr leaves host FP exception masks i
 }
 
 namespace {
-// Distinct bodies, so identical-code folding can't merge them.
+
 void FaultFnA(PPCContext& ctx, uint8_t*) {
   ctx.r3.u64 = 1;
 }
 void FaultFnB(PPCContext& ctx, uint8_t*) {
   ctx.r4.u64 = 2;
 }
-}  // namespace
+}
 
 TEST_CASE("FunctionDispatcher: a host PC maps to the guest function whose code holds it",
           "[runtime][dispatcher]") {

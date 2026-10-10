@@ -33,12 +33,10 @@ void XMutant::Initialize(bool initial_owner) {
 void XMutant::InitializeNative(void* native_ptr, X_DISPATCH_HEADER* header) {
   assert_false(mutant_);
 
-  // Haven't seen this yet, but it's possible.
   assert_always();
 }
 
 X_STATUS XMutant::ReleaseMutant(uint32_t priority_increment, bool abandon, bool wait) {
-  // Call should succeed if we own the mutant, so go ahead and do this.
   if (owning_thread_ == XThread::GetCurrentThread()) {
     owning_thread_ = nullptr;
   }
@@ -88,4 +86,4 @@ void XMutant::WaitCallback() {
   owning_thread_ = XThread::GetCurrentThread();
 }
 
-}  // namespace rex::system
+}

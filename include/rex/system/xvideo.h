@@ -14,13 +14,12 @@
 
 #pragma once
 
-#include <rex/memory.h>  // for be<T>
+#include <rex/memory.h>
 
 namespace rex::system {
 
 #pragma pack(push, 4)
 
-// https://github.com/CodeAsm/ffplay360/blob/master/Common/XTLOnPC.h
 struct X_VIDEO_MODE {
   be<uint32_t> display_width;
   be<uint32_t> display_height;
@@ -37,4 +36,4 @@ static_assert_size(X_VIDEO_MODE, 48);
 
 #pragma pack(pop)
 
-}  // namespace rex::system
+}

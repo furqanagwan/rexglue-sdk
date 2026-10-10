@@ -28,7 +28,6 @@ KernelModule::KernelModule(KernelState* kernel_state, const std::string_view pat
   path_ = path;
   name_ = rex::string::utf8_find_base_name_from_guest_path(path);
 
-  // Persist this object through reloads.
   host_object_ = true;
 
   OnLoad();
@@ -37,7 +36,6 @@ KernelModule::KernelModule(KernelState* kernel_state, const std::string_view pat
 KernelModule::~KernelModule() {}
 
 uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller_address) {
-  // Look up the export in the resolver
   auto export_entry = export_resolver_->GetExportByOrdinal(name_, ordinal);
   if (!export_entry) {
     REXSYS_DEBUG("GetProcAddressByOrdinal: ordinal {:04X} not found in {}", ordinal, name_);
@@ -45,7 +43,6 @@ uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller
   }
 
   if (export_entry->type == rex::runtime::Export::Type::kVariable) {
-    // Variables have guest addresses we can return directly
     REXSYS_DEBUG("GetProcAddressByOrdinal: {} ({:04X}) -> variable at {:08X}", export_entry->name,
                  ordinal, export_entry->variable_ptr);
     return export_entry->variable_ptr;
@@ -55,7 +52,6 @@ uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller
   uint32_t caller_module_base = dispatcher->FindCallerModuleBase(caller_address);
   ThunkKey key{caller_module_base, ordinal};
 
-  // Check thunk cache first (already allocated for this caller's module)
   auto thunk_it = thunk_cache_.find(key);
   if (thunk_it != thunk_cache_.end()) {
     REXSYS_DEBUG("GetProcAddressByOrdinal: {} ({:04X}) in {} -> cached thunk {:08X}",
@@ -63,7 +59,6 @@ uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller
     return thunk_it->second;
   }
 
-  // Look up native implementation by name from the auto-registry
   std::string imp_name = std::string("__imp__") + export_entry->name;
   REXSYS_DEBUG("GetProcAddressByOrdinal: searching registry for '{}'", imp_name);
   PPCFunc* func = rex::ppc::FindPPCFuncByName(imp_name.c_str());
@@ -77,7 +72,6 @@ uint32_t KernelModule::GetProcAddressByOrdinal(uint16_t ordinal, uint32_t caller
     }
   }
 
-  // No native implementation available
   REXSYS_WARN("GetProcAddressByOrdinal: function {} ({:04X}) in {} - no native implementation",
               export_entry->name, ordinal, name_);
   return 0;
@@ -99,4 +93,4 @@ void KernelModule::InvalidateThunkCacheInRange(uint32_t lo, uint32_t hi) {
   }
 }
 
-}  // namespace rex::system
+}

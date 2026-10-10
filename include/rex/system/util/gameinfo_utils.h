@@ -50,7 +50,7 @@ class GameInfoWrapper {
   struct GameInfoBlockTitl {
     rex::be<char16_t> title[128];
     rex::be<char16_t> description[256];
-    rex::be<char16_t> publisher[256];  // assumed field name from wxPirs
+    rex::be<char16_t> publisher[256];
   };
 
  private:
@@ -73,6 +73,6 @@ class GameInfo : public GameInfoWrapper {
   std::string module_name() const;
 };
 
-}  // namespace util
-}  // namespace system
-}  // namespace rex
+}
+}
+}

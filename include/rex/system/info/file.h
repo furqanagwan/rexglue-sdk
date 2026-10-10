@@ -16,7 +16,6 @@
 namespace rex {
 namespace system {
 
-// https://github.com/oukiar/vdash/blob/master/vdash/include/kernel.h
 enum X_FILE_INFORMATION_CLASS {
   XFileDirectoryInformation = 1,
   XFileFullDirectoryInformation,
@@ -59,7 +58,6 @@ enum X_FILE_INFORMATION_CLASS {
 
 #pragma pack(push, 1)
 
-// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_basic_information
 struct X_FILE_BASIC_INFORMATION {
   be<uint64_t> creation_time;
   be<uint64_t> last_access_time;
@@ -69,13 +67,11 @@ struct X_FILE_BASIC_INFORMATION {
 };
 static_assert_size(X_FILE_BASIC_INFORMATION, 0x28);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_internal_information
 struct X_FILE_INTERNAL_INFORMATION {
   be<uint64_t> index_number;
 };
 static_assert_size(X_FILE_INTERNAL_INFORMATION, 8);
 
-// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information
 struct X_FILE_RENAME_INFORMATION {
   be<uint32_t> replace_existing;
   be<uint32_t> root_dir_handle;
@@ -83,25 +79,21 @@ struct X_FILE_RENAME_INFORMATION {
 };
 static_assert_size(X_FILE_RENAME_INFORMATION, 16);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information
 struct X_FILE_DISPOSITION_INFORMATION {
   uint8_t delete_file;
 };
 static_assert_size(X_FILE_DISPOSITION_INFORMATION, 1);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_position_information
 struct X_FILE_POSITION_INFORMATION {
   be<uint64_t> current_byte_offset;
 };
 static_assert_size(X_FILE_POSITION_INFORMATION, 8);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_end_of_file_information
 struct X_FILE_END_OF_FILE_INFORMATION {
   be<uint64_t> end_of_file;
 };
 static_assert_size(X_FILE_END_OF_FILE_INFORMATION, 8);
 
-// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_allocation_information
 struct X_FILE_ALLOCATION_INFORMATION {
   be<uint64_t> allocation_size;
 };
@@ -112,21 +104,19 @@ struct X_FILE_XCTD_COMPRESSION_INFORMATION {
 };
 static_assert_size(X_FILE_XCTD_COMPRESSION_INFORMATION, 4);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_completion_information
 struct X_FILE_COMPLETION_INFORMATION {
   be<uint32_t> handle;
   be<uint32_t> key;
 };
 static_assert_size(X_FILE_COMPLETION_INFORMATION, 8);
 
-// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_network_open_information
 struct X_FILE_NETWORK_OPEN_INFORMATION {
   be<uint64_t> creation_time;
   be<uint64_t> last_access_time;
   be<uint64_t> last_write_time;
   be<uint64_t> change_time;
   be<uint64_t> allocation_size;
-  be<uint64_t> end_of_file;  // size in bytes
+  be<uint64_t> end_of_file;
   be<uint32_t> attributes;
   be<uint32_t> pad;
 };
@@ -134,5 +124,5 @@ static_assert_size(X_FILE_NETWORK_OPEN_INFORMATION, 56);
 
 #pragma pack(pop)
 
-}  // namespace system
-}  // namespace rex
+}
+}

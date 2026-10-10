@@ -113,7 +113,7 @@ void WriteAddedFilesList(const fs::path& previous_folder, const std::vector<fs::
   }
 }
 
-}  // namespace
+}
 
 std::optional<ReleaseVersion> ReleaseVersion::Parse(std::string_view text) {
   if (!text.empty() && (text.front() == 'v' || text.front() == 'V')) {
@@ -445,4 +445,4 @@ bool StartUpdateHelper(const UpdateHelperLaunch& launch, const fs::path& helper_
   return true;
 }
 
-}  // namespace rex::system::update
+}

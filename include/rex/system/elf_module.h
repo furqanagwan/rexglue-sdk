@@ -17,11 +17,10 @@
 
 namespace rex::system {
 class KernelState;
-}  // namespace rex::system
+}
 
 namespace rex::runtime {
 
-// ELF module: Used to load libxenon executables.
 class ElfModule : public Module {
  public:
   ElfModule(FunctionDispatcher* function_dispatcher, rex::system::KernelState* kernel_state);
@@ -32,7 +31,6 @@ class ElfModule : public Module {
   bool is_executable() const override;
   const std::string& path() const { return path_; }
 
-  // Binary introspection overrides
   uint32_t base_address() const override { return base_address_; }
   uint32_t image_size() const override { return image_size_; }
   uint32_t entry_point() const override { return entry_point_; }
@@ -46,10 +44,10 @@ class ElfModule : public Module {
   std::string path_;
 
   bool loaded_ = false;
-  std::vector<uint8_t> elf_header_mem_;  // Holds the ELF header
+  std::vector<uint8_t> elf_header_mem_;
   uint32_t entry_point_ = 0;
   uint32_t base_address_ = 0;
   uint32_t image_size_ = 0;
 };
 
-}  // namespace rex::runtime
+}

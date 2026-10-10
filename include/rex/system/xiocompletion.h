@@ -34,7 +34,6 @@ class XIOCompletion : public XObject {
 
   void QueueNotification(IONotification& notification);
 
-  // Returns true if the wait ended because a notification was received.
   bool WaitForNotification(uint64_t wait_ticks, IONotification* notify);
 
  private:
@@ -45,4 +44,4 @@ class XIOCompletion : public XObject {
   std::unique_ptr<rex::thread::Semaphore> notification_semaphore_ = nullptr;
 };
 
-}  // namespace rex::system
+}

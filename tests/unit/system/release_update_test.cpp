@@ -57,7 +57,7 @@ constexpr std::string_view kReleasesJson = R"([
   {"tag_name": "not-a-version", "prerelease": false, "draft": false, "assets": []}
 ])";
 
-}  // namespace
+}
 
 TEST_CASE("Release versions order as Semantic Versioning", "[system][update]") {
   CHECK(Version("0.1.0-alpha.1") < Version("0.1.0-alpha.2"));

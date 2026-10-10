@@ -58,12 +58,10 @@ X_STATUS XFile::QueryDirectory(X_FILE_DIRECTORY_INFORMATION* out_info, size_t le
   rex::filesystem::Entry* entry = nullptr;
 
   if (!file_name.empty()) {
-    // Only queries in the current directory are supported for now.
     assert_true(rex::string::utf8_find_any_of(file_name, "\\") == std::string_view::npos);
 
     find_engine_.SetRule(file_name);
 
-    // Always restart the search?
     find_index_ = 0;
     entry = file_->entry()->IterateChildren(find_engine_, &find_index_);
     if (!entry) {
@@ -106,7 +104,7 @@ X_STATUS XFile::Read(uint32_t buffer_guest_address, uint32_t buffer_length, uint
                      uint32_t* out_bytes_read, uint32_t apc_context, bool notify_completion) {
   ScopedFileReadTimer read_timer(out_bytes_read);
   std::lock_guard<std::mutex> lock(file_lock_);
-  // A new request clears the file's event (NT notification event).
+
   if (notify_completion) {
     async_event_->Reset();
   }
@@ -118,28 +116,16 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address, uint32_t buffer_leng
                              uint64_t byte_offset, uint32_t* out_bytes_read, uint32_t apc_context,
                              bool notify_completion) {
   if (byte_offset == uint64_t(-1)) {
-    // Read from current position.
     byte_offset = position_;
   }
 
   size_t bytes_read = 0;
   X_STATUS result = X_STATUS_SUCCESS;
-  // Zero length means success for a valid file object according to Windows
-  // tests.
+
   if (buffer_length) {
     if (UINT32_MAX - buffer_guest_address < buffer_length) {
       result = X_STATUS_ACCESS_VIOLATION;
     } else {
-      // Games often read directly to texture/vertex buffer memory - in this
-      // case, invalidation notifications must be sent. However, having any
-      // memory callbacks in the range will result in STATUS_ACCESS_VIOLATION at
-      // least on Windows, without anything being read or any callbacks being
-      // triggered. So for physical memory, host protection must be bypassed,
-      // and invalidation callbacks must be triggered manually (it's also wrong
-      // to trigger invalidation callbacks before reading in this case, because
-      // during the read, the guest may still access the data around the buffer
-      // that is located in the same host pages as the buffer's start and end,
-      // on the GPU - and that must not trigger a race condition).
       uint32_t buffer_guest_high_address = buffer_guest_address + buffer_length - 1;
       rex::memory::BaseHeap* buffer_start_heap = memory()->LookupHeap(buffer_guest_address);
       const rex::memory::BaseHeap* buffer_end_heap =
@@ -210,8 +196,6 @@ X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length, ui
   async_event_->Reset();
   X_STATUS result = X_STATUS_SUCCESS;
 
-  // segments points to an array of buffer pointers of type
-  // "FILE_SEGMENT_ELEMENT", but they can just be treated as normal pointers
   rex::be<uint32_t>* segments =
       reinterpret_cast<rex::be<uint32_t>*>(memory()->TranslateVirtual(segments_guest_address));
 
@@ -264,7 +248,6 @@ X_STATUS XFile::Write(uint32_t buffer_guest_address, uint32_t buffer_length, uin
   std::lock_guard<std::mutex> lock(file_lock_);
   async_event_->Reset();
   if (byte_offset == uint64_t(-1)) {
-    // Write from current position.
     byte_offset = position_;
   }
 
@@ -377,4 +360,4 @@ void XFile::NotifyIOCompletionPorts(XIOCompletion::IONotification& notification)
   }
 }
 
-}  // namespace rex::system
+}

@@ -33,15 +33,14 @@ enum X_FILE_ATTRIBUTES : uint32_t {
   X_FILE_ATTRIBUTE_ENCRYPTED = 0x4000,
 };
 
-// Known as XOVERLAPPED to 360 code.
 struct XAM_OVERLAPPED {
-  be<uint32_t> result;              // 0x0
-  be<uint32_t> length;              // 0x4
-  be<uint32_t> context;             // 0x8
-  be<uint32_t> event;               // 0xC
-  be<uint32_t> completion_routine;  // 0x10
-  be<uint32_t> completion_context;  // 0x14
-  be<uint32_t> extended_error;      // 0x18
+  be<uint32_t> result;
+  be<uint32_t> length;
+  be<uint32_t> context;
+  be<uint32_t> event;
+  be<uint32_t> completion_routine;
+  be<uint32_t> completion_context;
+  be<uint32_t> extended_error;
 };
 
 inline uint32_t XOverlappedGetResult(void* ptr) {
@@ -99,9 +98,9 @@ struct X_ANSI_STRING {
 static_assert_size(X_ANSI_STRING, 8);
 
 struct X_UNICODE_STRING {
-  be<uint16_t> length;          // 0x0
-  be<uint16_t> maximum_length;  // 0x2
-  be<uint32_t> pointer;         // 0x4
+  be<uint16_t> length;
+  be<uint16_t> maximum_length;
+  be<uint32_t> pointer;
 
   void reset() {
     length = 0;
@@ -111,7 +110,6 @@ struct X_UNICODE_STRING {
 };
 static_assert_size(X_UNICODE_STRING, 8);
 
-// https://msdn.microsoft.com/en-us/library/windows/hardware/ff550671(v=vs.85).aspx
 struct X_IO_STATUS_BLOCK {
   union {
     be<X_STATUS> status;
@@ -121,11 +119,11 @@ struct X_IO_STATUS_BLOCK {
 };
 
 struct X_OBJECT_ATTRIBUTES {
-  be<uint32_t> root_directory;  // 0x0
-  be<uint32_t> name_ptr;        // 0x4 PANSI_STRING
-  be<uint32_t> attributes;      // 0xC
+  be<uint32_t> root_directory;
+  be<uint32_t> name_ptr;
+  be<uint32_t> attributes;
 };
 
 #pragma pack(pop)
 
-}  // namespace rex::system
+}

@@ -61,7 +61,6 @@ XLanguage GetUserLanguage() {
   if (language == 0) {
     wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
     if (GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH)) {
-      // Windows locale names contain ASCII language, script and region subtags.
       std::string name;
       for (const wchar_t c : locale) {
         if (!c)
@@ -74,4 +73,4 @@ XLanguage GetUserLanguage() {
   return XLanguage::kEnglish;
 }
 
-}  // namespace rex::system
+}
