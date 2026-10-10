@@ -48,8 +48,15 @@ add_executable(spirv_translator_tests
     ${_gfx}/pipeline/shader/spirv_translator.cpp
     ${_gfx}/pipeline/shader/spirv_translator_alu.cpp
     ${_gfx}/pipeline/shader/spirv_translator_fetch.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_fragment.cpp
     ${_gfx}/pipeline/shader/spirv_translator_memexport.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_operands.cpp
     ${_gfx}/pipeline/shader/spirv_translator_rb.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_rb_color.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_rb_depth_stencil.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_texture_bindings.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_vertex.cpp
+    ${_gfx}/pipeline/shader/spirv_translator_vertex_fetch.cpp
 )
 target_include_directories(spirv_translator_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/thirdparty/renderdoc
