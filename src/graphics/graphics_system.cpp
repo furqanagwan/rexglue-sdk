@@ -27,7 +27,7 @@
 #include <rex/logging.h>
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/window.h>
 #include <rex/ui/windowed_app_context.h>

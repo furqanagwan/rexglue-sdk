@@ -17,8 +17,8 @@
 #include <rex/hook.h>
 #include <rex/types.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xenumerator.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_enumerator.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 
 REXCVAR_DEFINE_UINT32(user_country, 103, "Kernel", "User's country ID");

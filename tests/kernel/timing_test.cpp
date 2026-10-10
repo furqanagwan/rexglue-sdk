@@ -24,8 +24,8 @@
 
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_thread.h>
 
 namespace {
 

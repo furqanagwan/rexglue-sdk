@@ -16,8 +16,8 @@
 #include <rex/stream.h>
 #include <rex/system/file_read_statistics.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xfile.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_file.h>
 #include <rex/thread/mutex.h>
 
 #include <span>

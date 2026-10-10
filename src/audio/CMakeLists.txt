@@ -26,7 +26,7 @@ rex_target_pch(rexaudio
     <rex/thread/mutex.h>
     <rex/ppc/context.h>
     <rex/system/kernel_state.h>
-    <rex/system/xthread.h>
+    <rex/system/kernel_thread.h>
 )
 
 target_include_directories(rexaudio PUBLIC

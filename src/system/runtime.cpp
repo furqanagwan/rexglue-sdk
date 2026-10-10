@@ -30,7 +30,7 @@
 #include <rex/system/thread_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/xmemory.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 
 #include <windows.h>

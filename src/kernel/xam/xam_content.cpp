@@ -18,7 +18,7 @@
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_device.h>
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 #include <rex/system/xtypes.h>
 
 REXCVAR_DEFINE_UINT32(license_mask, 0, "Kernel", "Set license mask for activated content");

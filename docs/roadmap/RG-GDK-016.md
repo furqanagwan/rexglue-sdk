@@ -44,7 +44,7 @@ Unrelated subsystem replacement; CPU JIT; upstream repository mutations; unvalid
 
 ## Relevant Files
 
-- `src/system/xfile.cpp`
+- `src/system/kernel_file.cpp`
 - `src/filesystem/device.cpp`
 - `src/kernel/xboxkrnl/xboxkrnl_io.cpp`
 

@@ -7,21 +7,21 @@ set(REXSYSTEM_SOURCES
     xmemory.cpp
     kernel_module.cpp
     user_module.cpp
-    xthread.cpp
-    xevent.cpp
+    kernel_thread.cpp
+    kernel_event.cpp
     file_read_statistics.cpp
     release_update.cpp
-    xfile.cpp
-    xmutant.cpp
-    xsemaphore.cpp
-    xtimer.cpp
-    xiocompletion.cpp
-    xnotifylistener.cpp
-    xenumerator.cpp
-    xsocket.cpp
-    xsymboliclink.cpp
-    xobject.cpp
-    xmodule.cpp
+    kernel_file.cpp
+    kernel_mutant.cpp
+    kernel_semaphore.cpp
+    kernel_timer.cpp
+    kernel_io_completion.cpp
+    kernel_notify_listener.cpp
+    kernel_enumerator.cpp
+    kernel_socket.cpp
+    kernel_symbolic_link.cpp
+    kernel_object.cpp
+    kernel_module_object.cpp
     guest_path.cpp
     user_language.cpp
     game_source.cpp

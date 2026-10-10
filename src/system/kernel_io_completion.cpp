@@ -9,7 +9,7 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-#include <rex/system/xiocompletion.h>
+#include <rex/system/kernel_io_completion.h>
 
 namespace rex::system {
 

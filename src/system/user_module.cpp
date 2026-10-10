@@ -20,8 +20,8 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/xex_module.h>
-#include <rex/system/xfile.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_file.h>
+#include <rex/system/kernel_thread.h>
 
 namespace rex::system {
 

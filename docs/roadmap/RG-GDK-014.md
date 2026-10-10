@@ -42,10 +42,10 @@ Unrelated subsystem replacement; CPU JIT; upstream repository mutations; unvalid
 
 ## Relevant Files
 
-- `src/system/xobject.cpp`
-- `src/system/xevent.cpp`
-- `src/system/xsemaphore.cpp`
-- `src/system/xthread.cpp`
+- `src/system/kernel_object.cpp`
+- `src/system/kernel_event.cpp`
+- `src/system/kernel_semaphore.cpp`
+- `src/system/kernel_thread.cpp`
 - `tests/unit/kernel/object_table_test.cpp`
 
 ## Tasks

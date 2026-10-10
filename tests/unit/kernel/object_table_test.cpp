@@ -4,7 +4,7 @@
 
 #include <rex/logging.h>
 #include <rex/system/util/object_table.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 
 using namespace rex;
 using namespace rex::system;

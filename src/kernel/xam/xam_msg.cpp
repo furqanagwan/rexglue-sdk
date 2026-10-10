@@ -17,9 +17,9 @@
 #include <rex/hook.h>
 #include <rex/types.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xevent.h>
+#include <rex/system/kernel_event.h>
 #include <rex/system/xio.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 
 namespace rex {

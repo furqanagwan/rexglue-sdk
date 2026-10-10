@@ -22,7 +22,7 @@ rex_target_pch(rexinput
     <rex/thread/mutex.h>
     <rex/ppc/context.h>
     <rex/system/kernel_state.h>
-    <rex/system/xthread.h>
+    <rex/system/kernel_thread.h>
     <rex/ui/window.h>
     <rex/ui/presenter.h>
 )

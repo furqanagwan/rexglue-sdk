@@ -23,9 +23,9 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_language.h>
 #include <rex/system/xam/user_profile.h>
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 #include <rex/system/xio.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 
 REXCVAR_DEFINE_UINT32(user_language, 1, "Kernel",

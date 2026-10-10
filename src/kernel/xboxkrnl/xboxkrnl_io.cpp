@@ -23,11 +23,11 @@
 #include <rex/system/guest_path.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/string_utils.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xfile.h>
-#include <rex/system/xiocompletion.h>
-#include <rex/system/xsymboliclink.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_file.h>
+#include <rex/system/kernel_io_completion.h>
+#include <rex/system/kernel_symbolic_link.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread/mutex.h>
 

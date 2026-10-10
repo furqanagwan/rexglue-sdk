@@ -12,8 +12,8 @@
 #include <rex/chrono/chrono.h>
 #include <rex/chrono/clock.h>
 #include <rex/logging.h>
-#include <rex/system/xthread.h>
-#include <rex/system/xtimer.h>
+#include <rex/system/kernel_thread.h>
+#include <rex/system/kernel_timer.h>
 
 namespace rex::system {
 

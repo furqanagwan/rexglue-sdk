@@ -19,8 +19,8 @@
 
 #include "kernel_fixture.h"
 
-#include <rex/system/xevent.h>
-#include <rex/system/xsemaphore.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_semaphore.h>
 
 namespace {
 

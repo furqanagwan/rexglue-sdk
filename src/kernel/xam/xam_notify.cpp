@@ -14,7 +14,7 @@
 #include <rex/hook.h>
 #include <rex/types.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xnotifylistener.h>
+#include <rex/system/kernel_notify_listener.h>
 #include <rex/system/xtypes.h>
 
 namespace rex {

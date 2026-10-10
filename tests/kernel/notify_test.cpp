@@ -13,7 +13,7 @@
 #include <vector>
 
 #include <rex/system/xam/title_launch.h>
-#include <rex/system/xnotifylistener.h>
+#include <rex/system/kernel_notify_listener.h>
 
 #include "kernel_fixture.h"
 

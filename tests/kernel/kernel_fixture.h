@@ -35,8 +35,8 @@
 #include <rex/runtime.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_manager.h>
-#include <rex/system/xfile.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_file.h>
+#include <rex/system/kernel_object.h>
 
 namespace rex::testing {
 

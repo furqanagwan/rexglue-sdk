@@ -2,7 +2,7 @@
 
 What guest code can rely on for waits, delays, APCs and title termination in
 the static runtime, and what was measured (RG-GDK-015). Code:
-`src/system/xthread.cpp`, `src/system/xobject.cpp`,
+`src/system/kernel_thread.cpp`, `src/system/kernel_object.cpp`,
 `src/system/kernel_state.cpp`, `src/core/threading_win.cpp`.
 
 ## Threads and generated code

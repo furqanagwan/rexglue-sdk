@@ -15,8 +15,8 @@
 #include <rex/logging.h>
 #include <rex/stream.h>
 #include <rex/system/util/object_table.h>
-#include <rex/system/xobject.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_object.h>
+#include <rex/system/kernel_thread.h>
 
 namespace rex::system::util {
 

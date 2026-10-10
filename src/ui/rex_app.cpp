@@ -48,7 +48,7 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_language.h>
 #include <rex/system/util/xdbf_utils.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/guide/guide_notification.h>

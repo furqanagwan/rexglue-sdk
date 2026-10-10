@@ -12,7 +12,7 @@
 
 #include <mutex>
 
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread.h>
 

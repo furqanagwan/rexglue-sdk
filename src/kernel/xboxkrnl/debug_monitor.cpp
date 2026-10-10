@@ -21,7 +21,7 @@
 #include <rex/ppc/context.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 
 REXCVAR_DEFINE_BOOL(kernel_pix, false, "Kernel", "Enable PIX debugging support");
 

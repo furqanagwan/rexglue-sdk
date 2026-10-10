@@ -20,7 +20,7 @@
 #include <rex/ppc/context.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 
 namespace rex::kernel::xboxkrnl {
 

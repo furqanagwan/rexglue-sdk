@@ -19,7 +19,7 @@
 #include <rex/audio/xma/register_file.h>
 #include <rex/bit.h>
 #include <rex/kernel.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 
 namespace rex::runtime {
 class FunctionDispatcher;

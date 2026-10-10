@@ -14,7 +14,7 @@
 
 #include <rex/system/util/xex2_info.h>
 #include <rex/system/xex_module.h>
-#include <rex/system/xmodule.h>
+#include <rex/system/kernel_module_object.h>
 #include <rex/system/xtypes.h>
 
 namespace rex {
