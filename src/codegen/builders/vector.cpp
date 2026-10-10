@@ -72,7 +72,7 @@ namespace rex::codegen {
 // Vector Floating Point Arithmetic
 //=============================================================================
 
-bool build_mtvscr(BuilderContext& ctx) {
+bool BuildMtvscr(BuilderContext& ctx) {
   // Guest word 3 is host lane 0. Only NJ and SAT have defined local behavior.
   auto source = ctx.v(ctx.insn.operands[0]);
   ctx.println("\tctx.vscr_nj = ({}.u32[0] >> 16) & 1;", source);
@@ -81,7 +81,7 @@ bool build_mtvscr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mfvscr(BuilderContext& ctx) {
+bool BuildMfvscr(BuilderContext& ctx) {
   auto dest = ctx.v(ctx.insn.operands[0]);
   ctx.println("\t{}.u64[0] = 0;", dest);
   ctx.println("\t{}.u64[1] = 0;", dest);
@@ -89,7 +89,7 @@ bool build_mfvscr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vaddfp(BuilderContext& ctx) {
+bool BuildVaddfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vadd(simde_mm_load_ps({}.f32), "
@@ -98,7 +98,7 @@ bool build_vaddfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsubfp(BuilderContext& ctx) {
+bool BuildVsubfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vsub(simde_mm_load_ps({}.f32), "
@@ -107,7 +107,7 @@ bool build_vsubfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vmulfp128(BuilderContext& ctx) {
+bool BuildVmulfp128(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmul(simde_mm_load_ps({}.f32), "
@@ -116,7 +116,7 @@ bool build_vmulfp128(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vmaddfp(BuilderContext& ctx) {
+bool BuildVmaddfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   // (vA x vC) + vB, with PowerPC NaN rules (rex/ppc/fp.h).
   ctx.println(
@@ -127,7 +127,7 @@ bool build_vmaddfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vnmsubfp(BuilderContext& ctx) {
+bool BuildVnmsubfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   // -((vA x vC) - vB); a NaN result keeps its sign (rex/ppc/fp.h).
   ctx.println(
@@ -138,7 +138,7 @@ bool build_vnmsubfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vmaxfp(BuilderContext& ctx) {
+bool BuildVmaxfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmax(simde_mm_load_ps({}.f32), "
@@ -147,7 +147,7 @@ bool build_vmaxfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vminfp(BuilderContext& ctx) {
+bool BuildVminfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.println(
       "\tsimde_mm_store_ps({}.f32, rex::ppc::fp::vmin(simde_mm_load_ps({}.f32), "
@@ -156,27 +156,27 @@ bool build_vminfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrefp(BuilderContext& ctx) {
+bool BuildVrefp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr("simde_mm_div_ps(simde_mm_set1_ps(1), simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
-bool build_vrsqrtefp(BuilderContext& ctx) {
+bool BuildVrsqrtefp(BuilderContext& ctx) {
   // The Xenon's estimate, from a table (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vrsqrte(simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
-bool build_vexptefp(BuilderContext& ctx) {
+bool BuildVexptefp(BuilderContext& ctx) {
   // The Xenon 2^x estimate (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vexpte(simde_mm_load_ps({vA}.f32))");
   return true;
 }
 
-bool build_vlogefp(BuilderContext& ctx) {
+bool BuildVlogefp(BuilderContext& ctx) {
   // The Xenon log2 estimate (rex/ppc/fp.h).
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr("rex::ppc::fp::vloge(simde_mm_load_ps({vA}.f32))");
@@ -187,7 +187,7 @@ bool build_vlogefp(BuilderContext& ctx) {
 // Vector Dot Products
 //=============================================================================
 
-bool build_vmsum3fp128(BuilderContext& ctx) {
+bool BuildVmsum3fp128(BuilderContext& ctx) {
   // 3-element dot product accounting for guest->host vector element reversal
   // 0xEF = dot(yzw) with result broadcast to all elements (see constants doc)
   ctx.emit_set_flush_mode(true);
@@ -198,7 +198,7 @@ bool build_vmsum3fp128(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vmsum4fp128(BuilderContext& ctx) {
+bool BuildVmsum4fp128(BuilderContext& ctx) {
   // 4-element dot product: 0xFF = all 4 elements, result to all (see constants doc)
   ctx.emit_set_flush_mode(true);
   ctx.println(
@@ -212,7 +212,7 @@ bool build_vmsum4fp128(BuilderContext& ctx) {
 // Vector Rounding
 //=============================================================================
 
-bool build_vrfim(BuilderContext& ctx) {
+bool BuildVrfim(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr(
       "simde_mm_round_ps(simde_mm_load_ps({vA}.f32), "
@@ -220,7 +220,7 @@ bool build_vrfim(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrfin(BuilderContext& ctx) {
+bool BuildVrfin(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr(
       "simde_mm_round_ps(simde_mm_load_ps({vA}.f32), "
@@ -228,7 +228,7 @@ bool build_vrfin(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrfip(BuilderContext& ctx) {
+bool BuildVrfip(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr(
       "simde_mm_round_ps(simde_mm_load_ps({vA}.f32), "
@@ -236,7 +236,7 @@ bool build_vrfip(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrfiz(BuilderContext& ctx) {
+bool BuildVrfiz(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_unary_expr(
       "simde_mm_round_ps(simde_mm_load_ps({vA}.f32), "
@@ -274,19 +274,19 @@ void emitPackSaturation(BuilderContext& ctx, const char* lane, size_t count, con
 }
 }  // namespace
 
-bool build_vaddsbs(BuilderContext& ctx) {
+bool BuildVaddsbs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s8", 16, "INT8_MIN", "INT8_MAX", '+');
   ctx.emit_vec_int_binary("adds_epi8", "s8");
   return true;
 }
 
-bool build_vaddshs(BuilderContext& ctx) {
+bool BuildVaddshs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s16", 8, "INT16_MIN", "INT16_MAX", '+');
   ctx.emit_vec_int_binary("adds_epi16", "s16");
   return true;
 }
 
-bool build_vaddsws(BuilderContext& ctx) {
+bool BuildVaddsws(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s32", 4, "INT32_MIN", "INT32_MAX", '+');
   // vaddsws: Vector Add Signed Word Saturate
   auto vD = ctx.v(ctx.insn.operands[0]);
@@ -320,28 +320,28 @@ bool build_vaddsws(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vaddubm(BuilderContext& ctx) {
+bool BuildVaddubm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("add_epi8", "u8");
   return true;
 }
 
-bool build_vaddubs(BuilderContext& ctx) {
+bool BuildVaddubs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u8", 16, "0", "UINT8_MAX", '+');
   ctx.emit_vec_int_binary("adds_epu8", "u8");
   return true;
 }
 
-bool build_vadduhm(BuilderContext& ctx) {
+bool BuildVadduhm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("add_epi16", "u16");
   return true;
 }
 
-bool build_vadduwm(BuilderContext& ctx) {
+bool BuildVadduwm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("add_epi32", "u32");
   return true;
 }
 
-bool build_vaddcuw(BuilderContext& ctx) {
+bool BuildVaddcuw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; ++i) {
     ctx.println("\t{}.u32[{}] = uint32_t(uint64_t({}.u32[{}]) + {}.u32[{}] > UINT32_MAX);",
                 ctx.v(ctx.insn.operands[0]), i, ctx.v(ctx.insn.operands[1]), i,
@@ -350,7 +350,7 @@ bool build_vaddcuw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsubcuw(BuilderContext& ctx) {
+bool BuildVsubcuw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; ++i) {
     ctx.println("\t{}.u32[{}] = uint32_t({}.u32[{}] >= {}.u32[{}]);", ctx.v(ctx.insn.operands[0]),
                 i, ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
@@ -358,7 +358,7 @@ bool build_vsubcuw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vavguw(BuilderContext& ctx) {
+bool BuildVavguw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; ++i) {
     ctx.println("\t{}.u32[{}] = uint32_t((uint64_t({}.u32[{}]) + {}.u32[{}] + 1) >> 1);",
                 ctx.v(ctx.insn.operands[0]), i, ctx.v(ctx.insn.operands[1]), i,
@@ -367,7 +367,7 @@ bool build_vavguw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vmaxuw(BuilderContext& ctx) {
+bool BuildVmaxuw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; ++i) {
     ctx.println("\t{}.u32[{}] = std::max({}.u32[{}], {}.u32[{}]);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
@@ -375,7 +375,7 @@ bool build_vmaxuw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vadduws(BuilderContext& ctx) {
+bool BuildVadduws(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u32", 4, "0", "UINT32_MAX", '+');
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "
@@ -385,13 +385,13 @@ bool build_vadduws(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vadduhs(BuilderContext& ctx) {
+bool BuildVadduhs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u16", 8, "0", "UINT16_MAX", '+');
   ctx.emit_vec_int_binary("adds_epu16", "u16");
   return true;
 }
 
-bool build_vsubsws(BuilderContext& ctx) {
+bool BuildVsubsws(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s32", 4, "INT32_MIN", "INT32_MAX", '-');
 
   for (size_t i = 0; i < 4; i++) {
@@ -403,18 +403,18 @@ bool build_vsubsws(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsububm(BuilderContext& ctx) {
+bool BuildVsububm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("sub_epi8", "u8");
   return true;
 }
 
-bool build_vsububs(BuilderContext& ctx) {
+bool BuildVsububs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u8", 16, "0", "UINT8_MAX", '-');
   ctx.emit_vec_int_binary("subs_epu8", "u8");
   return true;
 }
 
-bool build_vsubuws(BuilderContext& ctx) {
+bool BuildVsubuws(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u32", 4, "0", "UINT32_MAX", '-');
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "
@@ -426,84 +426,84 @@ bool build_vsubuws(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsubuhs(BuilderContext& ctx) {
+bool BuildVsubuhs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "u16", 8, "0", "UINT16_MAX", '-');
   ctx.emit_vec_int_binary("subs_epu16", "u16");
   return true;
 }
 
-bool build_vsubuhm(BuilderContext& ctx) {
+bool BuildVsubuhm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("sub_epi16", "u16");
   return true;
 }
 
-bool build_vsubuwm(BuilderContext& ctx) {
+bool BuildVsubuwm(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("sub_epi32", "u32");
   return true;
 }
 
-bool build_vmaxsw(BuilderContext& ctx) {
+bool BuildVmaxsw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("max_epi32", "s32");
   return true;
 }
 
-bool build_vmaxsh(BuilderContext& ctx) {
+bool BuildVmaxsh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("max_epi16", "s16");
   return true;
 }
 
-bool build_vmaxsb(BuilderContext& ctx) {
+bool BuildVmaxsb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("max_epi8", "s8");
   return true;
 }
 
-bool build_vminsh(BuilderContext& ctx) {
+bool BuildVminsh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epi16", "s16");
   return true;
 }
 
-bool build_vminsb(BuilderContext& ctx) {
+bool BuildVminsb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epi8", "s8");
   return true;
 }
 
-bool build_vminsw(BuilderContext& ctx) {
+bool BuildVminsw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epi32", "s32");
   return true;
 }
 
-bool build_vmaxuh(BuilderContext& ctx) {
+bool BuildVmaxuh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("max_epu16", "u16");
   return true;
 }
 
-bool build_vminuh(BuilderContext& ctx) {
+bool BuildVminuh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epu16", "u16");
   return true;
 }
 
-bool build_vminuw(BuilderContext& ctx) {
+bool BuildVminuw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epu32", "u32");
   return true;
 }
 
-bool build_vsubsbs(BuilderContext& ctx) {
+bool BuildVsubsbs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s8", 16, "INT8_MIN", "INT8_MAX", '-');
   ctx.emit_vec_int_binary("subs_epi8", "s8");
   return true;
 }
 
-bool build_vmaxub(BuilderContext& ctx) {
+bool BuildVmaxub(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("max_epu8", "u8");
   return true;
 }
 
-bool build_vminub(BuilderContext& ctx) {
+bool BuildVminub(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("min_epu8", "u8");
   return true;
 }
 
-bool build_vsubshs(BuilderContext& ctx) {
+bool BuildVsubshs(BuilderContext& ctx) {
   emitArithmeticSaturation(ctx, "s16", 8, "INT16_MIN", "INT16_MAX", '-');
   ctx.emit_vec_int_binary("subs_epi16", "s16");
   return true;
@@ -513,7 +513,7 @@ bool build_vsubshs(BuilderContext& ctx) {
 // Vector Average
 //=============================================================================
 
-bool build_vavgsb(BuilderContext& ctx) {
+bool BuildVavgsb(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "rex::ppc::simde_mm_avg_epi8(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -522,7 +522,7 @@ bool build_vavgsb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vavgsh(BuilderContext& ctx) {
+bool BuildVavgsh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u16, "
       "rex::ppc::simde_mm_avg_epi16(simde_mm_load_si128((simde__m128i*){}.u16), "
@@ -531,7 +531,7 @@ bool build_vavgsh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vavgsw(BuilderContext& ctx) {
+bool BuildVavgsw(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s32, "
       "rex::ppc::simde_mm_avg_epi32("
@@ -541,12 +541,12 @@ bool build_vavgsw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vavgub(BuilderContext& ctx) {
+bool BuildVavgub(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("avg_epu8", "u8");
   return true;
 }
 
-bool build_vavguh(BuilderContext& ctx) {
+bool BuildVavguh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("avg_epu16", "u16");
   return true;
 }
@@ -555,24 +555,24 @@ bool build_vavguh(BuilderContext& ctx) {
 // Vector Logical
 //=============================================================================
 
-bool build_vand(BuilderContext& ctx) {
+bool BuildVand(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("and_si128", "u8");
   return true;
 }
 
-bool build_vandc128(BuilderContext& ctx) {
+bool BuildVandc128(BuilderContext& ctx) {
   // vandc128: vD = vA & ~vB (simde_mm_andnot_si128 has reversed operand semantics)
   ctx.emit_vec_int_binary_swapped("andnot_si128", "u8");
   return true;
 }
 
-bool build_vandc(BuilderContext& ctx) {
+bool BuildVandc(BuilderContext& ctx) {
   // vandc: vD = vA & ~vB (simde_mm_andnot_si128 has reversed operand semantics)
   ctx.emit_vec_int_binary_swapped("andnot_si128", "u8");
   return true;
 }
 
-bool build_vor(BuilderContext& ctx) {
+bool BuildVor(BuilderContext& ctx) {
   ctx.print("\tsimde_mm_store_si128((simde__m128i*){}.u8, ", ctx.v(ctx.insn.operands[0]));
 
   if (ctx.insn.operands[1] != ctx.insn.operands[2])
@@ -586,7 +586,7 @@ bool build_vor(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vxor(BuilderContext& ctx) {
+bool BuildVxor(BuilderContext& ctx) {
   ctx.print("\tsimde_mm_store_si128((simde__m128i*){}.u8, ", ctx.v(ctx.insn.operands[0]));
 
   if (ctx.insn.operands[1] != ctx.insn.operands[2])
@@ -600,7 +600,7 @@ bool build_vxor(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vnor(BuilderContext& ctx) {
+bool BuildVnor(BuilderContext& ctx) {
   // vnor: vD = ~(vA | vB)
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -613,7 +613,7 @@ bool build_vnor(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsel(BuilderContext& ctx) {
+bool BuildVsel(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_or_si128(simde_mm_andnot_si128(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -629,7 +629,7 @@ bool build_vsel(BuilderContext& ctx) {
 // Vector Compare
 //=============================================================================
 
-bool build_vcmpbfp(BuilderContext& ctx) {
+bool BuildVcmpbfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   // vcmpbfp: Vector Compare Bounds Floating Point
   // For each element i:
@@ -659,7 +659,7 @@ bool build_vcmpbfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpeqfp(BuilderContext& ctx) {
+bool BuildVcmpeqfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_binary("cmpeq");
   if (isRecordForm(ctx.insn))
@@ -668,7 +668,7 @@ bool build_vcmpeqfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpequb(BuilderContext& ctx) {
+bool BuildVcmpequb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("cmpeq_epi8", "u8");
   if (isRecordForm(ctx.insn))
     ctx.println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", ctx.cr(6),
@@ -676,7 +676,7 @@ bool build_vcmpequb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpequh(BuilderContext& ctx) {
+bool BuildVcmpequh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_cmpeq_epi16(simde_mm_load_si128((simde__m128i*){}.u16), "
@@ -688,7 +688,7 @@ bool build_vcmpequh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpequw(BuilderContext& ctx) {
+bool BuildVcmpequw(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_cmpeq_epi32(simde_mm_load_si128((simde__m128i*){}.u32), "
@@ -700,7 +700,7 @@ bool build_vcmpequw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgefp(BuilderContext& ctx) {
+bool BuildVcmpgefp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_binary("cmpge");
   if (isRecordForm(ctx.insn))
@@ -709,7 +709,7 @@ bool build_vcmpgefp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtfp(BuilderContext& ctx) {
+bool BuildVcmpgtfp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.emit_vec_fp_binary("cmpgt");
   if (isRecordForm(ctx.insn))
@@ -718,7 +718,7 @@ bool build_vcmpgtfp(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtub(BuilderContext& ctx) {
+bool BuildVcmpgtub(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "rex::ppc::simde_mm_cmpgt_epu8(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -730,7 +730,7 @@ bool build_vcmpgtub(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtuh(BuilderContext& ctx) {
+bool BuildVcmpgtuh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "rex::ppc::simde_mm_cmpgt_epu16(simde_mm_load_si128((simde__m128i*){}.u16), "
@@ -742,7 +742,7 @@ bool build_vcmpgtuh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtuw(BuilderContext& ctx) {
+bool BuildVcmpgtuw(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u32, "
       "simde_mm_cmpgt_epi32(simde_mm_xor_si128(simde_mm_load_si128((simde__m128i*){}.u32), "
@@ -758,7 +758,7 @@ bool build_vcmpgtuw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtsb(BuilderContext& ctx) {
+bool BuildVcmpgtsb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("cmpgt_epi8", "u8");
   if (isRecordForm(ctx.insn))
     ctx.println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", ctx.cr(6),
@@ -766,7 +766,7 @@ bool build_vcmpgtsb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtsh(BuilderContext& ctx) {
+bool BuildVcmpgtsh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_cmpgt_epi16(simde_mm_load_si128((simde__m128i*){}.u16), "
@@ -778,7 +778,7 @@ bool build_vcmpgtsh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcmpgtsw(BuilderContext& ctx) {
+bool BuildVcmpgtsw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary("cmpgt_epi32", "u32");
   if (isRecordForm(ctx.insn))
     ctx.println(
@@ -791,7 +791,7 @@ bool build_vcmpgtsw(BuilderContext& ctx) {
 // Vector Conversion
 //=============================================================================
 
-bool build_vctsxs(BuilderContext& ctx) {
+bool BuildVctsxs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.print("\tsimde_mm_store_si128((simde__m128i*){}.s32, rex::ppc::simde_mm_vctsxs(",
             ctx.v(ctx.insn.operands[0]));
@@ -803,7 +803,7 @@ bool build_vctsxs(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcfsx(BuilderContext& ctx) {
+bool BuildVcfsx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.print("\tsimde_mm_store_ps({}.f32, ", ctx.v(ctx.insn.operands[0]));
   if (ctx.insn.operands[2] != 0) {
@@ -819,7 +819,7 @@ bool build_vcfsx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vcfux(BuilderContext& ctx) {
+bool BuildVcfux(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   ctx.print("\tsimde_mm_store_ps({}.f32, ", ctx.v(ctx.insn.operands[0]));
   if (ctx.insn.operands[2] != 0) {
@@ -836,7 +836,7 @@ bool build_vcfux(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vctuxs(BuilderContext& ctx) {
+bool BuildVctuxs(BuilderContext& ctx) {
   // Vector Convert To Unsigned Fixed-Point Word Saturate
   ctx.emit_set_flush_mode(true);
   ctx.print("\tsimde_mm_store_si128((simde__m128i*){}.u32, rex::ppc::simde_mm_vctuxs(",
@@ -853,32 +853,32 @@ bool build_vctuxs(BuilderContext& ctx) {
 // Vector Merge
 //=============================================================================
 
-bool build_vmrghb(BuilderContext& ctx) {
+bool BuildVmrghb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpackhi_epi8", "u8");
   return true;
 }
 
-bool build_vmrghh(BuilderContext& ctx) {
+bool BuildVmrghh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpackhi_epi16", "u16");
   return true;
 }
 
-bool build_vmrghw(BuilderContext& ctx) {
+bool BuildVmrghw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpackhi_epi32", "u32");
   return true;
 }
 
-bool build_vmrglb(BuilderContext& ctx) {
+bool BuildVmrglb(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpacklo_epi8", "u8");
   return true;
 }
 
-bool build_vmrglh(BuilderContext& ctx) {
+bool BuildVmrglh(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpacklo_epi16", "u16");
   return true;
 }
 
-bool build_vmrglw(BuilderContext& ctx) {
+bool BuildVmrglw(BuilderContext& ctx) {
   ctx.emit_vec_int_binary_swapped("unpacklo_epi32", "u32");
   return true;
 }
@@ -887,7 +887,7 @@ bool build_vmrglw(BuilderContext& ctx) {
 // Vector Permute
 //=============================================================================
 
-bool build_vperm(BuilderContext& ctx) {
+bool BuildVperm(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "rex::ppc::simde_mm_perm_epi8_(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -897,7 +897,7 @@ bool build_vperm(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpermwi128(BuilderContext& ctx) {
+bool BuildVpermwi128(BuilderContext& ctx) {
   // NOTE: accounting for full vector reversal here
   uint32_t x = 3 - (ctx.insn.operands[2] & 0x3);
   uint32_t y = 3 - ((ctx.insn.operands[2] >> 2) & 0x3);
@@ -911,7 +911,7 @@ bool build_vpermwi128(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrlimi128(BuilderContext& ctx) {
+bool BuildVrlimi128(BuilderContext& ctx) {
   constexpr size_t shuffles[] = {SIMDE_MM_SHUFFLE(3, 2, 1, 0), SIMDE_MM_SHUFFLE(2, 1, 0, 3),
                                  SIMDE_MM_SHUFFLE(1, 0, 3, 2), SIMDE_MM_SHUFFLE(0, 3, 2, 1)};
   ctx.println(
@@ -926,12 +926,12 @@ bool build_vrlimi128(BuilderContext& ctx) {
 // Vector Shift
 //=============================================================================
 
-bool build_vslb(BuilderContext& ctx) {
+bool BuildVslb(BuilderContext& ctx) {
   ctx.emit_vec_var_shift("sllv", "epi8", 0x7);
   return true;
 }
 
-bool build_vsldoi(BuilderContext& ctx) {
+bool BuildVsldoi(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "simde_mm_alignr_epi8(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -941,36 +941,36 @@ bool build_vsldoi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vslh(BuilderContext& ctx) {
+bool BuildVslh(BuilderContext& ctx) {
   ctx.emit_vec_var_shift("sllv", "epi16", 0xF);
   return true;
 }
 
-bool build_vsrh(BuilderContext& ctx) {
+bool BuildVsrh(BuilderContext& ctx) {
   ctx.emit_vec_var_shift("srlv", "epi16", 0xF);
   return true;
 }
 
-bool build_vsrb(BuilderContext& ctx) {
+bool BuildVsrb(BuilderContext& ctx) {
   for (size_t i = 0; i < 16; i++)
     ctx.println("\t{}.u8[{}] = {}.u8[{}] >> ({}.u8[{}] & 0x7);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
   return true;
 }
 
-bool build_vsrab(BuilderContext& ctx) {
+bool BuildVsrab(BuilderContext& ctx) {
   for (size_t i = 0; i < 16; i++)
     ctx.println("\t{}.s8[{}] = {}.s8[{}] >> ({}.u8[{}] & 0x7);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i);
   return true;
 }
 
-bool build_vsrah(BuilderContext& ctx) {
+bool BuildVsrah(BuilderContext& ctx) {
   ctx.emit_vec_var_shift("srav", "epi16", 0xF);
   return true;
 }
 
-bool build_vrlb(BuilderContext& ctx) {
+bool BuildVrlb(BuilderContext& ctx) {
   // Rotate each byte left by the low 3 bits of the matching byte of vB.
   for (size_t i = 0; i < 16; i++) {
     ctx.println("	{{ uint8_t sh = {}.u8[{}] & 0x7;", ctx.v(ctx.insn.operands[2]), i);
@@ -981,7 +981,7 @@ bool build_vrlb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrlh(BuilderContext& ctx) {
+bool BuildVrlh(BuilderContext& ctx) {
   auto vD = ctx.v(ctx.insn.operands[0]);
   auto vA = ctx.v(ctx.insn.operands[1]);
   auto vB = ctx.v(ctx.insn.operands[2]);
@@ -998,7 +998,7 @@ bool build_vrlh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vrlw(BuilderContext& ctx) {
+bool BuildVrlw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; i++) {
     ctx.println("\t{{ uint32_t sh = {}.u32[{}] & 0x1F;", ctx.v(ctx.insn.operands[2]), i);
     ctx.println("\t{}.u32[{}] = ({}.u32[{}] << sh) | (sh ? ({}.u32[{}] >> (32 - sh)) : 0); }}",
@@ -1008,7 +1008,7 @@ bool build_vrlw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsl(BuilderContext& ctx) {
+bool BuildVsl(BuilderContext& ctx) {
   // Vector Shift Left (128-bit) - shift entire vector left by bits specified in low 3 bits of vB
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -1018,7 +1018,7 @@ bool build_vsl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vslo(BuilderContext& ctx) {
+bool BuildVslo(BuilderContext& ctx) {
   // Vector Shift Left by Octet - shift entire vector left by bytes specified in bits 121:124 of vB
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -1028,7 +1028,7 @@ bool build_vslo(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsro(BuilderContext& ctx) {
+bool BuildVsro(BuilderContext& ctx) {
   // Vector Shift Right by Octet - shift entire vector right by bytes specified in bits 121:124 of
   // vB
   ctx.println(
@@ -1039,7 +1039,7 @@ bool build_vsro(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vslw(BuilderContext& ctx) {
+bool BuildVslw(BuilderContext& ctx) {
   auto vD = ctx.v(ctx.insn.operands[0]);
   auto vA = ctx.v(ctx.insn.operands[1]);
   auto vB = ctx.v(ctx.insn.operands[2]);
@@ -1055,7 +1055,7 @@ bool build_vslw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsr(BuilderContext& ctx) {
+bool BuildVsr(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
       "rex::ppc::simde_mm_vsr(simde_mm_load_si128((simde__m128i*){}.u8), "
@@ -1064,14 +1064,14 @@ bool build_vsr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsraw(BuilderContext& ctx) {
+bool BuildVsraw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; i++)
     ctx.println("\t{}.s32[{}] = {}.s32[{}] >> ({}.u8[{}] & 0x1F);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i * 4);
   return true;
 }
 
-bool build_vsrw(BuilderContext& ctx) {
+bool BuildVsrw(BuilderContext& ctx) {
   for (size_t i = 0; i < 4; i++)
     ctx.println("\t{}.u32[{}] = {}.u32[{}] >> ({}.u8[{}] & 0x1F);", ctx.v(ctx.insn.operands[0]), i,
                 ctx.v(ctx.insn.operands[1]), i, ctx.v(ctx.insn.operands[2]), i * 4);
@@ -1082,7 +1082,7 @@ bool build_vsrw(BuilderContext& ctx) {
 // Vector Splat
 //=============================================================================
 
-bool build_vspltb(BuilderContext& ctx) {
+bool BuildVspltb(BuilderContext& ctx) {
   // NOTE: accounting for full vector reversal here
   uint32_t perm = 15 - ctx.insn.operands[2];
   ctx.println(
@@ -1093,7 +1093,7 @@ bool build_vspltb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vsplth(BuilderContext& ctx) {
+bool BuildVsplth(BuilderContext& ctx) {
   // NOTE: accounting for full vector reversal here
   uint32_t perm = 7 - ctx.insn.operands[2];
   perm = (perm * 2) | ((perm * 2 + 1) << 8);
@@ -1105,7 +1105,7 @@ bool build_vsplth(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vspltisb(BuilderContext& ctx) {
+bool BuildVspltisb(BuilderContext& ctx) {
   // Sign-extend 5-bit immediate to 8-bit
   int8_t imm5 = static_cast<int8_t>(ctx.insn.operands[1] << 3) >> 3;
   ctx.println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_set1_epi8(char(0x{:X})));",
@@ -1113,7 +1113,7 @@ bool build_vspltisb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vspltisw(BuilderContext& ctx) {
+bool BuildVspltisw(BuilderContext& ctx) {
   // Sign-extend 5-bit immediate to 32-bit
   int8_t imm5 = static_cast<int8_t>(ctx.insn.operands[1] << 3) >> 3;
   ctx.println("\tsimde_mm_store_si128((simde__m128i*){}.u32, simde_mm_set1_epi32(int(0x{:X})));",
@@ -1121,7 +1121,7 @@ bool build_vspltisw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vspltish(BuilderContext& ctx) {
+bool BuildVspltish(BuilderContext& ctx) {
   // Sign-extend 5-bit immediate to 16-bit
   int8_t imm5 = static_cast<int8_t>(ctx.insn.operands[1] << 3) >> 3;
   ctx.println("\tsimde_mm_store_si128((simde__m128i*){}.s16, simde_mm_set1_epi16(short(0x{:X})));",
@@ -1129,7 +1129,7 @@ bool build_vspltish(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vspltw(BuilderContext& ctx) {
+bool BuildVspltw(BuilderContext& ctx) {
   // NOTE: accounting for full vector reversal here
   uint32_t perm = 3 - ctx.insn.operands[2];
   perm |= (perm << 2) | (perm << 4) | (perm << 6);
@@ -1144,7 +1144,7 @@ bool build_vspltw(BuilderContext& ctx) {
 // Vector Pack
 //=============================================================================
 
-bool build_vpkshus(BuilderContext& ctx) {
+bool BuildVpkshus(BuilderContext& ctx) {
   emitPackSaturation(ctx, "s16", 8, "0", "UINT8_MAX");
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -1154,7 +1154,7 @@ bool build_vpkshus(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkuhum(BuilderContext& ctx) {
+bool BuildVpkuhum(BuilderContext& ctx) {
   // Vector Pack Unsigned Halfword Unsigned Modulo - pack low 8 bits from each halfword
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -1165,7 +1165,7 @@ bool build_vpkuhum(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkuhus(BuilderContext& ctx) {
+bool BuildVpkuhus(BuilderContext& ctx) {
   emitPackSaturation(ctx, "u16", 8, "0", "UINT8_MAX");
   // Vector Pack Unsigned Halfword Unsigned Saturate
   // NOTE(tomc): _mm_packus_epi16 treats inputs as signed, so we need custom saturation for
@@ -1182,7 +1182,7 @@ bool build_vpkuhus(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkuwum(BuilderContext& ctx) {
+bool BuildVpkuwum(BuilderContext& ctx) {
   // Vector Pack Unsigned Word Unsigned Modulo - pack low 16 bits from each word
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u16, "
@@ -1194,7 +1194,7 @@ bool build_vpkuwum(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkuwus(BuilderContext& ctx) {
+bool BuildVpkuwus(BuilderContext& ctx) {
   emitPackSaturation(ctx, "u32", 4, "0", "UINT16_MAX");
   // Vector Pack Unsigned Word Unsigned Saturate
 
@@ -1211,7 +1211,7 @@ bool build_vpkuwus(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkshss(BuilderContext& ctx) {
+bool BuildVpkshss(BuilderContext& ctx) {
   emitPackSaturation(ctx, "s16", 8, "INT8_MIN", "INT8_MAX");
   // Vector Pack Signed Halfword Signed Saturate
   ctx.println(
@@ -1222,7 +1222,7 @@ bool build_vpkshss(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkswss(BuilderContext& ctx) {
+bool BuildVpkswss(BuilderContext& ctx) {
   emitPackSaturation(ctx, "s32", 4, "INT16_MIN", "INT16_MAX");
   // Vector Pack Signed Word Signed Saturate
   ctx.println(
@@ -1233,7 +1233,7 @@ bool build_vpkswss(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkswus(BuilderContext& ctx) {
+bool BuildVpkswus(BuilderContext& ctx) {
   emitPackSaturation(ctx, "s32", 4, "0", "UINT16_MAX");
   // Vector Pack Signed Word Unsigned Saturate
   ctx.println(
@@ -1244,7 +1244,7 @@ bool build_vpkswus(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkpx(BuilderContext& ctx) {
+bool BuildVpkpx(BuilderContext& ctx) {
   // Guest pixels are ARGB8888 and the packed result is A1R5G5B5.
   // Snapshot both inputs so vD may alias either source register.
   ctx.println("\t{{");
@@ -1263,7 +1263,7 @@ bool build_vpkpx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vpkd3d128(BuilderContext& ctx) {
+bool BuildVpkd3d128(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(true);
   switch (ctx.insn.operands[2]) {
     case 0:  // D3D color
@@ -1480,7 +1480,7 @@ bool build_vpkd3d128(BuilderContext& ctx) {
 // Vector Unpack
 //=============================================================================
 
-bool build_vupkd3d128(BuilderContext& ctx) {
+bool BuildVupkd3d128(BuilderContext& ctx) {
   switch (ctx.insn.operands[2] >> 2) {
     case 0:  // D3D color
       for (size_t i = 0; i < 4; i++) {
@@ -1619,7 +1619,7 @@ bool build_vupkd3d128(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vupkhsb(BuilderContext& ctx) {
+bool BuildVupkhsb(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s16, "
       "simde_mm_cvtepi8_epi16(simde_mm_unpackhi_epi64(simde_mm_load_si128((simde__m128i*){}.s8), "
@@ -1628,7 +1628,7 @@ bool build_vupkhsb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vupkhsh(BuilderContext& ctx) {
+bool BuildVupkhsh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s32, "
       "simde_mm_cvtepi16_epi32(simde_mm_unpackhi_epi64(simde_mm_load_si128((simde__m128i*){}.s16), "
@@ -1637,7 +1637,7 @@ bool build_vupkhsh(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vupklsb(BuilderContext& ctx) {
+bool BuildVupklsb(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s32, "
       "simde_mm_cvtepi8_epi16(simde_mm_load_si128((simde__m128i*){}.s16)));",
@@ -1645,7 +1645,7 @@ bool build_vupklsb(BuilderContext& ctx) {
   return true;
 }
 
-bool build_vupklsh(BuilderContext& ctx) {
+bool BuildVupklsh(BuilderContext& ctx) {
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.s32, "
       "simde_mm_cvtepi16_epi32(simde_mm_load_si128((simde__m128i*){}.s16)));",

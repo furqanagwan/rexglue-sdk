@@ -37,6 +37,9 @@ CheckOptions:
   # Functions and methods
   - key: readability-identifier-naming.FunctionCase
     value: CamelCase
+  # Kernel exports keep the guest symbol's name: <GuestName>_entry.
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: '^[A-Za-z0-9]+_entry$'
   - key: readability-identifier-naming.MethodCase
     value: CamelCase
 

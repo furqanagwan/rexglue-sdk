@@ -79,21 +79,21 @@ void emitFpConvert(BuilderContext& ctx, bool to_int64, bool truncate) {
 // Sign Manipulation
 //=============================================================================
 
-bool build_fabs(BuilderContext& ctx) {
+bool BuildFabs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u64 = {}.u64 & ~0x8000000000000000;", ctx.f(ctx.insn.operands[0]),
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
 
-bool build_fnabs(BuilderContext& ctx) {
+bool BuildFnabs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u64 = {}.u64 | 0x8000000000000000;", ctx.f(ctx.insn.operands[0]),
               ctx.f(ctx.insn.operands[1]));
   return true;
 }
 
-bool build_fneg(BuilderContext& ctx) {
+bool BuildFneg(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u64 = {}.u64 ^ 0x8000000000000000;", ctx.f(ctx.insn.operands[0]),
               ctx.f(ctx.insn.operands[1]));
@@ -104,13 +104,13 @@ bool build_fneg(BuilderContext& ctx) {
 // Move and Conversion
 //=============================================================================
 
-bool build_fmr(BuilderContext& ctx) {
+bool BuildFmr(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = {}.f64;", ctx.f(ctx.insn.operands[0]), ctx.f(ctx.insn.operands[1]));
   return true;
 }
 
-bool build_fcfid(BuilderContext& ctx) {
+bool BuildFcfid(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = rex::ppc::fp::tracked_from_integer(ctx.fpscr, {}, {}.s64);",
               ctx.f(ctx.insn.operands[0]),
@@ -119,31 +119,31 @@ bool build_fcfid(BuilderContext& ctx) {
   return true;
 }
 
-bool build_fctid(BuilderContext& ctx) {
+bool BuildFctid(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpConvert(ctx, true, false);
   return true;
 }
 
-bool build_fctidz(BuilderContext& ctx) {
+bool BuildFctidz(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpConvert(ctx, true, true);
   return true;
 }
 
-bool build_fctiw(BuilderContext& ctx) {
+bool BuildFctiw(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpConvert(ctx, false, false);
   return true;
 }
 
-bool build_fctiwz(BuilderContext& ctx) {
+bool BuildFctiwz(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpConvert(ctx, false, true);
   return true;
 }
 
-bool build_frsp(BuilderContext& ctx) {
+bool BuildFrsp(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "to_single", 1);
   return true;
@@ -153,7 +153,7 @@ bool build_frsp(BuilderContext& ctx) {
 // Comparison
 //=============================================================================
 
-bool build_fcmpu(BuilderContext& ctx) {
+bool BuildFcmpu(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\trex::ppc::fp::compare(ctx.fpscr, {}, {}.f64, {}.f64, {});",
               ctx.cr(ctx.insn.operands[0]), ctx.f(ctx.insn.operands[1]),
@@ -161,21 +161,21 @@ bool build_fcmpu(BuilderContext& ctx) {
   return true;
 }
 
-bool build_fcmpo(BuilderContext& ctx) {
-  return build_fcmpu(ctx);
+bool BuildFcmpo(BuilderContext& ctx) {
+  return BuildFcmpu(ctx);
 }
 
 //=============================================================================
 // Addition
 //=============================================================================
 
-bool build_fadd(BuilderContext& ctx) {
+bool BuildFadd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "add", 2, "add_invalid_causes");
   return true;
 }
 
-bool build_fadds(BuilderContext& ctx) {
+bool BuildFadds(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "adds", 2, "add_invalid_causes", "single_denormal");
   return true;
@@ -185,13 +185,13 @@ bool build_fadds(BuilderContext& ctx) {
 // Subtraction
 //=============================================================================
 
-bool build_fsub(BuilderContext& ctx) {
+bool BuildFsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "sub", 2, "sub_invalid_causes");
   return true;
 }
 
-bool build_fsubs(BuilderContext& ctx) {
+bool BuildFsubs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "subs", 2, "sub_invalid_causes", "single_denormal");
   return true;
@@ -201,13 +201,13 @@ bool build_fsubs(BuilderContext& ctx) {
 // Multiplication
 //=============================================================================
 
-bool build_fmul(BuilderContext& ctx) {
+bool BuildFmul(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "mul", 2, "mul_invalid_causes");
   return true;
 }
 
-bool build_fmuls(BuilderContext& ctx) {
+bool BuildFmuls(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "muls", 2, "mul_invalid_causes", "single_denormal");
   return true;
@@ -217,13 +217,13 @@ bool build_fmuls(BuilderContext& ctx) {
 // Division
 //=============================================================================
 
-bool build_fdiv(BuilderContext& ctx) {
+bool BuildFdiv(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "div", 2, "div_invalid_causes");
   return true;
 }
 
-bool build_fdivs(BuilderContext& ctx) {
+bool BuildFdivs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "divs", 2, "div_invalid_causes");
   return true;
@@ -233,49 +233,49 @@ bool build_fdivs(BuilderContext& ctx) {
 // Fused Multiply-Add
 //=============================================================================
 
-bool build_fmadd(BuilderContext& ctx) {
+bool BuildFmadd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "madd", 3, "madd_invalid_causes");
   return true;
 }
 
-bool build_fmadds(BuilderContext& ctx) {
+bool BuildFmadds(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "madds", 3, "madd_invalid_causes", "single_denormal");
   return true;
 }
 
-bool build_fmsub(BuilderContext& ctx) {
+bool BuildFmsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "msub", 3, "msub_invalid_causes");
   return true;
 }
 
-bool build_fmsubs(BuilderContext& ctx) {
+bool BuildFmsubs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "msubs", 3, "msub_invalid_causes", "single_denormal");
   return true;
 }
 
-bool build_fnmadd(BuilderContext& ctx) {
+bool BuildFnmadd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "nmadd", 3, "madd_invalid_causes");
   return true;
 }
 
-bool build_fnmadds(BuilderContext& ctx) {
+bool BuildFnmadds(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "nmadds", 3, "madd_invalid_causes", "single_denormal");
   return true;
 }
 
-bool build_fnmsub(BuilderContext& ctx) {
+bool BuildFnmsub(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "nmsub", 3, "msub_invalid_causes");
   return true;
 }
 
-bool build_fnmsubs(BuilderContext& ctx) {
+bool BuildFnmsubs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "nmsubs", 3, "msub_invalid_causes", "single_denormal");
   return true;
@@ -285,7 +285,7 @@ bool build_fnmsubs(BuilderContext& ctx) {
 // Reciprocal and Square Root
 //=============================================================================
 
-bool build_fres(BuilderContext& ctx) {
+bool BuildFres(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = rex::ppc::fp::tracked_estimate(ctx.fpscr, {}, {}.f64, false);",
               ctx.f(ctx.insn.operands[0]),
@@ -294,7 +294,7 @@ bool build_fres(BuilderContext& ctx) {
   return true;
 }
 
-bool build_frsqrte(BuilderContext& ctx) {
+bool BuildFrsqrte(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = rex::ppc::fp::tracked_estimate(ctx.fpscr, {}, {}.f64, true);",
               ctx.f(ctx.insn.operands[0]),
@@ -303,13 +303,13 @@ bool build_frsqrte(BuilderContext& ctx) {
   return true;
 }
 
-bool build_fsqrt(BuilderContext& ctx) {
+bool BuildFsqrt(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "sqrt", 1, "sqrt_invalid_causes");
   return true;
 }
 
-bool build_fsqrts(BuilderContext& ctx) {
+bool BuildFsqrts(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   emitFpArith(ctx, "sqrts", 1, "sqrt_invalid_causes");
   return true;
@@ -319,7 +319,7 @@ bool build_fsqrts(BuilderContext& ctx) {
 // Selection
 //=============================================================================
 
-bool build_fsel(BuilderContext& ctx) {
+bool BuildFsel(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.f64 = {}.f64 >= 0.0 ? {}.f64 : {}.f64;", ctx.f(ctx.insn.operands[0]),
               ctx.f(ctx.insn.operands[1]), ctx.f(ctx.insn.operands[2]),

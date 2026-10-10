@@ -18,13 +18,13 @@ namespace rex::codegen {
 // Load Immediate (not really memory operations, but L* category)
 //=============================================================================
 
-bool build_li(BuilderContext& ctx) {
+bool BuildLi(BuilderContext& ctx) {
   ctx.println("\t{}.s64 = {};", ctx.r(ctx.insn.operands[0]),
               static_cast<int32_t>(ctx.insn.operands[1]));
   return true;
 }
 
-bool build_lis(BuilderContext& ctx) {
+bool BuildLis(BuilderContext& ctx) {
   uint32_t imm = static_cast<uint32_t>(ctx.insn.operands[1]);
   size_t dest_reg = ctx.insn.operands[0];
 
@@ -43,22 +43,22 @@ bool build_lis(BuilderContext& ctx) {
 // Byte Loads
 //=============================================================================
 
-bool build_lbz(BuilderContext& ctx) {
+bool BuildLbz(BuilderContext& ctx) {
   ctx.emit_load_d_form("REX_LOAD_U8", "u64");
   return true;
 }
 
-bool build_lbzu(BuilderContext& ctx) {
+bool BuildLbzu(BuilderContext& ctx) {
   emitLoadWithUpdate(ctx, "REX_LOAD_U8");
   return true;
 }
 
-bool build_lbzx(BuilderContext& ctx) {
+bool BuildLbzx(BuilderContext& ctx) {
   ctx.emit_load_x_form("REX_LOAD_U8", "u64");
   return true;
 }
 
-bool build_lbzux(BuilderContext& ctx) {
+bool BuildLbzux(BuilderContext& ctx) {
   emitLoadXFormWithUpdate(ctx, "REX_LOAD_U8");
   return true;
 }
@@ -67,37 +67,37 @@ bool build_lbzux(BuilderContext& ctx) {
 // Halfword Loads
 //=============================================================================
 
-bool build_lha(BuilderContext& ctx) {
+bool BuildLha(BuilderContext& ctx) {
   emitSignExtendLoadDForm(ctx, "int16_t", "REX_LOAD_U16");
   return true;
 }
 
-bool build_lhax(BuilderContext& ctx) {
+bool BuildLhax(BuilderContext& ctx) {
   emitSignExtendLoadXForm(ctx, "int16_t", "REX_LOAD_U16");
   return true;
 }
 
-bool build_lhz(BuilderContext& ctx) {
+bool BuildLhz(BuilderContext& ctx) {
   ctx.emit_load_d_form("REX_LOAD_U16", "u64");
   return true;
 }
 
-bool build_lhzx(BuilderContext& ctx) {
+bool BuildLhzx(BuilderContext& ctx) {
   ctx.emit_load_x_form("REX_LOAD_U16", "u64");
   return true;
 }
 
-bool build_lhzu(BuilderContext& ctx) {
+bool BuildLhzu(BuilderContext& ctx) {
   emitLoadWithUpdate(ctx, "REX_LOAD_U16");
   return true;
 }
 
-bool build_lhzux(BuilderContext& ctx) {
+bool BuildLhzux(BuilderContext& ctx) {
   emitLoadXFormWithUpdate(ctx, "REX_LOAD_U16");
   return true;
 }
 
-bool build_lhau(BuilderContext& ctx) {
+bool BuildLhau(BuilderContext& ctx) {
   // Load Halfword Algebraic with Update: sign-extend then update rA
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -106,7 +106,7 @@ bool build_lhau(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lhaux(BuilderContext& ctx) {
+bool BuildLhaux(BuilderContext& ctx) {
   // Load Halfword Algebraic with Update Indexed: EA = rA + rB; rD = EXTS(MEM16(EA)); rA = EA
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -115,7 +115,7 @@ bool build_lhaux(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lhbrx(BuilderContext& ctx) {
+bool BuildLhbrx(BuilderContext& ctx) {
   // Load Halfword Byte-Reverse Indexed
   ctx.print("\t{}.u64 = __builtin_bswap16({}(", ctx.r(ctx.insn.operands[0]),
             ctx.mmio_check_x_form() ? "REX_MM_LOAD_U16" : "REX_LOAD_U16");
@@ -129,12 +129,12 @@ bool build_lhbrx(BuilderContext& ctx) {
 // Word Loads
 //=============================================================================
 
-bool build_lwa(BuilderContext& ctx) {
+bool BuildLwa(BuilderContext& ctx) {
   emitSignExtendLoadDForm(ctx, "int32_t", "REX_LOAD_U32");
   return true;
 }
 
-bool build_lwaux(BuilderContext& ctx) {
+bool BuildLwaux(BuilderContext& ctx) {
   // Load Word Algebraic with Update Indexed: EA = rA + rB; rD = EXTS(MEM32(EA)); rA = EA
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -143,17 +143,17 @@ bool build_lwaux(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lwax(BuilderContext& ctx) {
+bool BuildLwax(BuilderContext& ctx) {
   emitSignExtendLoadXForm(ctx, "int32_t", "REX_LOAD_U32");
   return true;
 }
 
-bool build_lwz(BuilderContext& ctx) {
+bool BuildLwz(BuilderContext& ctx) {
   ctx.emit_load_d_form("REX_LOAD_U32", "u64");
   return true;
 }
 
-bool build_lmw(BuilderContext& ctx) {
+bool BuildLmw(BuilderContext& ctx) {
   // Snapshot the address before loads, including when RA is a destination.
   const auto first = ctx.insn.operands[0];
   const auto ra = ctx.insn.operands[2];
@@ -167,22 +167,22 @@ bool build_lmw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lwzu(BuilderContext& ctx) {
+bool BuildLwzu(BuilderContext& ctx) {
   emitLoadWithUpdate(ctx, "REX_LOAD_U32");
   return true;
 }
 
-bool build_lwzx(BuilderContext& ctx) {
+bool BuildLwzx(BuilderContext& ctx) {
   ctx.emit_load_x_form("REX_LOAD_U32", "u64");
   return true;
 }
 
-bool build_lwzux(BuilderContext& ctx) {
+bool BuildLwzux(BuilderContext& ctx) {
   emitLoadXFormWithUpdate(ctx, "REX_LOAD_U32");
   return true;
 }
 
-bool build_lwbrx(BuilderContext& ctx) {
+bool BuildLwbrx(BuilderContext& ctx) {
   ctx.print("\t{}.u64 = __builtin_bswap32({}(", ctx.r(ctx.insn.operands[0]),
             ctx.mmio_check_x_form() ? "REX_MM_LOAD_U32" : "REX_LOAD_U32");
   if (ctx.insn.operands[1] != 0)
@@ -195,17 +195,17 @@ bool build_lwbrx(BuilderContext& ctx) {
 // Doubleword Loads
 //=============================================================================
 
-bool build_ld(BuilderContext& ctx) {
+bool BuildLd(BuilderContext& ctx) {
   ctx.emit_load_d_form("REX_LOAD_U64", "u64");
   return true;
 }
 
-bool build_ldu(BuilderContext& ctx) {
+bool BuildLdu(BuilderContext& ctx) {
   emitLoadWithUpdate(ctx, "REX_LOAD_U64");
   return true;
 }
 
-bool build_ldbrx(BuilderContext& ctx) {
+bool BuildLdbrx(BuilderContext& ctx) {
   // Load Doubleword Byte-Reverse Indexed
   ctx.print("	{}.u64 = __builtin_bswap64(REX_LOAD_U64(", ctx.r(ctx.insn.operands[0]));
   if (ctx.insn.operands[1] != 0)
@@ -214,12 +214,12 @@ bool build_ldbrx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_ldx(BuilderContext& ctx) {
+bool BuildLdx(BuilderContext& ctx) {
   ctx.emit_load_x_form("REX_LOAD_U64", "u64");
   return true;
 }
 
-bool build_ldux(BuilderContext& ctx) {
+bool BuildLdux(BuilderContext& ctx) {
   emitLoadXFormWithUpdate(ctx, "REX_LOAD_U64");
   return true;
 }
@@ -228,12 +228,12 @@ bool build_ldux(BuilderContext& ctx) {
 // Atomic Load and Reserve
 //=============================================================================
 
-bool build_lwarx(BuilderContext& ctx) {
+bool BuildLwarx(BuilderContext& ctx) {
   emitAtomicLoadReserve(ctx, "uint32_t", "__builtin_bswap32", "u32");
   return true;
 }
 
-bool build_ldarx(BuilderContext& ctx) {
+bool BuildLdarx(BuilderContext& ctx) {
   emitAtomicLoadReserve(ctx, "uint64_t", "__builtin_bswap64", "u64");
   return true;
 }
@@ -242,7 +242,7 @@ bool build_ldarx(BuilderContext& ctx) {
 // Floating Point Loads
 //=============================================================================
 
-bool build_lfd(BuilderContext& ctx) {
+bool BuildLfd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("\t{}.u64 = REX_LOAD_U64(", ctx.f(ctx.insn.operands[0]));
   if (ctx.insn.operands[2] != 0)
@@ -251,7 +251,7 @@ bool build_lfd(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfdx(BuilderContext& ctx) {
+bool BuildLfdx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("\t{}.u64 = REX_LOAD_U64(", ctx.f(ctx.insn.operands[0]));
   if (ctx.insn.operands[1] != 0)
@@ -260,7 +260,7 @@ bool build_lfdx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfs(BuilderContext& ctx) {
+bool BuildLfs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("\t{}.u32 = REX_LOAD_U32(", ctx.temp());
   if (ctx.insn.operands[2] != 0)
@@ -271,7 +271,7 @@ bool build_lfs(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfsx(BuilderContext& ctx) {
+bool BuildLfsx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("\t{}.u32 = REX_LOAD_U32(", ctx.temp());
   if (ctx.insn.operands[1] != 0)
@@ -282,7 +282,7 @@ bool build_lfsx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfdu(BuilderContext& ctx) {
+bool BuildLfdu(BuilderContext& ctx) {
   // Load Floating-point Double with Update
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
@@ -292,7 +292,7 @@ bool build_lfdu(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfdux(BuilderContext& ctx) {
+bool BuildLfdux(BuilderContext& ctx) {
   // Load Floating-point Double with Update Indexed
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
@@ -302,7 +302,7 @@ bool build_lfdux(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfsu(BuilderContext& ctx) {
+bool BuildLfsu(BuilderContext& ctx) {
   // Load Floating-point Single with Update (convert to double)
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
@@ -314,7 +314,7 @@ bool build_lfsu(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lfsux(BuilderContext& ctx) {
+bool BuildLfsux(BuilderContext& ctx) {
   // Load Floating-point Single with Update Indexed (convert to double)
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
@@ -330,22 +330,22 @@ bool build_lfsux(BuilderContext& ctx) {
 // Byte Stores
 //=============================================================================
 
-bool build_stb(BuilderContext& ctx) {
+bool BuildStb(BuilderContext& ctx) {
   ctx.emit_store_d_form("REX_STORE_U8", "u8", true);
   return true;
 }
 
-bool build_stbu(BuilderContext& ctx) {
+bool BuildStbu(BuilderContext& ctx) {
   emitStoreWithUpdate(ctx, "REX_STORE_U8", "u8");
   return true;
 }
 
-bool build_stbx(BuilderContext& ctx) {
+bool BuildStbx(BuilderContext& ctx) {
   ctx.emit_store_x_form("REX_STORE_U8", "u8", true);
   return true;
 }
 
-bool build_stbux(BuilderContext& ctx) {
+bool BuildStbux(BuilderContext& ctx) {
   emitStoreXFormWithUpdate(ctx, "REX_STORE_U8", "REX_MM_STORE_U8", "u8");
   return true;
 }
@@ -354,12 +354,12 @@ bool build_stbux(BuilderContext& ctx) {
 // Halfword Stores
 //=============================================================================
 
-bool build_sth(BuilderContext& ctx) {
+bool BuildSth(BuilderContext& ctx) {
   ctx.emit_store_d_form("REX_STORE_U16", "u16", true);
   return true;
 }
 
-bool build_sthbrx(BuilderContext& ctx) {
+bool BuildSthbrx(BuilderContext& ctx) {
   ctx.print("{}", ctx.mmio_check_x_form() ? "\tREX_MM_STORE_U16(" : "\tREX_STORE_U16(");
   if (ctx.insn.operands[1] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
@@ -368,17 +368,17 @@ bool build_sthbrx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_sthx(BuilderContext& ctx) {
+bool BuildSthx(BuilderContext& ctx) {
   ctx.emit_store_x_form("REX_STORE_U16", "u16", true);
   return true;
 }
 
-bool build_sthu(BuilderContext& ctx) {
+bool BuildSthu(BuilderContext& ctx) {
   emitStoreWithUpdate(ctx, "REX_STORE_U16", "u16");
   return true;
 }
 
-bool build_sthux(BuilderContext& ctx) {
+bool BuildSthux(BuilderContext& ctx) {
   emitStoreXFormWithUpdate(ctx, "REX_STORE_U16", "REX_MM_STORE_U16", "u16");
   return true;
 }
@@ -387,27 +387,27 @@ bool build_sthux(BuilderContext& ctx) {
 // Word Stores
 //=============================================================================
 
-bool build_stw(BuilderContext& ctx) {
+bool BuildStw(BuilderContext& ctx) {
   ctx.emit_store_d_form("REX_STORE_U32", "u32", true);
   return true;
 }
 
-bool build_stwu(BuilderContext& ctx) {
+bool BuildStwu(BuilderContext& ctx) {
   emitStoreWithUpdate(ctx, "REX_STORE_U32", "u32");
   return true;
 }
 
-bool build_stwux(BuilderContext& ctx) {
+bool BuildStwux(BuilderContext& ctx) {
   emitStoreXFormWithUpdate(ctx, "REX_STORE_U32", "REX_MM_STORE_U32", "u32");
   return true;
 }
 
-bool build_stwx(BuilderContext& ctx) {
+bool BuildStwx(BuilderContext& ctx) {
   ctx.emit_store_x_form("REX_STORE_U32", "u32", true);
   return true;
 }
 
-bool build_stmw(BuilderContext& ctx) {
+bool BuildStmw(BuilderContext& ctx) {
   // EA = (rA == 0 ? 0 : r[rA]) + EXTS(d); store r[rS]..r[31] at EA, EA+4, ...
   uint32_t rS = ctx.insn.operands[0];
   int32_t offset = static_cast<int32_t>(ctx.insn.operands[1]);
@@ -422,7 +422,7 @@ bool build_stmw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stwbrx(BuilderContext& ctx) {
+bool BuildStwbrx(BuilderContext& ctx) {
   ctx.print("{}", ctx.mmio_check_x_form() ? "\tREX_MM_STORE_U32(" : "\tREX_STORE_U32(");
   if (ctx.insn.operands[1] != 0)
     ctx.print("{}.u32 + ", ctx.r(ctx.insn.operands[1]));
@@ -435,12 +435,12 @@ bool build_stwbrx(BuilderContext& ctx) {
 // Atomic Store Conditional
 //=============================================================================
 
-bool build_stwcx(BuilderContext& ctx) {
+bool BuildStwcx(BuilderContext& ctx) {
   emitAtomicStoreConditional(ctx, "uint32_t", "__builtin_bswap32", "s32");
   return true;
 }
 
-bool build_stdcx(BuilderContext& ctx) {
+bool BuildStdcx(BuilderContext& ctx) {
   emitAtomicStoreConditional(ctx, "uint64_t", "__builtin_bswap64", "s64");
   return true;
 }
@@ -449,17 +449,17 @@ bool build_stdcx(BuilderContext& ctx) {
 // Doubleword Stores
 //=============================================================================
 
-bool build_std(BuilderContext& ctx) {
+bool BuildStd(BuilderContext& ctx) {
   ctx.emit_store_d_form("REX_STORE_U64", "u64", true);
   return true;
 }
 
-bool build_stdu(BuilderContext& ctx) {
+bool BuildStdu(BuilderContext& ctx) {
   emitStoreWithUpdate(ctx, "REX_STORE_U64", "u64");
   return true;
 }
 
-bool build_stdbrx(BuilderContext& ctx) {
+bool BuildStdbrx(BuilderContext& ctx) {
   // Store Doubleword Byte-Reverse Indexed
   ctx.print("{}", ctx.mmio_check_x_form() ? "	REX_MM_STORE_U64(" : "	REX_STORE_U64(");
   if (ctx.insn.operands[1] != 0)
@@ -469,12 +469,12 @@ bool build_stdbrx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stdx(BuilderContext& ctx) {
+bool BuildStdx(BuilderContext& ctx) {
   ctx.emit_store_x_form("REX_STORE_U64", "u64", true);
   return true;
 }
 
-bool build_stdux(BuilderContext& ctx) {
+bool BuildStdux(BuilderContext& ctx) {
   emitStoreXFormWithUpdate(ctx, "REX_STORE_U64", "REX_MM_STORE_U64", "u64");
   return true;
 }
@@ -483,7 +483,7 @@ bool build_stdux(BuilderContext& ctx) {
 // Floating Point Stores
 //=============================================================================
 
-bool build_stfd(BuilderContext& ctx) {
+bool BuildStfd(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("{}", ctx.mmio_check_d_form() ? "\tREX_MM_STORE_U64(" : "\tREX_STORE_U64(");
   if (ctx.insn.operands[2] != 0)
@@ -493,7 +493,7 @@ bool build_stfd(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfdx(BuilderContext& ctx) {
+bool BuildStfdx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("{}", ctx.mmio_check_x_form() ? "\tREX_MM_STORE_U64(" : "\tREX_STORE_U64(");
   if (ctx.insn.operands[1] != 0)
@@ -502,7 +502,7 @@ bool build_stfdx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfdux(BuilderContext& ctx) {
+bool BuildStfdux(BuilderContext& ctx) {
   // Store Floating-point Double with Update Indexed: EA = rA + rB; MEM(EA) = FRS; rA = EA
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {}.u32 + {}.u32;", ctx.ea(), ctx.r(ctx.insn.operands[1]),
@@ -512,7 +512,7 @@ bool build_stfdux(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfiwx(BuilderContext& ctx) {
+bool BuildStfiwx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.print("{}", ctx.mmio_check_x_form() ? "\tREX_MM_STORE_U32(" : "\tREX_STORE_U32(");
   if (ctx.insn.operands[1] != 0)
@@ -521,7 +521,7 @@ bool build_stfiwx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfs(BuilderContext& ctx) {
+bool BuildStfs(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
               ctx.f(ctx.insn.operands[0]));
@@ -532,7 +532,7 @@ bool build_stfs(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfsx(BuilderContext& ctx) {
+bool BuildStfsx(BuilderContext& ctx) {
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
               ctx.f(ctx.insn.operands[0]));
@@ -543,7 +543,7 @@ bool build_stfsx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfdu(BuilderContext& ctx) {
+bool BuildStfdu(BuilderContext& ctx) {
   // Store Floating-point Double with Update
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
@@ -553,7 +553,7 @@ bool build_stfdu(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfsu(BuilderContext& ctx) {
+bool BuildStfsu(BuilderContext& ctx) {
   // Store Floating-point Single with Update (convert double to float first)
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{} = {} + {}.u32;", ctx.ea(), static_cast<int32_t>(ctx.insn.operands[1]),
@@ -565,7 +565,7 @@ bool build_stfsu(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stfsux(BuilderContext& ctx) {
+bool BuildStfsux(BuilderContext& ctx) {
   // Store Floating-point Single with Update Indexed
   ctx.emit_set_flush_mode(false);
   ctx.println("\t{}.u32 = rex::ppc::fp::store_single({}.f64);", ctx.temp(),
@@ -582,7 +582,7 @@ bool build_stfsux(BuilderContext& ctx) {
 // Vector Loads (will be more comprehensive in vector.cpp)
 //=============================================================================
 
-bool build_lvx(BuilderContext& ctx) {
+bool BuildLvx(BuilderContext& ctx) {
   // NOTE(tomc): for endian swapping, we reverse the whole vector instead of individual elements.
   // this is accounted for in every instruction (eg. dp3 sums yzw instead of xyz)
   emitVectorEA(ctx, "0xF");
@@ -594,7 +594,7 @@ bool build_lvx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lvlx(BuilderContext& ctx) {
+bool BuildLvlx(BuilderContext& ctx) {
   emitVectorTempEA(ctx);
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -604,7 +604,7 @@ bool build_lvlx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lvrx(BuilderContext& ctx) {
+bool BuildLvrx(BuilderContext& ctx) {
   emitVectorTempEA(ctx);
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, {}.u32 & 0xF ? "
@@ -615,7 +615,7 @@ bool build_lvrx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lvsl(BuilderContext& ctx) {
+bool BuildLvsl(BuilderContext& ctx) {
   emitVectorTempEA(ctx);
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -624,7 +624,7 @@ bool build_lvsl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_lvsr(BuilderContext& ctx) {
+bool BuildLvsr(BuilderContext& ctx) {
   emitVectorTempEA(ctx);
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*){}.u8, "
@@ -637,28 +637,28 @@ bool build_lvsr(BuilderContext& ctx) {
 // Vector Stores
 //=============================================================================
 
-bool build_stvebx(BuilderContext& ctx) {
+bool BuildStvebx(BuilderContext& ctx) {
   emitVectorEA(ctx);
   ctx.println("\tREX_STORE_U8({}, {}.u8[15 - ({} & 0xF)]);", ctx.ea(), ctx.v(ctx.insn.operands[0]),
               ctx.ea());
   return true;
 }
 
-bool build_stvehx(BuilderContext& ctx) {
+bool BuildStvehx(BuilderContext& ctx) {
   emitVectorEA(ctx, "0x1");
   ctx.println("\tREX_STORE_U16(ea, {}.u16[7 - (({} & 0xF) >> 1)]);", ctx.v(ctx.insn.operands[0]),
               ctx.ea());
   return true;
 }
 
-bool build_stvewx(BuilderContext& ctx) {
+bool BuildStvewx(BuilderContext& ctx) {
   emitVectorEA(ctx, "0x3");
   ctx.println("\tREX_STORE_U32(ea, {}.u32[3 - (({} & 0xF) >> 2)]);", ctx.v(ctx.insn.operands[0]),
               ctx.ea());
   return true;
 }
 
-bool build_stvlx(BuilderContext& ctx) {
+bool BuildStvlx(BuilderContext& ctx) {
   emitVectorEA(ctx);
 
   ctx.println("\tfor (size_t i = 0; i < (16 - ({} & 0xF)); i++)", ctx.ea());
@@ -666,7 +666,7 @@ bool build_stvlx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stvrx(BuilderContext& ctx) {
+bool BuildStvrx(BuilderContext& ctx) {
   emitVectorEA(ctx);
 
   ctx.println("\tfor (size_t i = 0; i < ({} & 0xF); i++)", ctx.ea());
@@ -674,7 +674,7 @@ bool build_stvrx(BuilderContext& ctx) {
   return true;
 }
 
-bool build_stvx(BuilderContext& ctx) {
+bool BuildStvx(BuilderContext& ctx) {
   emitVectorEA(ctx, "0xF");
   ctx.println(
       "\tsimde_mm_store_si128((simde__m128i*)REX_RAW_ADDR({}), "
