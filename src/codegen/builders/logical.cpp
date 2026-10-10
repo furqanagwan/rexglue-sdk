@@ -17,21 +17,21 @@ namespace rex::codegen {
 // AND Operations
 //=============================================================================
 
-bool build_and(BuilderContext& ctx) {
+bool BuildAnd(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & {}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_andc(BuilderContext& ctx) {
+bool BuildAndc(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & ~{}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_andi(BuilderContext& ctx) {
+bool BuildAndi(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & {};", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2]);
   // ANDI. always sets CR0
@@ -40,7 +40,7 @@ bool build_andi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_andis(BuilderContext& ctx) {
+bool BuildAndis(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & {};", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2] << 16);
   // ANDIS. always sets CR0
@@ -53,27 +53,27 @@ bool build_andis(BuilderContext& ctx) {
 // OR Operations
 //=============================================================================
 
-bool build_nand(BuilderContext& ctx) {
+bool BuildNand(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = ~({}.u64 & {}.u64);", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_nor(BuilderContext& ctx) {
+bool BuildNor(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = ~({}.u64 | {}.u64);", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_not(BuilderContext& ctx) {
+bool BuildNot(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = ~{}.u64;", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_or(BuilderContext& ctx) {
+bool BuildOr(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 | {}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
@@ -89,14 +89,14 @@ bool build_or(BuilderContext& ctx) {
   return true;
 }
 
-bool build_orc(BuilderContext& ctx) {
+bool BuildOrc(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 | ~{}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_ori(BuilderContext& ctx) {
+bool BuildOri(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 | {};", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2]);
 
@@ -109,7 +109,7 @@ bool build_ori(BuilderContext& ctx) {
   return true;
 }
 
-bool build_oris(BuilderContext& ctx) {
+bool BuildOris(BuilderContext& ctx) {
   uint32_t imm = static_cast<uint32_t>(ctx.insn.operands[2]);
   size_t dest_reg = ctx.insn.operands[0];
 
@@ -127,26 +127,26 @@ bool build_oris(BuilderContext& ctx) {
 // XOR Operations
 //=============================================================================
 
-bool build_xor(BuilderContext& ctx) {
+bool BuildXor(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 ^ {}.u64;", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_xori(BuilderContext& ctx) {
+bool BuildXori(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 ^ {};", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2]);
   return true;
 }
 
-bool build_xoris(BuilderContext& ctx) {
+bool BuildXoris(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 ^ {};", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2] << 16);
   return true;
 }
 
-bool build_eqv(BuilderContext& ctx) {
+bool BuildEqv(BuilderContext& ctx) {
   // eqv: rA = ~(rS ^ rB) (XNOR - equivalent)
   ctx.println("\t{}.u64 = ~({}.u64 ^ {}.u64);", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]));
@@ -158,14 +158,14 @@ bool build_eqv(BuilderContext& ctx) {
 // Count Leading Zeros
 //=============================================================================
 
-bool build_cntlzd(BuilderContext& ctx) {
+bool BuildCntlzd(BuilderContext& ctx) {
   ctx.println("\t{0}.u64 = {1}.u64 == 0 ? 64 : __builtin_clzll({1}.u64);",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_cntlzw(BuilderContext& ctx) {
+bool BuildCntlzw(BuilderContext& ctx) {
   ctx.println("\t{0}.u64 = {1}.u32 == 0 ? 32 : __builtin_clz({1}.u32);",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
@@ -176,19 +176,19 @@ bool build_cntlzw(BuilderContext& ctx) {
 // Sign Extension
 //=============================================================================
 
-bool build_extsb(BuilderContext& ctx) {
+bool BuildExtsb(BuilderContext& ctx) {
   ctx.println("\t{}.s64 = {}.s8;", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_extsh(BuilderContext& ctx) {
+bool BuildExtsh(BuilderContext& ctx) {
   ctx.println("\t{}.s64 = {}.s16;", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
 }
 
-bool build_extsw(BuilderContext& ctx) {
+bool BuildExtsw(BuilderContext& ctx) {
   ctx.println("\t{}.s64 = {}.s32;", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
   return true;
@@ -198,7 +198,7 @@ bool build_extsw(BuilderContext& ctx) {
 // Clear Left Word Immediate
 //=============================================================================
 
-bool build_clrlwi(BuilderContext& ctx) {
+bool BuildClrlwi(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u32 & 0x{:X};", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), (1ull << (32 - ctx.insn.operands[2])) - 1);
   emitRecordFormCompare(ctx);
@@ -209,7 +209,7 @@ bool build_clrlwi(BuilderContext& ctx) {
 // Rotate Left Double Word
 //=============================================================================
 
-bool build_rldicl(BuilderContext& ctx) {
+bool BuildRldicl(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.insn.operands[2],
               compute_mask(ctx.insn.operands[3], 63));
@@ -217,7 +217,7 @@ bool build_rldicl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rldicr(BuilderContext& ctx) {
+bool BuildRldicr(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.insn.operands[2],
               compute_mask(0, ctx.insn.operands[3]));
@@ -225,7 +225,7 @@ bool build_rldicr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rldic(BuilderContext& ctx) {
+bool BuildRldic(BuilderContext& ctx) {
   uint32_t sh = ctx.insn.operands[2];
   uint64_t mask = compute_mask(ctx.insn.operands[3], 63 - sh);
   if (sh)
@@ -238,7 +238,7 @@ bool build_rldic(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rldcl(BuilderContext& ctx) {
+bool BuildRldcl(BuilderContext& ctx) {
   uint64_t mask = compute_mask(ctx.insn.operands[3], 63);
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]),
@@ -247,7 +247,7 @@ bool build_rldcl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rotld(BuilderContext& ctx) {
+bool BuildRotld(BuilderContext& ctx) {
   // The disassembler uses rotld for rldcl with a zero mask.
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F);",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
@@ -256,7 +256,7 @@ bool build_rotld(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rldcr(BuilderContext& ctx) {
+bool BuildRldcr(BuilderContext& ctx) {
   uint64_t mask = compute_mask(0, ctx.insn.operands[3]);
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[2]),
@@ -265,7 +265,7 @@ bool build_rldcr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rldimi(BuilderContext& ctx) {
+bool BuildRldimi(BuilderContext& ctx) {
   const uint64_t mask = compute_mask(ctx.insn.operands[3], ~ctx.insn.operands[2]);
   ctx.println("\t{}.u64 = (__builtin_rotateleft64({}.u64, {}) & 0x{:X}) | ({}.u64 & 0x{:X});",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.insn.operands[2], mask,
@@ -274,7 +274,7 @@ bool build_rldimi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rotldi(BuilderContext& ctx) {
+bool BuildRotldi(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u64, {});", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.insn.operands[2]);
   emitRecordFormCompare(ctx);
@@ -285,7 +285,7 @@ bool build_rotldi(BuilderContext& ctx) {
 // Rotate Left Word
 //=============================================================================
 
-bool build_rlwimi(BuilderContext& ctx) {
+bool BuildRlwimi(BuilderContext& ctx) {
   const uint64_t mask = compute_mask(ctx.insn.operands[3] + 32, ctx.insn.operands[4] + 32);
   ctx.println(
       "\t{}.u64 = (__builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}) & 0x{:X}) | ({}.u64 & "
@@ -296,7 +296,7 @@ bool build_rlwimi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rlwinm(BuilderContext& ctx) {
+bool BuildRlwinm(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
               ctx.insn.operands[2],
@@ -305,7 +305,7 @@ bool build_rlwinm(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rlwnm(BuilderContext& ctx) {
+bool BuildRlwnm(BuilderContext& ctx) {
   // Like rlwinm but shift amount comes from register, not immediate
   ctx.println("\t{}.u64 = __builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}.u8 & 0x1F) & 0x{:X};",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
@@ -315,7 +315,7 @@ bool build_rlwnm(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rotlw(BuilderContext& ctx) {
+bool BuildRotlw(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft32({}.u32, {}.u8 & 0x1F);",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -323,7 +323,7 @@ bool build_rotlw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_rotlwi(BuilderContext& ctx) {
+bool BuildRotlwi(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = __builtin_rotateleft32({}.u32, {});", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), ctx.insn.operands[2]);
   emitRecordFormCompare(ctx);
@@ -334,7 +334,7 @@ bool build_rotlwi(BuilderContext& ctx) {
 // Shift Left
 //=============================================================================
 
-bool build_sld(BuilderContext& ctx) {
+bool BuildSld(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u8 & 0x40 ? 0 : ({}.u64 << ({}.u8 & 0x7F));",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[2]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -342,7 +342,7 @@ bool build_sld(BuilderContext& ctx) {
   return true;
 }
 
-bool build_slw(BuilderContext& ctx) {
+bool BuildSlw(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u8 & 0x20 ? 0 : ({}.u32 << ({}.u8 & 0x3F));",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[2]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -354,7 +354,7 @@ bool build_slw(BuilderContext& ctx) {
 // Shift Right Algebraic (signed)
 //=============================================================================
 
-bool build_srad(BuilderContext& ctx) {
+bool BuildSrad(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & 0x7F;", ctx.temp(), ctx.r(ctx.insn.operands[2]));
   ctx.println("\tif ({}.u64 > 0x3F) {}.u64 = 0x3F;", ctx.temp(), ctx.temp());
   ctx.println("\t{}.ca = ({}.s64 < 0) & ((({}.s64 >> {}.u64) << {}.u64) != {}.s64);", ctx.xer(),
@@ -366,7 +366,7 @@ bool build_srad(BuilderContext& ctx) {
   return true;
 }
 
-bool build_sradi(BuilderContext& ctx) {
+bool BuildSradi(BuilderContext& ctx) {
   if (ctx.insn.operands[2] != 0) {
     ctx.println("\t{}.ca = ({}.s64 < 0) & (({}.u64 & 0x{:X}) != 0);", ctx.xer(),
                 ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
@@ -381,7 +381,7 @@ bool build_sradi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_sraw(BuilderContext& ctx) {
+bool BuildSraw(BuilderContext& ctx) {
   ctx.println("\t{}.u32 = {}.u32 & 0x3F;", ctx.temp(), ctx.r(ctx.insn.operands[2]));
   ctx.println("\tif ({}.u32 > 0x1F) {}.u32 = 0x1F;", ctx.temp(), ctx.temp());
   ctx.println("\t{}.ca = ({}.s32 < 0) & ((({}.s32 >> {}.u32) << {}.u32) != {}.s32);", ctx.xer(),
@@ -393,7 +393,7 @@ bool build_sraw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_srawi(BuilderContext& ctx) {
+bool BuildSrawi(BuilderContext& ctx) {
   if (ctx.insn.operands[2] != 0) {
     ctx.println("\t{}.ca = ({}.s32 < 0) & (({}.u32 & 0x{:X}) != 0);", ctx.xer(),
                 ctx.r(ctx.insn.operands[1]), ctx.r(ctx.insn.operands[1]),
@@ -412,7 +412,7 @@ bool build_srawi(BuilderContext& ctx) {
 // Shift Right (unsigned)
 //=============================================================================
 
-bool build_srd(BuilderContext& ctx) {
+bool BuildSrd(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u8 & 0x40 ? 0 : ({}.u64 >> ({}.u8 & 0x7F));",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[2]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -420,7 +420,7 @@ bool build_srd(BuilderContext& ctx) {
   return true;
 }
 
-bool build_srw(BuilderContext& ctx) {
+bool BuildSrw(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u8 & 0x20 ? 0 : ({}.u32 >> ({}.u8 & 0x3F));",
               ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[2]), ctx.r(ctx.insn.operands[1]),
               ctx.r(ctx.insn.operands[2]));
@@ -428,49 +428,49 @@ bool build_srw(BuilderContext& ctx) {
   return true;
 }
 
-bool build_crand(BuilderContext& ctx) {
+bool BuildCrand(BuilderContext& ctx) {
   // crand: CR[crD] = CR[crA] & CR[crB]
   emitCRBitOperation(ctx, "&");
   return true;
 }
 
-bool build_crandc(BuilderContext& ctx) {
+bool BuildCrandc(BuilderContext& ctx) {
   // crandc: CR[crD] = CR[crA] & ~CR[crB]
   emitCRBitOperation(ctx, "&", false, true, false);
   return true;
 }
 
-bool build_creqv(BuilderContext& ctx) {
+bool BuildCreqv(BuilderContext& ctx) {
   // creqv: CR[crD] = ~(CR[crA] ^ CR[crB])  (XNOR)
   emitCRBitOperation(ctx, "^", false, false, true);
   return true;
 }
 
-bool build_crnand(BuilderContext& ctx) {
+bool BuildCrnand(BuilderContext& ctx) {
   // crnand: CR[crD] = ~(CR[crA] & CR[crB])
   emitCRBitOperation(ctx, "&", false, false, true);
   return true;
 }
 
-bool build_crnor(BuilderContext& ctx) {
+bool BuildCrnor(BuilderContext& ctx) {
   // crnor: CR[crD] = ~(CR[crA] | CR[crB])
   emitCRBitOperation(ctx, "|", false, false, true);
   return true;
 }
 
-bool build_cror(BuilderContext& ctx) {
+bool BuildCror(BuilderContext& ctx) {
   // cror: CR[crD] = CR[crA] | CR[crB]
   emitCRBitOperation(ctx, "|");
   return true;
 }
 
-bool build_crorc(BuilderContext& ctx) {
+bool BuildCrorc(BuilderContext& ctx) {
   // crorc: CR[crD] = CR[crA] | ~CR[crB]
   emitCRBitOperation(ctx, "|", false, true, false);
   return true;
 }
 
-bool build_crxor(BuilderContext& ctx) {
+bool BuildCrxor(BuilderContext& ctx) {
   // crxor: CR[crD] = CR[crA] ^ CR[crB]
   emitCRBitOperation(ctx, "^");
   return true;

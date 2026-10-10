@@ -24,7 +24,7 @@ namespace rex::codegen {
 // Unconditional Branch
 //=============================================================================
 
-bool build_b(BuilderContext& ctx) {
+bool BuildB(BuilderContext& ctx) {
   uint32_t target = ctx.insn.operands[0];
 
   // Use graph to classify the target - handles thunks that branch to nearby functions
@@ -58,7 +58,7 @@ bool build_b(BuilderContext& ctx) {
   return true;
 }
 
-bool build_bl(BuilderContext& ctx) {
+bool BuildBl(BuilderContext& ctx) {
   uint32_t target = ctx.insn.operands[0];
 
   // Always set LR (unless skipLr)
@@ -91,12 +91,12 @@ bool build_bl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_blr(BuilderContext& ctx) {
+bool BuildBlr(BuilderContext& ctx) {
   ctx.println("\treturn;");
   return true;
 }
 
-bool build_blrl(BuilderContext& ctx) {
+bool BuildBlrl(BuilderContext& ctx) {
   // BLRL: save return address, then branch-and-link to current LR
   ctx.println("\t{{ auto old_lr = ctx.lr;");
   if (!ctx.config().skipLr)
@@ -110,7 +110,7 @@ bool build_blrl(BuilderContext& ctx) {
 // Count Register Branch
 //=============================================================================
 
-bool build_bctr(BuilderContext& ctx) {
+bool BuildBctr(BuilderContext& ctx) {
   // Check active jump table (set by emitCpp before dispatch), then auto-detected
   const JumpTable* jt = ctx.activeJumpTable;
 
@@ -183,7 +183,7 @@ bool build_bctr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_bctrl(BuilderContext& ctx) {
+bool BuildBctrl(BuilderContext& ctx) {
   if (!ctx.config().skipLr)
     ctx.println("\tctx.lr = 0x{:X};", ctx.base + 4);
   ctx.println("\tREX_CALL_INDIRECT_FUNC({}.u32);", ctx.ctr());
@@ -191,7 +191,7 @@ bool build_bctrl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_bnectr(BuilderContext& ctx) {
+bool BuildBnectr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.eq) {{", ctx.cr(ctx.insn.operands[0]));
   ctx.println("\t\tREX_CALL_INDIRECT_FUNC({}.u32);", ctx.ctr());
   ctx.println("\t\treturn;");
@@ -203,33 +203,33 @@ bool build_bnectr(BuilderContext& ctx) {
 // Decrement Counter and Branch
 //=============================================================================
 
-bool build_bdz(BuilderContext& ctx) {
+bool BuildBdz(BuilderContext& ctx) {
   ctx.println("\t--{}.u64;", ctx.ctr());
   emitBranchWithBoundsCheck(ctx, ctx.insn.operands[0], fmt::format("{}.u32 == 0", ctx.ctr()),
                             "bdz");
   return true;
 }
 
-bool build_bdzlr(BuilderContext& ctx) {
+bool BuildBdzlr(BuilderContext& ctx) {
   ctx.println("\t--{}.u64;", ctx.ctr());
   ctx.println("\tif ({}.u32 == 0) return;", ctx.ctr());
   return true;
 }
 
-bool build_bdnzlr(BuilderContext& ctx) {
+bool BuildBdnzlr(BuilderContext& ctx) {
   ctx.println("\t--{}.u64;", ctx.ctr());
   ctx.println("\tif ({}.u32 != 0) return;", ctx.ctr());
   return true;
 }
 
-bool build_bdnz(BuilderContext& ctx) {
+bool BuildBdnz(BuilderContext& ctx) {
   ctx.println("\t--{}.u64;", ctx.ctr());
   emitBranchWithBoundsCheck(ctx, ctx.insn.operands[0], fmt::format("{}.u32 != 0", ctx.ctr()),
                             "bdnz");
   return true;
 }
 
-bool build_bdnzf(BuilderContext& ctx) {
+bool BuildBdnzf(BuilderContext& ctx) {
   auto bit = crBitName(ctx.insn.operands[0]);
   ctx.println("\t--{}.u64;", ctx.ctr());
   emitBranchWithBoundsCheck(
@@ -239,7 +239,7 @@ bool build_bdnzf(BuilderContext& ctx) {
   return true;
 }
 
-bool build_bdnzt(BuilderContext& ctx) {
+bool BuildBdnzt(BuilderContext& ctx) {
   auto bit = crBitName(ctx.insn.operands[0]);
   ctx.println("\t--{}.u64;", ctx.ctr());
   emitBranchWithBoundsCheck(
@@ -249,7 +249,7 @@ bool build_bdnzt(BuilderContext& ctx) {
   return true;
 }
 
-bool build_bdzf(BuilderContext& ctx) {
+bool BuildBdzf(BuilderContext& ctx) {
   auto bit = crBitName(ctx.insn.operands[0]);
   ctx.println("\t--{}.u64;", ctx.ctr());
   emitBranchWithBoundsCheck(
@@ -263,22 +263,22 @@ bool build_bdzf(BuilderContext& ctx) {
 // Conditional Branch (eq)
 //=============================================================================
 
-bool build_beq(BuilderContext& ctx) {
+bool BuildBeq(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "eq");
   return true;
 }
 
-bool build_beqlr(BuilderContext& ctx) {
+bool BuildBeqlr(BuilderContext& ctx) {
   ctx.println("\tif ({}.eq) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_bne(BuilderContext& ctx) {
+bool BuildBne(BuilderContext& ctx) {
   ctx.emit_conditional_branch(true, "eq");
   return true;
 }
 
-bool build_bnelr(BuilderContext& ctx) {
+bool BuildBnelr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.eq) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
@@ -287,22 +287,22 @@ bool build_bnelr(BuilderContext& ctx) {
 // Conditional Branch (lt)
 //=============================================================================
 
-bool build_blt(BuilderContext& ctx) {
+bool BuildBlt(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "lt");
   return true;
 }
 
-bool build_bltlr(BuilderContext& ctx) {
+bool BuildBltlr(BuilderContext& ctx) {
   ctx.println("\tif ({}.lt) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_bge(BuilderContext& ctx) {
+bool BuildBge(BuilderContext& ctx) {
   ctx.emit_conditional_branch(true, "lt");
   return true;
 }
 
-bool build_bgelr(BuilderContext& ctx) {
+bool BuildBgelr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.lt) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
@@ -311,22 +311,22 @@ bool build_bgelr(BuilderContext& ctx) {
 // Conditional Branch (gt)
 //=============================================================================
 
-bool build_bgt(BuilderContext& ctx) {
+bool BuildBgt(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "gt");
   return true;
 }
 
-bool build_bgtlr(BuilderContext& ctx) {
+bool BuildBgtlr(BuilderContext& ctx) {
   ctx.println("\tif ({}.gt) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_ble(BuilderContext& ctx) {
+bool BuildBle(BuilderContext& ctx) {
   ctx.emit_conditional_branch(true, "gt");
   return true;
 }
 
-bool build_blelr(BuilderContext& ctx) {
+bool BuildBlelr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.gt) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
@@ -335,22 +335,22 @@ bool build_blelr(BuilderContext& ctx) {
 // Conditional Branch (so - summary overflow / unordered)
 //=============================================================================
 
-bool build_bso(BuilderContext& ctx) {
+bool BuildBso(BuilderContext& ctx) {
   ctx.emit_conditional_branch(false, "so");
   return true;
 }
 
-bool build_bsolr(BuilderContext& ctx) {
+bool BuildBsolr(BuilderContext& ctx) {
   ctx.println("\tif ({}.so) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_bns(BuilderContext& ctx) {
+bool BuildBns(BuilderContext& ctx) {
   ctx.emit_conditional_branch(true, "so");
   return true;
 }
 
-bool build_bnslr(BuilderContext& ctx) {
+bool BuildBnslr(BuilderContext& ctx) {
   ctx.println("\tif (!{}.so) return;", ctx.cr(ctx.insn.operands[0]));
   return true;
 }

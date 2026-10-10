@@ -18,67 +18,67 @@ namespace rex::codegen {
 // No-ops and Sync Operations
 //=============================================================================
 
-bool build_nop(BuilderContext& ctx) {
+bool BuildNop(BuilderContext& ctx) {
   // Canonical PPC no-op (ori 0,0,0)
   (void)ctx;
   return true;
 }
 
-bool build_attn(BuilderContext& ctx) {
+bool BuildAttn(BuilderContext& ctx) {
   // Xenon-specific debug breakpoint, no effect in recompiled code
   (void)ctx;
   return true;
 }
 
-bool build_sync(BuilderContext& ctx) {
+bool BuildSync(BuilderContext& ctx) {
   // Memory barrier, x86 has strong ordering so this is a no-op
   (void)ctx;
   return true;
 }
 
-bool build_isync(BuilderContext& ctx) {
+bool BuildIsync(BuilderContext& ctx) {
   // Generated code does not fetch or execute guest instructions dynamically.
   (void)ctx;
   return true;
 }
 
-bool build_icbi(BuilderContext& ctx) {
+bool BuildIcbi(BuilderContext& ctx) {
   // Instruction cache invalidation has no effect on static native code.
   (void)ctx;
   return true;
 }
 
-bool build_lwsync(BuilderContext& ctx) {
+bool BuildLwsync(BuilderContext& ctx) {
   // Lightweight memory barrier, x86 has strong ordering so this is a no-op
   (void)ctx;
   return true;
 }
 
-bool build_eieio(BuilderContext& ctx) {
+bool BuildEieio(BuilderContext& ctx) {
   // Enforce in-order execution of I/O, x86 has strong ordering so this is a no-op
   (void)ctx;
   return true;
 }
 
-bool build_db16cyc(BuilderContext& ctx) {
+bool BuildDb16cyc(BuilderContext& ctx) {
   // Xenon-specific 16-cycle delay hint, no effect in recompiled code
   (void)ctx;
   return true;
 }
 
-bool build_cctpl(BuilderContext& ctx) {
+bool BuildCctpl(BuilderContext& ctx) {
   // Xenon-specific cache control thread priority low, no effect in recompiled code
   (void)ctx;
   return true;
 }
 
-bool build_cctpm(BuilderContext& ctx) {
+bool BuildCctpm(BuilderContext& ctx) {
   // Xenon-specific cache control thread priority medium, no effect in recompiled code
   (void)ctx;
   return true;
 }
 
-bool build_cctph(BuilderContext& ctx) {
+bool BuildCctph(BuilderContext& ctx) {
   // Xenon-specific cache control thread priority high, no effect in recompiled code
   (void)ctx;
   return true;
@@ -93,7 +93,7 @@ bool build_cctph(BuilderContext& ctx) {
 // the same builder.
 //=============================================================================
 
-bool build_tdi(BuilderContext& ctx) {
+bool BuildTdi(BuilderContext& ctx) {
   uint32_t to = (ctx.insn.instruction >> 21) & 0x1F;
   uint32_t ra = (ctx.insn.instruction >> 16) & 0x1F;
   int64_t simm = static_cast<int16_t>(ctx.insn.instruction & 0xFFFF);
@@ -102,7 +102,7 @@ bool build_tdi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_twi(BuilderContext& ctx) {
+bool BuildTwi(BuilderContext& ctx) {
   uint32_t to = (ctx.insn.instruction >> 21) & 0x1F;
   uint32_t ra = (ctx.insn.instruction >> 16) & 0x1F;
   int32_t simm = static_cast<int16_t>(ctx.insn.instruction & 0xFFFF);
@@ -119,7 +119,7 @@ bool build_twi(BuilderContext& ctx) {
   return true;
 }
 
-bool build_td(BuilderContext& ctx) {
+bool BuildTd(BuilderContext& ctx) {
   uint32_t to = (ctx.insn.instruction >> 21) & 0x1F;
   uint32_t ra = (ctx.insn.instruction >> 16) & 0x1F;
   uint32_t rb = (ctx.insn.instruction >> 11) & 0x1F;
@@ -128,7 +128,7 @@ bool build_td(BuilderContext& ctx) {
   return true;
 }
 
-bool build_tw(BuilderContext& ctx) {
+bool BuildTw(BuilderContext& ctx) {
   uint32_t to = (ctx.insn.instruction >> 21) & 0x1F;
   uint32_t ra = (ctx.insn.instruction >> 16) & 0x1F;
   uint32_t rb = (ctx.insn.instruction >> 11) & 0x1F;
@@ -141,25 +141,25 @@ bool build_tw(BuilderContext& ctx) {
 // Cache Operations
 //=============================================================================
 
-bool build_dcbf(BuilderContext& ctx) {
+bool BuildDcbf(BuilderContext& ctx) {
   // Hint instruction, access violation callback handlers take care of this on write
   (void)ctx;
   return true;
 }
 
-bool build_dcbt(BuilderContext& ctx) {
+bool BuildDcbt(BuilderContext& ctx) {
   // Hint instruction, prefetch has no semantic effect
   (void)ctx;
   return true;
 }
 
-bool build_dcbtst(BuilderContext& ctx) {
+bool BuildDcbtst(BuilderContext& ctx) {
   // Hint instruction, prefetch-for-store has no semantic effect
   (void)ctx;
   return true;
 }
 
-bool build_dcbz(BuilderContext& ctx) {
+bool BuildDcbz(BuilderContext& ctx) {
   // Xenon has 128-byte cache blocks for both dcbz and dcbzl.
   ctx.print("\t{} = (", ctx.ea());
   if (ctx.insn.operands[0] != 0)
@@ -169,7 +169,7 @@ bool build_dcbz(BuilderContext& ctx) {
   return true;
 }
 
-bool build_dcbzl(BuilderContext& ctx) {
+bool BuildDcbzl(BuilderContext& ctx) {
   // Compute EA, align to 128-byte cache line, apply physical offset
   ctx.print("\t{} = (", ctx.ea());
   if (ctx.insn.operands[0] != 0)
@@ -179,7 +179,7 @@ bool build_dcbzl(BuilderContext& ctx) {
   return true;
 }
 
-bool build_dcbst(BuilderContext& ctx) {
+bool BuildDcbst(BuilderContext& ctx) {
   // Hint instruction, access violation callback handlers take care of this on write
   (void)ctx;
   return true;
@@ -189,7 +189,7 @@ bool build_dcbst(BuilderContext& ctx) {
 // Move Register
 //=============================================================================
 
-bool build_mr(BuilderContext& ctx) {
+bool BuildMr(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64;", ctx.r(ctx.insn.operands[0]), ctx.r(ctx.insn.operands[1]));
   emitRecordFormCompare(ctx);
 
@@ -206,13 +206,13 @@ bool build_mr(BuilderContext& ctx) {
 // Move Register Field
 //=============================================================================
 
-bool build_mcrf(BuilderContext& ctx) {
+bool BuildMcrf(BuilderContext& ctx) {
   // Trivally copy one Control Register Field to another:
   ctx.println("\t{0} = {1};", ctx.cr(ctx.insn.operands[0]), ctx.cr(ctx.insn.operands[1]));
   return true;
 }
 
-bool build_mcrfs(BuilderContext& ctx) {
+bool BuildMcrfs(BuilderContext& ctx) {
   const uint32_t shift = 4 * (7 - ctx.insn.operands[1]);
   // Only exception flags are cleared; rounding, enables and result flags survive.
   // In particular, clearing a field must not reset RN through guest_bits, which
@@ -232,18 +232,18 @@ bool build_mcrfs(BuilderContext& ctx) {
 // Move From Special Registers
 //=============================================================================
 
-bool build_mfxer(BuilderContext& ctx) {
+bool BuildMfxer(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = ({}.so << 31) | ({}.ov << 30) | ({}.ca << 29);",
               ctx.r(ctx.insn.operands[0]), ctx.xer(), ctx.xer(), ctx.xer());
   return true;
 }
 
-bool build_mfctr(BuilderContext& ctx) {
+bool BuildMfctr(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64;", ctx.r(ctx.insn.operands[0]), ctx.ctr());
   return true;
 }
 
-bool build_mfcr(BuilderContext& ctx) {
+bool BuildMfcr(BuilderContext& ctx) {
   for (size_t i = 0; i < 32; i++) {
     constexpr std::string_view fields[] = {"lt", "gt", "eq", "so"};
     ctx.println("\t{}.u64 {}= {}.{} ? 0x{:X} : 0;", ctx.r(ctx.insn.operands[0]), i == 0 ? "" : "|",
@@ -252,7 +252,7 @@ bool build_mfcr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mfocrf(BuilderContext& ctx) {
+bool BuildMfocrf(BuilderContext& ctx) {
   // FXM is a one-hot mask: bit 7 = CR0, bit 6 = CR1, ..., bit 0 = CR7
   uint32_t fxm = ctx.insn.operands[1];
   uint32_t crField = 0;
@@ -269,13 +269,13 @@ bool build_mfocrf(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mflr(BuilderContext& ctx) {
+bool BuildMflr(BuilderContext& ctx) {
   if (!ctx.config().skipLr)
     ctx.println("\t{}.u64 = ctx.lr;", ctx.r(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_mfmsr(BuilderContext& ctx) {
+bool BuildMfmsr(BuilderContext& ctx) {
   if (!ctx.config().skipMsr) {
     // Memory barrier for MSR read
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
@@ -286,19 +286,19 @@ bool build_mfmsr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mffs(BuilderContext& ctx) {
+bool BuildMffs(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = ctx.fpscr.loadFromHost();", ctx.f(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_mftb(BuilderContext& ctx) {
+bool BuildMftb(BuilderContext& ctx) {
   // Xbox 360 timebase runs at 50 MHz (guest tick frequency)
   // Using REX_QUERY_TIMEBASE() macro provides properly scaled timing from the runtime
   ctx.println("\t{}.u64 = REX_QUERY_TIMEBASE();", ctx.r(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_mftbu(BuilderContext& ctx) {
+bool BuildMftbu(BuilderContext& ctx) {
   // Upper 32 bits of timebase
   ctx.println("\t{}.u64 = REX_QUERY_TIMEBASE() >> 32;", ctx.r(ctx.insn.operands[0]));
   return true;
@@ -308,7 +308,7 @@ bool build_mftbu(BuilderContext& ctx) {
 // Move To Special Registers
 //=============================================================================
 
-bool build_mtcr(BuilderContext& ctx) {
+bool BuildMtcr(BuilderContext& ctx) {
   for (size_t i = 0; i < 32; i++) {
     constexpr std::string_view fields[] = {"lt", "gt", "eq", "so"};
     ctx.println("\t{}.{} = ({}.u32 & 0x{:X}) != 0;", ctx.cr(i / 4), fields[i % 4],
@@ -317,7 +317,7 @@ bool build_mtcr(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mtcrf(BuilderContext& ctx) {
+bool BuildMtcrf(BuilderContext& ctx) {
   uint32_t fxm = ctx.insn.operands[0];
   constexpr std::string_view names[] = {"lt", "gt", "eq", "so"};
   for (uint32_t field = 0; field < 8; field++) {
@@ -332,18 +332,18 @@ bool build_mtcrf(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mtctr(BuilderContext& ctx) {
+bool BuildMtctr(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64;", ctx.ctr(), ctx.r(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_mtlr(BuilderContext& ctx) {
+bool BuildMtlr(BuilderContext& ctx) {
   if (!ctx.config().skipLr)
     ctx.println("\tctx.lr = {}.u64;", ctx.r(ctx.insn.operands[0]));
   return true;
 }
 
-bool build_mtmsrd(BuilderContext& ctx) {
+bool BuildMtmsrd(BuilderContext& ctx) {
   if (!ctx.config().skipMsr) {
     // Memory barrier for MSR write
     ctx.println("\tstd::atomic_thread_fence(std::memory_order_seq_cst);");
@@ -363,7 +363,7 @@ bool build_mtmsrd(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mtfsf(BuilderContext& ctx) {
+bool BuildMtfsf(BuilderContext& ctx) {
   uint32_t fm = ctx.insn.operands[0];
   uint32_t mask = 0;
   for (int j = 0; j < 8; j++) {
@@ -380,7 +380,7 @@ bool build_mtfsf(BuilderContext& ctx) {
   return true;
 }
 
-bool build_mtxer(BuilderContext& ctx) {
+bool BuildMtxer(BuilderContext& ctx) {
   ctx.println("\t{}.so = ({}.u64 & 0x80000000) != 0;", ctx.xer(), ctx.r(ctx.insn.operands[0]));
   ctx.println("\t{}.ov = ({}.u64 & 0x40000000) != 0;", ctx.xer(), ctx.r(ctx.insn.operands[0]));
   ctx.println("\t{}.ca = ({}.u64 & 0x20000000) != 0;", ctx.xer(), ctx.r(ctx.insn.operands[0]));
@@ -391,7 +391,7 @@ bool build_mtxer(BuilderContext& ctx) {
 // Clear Left Double Word Immediate
 //=============================================================================
 
-bool build_clrldi(BuilderContext& ctx) {
+bool BuildClrldi(BuilderContext& ctx) {
   ctx.println("\t{}.u64 = {}.u64 & 0x{:X};", ctx.r(ctx.insn.operands[0]),
               ctx.r(ctx.insn.operands[1]), (1ull << (64 - ctx.insn.operands[2])) - 1);
   emitRecordFormCompare(ctx);
