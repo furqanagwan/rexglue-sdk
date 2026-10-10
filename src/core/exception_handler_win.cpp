@@ -25,6 +25,17 @@ void* vch_handle_ = nullptr;
 
 constexpr size_t kMaxHandlerCount = 8;
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define REX_ADDRESS_SANITIZER 1
+#endif
+#endif
+#ifdef REX_ADDRESS_SANITIZER
+constexpr ULONG kRunBeforeOtherHandlers = 0;
+#else
+constexpr ULONG kRunBeforeOtherHandlers = 1;
+#endif
+
 std::pair<ExceptionHandler::Handler, void*> handlers_[kMaxHandlerCount];
 
 LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
@@ -105,7 +116,7 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
 
 void ExceptionHandler::Install(Handler fn, void* data) {
   if (!veh_handle_) {
-    veh_handle_ = AddVectoredExceptionHandler(1, ExceptionHandlerCallback);
+    veh_handle_ = AddVectoredExceptionHandler(kRunBeforeOtherHandlers, ExceptionHandlerCallback);
 
     if (IsDebuggerPresent()) {}
   }
