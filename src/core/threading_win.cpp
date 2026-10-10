@@ -9,8 +9,6 @@
 #include <rex/platform.h>
 #include <rex/thread.h>
 
-static_assert(REX_PLATFORM_WIN32, "This file is Windows-only");
-
 #include "platform_win.h"
 
 #include <spdlog/spdlog.h>

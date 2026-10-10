@@ -1,8 +1,6 @@
 #include <rex/platform.h>
 #include <rex/platform/dynlib.h>
 
-static_assert(REX_PLATFORM_WIN32, "This file is Windows-only");
-
 #include "platform_win.h"
 
 namespace rex::platform {

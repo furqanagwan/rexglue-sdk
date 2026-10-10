@@ -1,8 +1,6 @@
 #include <rex/platform.h>
 #include <rex/thread/atomic.h>
 
-static_assert(REX_PLATFORM_WIN32, "This file is Windows-only");
-
 #include <intrin.h>
 
 namespace rex::thread {

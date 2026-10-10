@@ -11,8 +11,6 @@
 
 #include <rex/exception_handler.h>
 
-#if REX_PLATFORM_WIN32
-
 #include "platform_win.h"
 
 #include <rex/assert.h>
@@ -171,5 +169,3 @@ void ExceptionHandler::Uninstall(Handler fn, void* data) {
 }
 
 }  // namespace rex::arch
-
-#endif  // REX_PLATFORM_WIN32

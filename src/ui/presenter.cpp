@@ -287,7 +287,6 @@ Presenter::~Presenter() {
   // it if needed.
   assert_false(is_executing_ui_drawers_);
 
-#if REX_PLATFORM_WIN32
   if (dxgi_ui_tick_thread_.joinable()) {
     {
       std::scoped_lock<std::mutex> dxgi_ui_tick_lock(dxgi_ui_tick_mutex_);
@@ -296,7 +295,6 @@ Presenter::~Presenter() {
     dxgi_ui_tick_control_condition_.notify_all();
     dxgi_ui_tick_thread_.join();
   }
-#endif  // XE_PLATFORM
 
   if (window_) {
     Window* old_window = window_;
@@ -792,9 +790,7 @@ bool Presenter::InitializeCommonSurfaceIndependent() {
   }
 
   // Initialize UI frame rate limiting.
-#if REX_PLATFORM_WIN32
   dxgi_ui_tick_thread_ = std::thread(&Presenter::DXGIUITickThread, this);
-#endif  // XE_PLATFORM
 
   return true;
 }
@@ -1430,7 +1426,6 @@ void Presenter::UpdateSurfaceMonitorFromUIThread(bool old_monitor_potentially_di
   // surface, the existence of `surface_` (which implies that `window_` exists
   // too) must be the condition for a non-null monitor, not just the existence
   // of `window_`.
-#if REX_PLATFORM_WIN32
   HMONITOR surface_new_win32_monitor = nullptr;
   if (surface_) {
     HWND hwnd = static_cast<HWND>(window_->GetNativeWindowHandle());
@@ -1480,18 +1475,13 @@ void Presenter::UpdateSurfaceMonitorFromUIThread(bool old_monitor_potentially_di
       dxgi_ui_tick_control_condition_.notify_all();
     }
   }
-#endif  // XE_PLATFORM
 }
 
 bool Presenter::InSurfaceOnMonitorFromUIThread() const {
   if (!surface_) {
     return false;
   }
-#if REX_PLATFORM_WIN32
   return surface_win32_monitor_ != nullptr;
-#else
-  return true;
-#endif  // XE_PLATFORM
 }
 
 Presenter::PaintResult Presenter::PaintAndPresent(bool execute_ui_drawers) {
@@ -1559,7 +1549,6 @@ void Presenter::HandleUIDrawersChangeFromUIThread(bool drawers_were_empty) {
 }
 
 void Presenter::UpdateUITicksNeededFromUIThread() {
-#if REX_PLATFORM_WIN32
   bool new_needed = AreUITicksNeededFromUIThread();
   if (dxgi_ui_ticks_needed_ == new_needed) {
     return;
@@ -1573,11 +1562,9 @@ void Presenter::UpdateUITicksNeededFromUIThread() {
   if (signal_dxgi_ui_tick_control) {
     dxgi_ui_tick_control_condition_.notify_all();
   }
-#endif
 }
 
 void Presenter::WaitForUITickFromUIThread() {
-#if REX_PLATFORM_WIN32
   if (!AreUITicksNeededFromUIThread()) {
     return;
   }
@@ -1602,17 +1589,13 @@ void Presenter::WaitForUITickFromUIThread() {
     }
     dxgi_ui_tick_signal_condition_.wait(dxgi_ui_tick_lock);
   }
-#endif  // XE_PLATFORM
 }
 
 void Presenter::ForceUIThreadPaintTick() {
-#if REX_PLATFORM_WIN32
   std::scoped_lock<std::mutex> dxgi_ui_tick_lock(dxgi_ui_tick_mutex_);
   dxgi_ui_tick_force_requested_ = true;
-#endif  // XE_PLATFORM
 }
 
-#if REX_PLATFORM_WIN32
 Microsoft::WRL::ComPtr<IDXGIOutput> Presenter::GetDXGIOutputForMonitor(IDXGIFactory1* factory,
                                                                        HMONITOR monitor) {
   Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
@@ -1661,7 +1644,6 @@ void Presenter::DXGIUITickThread() {
     dxgi_ui_tick_signal_condition_.notify_all();
   }
 }
-#endif  // XE_PLATFORM
 
 }  // namespace ui
 }  // namespace rex

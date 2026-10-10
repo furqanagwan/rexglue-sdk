@@ -10,7 +10,6 @@
  */
 
 #include <rex/platform.h>
-#if REX_PLATFORM_WIN32
 #include <Windows.h>
 #include <rex/thread/fiber.h>
 
@@ -60,5 +59,3 @@ void Fiber::Destroy() {
 }
 
 }  // namespace rex::thread
-
-#endif  // REX_PLATFORM_WIN32

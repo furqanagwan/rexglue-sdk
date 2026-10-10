@@ -11,10 +11,6 @@
 
 #include <rex/platform.h>
 
-#if !REX_PLATFORM_WIN32
-#include <strings.h>
-#endif
-
 #include <rex/hook.h>
 #include <rex/string.h>
 
@@ -29,9 +25,7 @@ static int native_strncmp(const char* s1, const char* s2, size_t n) {
 }
 
 static char* native_strncpy(char* dst, const char* src, size_t n) {
-#if REX_PLATFORM_WIN32
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
   return std::strncpy(dst, src, n);
 }
 
@@ -50,35 +44,15 @@ static char* native_strrchr(const char* s, int c) {
 static char* native_strtok(char* s, const char* delim) {
   // Non-reentrant per guest libc contract; concurrent guest threads will trample.
   static char* context = nullptr;
-#if REX_PLATFORM_WIN32
   return strtok_s(s, delim, &context);
-#else
-  return strtok_r(s, delim, &context);
-#endif
 }
 
 static int native_stricmp(const char* s1, const char* s2) {
-#if REX_PLATFORM_WIN32
   return _stricmp(s1, s2);
-#else
-  return strcasecmp(s1, s2);
-#endif
 }
 
 static int native_strcpy_s(char* dst, size_t dstsz, const char* src) {
-#if REX_PLATFORM_WIN32
   return strcpy_s(dst, dstsz, src);
-#else
-  if (!dst || !src || dstsz == 0)
-    return 22;  // EINVAL
-  const size_t src_len = std::strlen(src);
-  if (src_len + 1 > dstsz) {
-    dst[0] = '\0';
-    return 34;  // ERANGE
-  }
-  std::memcpy(dst, src, src_len + 1);
-  return 0;
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -91,18 +65,14 @@ static int native_lstrlenA(const char* s) {
 
 static char* native_lstrcpyA(char* dst, const char* src) {
   // Unbounded by guest contract.
-#if REX_PLATFORM_WIN32
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
   return std::strcpy(dst, src);
 }
 
 static char* native_lstrcpynA(char* dst, const char* src, int maxlen) {
   if (maxlen <= 0)
     return dst;
-#if REX_PLATFORM_WIN32
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
   std::strncpy(dst, src, static_cast<size_t>(maxlen) - 1);
   dst[maxlen - 1] = '\0';
   return dst;
@@ -110,18 +80,12 @@ static char* native_lstrcpynA(char* dst, const char* src, int maxlen) {
 
 static char* native_lstrcatA(char* dst, const char* src) {
   // Unbounded by guest contract.
-#if REX_PLATFORM_WIN32
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
   return std::strcat(dst, src);
 }
 
 static int native_lstrcmpiA(const char* s1, const char* s2) {
-#if REX_PLATFORM_WIN32
   return _stricmp(s1, s2);
-#else
-  return strcasecmp(s1, s2);
-#endif
 }
 
 // ---------------------------------------------------------------------------
