@@ -10,19 +10,19 @@
 #include "pixel_formats.xesli"
 #include "texture_load.xesli"
 
-// http://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/talks/unc-xenos-doggett.pdf
-// CXT1 is like DXT3/5 color, but 2-component and with 8:8 endpoints rather than
-// 5:6:5.
-//
-// Dword 1:
-// rrrrrrrrgggggggg
-// RRRRRRRRGGGGGGGG
-// (R is in the higher bits, according to how this format is used in 4D5307E6).
-// Dword 2:
-// AA BB CC DD
-// EE FF GG HH
-// II JJ KK LL
-// MM NN OO PP
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 array_buffer_wo_declare_xe(uint4_xe, xe_texture_load_dest, set=0, binding=0, u0,
                            space0)
@@ -38,7 +38,7 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 4 CTX1 blocks to 16x4 R8G8 texels.
+
   XeTextureLoadInfo load_info = XeTextureLoadGetInfo(pass_push_consts_xe);
   uint3_xe block_index = in_global_thread_id_xe << uint3_xe(2u, 0u, 0u);
   dont_flatten_xe
@@ -58,15 +58,15 @@ entry_inputs_end_code_begin_compute_xe
   unroll_xe for (i = 0u; i < 2u; ++i) {
     if (i != 0u) {
       ++block_offset_host;
-      // Odd 2 blocks = even 2 blocks + 32 bytes when tiled.
+
       block_offset_guest += load_info.is_tiled ? 2u : 1u;
     }
-    // Two blocks.
+
     uint4_xe blocks = XeEndianSwap32(
         array_buffer_load_xe(xe_texture_load_source, block_offset_guest),
         load_info.endian_32);
-    // Unpack the endpoints as 0x00g000r0 0x00G000R0 0x00g100r1 0x00G100R1 so
-    // they can be multiplied by their weights allowing overflow.
+
+
     uint4_xe end_8in16;
     end_8in16.xz = ((blocks.xz >> 8u) & 0xFFu) | ((blocks.xz & 0xFFu) << 16u);
     end_8in16.yw = (blocks.xz >> 24u) | (blocks.xz & 0xFF0000u);

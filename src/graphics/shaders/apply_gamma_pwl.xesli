@@ -10,14 +10,14 @@
 #include "../../ui/shaders/xesl.xesli"
 
 float XeApplyPWLGamma(uint input_value, uint2_xe ramp_value) {
-  // output = base + (multiplier * delta) / increment
-  // https://developer.amd.com/wordpress/media/2012/10/RRG-216M56-03oOEM.pdf
-  // The lower 6 bits of the base and the delta are 0 (though enforcing that in
-  // the shader is not necessary).
-  // The `(multiplier * delta) / increment` part may result in a nonzero value
-  // in the lower 6 bits of the result, however, so doing `* (1.0f / 64.0f)`
-  // instead of `>> 6` to preserve them (if the render target is 16bpc rather
-  // than 10bpc, for instance).
+
+
+
+
+
+
+
+
   return saturate_xe(
       (float(ramp_value.x) +
        float((input_value & 7u) * ramp_value.y) * (1.0f / 8.0f)) *
@@ -70,8 +70,8 @@ entry_bindings_end_inputs_begin_xe
   entry_in_pixel_coord_xe
 entry_inputs_end_code_begin_xe
   uint2_xe pixel_index = uint2_xe(in_pixel_coord_xe.xy);
-#endif  // XE_APPLY_GAMMA_COMPUTE
-  // UNORM conversion according to the Direct3D 10+ rules.
+#endif
+
   uint3_xe apply_gamma_input = uint3_xe(
       texel_fetch_2d_xe(xe_apply_gamma_source, pixel_index, 0).rgb * 1023.0f +
       0.5f);
@@ -92,7 +92,7 @@ entry_inputs_end_code_begin_xe
       texel_fetch_buffer_xe(xe_apply_gamma_ramp,
                             (apply_gamma_input.b >> 3u) * 3u + 2u).rg);
   #ifdef XE_APPLY_GAMMA_FXAA_LUMA
-    // Perceptual luma.
+
     apply_gamma_output.a =
         dot(apply_gamma_output.rgb, float3_xe(0.299f, 0.587f, 0.114f));
   #else

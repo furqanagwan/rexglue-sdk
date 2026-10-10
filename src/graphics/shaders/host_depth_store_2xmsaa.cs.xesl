@@ -26,11 +26,11 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 8 samples (8x0.5 pixels, resolve granularity is 8 pixels).
+
   uint rect_constant = push_const_xe(xe_host_depth_store_rectangle);
   uint rt_constant = push_const_xe(xe_host_depth_store_render_target);
   uint2_xe resolution_scale = XeHostDepthStoreRTResolutionScale(rt_constant);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (in_global_thread_id_xe.x >=
       (XeHostDepthStoreRectUnscaledWidthDiv8(rect_constant) *
@@ -41,18 +41,18 @@ entry_inputs_end_code_begin_compute_xe
       XeHostDepthStoreRectUnscaledOrigin(rect_constant) * resolution_scale +
       uint2_xe(in_global_thread_id_xe.x << 3u, in_global_thread_id_xe.y >> 1u));
   uint dest_sample_index = in_global_thread_id_xe.y & 1u;
-  // For simplicity, passing samples directly, not pixels, to
-  // XeEdramOffsetInts (xenia-canary #1238). Both backend transfer shader
-  // readers expect:
-  // x and 2 * y + sample
+
+
+
+
   uint edram_address_int4s =
       XeEdramOffsetInts((uint2_xe(pixel_index) << uint2_xe(0u, 1u)) |
                             uint2_xe(0u, dest_sample_index),
                         0u, false, XeHostDepthStoreRTPitchTiles(rt_constant),
                         kXenosMsaaSamples_1X, false, 0u, 0u, resolution_scale)
       >> 2u;
-  // Top and bottom to Direct3D 10.1+ and Vulkan top 1 and bottom 0 (for 2x) or
-  // top-left 0 and bottom-right 3 (for 4x).
+
+
   int source_sample_index =
       XeHostDepthStoreRTMsaa2xSupported(rt_constant)
           ? (bool(dest_sample_index) ? 0 : 1)

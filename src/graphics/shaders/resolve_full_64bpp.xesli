@@ -27,10 +27,10 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 4 host pixels.
+
   XeResolveInfo resolve_info = XeResolveGetInfo(pass_push_consts_xe);
   uint2_xe pixel_index = in_global_thread_id_xe.xy << uint2_xe(2u, 0u);
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (pixel_index.x >= resolve_info.width_div_8_scaled << 3u) {
     return;

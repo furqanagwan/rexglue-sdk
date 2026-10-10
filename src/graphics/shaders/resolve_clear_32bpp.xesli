@@ -23,12 +23,12 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 8 host samples (same as the resolve granularity at 1x1 scale).
+
   XeResolveInfo resolve_info = XeResolveGetInfo(pass_push_consts_xe);
   uint2_xe extent_scale = uint2_xe(greater_than_equal_xe(
       uint_x2_xe(resolve_info.edram_msaa_samples),
       uint2_xe(kXenosMsaaSamples_4X, kXenosMsaaSamples_2X)));
-  // Group height can't cross resolve granularity, Y overflow check not needed.
+
   dont_flatten_xe
   if (in_global_thread_id_xe.x >=
       resolve_info.width_div_8_scaled << extent_scale.x) {

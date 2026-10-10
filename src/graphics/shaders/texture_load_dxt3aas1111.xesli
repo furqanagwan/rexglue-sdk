@@ -23,10 +23,10 @@ entry_bindings_end_inputs_begin_compute_xe
   entry_in_global_thread_id_xe
 entry_inputs_end_code_begin_compute_xe
 {
-  // 1 thread = 4 DXT3A-as-1111 blocks to 16x4 16bpp texels passed through an
-  // externally provided
-  // `uint4 XE_TEXTURE_LOAD_DXT3A_AS_1_1_1_1_TO_16BPP(uint2 halfblocks)`
-  // conversion function.
+
+
+
+
   XeTextureLoadInfo load_info = XeTextureLoadGetInfo(pass_push_consts_xe);
   uint3_xe block_index = in_global_thread_id_xe << uint3_xe(2u, 0u, 0u);
   dont_flatten_xe
@@ -45,7 +45,7 @@ entry_inputs_end_code_begin_compute_xe
   uint4_xe blocks_01 = XeEndianSwap32(
       array_buffer_load_xe(xe_texture_load_source, block_offset_guest),
       load_info.endian_32);
-  // Odd 2 blocks = even 2 blocks + 32 bytes when tiled.
+
   block_offset_guest += load_info.is_tiled ? 2u : 1u;
   uint4_xe blocks_23 = XeEndianSwap32(
       array_buffer_load_xe(xe_texture_load_source, block_offset_guest),
