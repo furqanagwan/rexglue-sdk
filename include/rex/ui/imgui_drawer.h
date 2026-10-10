@@ -40,6 +40,7 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   ~ImGuiDrawer();
 
   ImGuiIO& GetIO();
+  float PixelsPerPoint() const;
 
   // Per-overlay styling, patched by the consumer in OnConfigureStyle.
   Style& style() { return style_; }
