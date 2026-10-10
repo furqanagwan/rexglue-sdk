@@ -52,9 +52,7 @@ bool Entry::is_read_only() const {
 
 Entry* Entry::GetChild(const std::string_view name) {
   auto global_lock = global_critical_region_.Acquire();
-  // The size test is exact, not just a hint: the fold is ASCII-only, so any two
-  // names it calls equal hold the same bytes per codepoint. It skips the UTF-8
-  // decode for nearly every child, and a game directory can hold thousands.
+
   auto it = std::find_if(children_.cbegin(), children_.cend(), [&](const auto& child) {
     return child->name().size() == name.size() && rex::string::utf8_equal_case(child->name(), name);
   });
@@ -65,12 +63,10 @@ Entry* Entry::GetChild(const std::string_view name) {
 }
 
 Entry* Entry::ResolvePath(const std::string_view path) {
-  // Walk the path, one separator at a time.
   Entry* entry = this;
   for (auto& part : rex::string::utf8_split_path(path)) {
     entry = entry->GetChild(part);
     if (!entry) {
-      // Not found.
       return nullptr;
     }
   }
@@ -96,7 +92,6 @@ Entry* Entry::CreateEntry(const std::string_view name, uint32_t attributes) {
     return nullptr;
   }
   if (GetChild(name)) {
-    // Already exists.
     return nullptr;
   }
   auto entry = CreateEntryInternal(name, attributes);
@@ -136,11 +131,9 @@ bool Entry::Delete() {
 }
 
 X_STATUS Entry::Rename(const std::filesystem::path& file_path) {
-  // Store the string so split path string_views remain valid.
   const std::string path_str = rex::path_to_utf8(file_path);
   std::vector<std::string_view> path_parts = rex::string::utf8_split_path(path_str);
   if (!path_parts.empty()) {
-    // Drop root path (for example, "game:").
     path_parts.erase(path_parts.begin());
   }
 
@@ -158,4 +151,4 @@ X_STATUS Entry::Rename(const std::filesystem::path& file_path) {
 
 void Entry::Touch() {}
 
-}  // namespace rex::filesystem
+}

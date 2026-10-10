@@ -45,12 +45,10 @@ int vfs_dump_main(const std::vector<std::string>& args) {
     return 1;
   }
 
-  // Run through all the files, breadth-first style.
   std::queue<vfs::Entry*> queue;
   auto root = device->ResolvePath("/");
   queue.push(root);
 
-  // Allocate a buffer when needed.
   size_t buffer_size = 0;
   uint8_t* buffer = nullptr;
 
@@ -84,14 +82,11 @@ int vfs_dump_main(const std::vector<std::string>& args) {
       fwrite(map->data(), map->size(), 1, file);
       map->Close();
     } else {
-      // Can't map the file into memory. Read it into a temporary buffer.
       if (!buffer || entry->size() > buffer_size) {
-        // Resize the buffer.
         if (buffer) {
           delete[] buffer;
         }
 
-        // Allocate a buffer rounded up to the nearest 512MB.
         buffer_size = rex::round_up(entry->size(), 512_MiB);
         buffer = new uint8_t[buffer_size];
       }
@@ -112,4 +107,4 @@ int vfs_dump_main(const std::vector<std::string>& args) {
   return 0;
 }
 
-}  // namespace rex::filesystem
+}

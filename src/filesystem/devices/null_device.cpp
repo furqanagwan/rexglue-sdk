@@ -59,4 +59,4 @@ Entry* NullDevice::ResolvePath(const std::string_view path) {
   return nullptr;
 }
 
-}  // namespace rex::filesystem
+}

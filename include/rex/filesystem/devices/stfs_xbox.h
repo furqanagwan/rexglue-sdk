@@ -24,20 +24,18 @@
 
 namespace rex::filesystem {
 
-// Import kernel content types for STFS structures
 using rex::system::XContentType;
 using rex::system::XLanguage;
 
-// Convert FAT timestamp to 100-nanosecond intervals since January 1, 1601 (UTC)
 inline uint64_t decode_fat_timestamp(const uint32_t date, const uint32_t time) {
   struct tm tm = {};
-  // 80 is the difference between 1980 (FAT) and 1900 (tm);
+
   tm.tm_year = ((0xFE00 & date) >> 9) + 80;
   tm.tm_mon = ((0x01E0 & date) >> 5) - 1;
   tm.tm_mday = (0x001F & date) >> 0;
   tm.tm_hour = (0xF800 & time) >> 11;
   tm.tm_min = (0x07E0 & time) >> 5;
-  tm.tm_sec = (0x001F & time) << 1;  // the value stored in 2-seconds intervals
+  tm.tm_sec = (0x001F & time) << 1;
   tm.tm_isdst = 0;
 
   time_t timet = _mkgmtime(&tm);
@@ -45,11 +43,9 @@ inline uint64_t decode_fat_timestamp(const uint32_t date, const uint32_t time) {
   if (timet == -1) {
     return 0;
   }
-  // 11644473600LL is a difference between 1970 and 1601
+
   return (timet + 11644473600LL) * 10000000;
 }
-
-// Structs used for interchange between Xenia and actual Xbox360 kernel/XAM
 
 inline uint32_t load_uint24_be(const uint8_t* p) {
   return (uint32_t(p[0]) << 16) | (uint32_t(p[1]) << 8) | uint32_t(p[2]);
@@ -74,7 +70,6 @@ enum class XContentVolumeType : uint32_t {
   kSvod = 1,
 };
 
-/* STFS structures */
 #pragma pack(push, 1)
 struct StfsVolumeDescriptor {
   uint8_t descriptor_length;
@@ -82,11 +77,9 @@ struct StfsVolumeDescriptor {
   union {
     uint8_t as_byte;
     struct {
-      uint8_t read_only_format : 1;   // if set, only uses a single backing-block
-                                      // per hash table (no resiliency),
-                                      // otherwise uses two
-      uint8_t root_active_index : 1;  // if set, uses secondary backing-block
-                                      // for the highest-level hash table
+      uint8_t read_only_format : 1;
+
+      uint8_t root_active_index : 1;
 
       uint8_t directory_overallocated : 1;
       uint8_t directory_index_bounds_valid : 1;
@@ -110,8 +103,8 @@ static_assert_size(StfsVolumeDescriptor, 0x24);
 #pragma pack(pop)
 
 enum class StfsHashState : uint8_t {
-  kFree = 0,   // unallocated but doesn't exist in package (needs to expand)?
-  kFree2 = 1,  // unallocated but exists in package?
+  kFree = 0,
+  kFree2 = 1,
   kInUse = 2,
 };
 
@@ -156,7 +149,7 @@ static_assert_size(StfsHashEntry, 0x18);
 
 struct StfsHashTable {
   StfsHashEntry entries[170];
-  rex::be<uint32_t> num_blocks;  // num L0 blocks covered by this table?
+  rex::be<uint32_t> num_blocks;
   uint8_t padding[12];
 };
 static_assert_size(StfsHashTable, 0x1000);
@@ -204,7 +197,6 @@ struct StfsDirectoryBlock {
 };
 static_assert_size(StfsDirectoryBlock, 0x1000);
 
-/* SVOD structures */
 struct SvodDeviceDescriptor {
   uint8_t descriptor_length;
   uint8_t block_cache_element_count;
@@ -229,7 +221,6 @@ struct SvodDeviceDescriptor {
 };
 static_assert_size(SvodDeviceDescriptor, 0x24);
 
-/* XContent structures */
 struct XContentLicense {
   be<uint64_t> licensee_id;
   be<uint32_t> license_bits;
@@ -271,7 +262,7 @@ struct XContentMetadata {
   static const uint32_t kThumbLengthV2 = 0x3D00;
 
   static const uint32_t kNumLanguagesV1 = 9;
-  // metadata_version 2 adds 3 languages inside thumbnail/title_thumbnail space
+
   static const uint32_t kNumLanguagesV2 = 12;
 
   be<XContentType> content_type;
@@ -333,7 +324,7 @@ struct XContentMetadata {
 
     if (lang_id >= kNumLanguagesV2) {
       assert_always();
-      // no room for this lang, read from english slot..
+
       lang_id = uint32_t(XLanguage::kEnglish) - 1;
     }
 
@@ -345,7 +336,6 @@ struct XContentMetadata {
     }
 
     if (!str) {
-      // Invalid language ID?
       assert_always();
       return u"";
     }
@@ -358,7 +348,7 @@ struct XContentMetadata {
 
     if (lang_id >= kNumLanguagesV2) {
       assert_always();
-      // no room for this lang, read from english slot..
+
       lang_id = uint32_t(XLanguage::kEnglish) - 1;
     }
 
@@ -370,7 +360,6 @@ struct XContentMetadata {
     }
 
     if (!str) {
-      // Invalid language ID?
       assert_always();
       return u"";
     }
@@ -391,7 +380,7 @@ struct XContentMetadata {
 
     if (lang_id >= kNumLanguagesV2) {
       assert_always();
-      // no room for this lang, store in english slot..
+
       lang_id = uint32_t(XLanguage::kEnglish) - 1;
     }
 
@@ -403,7 +392,6 @@ struct XContentMetadata {
     }
 
     if (!str) {
-      // Invalid language ID?
       assert_always();
       return false;
     }
@@ -417,7 +405,7 @@ struct XContentMetadata {
 
     if (lang_id >= kNumLanguagesV2) {
       assert_always();
-      // no room for this lang, store in english slot..
+
       lang_id = uint32_t(XLanguage::kEnglish) - 1;
     }
 
@@ -429,7 +417,6 @@ struct XContentMetadata {
     }
 
     if (!str) {
-      // Invalid language ID?
       assert_always();
       return false;
     }
@@ -471,4 +458,4 @@ struct StfsHeader {
 };
 static_assert_size(StfsHeader, 0x971A);
 
-}  // namespace rex::filesystem
+}

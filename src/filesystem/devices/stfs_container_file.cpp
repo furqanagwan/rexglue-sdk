@@ -42,7 +42,6 @@ X_STATUS StfsContainerFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offs
   for (size_t i = 0; i < entry_->block_list().size(); i++) {
     auto& record = entry_->block_list()[i];
     if (src_offset + record.length <= byte_offset) {
-      // Doesn't begin in this region. Skip it.
       src_offset += record.length;
       continue;
     }
@@ -52,7 +51,7 @@ X_STATUS StfsContainerFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offs
 
     auto file_it = entry_->files()->find(record.file);
     if (file_it == entry_->files()->end()) {
-      break;  // a block record in a data file that does not exist
+      break;
     }
     auto file = file_it->second;
     rex::filesystem::Seek(file, record.offset + read_offset, SEEK_SET);
@@ -62,8 +61,7 @@ X_STATUS StfsContainerFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offs
     p += num_read;
     src_offset += record.length;
     remaining_length -= read_length;
-    // A block past the end of a truncated package: stop at what was read
-    // rather than place later blocks at the wrong offset.
+
     if (num_read != read_length || remaining_length == 0) {
       break;
     }
@@ -72,4 +70,4 @@ X_STATUS StfsContainerFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offs
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::filesystem
+}

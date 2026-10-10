@@ -25,8 +25,6 @@
 
 namespace rex::filesystem {
 
-// https://free60project.github.io/wiki/STFS.html
-
 class StfsContainerEntry;
 
 class StfsContainerDevice : public Device {
@@ -51,9 +49,6 @@ class StfsContainerDevice : public Device {
   uint32_t component_name_max_length() const override { return 40; }
   const StfsHeader& header() const { return header_; }
 
-  // Reads and validates the StfsHeader from an STFS package file without
-  // mounting the device. Returns nullptr if the file is missing, too small,
-  // or has an invalid magic.
   static std::unique_ptr<StfsHeader> ReadPackageHeader(const std::filesystem::path& file_path);
 
   uint32_t total_allocation_units() const override {
@@ -139,9 +134,8 @@ class StfsContainerDevice : public Device {
   uint32_t block_step[2];
 
   std::unordered_map<size_t, StfsHashTable> cached_hash_tables_;
-  // SVOD directory nodes already read, so a node that points back at an
-  // earlier one ends the walk instead of recursing forever.
+
   std::unordered_set<uint64_t> svod_visited_nodes_;
 };
 
-}  // namespace rex::filesystem
+}

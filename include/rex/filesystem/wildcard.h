@@ -48,7 +48,6 @@ class WildcardEngine {
  public:
   void SetRule(const std::string_view pattern);
 
-  // Always ignoring case
   bool Match(const std::string_view str) const;
 
  private:
@@ -56,5 +55,5 @@ class WildcardEngine {
   void PreparePattern(const std::string_view pattern);
 };
 
-}  // namespace filesystem
-}  // namespace rex
+}
+}

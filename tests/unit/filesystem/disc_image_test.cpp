@@ -73,7 +73,7 @@ struct FileGuard {
   ~FileGuard() { file->Destroy(); }
   File* file = nullptr;
 };
-}  // namespace
+}
 
 TEST_CASE("XDVDFS file reads and owned snapshots preserve read-only semantics",
           "[filesystem][disc]") {

@@ -43,15 +43,13 @@ X_STATUS DiscImageEntry::Open(uint32_t desired_access, File** out_file) {
 std::unique_ptr<memory::MappedMemory> DiscImageEntry::OpenMapped(memory::MappedMemory::Mode mode,
                                                                  size_t offset, size_t length) {
   if (mode != memory::MappedMemory::Mode::kRead) {
-    // Only allow reads.
     return nullptr;
   }
 
   if (offset > data_size_ || (attributes() & kFileAttributeDirectory))
     return nullptr;
   const size_t real_length = length ? std::min(length, data_size_ - offset) : data_size_ - offset;
-  // Preserve the mapping API for existing callers using an owned snapshot.
-  // No memory pages are backed by a file on media that can disappear.
+
   class Snapshot : public memory::MappedMemory {
    public:
     explicit Snapshot(size_t size) : bytes_(size) {
@@ -73,4 +71,4 @@ bool DiscImageEntry::ReadBytes(size_t offset, std::span<uint8_t> bytes) {
          disc_->ReadBytes(data_offset_ + offset, bytes);
 }
 
-}  // namespace rex::filesystem
+}

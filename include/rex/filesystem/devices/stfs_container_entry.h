@@ -57,4 +57,4 @@ class StfsContainerEntry : public Entry {
   std::vector<BlockRecord> block_list_;
 };
 
-}  // namespace rex::filesystem
+}

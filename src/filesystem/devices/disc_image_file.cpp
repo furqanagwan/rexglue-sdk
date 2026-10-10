@@ -40,4 +40,4 @@ X_STATUS DiscImageFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offset,
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::filesystem
+}

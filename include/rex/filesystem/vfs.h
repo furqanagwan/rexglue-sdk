@@ -56,4 +56,4 @@ class VirtualFileSystem {
   bool ResolveSymbolicLink(const std::string_view path, std::string& result);
 };
 
-}  // namespace rex::filesystem
+}

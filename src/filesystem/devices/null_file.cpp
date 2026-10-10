@@ -47,4 +47,4 @@ X_STATUS NullFile::SetLength(size_t length) {
   return X_STATUS_SUCCESS;
 }
 
-}  // namespace rex::filesystem
+}

@@ -39,4 +39,4 @@ class HostPathFile : public File {
   std::unique_ptr<rex::filesystem::FileHandle> file_handle_;
 };
 
-}  // namespace rex::filesystem
+}

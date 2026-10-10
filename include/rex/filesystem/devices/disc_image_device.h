@@ -28,7 +28,7 @@ class DiscImageEntry;
 class DiscImageDevice : public Device {
  public:
   DiscImageDevice(const std::string_view mount_path, const std::filesystem::path& host_path);
-  // Reader injection for synthetic media and deterministic I/O failure tests.
+
   DiscImageDevice(std::string_view mount_path, std::unique_ptr<FileHandle> reader, size_t size);
   ~DiscImageDevice() override;
 
@@ -47,13 +47,11 @@ class DiscImageDevice : public Device {
   uint64_t file_count() const { return file_count_; }
   uint64_t total_file_size() const { return total_file_size_; }
   const DiscInfo& disc_info() const { return disc_info_; }
-  // Exact positioned read. Short reads and host errors are failures, never a
-  // pointer into removable media. File handles remain serialized.
+
   bool ReadBytes(size_t offset, std::span<uint8_t> bytes);
-  // Called only after a failed read; recovery is serialized across guest I/O.
+
   void SetFailureHandler(std::function<bool()> handler, std::function<bool()> allowed = {});
-  // Caller validates the source executable too. Directory layout must match
-  // before retaining existing guest file entries and replacing the reader.
+
   bool ReconnectFrom(DiscImageDevice& replacement);
 
   const std::string& name() const override { return name_; }
@@ -87,4 +85,4 @@ class DiscImageDevice : public Device {
   bool ReadBytesOnce(size_t offset, std::span<uint8_t> bytes);
 };
 
-}  // namespace rex::filesystem
+}

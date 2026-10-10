@@ -31,11 +31,10 @@ using rex::X_STATUS;
 namespace {
 
 constexpr size_t kBlock = 0x1000;
-constexpr size_t kHeaderSize = sizeof(StfsHeader);  // 0x971A, rounded to 0xA000
-constexpr size_t kHashTable = 0xA000;               // level 0 table for blocks 0-169
+constexpr size_t kHeaderSize = sizeof(StfsHeader);
+constexpr size_t kHashTable = 0xA000;
 constexpr uint32_t kEnd = 0xFFFFFF;
 
-// Block b (< 170) of a read-only STFS sits after the table: 0xA000 + (b+1) * 4K.
 size_t BlockOffset(uint32_t b) {
   return kHashTable + (b + 1) * kBlock;
 }
@@ -50,8 +49,6 @@ struct Package {
   }
 };
 
-// A package with one file, `name`, of `data` bytes in consecutive blocks
-// starting at block 1.
 Package MakeStfs(const std::string& name, const std::string& data) {
   const uint32_t data_blocks = uint32_t((data.size() + kBlock - 1) / kBlock);
   Package p;
@@ -69,7 +66,7 @@ Package MakeStfs(const std::string& name, const std::string& data) {
   d.set_file_table_block_number(0);
   d.total_block_count = 1 + data_blocks;
 
-  p.hashes().entries[0].set_level0_next_block(kEnd);  // file table
+  p.hashes().entries[0].set_level0_next_block(kEnd);
   for (uint32_t b = 1; b <= data_blocks; ++b) {
     p.hashes().entries[b].set_level0_next_block(b == data_blocks ? kEnd : b + 1);
   }
@@ -119,7 +116,7 @@ std::string ReadAll(Entry* entry, size_t capacity = 3 * kBlock) {
   return out;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A well-formed STFS package mounts and reads back", "[filesystem][stfs]") {
   const std::string data(kBlock + 100, 'x');
@@ -163,7 +160,7 @@ TEST_CASE("An STFS package cut short in its file table is refused", "[filesystem
 TEST_CASE("An STFS file whose data is cut short reads only what exists", "[filesystem][stfs]") {
   const std::string data(2 * kBlock, 'y');
   auto p = MakeStfs("save.dat", data);
-  p.bytes.resize(BlockOffset(2) + 10);  // second data block mostly missing
+  p.bytes.resize(BlockOffset(2) + 10);
   TempFile file(p.bytes);
   auto device = Mount(file.path);
   REQUIRE(device);
@@ -171,8 +168,6 @@ TEST_CASE("An STFS file whose data is cut short reads only what exists", "[files
 }
 
 TEST_CASE("An STFS block chain that leaves the package stops there", "[filesystem][stfs]") {
-  // Block 1 claims its successor is block 200, whose hash table would lie far
-  // past the end of the file (xenia-canary #1226 crash shape).
   auto p = MakeStfs("save.dat", std::string(kBlock, 'z'));
   p.entry(0).length = uint32_t(3 * kBlock);
   p.entry(0).set_allocated_data_blocks(3);
@@ -180,8 +175,7 @@ TEST_CASE("An STFS block chain that leaves the package stops there", "[filesyste
   TempFile file(p.bytes);
   auto device = Mount(file.path);
   REQUIRE(device);
-  // Block 1 and the out-of-package block 200 were recorded; reading stops at
-  // the end of the file instead of misplacing data.
+
   CHECK(ReadAll(device->ResolvePath("save.dat")) == std::string(kBlock, 'z'));
 }
 
@@ -204,13 +198,13 @@ TEST_CASE("An STFS entry naming a file as its parent is refused", "[filesystem][
   auto p = MakeStfs("save.dat", "abc");
   p.entry(1) = p.entry(0);
   p.entry(1).name[0] = 'x';
-  p.entry(1).directory_index = 0;  // entry 0 is a file
+  p.entry(1).directory_index = 0;
   TempFile file(p.bytes);
   CHECK_FALSE(Mount(file.path));
 }
 
 TEST_CASE("An STFS name length past the name field is clamped", "[filesystem][stfs]") {
-  auto p = MakeStfs("abcdefghijklmnopqrstuvwxyz0123456789ABCD", "abc");  // 40 chars
+  auto p = MakeStfs("abcdefghijklmnopqrstuvwxyz0123456789ABCD", "abc");
   p.entry(0).flags.name_length = 63;
   TempFile file(p.bytes);
   auto device = Mount(file.path);
@@ -240,9 +234,7 @@ TEST_CASE("A folder holding only files too small for a magic is not a package",
 }
 
 TEST_CASE("An SVOD directory node that points back at itself is refused", "[filesystem][svod]") {
-  // Single-file SVOD: the media magic at 0xD000 (block 0), root directory at
-  // block 2 (0xE000). Node 0 links right to node 8, which links to itself.
-  std::vector<uint8_t> bytes(0x13000, 0);  // reaches past the 0x12000 XSF probe
+  std::vector<uint8_t> bytes(0x13000, 0);
   auto& h = *reinterpret_cast<StfsHeader*>(bytes.data());
   h.header.magic = XContentPackageType::kLive;
   h.header.header_size = uint32_t(kHeaderSize);
@@ -259,7 +251,7 @@ TEST_CASE("An SVOD directory node that points back at itself is refused", "[file
     const uint16_t left = 0;
     std::memcpy(&bytes[address + 0], &left, 2);
     std::memcpy(&bytes[address + 2], &right, 2);
-    bytes[address + 13] = 1;  // name length
+    bytes[address + 13] = 1;
     bytes[address + 14] = 'n';
   };
   node(0xE000, 8);

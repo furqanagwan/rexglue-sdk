@@ -43,4 +43,4 @@ class DiscImageFile : public File {
   DiscImageEntry* entry_;
 };
 
-}  // namespace rex::filesystem
+}
