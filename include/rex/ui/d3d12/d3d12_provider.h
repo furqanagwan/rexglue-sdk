@@ -15,6 +15,7 @@
 #include <string>
 
 #include <rex/ui/d3d12/d3d12_api.h>
+#include <rex/ui/d3d12/d3d12_capabilities.h>
 #include <rex/ui/graphics_provider.h>
 
 namespace rex::ui::d3d12 {
@@ -41,6 +42,7 @@ class D3D12Provider : public GraphicsProvider {
   bool IsAdapterSoftware() const { return adapter_is_software_; }
   D3D_FEATURE_LEVEL GetMaxFeatureLevel() const { return max_feature_level_; }
   D3D_SHADER_MODEL GetHighestShaderModel() const { return highest_shader_model_; }
+  const D3D12Capabilities& GetCapabilities() const { return capabilities_; }
   ID3D12Device* GetDevice() const { return device_; }
   ID3D12CommandQueue* GetDirectQueue() const { return direct_queue_; }
 
@@ -176,6 +178,7 @@ class D3D12Provider : public GraphicsProvider {
   D3D_FEATURE_LEVEL max_feature_level_ = D3D_FEATURE_LEVEL_11_0;
   D3D_SHADER_MODEL highest_shader_model_ = D3D_SHADER_MODEL_5_1;
   bool unaligned_block_textures_supported_;
+  D3D12Capabilities capabilities_;
 };
 
 }

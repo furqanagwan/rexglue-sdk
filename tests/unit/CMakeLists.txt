@@ -57,6 +57,7 @@ add_executable(unit_tests
     ui/win32_window_test.cpp
     ui/display_mode_test.cpp
     ui/display_info_test.cpp
+    ui/d3d12_capabilities_test.cpp
     ui/launch_settings_test.cpp
     ui/game_source_test.cpp
     codegen/codegen_writer_test.cpp

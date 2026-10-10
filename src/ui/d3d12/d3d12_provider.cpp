@@ -502,6 +502,7 @@ bool D3D12Provider::Initialize() {
     virtual_address_bits_per_resource_ =
         virtual_address_support.MaxGPUVirtualAddressBitsPerResource;
   }
+  capabilities_ = QueryD3D12Capabilities(device, max_feature_level_, highest_shader_model_);
   REXGPU_INFO(
       "Direct3D 12 device and OS features:\n"
       "* Max feature level: {}_{}\n"
@@ -515,7 +516,8 @@ bool D3D12Provider::Initialize() {
       "* Rasterizer-ordered views: {}\n"
       "* Resource binding: tier {}\n"
       "* Tiled resources: tier {}\n"
-      "* Unaligned block-compressed textures: {}",
+      "* Unaligned block-compressed textures: {}\n"
+      "{}",
       uint32_t(feature_levels.MaxSupportedFeatureLevel) >> 12,
       (uint32_t(feature_levels.MaxSupportedFeatureLevel) >> 8) & 0xF,
       uint32_t(shader_model.HighestShaderModel) >> 4,
@@ -525,7 +527,8 @@ bool D3D12Provider::Initialize() {
       ps_specified_stencil_reference_supported_ ? "yes" : "no",
       uint32_t(programmable_sample_positions_tier_),
       rasterizer_ordered_views_supported_ ? "yes" : "no", uint32_t(resource_binding_tier_),
-      uint32_t(tiled_resources_tier_), unaligned_block_textures_supported_ ? "yes" : "no");
+      uint32_t(tiled_resources_tier_), unaligned_block_textures_supported_ ? "yes" : "no",
+      DescribeD3D12Capabilities(capabilities_));
 
   pfn_dxgi_get_debug_interface1_(0, IID_PPV_ARGS(&graphics_analysis_));
 

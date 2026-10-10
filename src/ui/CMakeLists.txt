@@ -34,6 +34,7 @@ set(REXUI_OVERLAY_SOURCES
 # D3D12 UI backend
 if(REXGLUE_USE_D3D12)
     set(REXUI_D3D12_SOURCES
+        d3d12/d3d12_capabilities.cpp
         d3d12/d3d12_cpu_descriptor_pool.cpp
         d3d12/d3d12_descriptor_heap_pool.cpp
         d3d12/d3d12_immediate_drawer.cpp
