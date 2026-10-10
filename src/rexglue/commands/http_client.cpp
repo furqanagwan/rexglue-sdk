@@ -29,7 +29,7 @@ struct Handle {
   }
 };
 
-}  // namespace
+}
 
 std::optional<std::vector<uint8_t>> HttpGet(const std::string& url, std::string* error,
                                             int timeout_ms) {
@@ -102,4 +102,4 @@ std::optional<std::vector<uint8_t>> HttpGet(const std::string& url, std::string*
   return body;
 }
 
-}  // namespace rexglue::cli
+}

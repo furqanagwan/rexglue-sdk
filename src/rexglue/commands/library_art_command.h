@@ -18,4 +18,4 @@ namespace rexglue::cli {
 
 void RegisterLibraryArt(CLI::App& parent, const CliContext& ctx, DeferredAction& pending);
 
-}  // namespace rexglue::cli
+}

@@ -32,7 +32,7 @@ TEST_CASE("GameInput sticks cover the whole XInput range", "[gdk][gameinput]") {
   CHECK(StickToXInput(-1.0f) == -32768);
   CHECK(StickToXInput(0.5f) == 16384);
   CHECK(StickToXInput(-0.5f) == -16384);
-  CHECK(StickToXInput(2.0f) == 32767);  // out of range clamps
+  CHECK(StickToXInput(2.0f) == 32767);
   CHECK(StickToXInput(-2.0f) == -32768);
   CHECK(StickToXInput(NAN) == 0);
   CHECK(TriggerToXInput(0.0f) == 0);
@@ -46,7 +46,7 @@ TEST_CASE("GameInput gamepad buttons map to XInput buttons", "[gdk][gameinput]")
   state.buttons = GameInputGamepadA | GameInputGamepadMenu | GameInputGamepadView |
                   GameInputGamepadDPadLeft | GameInputGamepadRightShoulder |
                   GameInputGamepadLeftThumbstick;
-  state.leftThumbstickY = 1.0f;  // up is positive in both
+  state.leftThumbstickY = 1.0f;
   state.rightTrigger = 1.0f;
   X_INPUT_GAMEPAD pad = GamepadToXInput(state, false);
   CHECK(uint16_t(pad.buttons) ==
@@ -57,7 +57,6 @@ TEST_CASE("GameInput gamepad buttons map to XInput buttons", "[gdk][gameinput]")
   CHECK(pad.left_trigger == 0);
   CHECK(uint16_t(GamepadToXInput({}, true).buttons) == X_INPUT_GAMEPAD_GUIDE);
 
-  // Every GameInput button maps to a distinct XInput button.
   uint16_t all = 0;
   for (uint32_t bit = 1; bit <= GameInputGamepadRightThumbstick; bit <<= 1) {
     GameInputGamepadState one = {};
@@ -81,7 +80,7 @@ TEST_CASE("XInput motor speeds become GameInput rumble", "[gdk][gameinput]") {
 TEST_CASE("GameInput device kinds become XInput subtypes", "[gdk][gameinput]") {
   CHECK(SubtypeFromGameInput(GameInputKindGamepad) == XINPUT_DEVSUBTYPE_GAMEPAD);
   CHECK(SubtypeFromGameInput(GameInputKindUnknown) == XINPUT_DEVSUBTYPE_GAMEPAD);
-  // Wheels and sticks usually offer the gamepad kind as well.
+
   CHECK(SubtypeFromGameInput(GameInputKindGamepad | GameInputKindRacingWheel) ==
         XINPUT_DEVSUBTYPE_WHEEL);
   CHECK(SubtypeFromGameInput(GameInputKindGamepad | GameInputKindArcadeStick) ==
@@ -110,7 +109,7 @@ TEST_CASE("The GameInput driver starts against the installed runtime",
     X_INPUT_STATE state = {};
     CHECK(driver.GetDeviceState(device.id, &state) == X_ERROR_SUCCESS);
     CHECK(state.packet_number >= 1);
-    // The capabilities carry what GameInput identified.
+
     X_INPUT_CAPABILITIES caps = {};
     REQUIRE(driver.GetDeviceCapabilities(device.id, 0, &caps) == X_ERROR_SUCCESS);
     INFO(device.name);
@@ -122,8 +121,6 @@ TEST_CASE("The GameInput driver starts against the installed runtime",
 
 TEST_CASE("A GameInput input system survives ReXApp's window attach",
           "[gdk][gameinput][installed_runtime]") {
-  // ReXApp: CreateDefaultInputSystem, then AttachWindow once the runtime is set up.
-  // GameInput is the GDK build's default (owner decision, 2026-09-28).
   CHECK(REXCVAR_GET(input_backend) == "gameinput");
   REQUIRE(rex::cvar::SetFlagByName("input_backend", "gameinput"));
   auto input = CreateDefaultInputSystem(false);
@@ -136,9 +133,6 @@ TEST_CASE("A GameInput input system survives ReXApp's window attach",
 
 TEST_CASE("GameInput Setup leaves the driver object intact",
           "[gdk][gameinput][installed_runtime]") {
-  // The installed runtime once wrote a callback token over the driver's vtable
-  // pointer during Setup (RegisterGuideButtonCallback); the next virtual call,
-  // ReXApp's AttachWindow, crashed. Virtual calls go through the base here.
   auto driver = std::make_unique<GameInputDriver>(nullptr, 0);
   const uintptr_t vtable = *reinterpret_cast<uintptr_t*>(driver.get());
   REQUIRE(driver->Setup() == X_STATUS_SUCCESS);

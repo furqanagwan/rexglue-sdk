@@ -25,7 +25,6 @@
 
 namespace rexglue::ui {
 
-/** Per-module task-list view that implements rex::codegen::ProgressReporter. */
 class ProgressView final : public rex::codegen::ProgressReporter {
  public:
   explicit ProgressView(std::string_view title);
@@ -70,4 +69,4 @@ class ProgressView final : public rex::codegen::ProgressReporter {
   std::thread spinner_thread_;
 };
 
-}  // namespace rexglue::ui
+}

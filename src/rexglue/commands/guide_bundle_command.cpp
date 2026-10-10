@@ -46,7 +46,7 @@ Result<void> WriteGuideBundle(const GuideBundleArgs& args) {
   std::string error;
   const std::vector<std::filesystem::path> sources(args.sources.begin(), args.sources.end());
   auto modules = SystemUpdate::ReadModules(sources, &error);
-  // Check the guide can be built from it before anything is embedded.
+
   std::unique_ptr<SystemUpdate> update;
   if (!modules || !(update = SystemUpdate::FromModules(*modules, &error))) {
     return Err<void>(ErrorCategory::Config,
@@ -63,7 +63,7 @@ Result<void> WriteGuideBundle(const GuideBundleArgs& args) {
   if (out.has_parent_path()) {
     std::filesystem::create_directories(out.parent_path(), ec);
   }
-  // Written beside, then moved, so a failed write never leaves half a bundle.
+
   const std::filesystem::path temp = out.string() + ".tmp";
   {
     std::ofstream file(temp, std::ios::binary | std::ios::trunc);
@@ -87,7 +87,6 @@ struct XuiDumpArgs {
   std::string output;
 };
 
-// Every file of every package, for research: <output>/<module>/<resource>/<file>.
 Result<void> DumpXui(const XuiDumpArgs& args) {
   using rex::ui::xui::SystemUpdate;
   std::string error;
@@ -118,7 +117,7 @@ Result<void> DumpXui(const XuiDumpArgs& args) {
   return rex::Ok();
 }
 
-}  // namespace
+}
 
 void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   (void)ctx;
@@ -152,4 +151,4 @@ void RegisterGuideBundle(CLI::App& parent, const CliContext& ctx, DeferredAction
       [dump, &pending]() { pending = [dump]() -> Result<void> { return DumpXui(*dump); }; });
 }
 
-}  // namespace rexglue::cli
+}

@@ -87,7 +87,6 @@ std::map<size_t, std::string> ParseMapFile(const std::string& mapPath) {
 }
 
 std::vector<uint8_t> ParseHexBytes(std::string hex) {
-  // "ABCD12" or, as hardware captures write them, "[AB, CD, 12]".
   std::erase_if(hex, [](char c) { return c == '[' || c == ']' || c == ',' || c == ' '; });
   std::vector<uint8_t> result;
   for (size_t i = 0; i < hex.size(); i += 2) {
@@ -104,7 +103,6 @@ std::vector<uint8_t> ParseHexBytes(std::string hex) {
   return result;
 }
 
-/* Source order is high-to-low; stored low-to-high to match runtime layout. */
 RegValue ParseVectorRegister(const std::string& line, std::string reg, size_t after) {
   RegValue rv;
   rv.reg = std::move(reg);
@@ -131,7 +129,7 @@ RegValue ParseRegisterDirective(const std::string& line, size_t directive_idx) {
   RegValue rv;
   rv.reg = std::move(reg);
   rv.value = rex::string::trim_string(line.substr(sp2 + 1));
-  // A bracketed scalar ("f4 [3FF0000000000000]") is the register's bits.
+
   if (rv.value.size() > 2 && rv.value.front() == '[' && rv.value.back() == ']') {
     rv.value = "0x" + rv.value.substr(1, rv.value.size() - 2);
     return rv;
@@ -145,7 +143,7 @@ MemValue ParseMemoryDirective(const std::string& line, size_t directive_idx) {
   auto sp2 = line.find(' ', sp1 + 1);
   MemValue mv;
   mv.address = line.substr(sp1 + 1, sp2 - sp1 - 1);
-  // Hardware captures write "0x0000000010001000"; the template adds the 0x.
+
   if (mv.address.starts_with("0x") || mv.address.starts_with("0X")) {
     mv.address = mv.address.substr(2);
   }
@@ -229,7 +227,7 @@ std::vector<TestSpec> ParseTestSpecs(const std::string& asmPath,
       continue;
     auto name = line.substr(0, colonIndex);
     if (name == "__rex_test_setjmp" || name == "__rex_test_longjmp")
-      continue;  // Helper entries are emitted, but have no standalone test spec.
+      continue;
     auto symbolIt = symbols.find(name);
     if (symbolIt == symbols.end())
       continue;
@@ -266,7 +264,7 @@ nlohmann::json SerializeRegisters(const std::vector<RegValue>& regs) {
       reg["type"] = "cr";
       reg["value"] = rv.value;
     } else if (rv.reg == "xer") {
-      reg["type"] = "xer";  // SO, OV and CA are bits 31, 30 and 29
+      reg["type"] = "xer";
       reg["value"] = rv.value;
     } else if (rv.is_vector) {
       reg["type"] = "vector";
@@ -316,8 +314,6 @@ std::string CategoryFromStem(std::string_view stem) {
   return "misc";
 }
 
-// Labels named one per line ("#" comments allowed), e.g. Edge's skip.txt.
-// With `with_reason`, the rest of a line after the label is kept.
 std::unordered_map<std::string, std::string> ReadLabelList(const std::string& path,
                                                            bool with_reason) {
   std::unordered_map<std::string, std::string> labels;
@@ -344,18 +340,16 @@ std::unordered_map<std::string, std::string> ReadLabelList(const std::string& pa
   return labels;
 }
 
-// A file's cases as ppc_table data (ppc_table_runner.h) and one TEST_CASE
-// that runs them. Each case carries its known failure cause, or nullptr.
 std::string EmitTable(const std::string& stem, const std::string& category,
                       const std::vector<std::pair<const TestSpec*, const std::string*>>& cases) {
   std::string ops, list, pool;
   size_t op_count = 0, pool_size = 0;
-  // Some captures already carry a suffix ("0x...ull").
+
   auto u64 = [](const std::string& v) {
     const char last = v.empty() ? '0' : char(std::tolower(uint8_t(v.back())));
     return last == 'l' || last == 'u' ? v : v + "ULL";
   };
-  // u32[3], u32[2] in the high half; u32[1], u32[0] in the low half.
+
   auto vec_hi = [](const RegValue& rv) {
     return fmt::format("0x{:0>8}{:0>8}ULL", rv.vec_values[3], rv.vec_values[2]);
   };
@@ -434,14 +428,11 @@ std::string EmitTable(const std::string& stem, const std::string& category,
 
 struct RecompileOptions {
   std::string bin_dir, asm_dir, out_dir;
-  // Output split over this many function and case files, so a large corpus
-  // compiles in parallel; 1 writes ppc_test_functions.cpp and
-  // ppc_test_cases.cpp as before.
+
   size_t chunks = 1;
-  std::string skip_list;       // test labels left out (captures judged wrong)
-  std::string known_failures;  // labels expected to fail, each with its cause
-  // Cases as data run from one loop per file (ppc_table_runner.h), for a
-  // corpus too large for a Catch2 test per case.
+  std::string skip_list;
+  std::string known_failures;
+
   bool table = false;
 };
 
@@ -528,8 +519,6 @@ bool RecompileTests(const RecompileOptions& opts) {
     }
   }
 
-  // Each file's labels name its own functions: files reuse labels (both
-  // instr_vcmpbfp.s and instr_vcmpxxfp.s have test_vcmpbfp_1).
   auto labels_of = [](const std::string& stem, const FileOutput& out) {
     std::unordered_map<std::string, std::string> labels;
     for (const auto& [addr, name] : out.symbols) {
@@ -569,7 +558,6 @@ bool RecompileTests(const RecompileOptions& opts) {
     std::string category = CategoryFromStem(stem);
     std::vector<std::pair<const TestSpec*, const std::string*>> table_cases;
     for (const auto& spec : specs) {
-      // Edge's skip.txt names labels without their "test_" prefix.
       const std::string bare = spec.name.starts_with("test_") ? spec.name.substr(5) : spec.name;
       if (skip.contains(spec.name) || skip.contains(bare)) {
         ++skipped;
@@ -580,8 +568,7 @@ bool RecompileTests(const RecompileOptions& opts) {
       testJson["category"] = category;
       testJson["stem"] = stem;
       testJson["symbol"] = spec.symbol;
-      // Catch2 reports a known failure that passes, so a fix shows too.
-      // Keyed "stem/label": files reuse labels.
+
       if (auto known = known_failures.find(fmt::format("{}/{}", stem, spec.name));
           known != known_failures.end()) {
         testJson["known_failure"] = true;
@@ -649,7 +636,7 @@ struct RecompileTestsArgs {
   bool table = false;
 };
 
-}  // namespace
+}
 
 void RegisterRecompileTests(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   (void)ctx;
@@ -686,4 +673,4 @@ void RegisterRecompileTests(CLI::App& parent, const CliContext& ctx, DeferredAct
   });
 }
 
-}  // namespace rexglue::cli
+}

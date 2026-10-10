@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ReXGlue contributors. BSD 3-Clause License; see LICENSE.
-// Installed-SDK smoke: render the launcher and shut down before loading a XEX.
+
 #include <fstream>
 
 #include <imgui.h>

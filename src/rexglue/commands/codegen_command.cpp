@@ -142,7 +142,7 @@ struct CodegenArgs {
   bool ignore_stamp = false;
 };
 
-}  // namespace
+}
 
 Result<std::string> DiscoverManifestInCwd() {
   std::error_code ec;
@@ -250,4 +250,4 @@ void RegisterCodegen(CLI::App& parent, const CliContext& ctx, DeferredAction& pe
   });
 }
 
-}  // namespace rexglue::cli
+}

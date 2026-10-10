@@ -84,7 +84,7 @@ fs::path ResolveDir(const std::string& raw, std::error_code& ec) {
   return canon;
 }
 
-}  // namespace
+}
 
 Result<void> InitProject(const InitOptions& opts, const CliContext& ctx) {
   (void)ctx;
@@ -363,7 +363,7 @@ Result<void> InitModule(const InitModuleOptions& opts, const CliContext& ctx) {
   return Ok();
 }
 
-Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliContext& /*ctx*/) {
+Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliContext&) {
   std::error_code ec;
   fs::path xexPath = fs::absolute(opts.xex_path, ec);
   if (ec || !fs::exists(xexPath)) {
@@ -378,7 +378,6 @@ Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliCont
     return Err<void>(ErrorCategory::IO, "Cannot create output directory: " + outDir.string());
   }
 
-  // Build VFS path: game:\ maps to the XEX's parent directory.
   fs::path gameRoot = xexPath.parent_path();
   fs::path entryRel = xexPath.filename();
   std::string entryRelStr = entryRel.string();
@@ -473,7 +472,6 @@ Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliCont
 
   REXLOG_INFO("Wrote {} achievements to {}", achievements.size(), outPath.string());
 
-  // ---- Icons ---------------------------------------------------------------
   fs::path iconsDir = outDir / "icons";
   fs::create_directories(iconsDir, ec);
   if (ec) {
@@ -515,7 +513,6 @@ Result<void> InitAchievements(const InitAchievementsOptions& opts, const CliCont
       REXLOG_WARN("{} achievement(s) had no icon in XDBF", icons_missing);
     }
 
-    // Game title icon (not tied to any achievement).
     if (auto game_icon = db.icon(); game_icon && game_icon.size > 0) {
       fs::path game_icon_path = iconsDir / "title.png";
       std::ofstream f(game_icon_path, std::ios::binary);
@@ -572,7 +569,6 @@ Result<void> InitGameConfig(const InitGameConfigOptions& opts, const CliContext&
   }
   REXLOG_INFO("Wrote {}", config_path.string());
 
-  // Placeholder art, never replacing images the title already has.
   const uint32_t color =
       static_cast<uint32_t>(std::stoul(opts.identity.background_color.substr(1), nullptr, 16));
   for (const auto& image : rex::codegen::GameConfigImages()) {
@@ -629,13 +625,12 @@ struct InitAchievementsArgs {
   uint32_t language = static_cast<uint32_t>(rex::system::XLanguage::kEnglish);
 };
 
-}  // namespace
+}
 
 void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pending) {
   auto* init = parent.add_subcommand("init", "Initialize a new project")->fallthrough();
   auto args = std::make_shared<InitArgs>();
-  // Not CLI11-required: that would also demand them of the module,
-  // achievements and gameconfig subcommands. InitProject checks both.
+
   init->add_option("--project-name", args->project_name,
                    "Project name (becomes [project].name in the manifest)")
       ->type_name("NAME");
@@ -666,7 +661,7 @@ void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pendi
 
   init->callback([args, &ctx, &pending]() {
     if (pending)
-      return;  // a subcommand already claimed the action
+      return;
     pending = [args, &ctx]() -> Result<void> {
       InitOptions opts;
       opts.project_name = args->project_name;
@@ -776,4 +771,4 @@ void RegisterInit(CLI::App& parent, const CliContext& ctx, DeferredAction& pendi
   });
 }
 
-}  // namespace rexglue::cli
+}

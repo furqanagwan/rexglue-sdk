@@ -15,8 +15,6 @@
 #include <rex/cvar.h>
 #include <rex/system/gpu_plugin.h>
 
-// The GDK headers need the Windows headers first; the SDK headers above do
-// not include them.
 #include <windows.h>
 
 #include <XGameRuntime.h>
@@ -44,7 +42,7 @@ void Check(bool condition, const char* what) {
   }
 }
 
-}  // namespace
+}
 
 int main() {
   std::printf("GDK edition %d\n", _GRDK_EDITION);

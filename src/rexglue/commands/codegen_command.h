@@ -30,4 +30,4 @@ Result<std::string> DiscoverManifestInCwd();
 
 void RegisterCodegen(CLI::App& parent, const CliContext& ctx, DeferredAction& pending);
 
-}  // namespace rexglue::cli
+}

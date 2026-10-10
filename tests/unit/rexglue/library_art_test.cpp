@@ -63,7 +63,7 @@ TEST_CASE("Native title ICO frames retain size colour and transparency", "[libra
       CHECK(read32(offset) == 40);
       CHECK(read32(offset + 4) == uint32_t(sizes[i]));
       CHECK(read32(offset + 8) == uint32_t(sizes[i] * 2));
-      CHECK((*ico)[offset + 40] == 64);  // Straight blue, not premultiplied.
+      CHECK((*ico)[offset + 40] == 64);
       CHECK((*ico)[offset + 43] == 128);
     }
     end = size_t(offset) + length;
@@ -103,7 +103,7 @@ Rgb At(const Image& image, int x, int y) {
   return {p[2], p[1], p[0]};
 }
 
-}  // namespace
+}
 
 TEST_CASE("Library art PNGs round-trip", "[library_art]") {
   Image image = Solid(3, 2, 10, 20, 30);
@@ -120,13 +120,12 @@ TEST_CASE("Library art PNGs round-trip", "[library_art]") {
 }
 
 TEST_CASE("The tile is the strip beside the box art without its banner", "[library_art]") {
-  // Marketplace-style box art: a blue banner over the top 13%, red below.
   Image cover = Solid(219, 300, 220, 0, 0);
   Fill(cover, 0, 0, 219, 39, 0, 0, 220);
   const Image tile = ComposeTile(cover, 0.13, nullptr, 1080);
   REQUIRE(tile.width == 1080);
   REQUIRE(tile.height == 1080);
-  // The art fills everything right of the strip, banner gone.
+
   for (int y : {2, 540, 1077}) {
     for (int x : {192, 600, 1077}) {
       INFO(x << ", " << y);
@@ -134,7 +133,7 @@ TEST_CASE("The tile is the strip beside the box art without its banner", "[libra
       CHECK(At(tile, x, y).b < 20);
     }
   }
-  // The strip: green swooshes at the top, white below.
+
   const Rgb top = At(tile, 20, 60);
   CHECK(top.g > top.r);
   CHECK(top.g > top.b + 100);
@@ -144,16 +143,14 @@ TEST_CASE("The tile is the strip beside the box art without its banner", "[libra
     CHECK(white.g == 255);
     CHECK(white.b == 255);
   }
-  // Scaled down for the smaller sizes, the layout holds.
+
   const Image small = ComposeTile(cover, 0.13, nullptr, 150);
   CHECK(small.width == 150);
-  CHECK(At(small, 13, 75).r > 240);   // strip
-  CHECK(At(small, 100, 75).r > 200);  // art
+  CHECK(At(small, 13, 75).r > 240);
+  CHECK(At(small, 100, 75).r > 200);
 }
 
 TEST_CASE("The strip's orb and wordmark come from the console's splash", "[library_art]") {
-  // A splash in splash_360.png's layout: the orb, a gap, the wordmark (a
-  // green word and a grey one) with a trade mark sign at its baseline.
   Image splash = Solid(300, 200, 0, 0, 0);
   for (uint8_t& v : splash.pixels) {
     v = 0;
@@ -165,20 +162,20 @@ TEST_CASE("The strip's orb and wordmark come from the console's splash", "[libra
       }
     }
   }
-  Fill(splash, 140, 30, 160, 70, 40, 180, 20);      // the X
-  Fill(splash, 10, 120, 120, 170, 100, 190, 30);    // XBOX
-  Fill(splash, 130, 120, 250, 170, 120, 120, 120);  // 360
-  Fill(splash, 253, 163, 263, 170, 120, 120, 120);  // trade mark sign
+  Fill(splash, 140, 30, 160, 70, 40, 180, 20);
+  Fill(splash, 10, 120, 120, 170, 100, 190, 30);
+  Fill(splash, 130, 120, 250, 170, 120, 120, 120);
+  Fill(splash, 253, 163, 263, 170, 120, 120, 120);
   std::string error;
   const auto art = StripArtFromSplash(splash, &error);
   REQUIRE(art);
   CHECK(art->orb.width == 80);
   CHECK(art->orb.height == 80);
-  CHECK(art->orb.at(40, 40)[3] == 255);  // inside the disc
-  CHECK(art->orb.at(1, 1)[3] == 0);      // outside it
-  const Rgb x = At(art->orb, 40, 40);    // the X, in the tiles' green
+  CHECK(art->orb.at(40, 40)[3] == 255);
+  CHECK(art->orb.at(1, 1)[3] == 0);
+  const Rgb x = At(art->orb, 40, 40);
   CHECK(x.g > x.r + 60);
-  // The wordmark without the trade mark sign, recoloured.
+
   CHECK(art->wordmark.width == 240);
   CHECK(art->wordmark.height == 50);
   const Rgb xbox = At(art->wordmark, 50, 25);
@@ -188,9 +185,8 @@ TEST_CASE("The strip's orb and wordmark come from the console's splash", "[libra
   CHECK(grey.r == 104);
   CHECK(grey.g == 104);
 
-  // Placed: the wordmark runs up the strip, the orb below it.
   const Image tile = ComposeTile(Solid(10, 10, 220, 0, 0), 0.0, &*art, 1080);
-  const Rgb word = At(tile, 95, 850);  // the bottom of XBOX
+  const Rgb word = At(tile, 95, 850);
   CHECK(word.g > word.r + 60);
   const Rgb orb = At(tile, 95, 986);
   CHECK(orb.r < 250);

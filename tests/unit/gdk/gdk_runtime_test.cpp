@@ -6,16 +6,12 @@
  * @license     BSD 3-Clause License
  */
 
-// SDK headers first, then the GDK, as a title would: both must coexist with
-// the SDK's NOMINMAX/WIN32_LEAN_AND_MEAN Windows configuration.
 #include <rex/codegen/game_config.h>
 #include <rex/cvar.h>
 #include <rex/platform.h>
 #include <rex/system/gaming_runtime.h>
 #include <rex/system/gpu_plugin.h>
 
-// The GDK headers need the Windows headers first; the SDK headers above do
-// not include them.
 #include <windows.h>
 
 #include <XGameRuntime.h>
@@ -47,8 +43,6 @@ TEST_CASE("Gaming Runtime initializes in an unpackaged SDK process", "[gdk][inst
 }
 
 TEST_CASE("C++ exceptions unwind through rexruntime under the GDK toolchain", "[gdk]") {
-  // The command runs inside rexruntime's cvar dispatch, so the exception
-  // crosses the DLL boundary on its way back to the test.
   try {
     rex::cvar::InvokeCommand("gdk_test_throw", "crossed rexruntime");
     FAIL("no exception");

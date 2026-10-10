@@ -56,13 +56,13 @@ void ConfigureLogging(const std::string& level, const std::string& log_file, boo
   rex::RegisterLogLevelCallback();
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
   CLI::App app{TitleString(), "rexglue"};
   app.set_version_flag("--version", REXGLUE_VERSION_STRING);
   app.require_subcommand(1);
-  // Lets cvar overrides be spelled after the subcommand name.
+
   app.fallthrough();
 
   rexglue::cli::CliContext ctx;
@@ -92,7 +92,6 @@ int main(int argc, char** argv) {
 
   CLI11_PARSE(app, argc, argv);
 
-  // The registry also exposes log_level, so honor that spelling.
   if (rex::cvar::GetFlagSource("log_level") == rex::cvar::Source::kCommandLine) {
     log_level = rex::cvar::GetFlagByName("log_level");
   }

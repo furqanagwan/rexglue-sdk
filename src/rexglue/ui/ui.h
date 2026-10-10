@@ -29,7 +29,6 @@ namespace detail {
 class GlobalSinkAccessor;
 }
 
-/** spdlog sink that also owns direct presentation output for the rexglue CLI. */
 class PresentationSink final : public spdlog::sinks::base_sink<std::mutex> {
  public:
   PresentationSink(std::ostream& out, bool tty, bool color);
@@ -89,7 +88,6 @@ bool SinkIsTty();
 
 void SetSinkActiveProgress(bool active);
 
-/** RAII lock on the global sink's mutex for write access. */
 class GlobalSinkAccessor {
  public:
   GlobalSinkAccessor();
@@ -106,7 +104,7 @@ class GlobalSinkAccessor {
   void writeColored(std::string_view code, std::string_view text);
 };
 
-}  // namespace detail
+}
 
 namespace color {
 inline constexpr std::string_view kReset = "\033[0m";
@@ -118,6 +116,6 @@ inline constexpr std::string_view kCyan = "\033[36m";
 inline constexpr std::string_view kBoldGreen = "\033[1;32m";
 inline constexpr std::string_view kBoldRed = "\033[1;31m";
 inline constexpr std::string_view kBoldYellow = "\033[1;33m";
-}  // namespace color
+}
 
-}  // namespace rexglue::ui
+}
