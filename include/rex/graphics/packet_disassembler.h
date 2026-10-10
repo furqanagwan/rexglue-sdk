@@ -90,4 +90,4 @@ class PacketDisassembler {
   static bool DisasmPacket(const uint8_t* base_ptr, PacketInfo* out_info);
 };
 
-}  // namespace rex::graphics
+}

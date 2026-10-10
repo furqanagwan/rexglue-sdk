@@ -126,4 +126,4 @@ inline bool ResolveConfiguredSize(int32_t& width_out, int32_t& height_out) {
   return width_out > 0 && height_out > 0;
 }
 
-}  // namespace rex::graphics::video_mode_util
+}

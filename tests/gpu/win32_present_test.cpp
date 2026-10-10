@@ -30,8 +30,6 @@ namespace {
 using namespace rex::ui;  // NOLINT
 using rex::ui::d3d12::D3D12Provider;
 
-// UI drawers run only for frames that are presented, so this records every
-// presented frame's render target size.
 struct FrameRecorder : UIDrawer {
   std::vector<std::pair<uint32_t, uint32_t>> frames;
   void Draw(UIDrawContext& context) override {
@@ -39,7 +37,6 @@ struct FrameRecorder : UIDrawer {
   }
 };
 
-// Pumps the UI thread's messages until `done` or the timeout.
 template <typename Done>
 bool PumpUntil(Done done, std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
   auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -57,7 +54,7 @@ bool PumpUntil(Done done, std::chrono::milliseconds timeout = std::chrono::secon
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("D3D12 presents through the Win32 window across resize and close", "[gpu][win32]") {
   static bool logging_initialized = [] {
@@ -68,7 +65,7 @@ TEST_CASE("D3D12 presents through the Win32 window across resize and close", "[g
   if (!D3D12Provider::IsD3D12APIAvailable()) {
     SKIP("Direct3D 12 is not available");
   }
-  const int32_t adapter = GENERATE(-2, -1);  // WARP, then the hardware adapter
+  const int32_t adapter = GENERATE(-2, -1);
   REXCVAR_SET(d3d12_adapter, adapter);
   auto provider = D3D12Provider::Create();
   REXCVAR_SET(d3d12_adapter, -1);
@@ -90,12 +87,10 @@ TEST_CASE("D3D12 presents through the Win32 window across resize and close", "[g
   presenter->AddUIDrawerFromUIThread(&recorder, 0);
   window->SetPresenter(presenter.get());
 
-  // First frame at the window's size.
   REQUIRE(PumpUntil([&] { return !recorder.frames.empty(); }));
   CHECK(recorder.frames.back().first == window->GetActualPhysicalWidth());
   CHECK(recorder.frames.back().second == window->GetActualPhysicalHeight());
 
-  // Resize: the swap chain follows the client area.
   HWND hwnd = static_cast<HWND>(window->GetNativeWindowHandle());
   RECT rect = {0, 0, 640, 400};
   AdjustWindowRectEx(&rect, DWORD(GetWindowLongW(hwnd, GWL_STYLE)), FALSE,
@@ -107,7 +102,6 @@ TEST_CASE("D3D12 presents through the Win32 window across resize and close", "[g
     return recorder.frames.back().first == 640 && recorder.frames.back().second == 400;
   }));
 
-  // Minimize and restore keep presenting afterwards.
   ShowWindow(hwnd, SW_MINIMIZE);
   PumpUntil([] { return false; }, std::chrono::milliseconds(100));
   ShowWindow(hwnd, SW_RESTORE);
@@ -117,8 +111,6 @@ TEST_CASE("D3D12 presents through the Win32 window across resize and close", "[g
     return recorder.frames.size() > frames_before;
   }));
 
-  // Close with the presenter still attached, while frames are being requested:
-  // the window detaches the surface, and the presenter outlives it cleanly.
   presenter->RequestUIPaintFromUIThread();
   window->RequestClose();
   CHECK(window->GetNativeWindowHandle() == nullptr);

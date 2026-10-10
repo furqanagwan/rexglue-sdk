@@ -20,7 +20,6 @@
 namespace rex::graphics {
 
 inline xenos::TextureFormat GetBaseFormat(xenos::TextureFormat texture_format) {
-  // These formats are used for resampling textures / gamma control.
   switch (texture_format) {
     case xenos::TextureFormat::k_16_EXPAND:
       return xenos::TextureFormat::k_16_FLOAT;
@@ -112,9 +111,9 @@ inline xenos::TextureFormat DepthRenderTargetToTextureFormat(
 }
 
 enum class FormatType {
-  // Uncompressed, and is also a ColorFormat.
+
   kResolvable,
-  // Uncompressed, but resolve or memory export cannot be done to the format.
+
   kUncompressed,
   kCompressed,
 };
@@ -126,9 +125,9 @@ struct FormatInfo {
   uint32_t block_width;
   uint32_t block_height;
   uint32_t bits_per_pixel;
-  // Bits of each stored component, 0 for none (and for non-fixed formats).
+
   uint8_t component_bits[4];
-  // Fixed point: the host samples it normalized.
+
   bool fixed;
 
   uint32_t bytes_per_block() const { return block_width * block_height * bits_per_pixel / 8; }
@@ -143,12 +142,12 @@ struct FormatInfo {
 struct TextureInfo;
 
 struct TextureExtent {
-  uint32_t pitch;          // texel pitch
-  uint32_t height;         // texel height
-  uint32_t block_width;    // # of horizontal visible blocks
-  uint32_t block_height;   // # of vertical visible blocks
-  uint32_t block_pitch_h;  // # of horizontal pitch blocks
-  uint32_t block_pitch_v;  // # of vertical pitch blocks
+  uint32_t pitch;
+  uint32_t height;
+  uint32_t block_width;
+  uint32_t block_height;
+  uint32_t block_pitch_h;
+  uint32_t block_pitch_v;
   uint32_t depth;
 
   uint32_t all_blocks() const { return block_pitch_h * block_pitch_v * depth; }
@@ -171,10 +170,10 @@ struct TextureInfo {
   xenos::Endian endianness;
 
   xenos::DataDimension dimension;
-  uint32_t width;   // width in pixels
-  uint32_t height;  // height in pixels
-  uint32_t depth;   // depth in layers
-  uint32_t pitch;   // pitch in blocks
+  uint32_t width;
+  uint32_t height;
+  uint32_t depth;
+  uint32_t pitch;
   uint32_t mip_min_level;
   uint32_t mip_max_level;
   bool is_stacked;
@@ -202,7 +201,6 @@ struct TextureInfo {
 
   void GetMipSize(uint32_t mip, uint32_t* width, uint32_t* height) const;
 
-  // Get the memory location of a mip. offset_x and offset_y are in blocks.
   uint32_t GetMipLocation(uint32_t mip, uint32_t* offset_x, uint32_t* offset_y,
                           bool is_guest) const;
 
@@ -220,4 +218,4 @@ struct TextureInfo {
   void SetupMemoryInfo(uint32_t base_address, uint32_t mip_address);
 };
 
-}  // namespace rex::graphics
+}

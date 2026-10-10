@@ -40,26 +40,18 @@ class D3D12SharedMemory : public SharedMemory {
   void CompletedSubmissionUpdated();
   void BeginSubmission();
 
-  // RequestRange may transition the buffer to copy destination - call it before
-  // UseForReading or UseForWriting.
-
-  // Makes the buffer usable for vertices, indices and texture untiling.
   void UseForReading() {
-    // Vertex fetch is also allowed in pixel shaders.
     CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATE_INDEX_BUFFER |
                                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
                                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
   }
-  // Makes the buffer usable for texture tiling after a resolve.
+
   void UseForWriting() {
     CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
-  // Makes the buffer usable as a source for copy commands.
+
   void UseAsCopySource() { CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATE_COPY_SOURCE); }
-  // Must be called when doing draws/dispatches modifying data within the shared
-  // memory buffer as a UAV, to make sure that when UseForWriting is called the
-  // next time, a UAV barrier will be done, and subsequent overlapping UAV
-  // writes and reads are ordered.
+
   void MarkUAVWritesCommitNeeded() {
     if (buffer_state_ == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
       buffer_uav_writes_commit_needed_ = true;
@@ -68,8 +60,7 @@ class D3D12SharedMemory : public SharedMemory {
 
   void WriteRawSRVDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void WriteRawUAVDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE handle);
-  // Due to the D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP limitation, the
-  // smallest supported formats are 32-bit.
+
   void WriteUintPow2SRVDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE handle,
                                   uint32_t element_size_bytes_pow2);
   void WriteUintPow2UAVDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE handle,
@@ -84,7 +75,6 @@ class D3D12SharedMemory : public SharedMemory {
  private:
   D3D12CommandProcessor& command_processor_;
 
-  // The 512 MB tiled buffer.
   ID3D12Resource* buffer_ = nullptr;
   D3D12_GPU_VIRTUAL_ADDRESS buffer_gpu_address_ = 0;
   std::vector<ID3D12Heap*> buffer_tiled_heaps_;
@@ -92,8 +82,6 @@ class D3D12SharedMemory : public SharedMemory {
   bool buffer_uav_writes_commit_needed_ = false;
   void CommitUAVWritesAndTransitionBuffer(D3D12_RESOURCE_STATES new_state);
 
-  // Non-shader-visible buffer descriptor heap for faster binding (via copying
-  // rather than creation).
   enum class BufferDescriptorIndex : uint32_t {
     kRawSRV,
     kR32UintSRV,
@@ -112,4 +100,4 @@ class D3D12SharedMemory : public SharedMemory {
   std::unique_ptr<ui::d3d12::D3D12UploadBufferPool> upload_buffer_pool_;
 };
 
-}  // namespace rex::graphics::d3d12
+}

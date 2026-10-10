@@ -30,7 +30,6 @@ const uint8_t kHeader[] = {'X', 'E', 'S', 'H', 0x20, 0x20, 0x12, 0x19};
 const uint8_t kOldHeader[] = {'X', 'E', 'S', 'H', 0x20, 0x19, 0x01, 0x01};
 const StorageFormat kShaders{kHeader, 0};
 
-// A shader record: hash, dword count and type, ucode.
 Bytes Shader(uint32_t seed, uint32_t dwords) {
   std::vector<uint32_t> ucode(dwords);
   for (uint32_t i = 0; i < dwords; ++i) {
@@ -39,13 +38,12 @@ Bytes Shader(uint32_t seed, uint32_t dwords) {
   const uint64_t hash = XXH3_64bits(ucode.data(), ucode.size() * 4);
   Bytes out(12 + dwords * 4);
   std::memcpy(&out[0], &hash, 8);
-  const uint32_t field = dwords | (seed & 1u) << 31;  // the type bit
+  const uint32_t field = dwords | (seed & 1u) << 31;
   std::memcpy(&out[8], &field, 4);
   std::memcpy(&out[12], ucode.data(), ucode.size() * 4);
   return out;
 }
 
-// A fixed-size pipeline record: hash, then 24 bytes it covers.
 Bytes Pipeline(uint8_t seed) {
   Bytes body(24, seed);
   const uint64_t hash = XXH3_64bits(body.data(), body.size());
@@ -82,7 +80,7 @@ struct TempDir {
   }
 };
 
-}  // namespace
+}
 
 TEST_CASE("A shipped shader cache seeds a player without one", "[graphics][shader_cache]") {
   TempDir dir;
@@ -93,12 +91,10 @@ TEST_CASE("A shipped shader cache seeds a player without one", "[graphics][shade
   CHECK(outcome.added == 2);
   CHECK(dir.Get("user.xsh") == shipped);
 
-  // Nothing new the second time.
   outcome = SeedStorageFile(dir.path / "shipped.xsh", dir.path / "user.xsh", kShaders);
   CHECK(outcome.result == SeedResult::kUpToDate);
   CHECK(dir.Get("user.xsh") == shipped);
 
-  // Nothing shipped.
   CHECK(SeedStorageFile(dir.path / "none.xsh", dir.path / "user.xsh", kShaders).result ==
         SeedResult::kNoShippedFile);
 }
@@ -107,7 +103,7 @@ TEST_CASE("Shipped records the player lacks are appended after theirs",
           "[graphics][shader_cache]") {
   TempDir dir;
   dir.Put("shipped.xsh", File(kHeader, {Shader(1, 3), Shader(2, 5), Shader(3, 1)}));
-  // The player has shader 2 and their own 9, then a cut-off record.
+
   Bytes user = File(kHeader, {Shader(2, 5), Shader(9, 4)});
   const Bytes cut = Shader(4, 8);
   user.insert(user.end(), cut.begin(), cut.begin() + 20);
@@ -128,7 +124,6 @@ TEST_CASE("A cache for another version is not shipped, and is replaced on the pl
         SeedResult::kStale);
   CHECK(dir.Get("user.xsh") == File(kHeader, {Shader(2, 2)}));
 
-  // The player's from an older SDK: the pipeline cache would throw it away.
   dir.Put("shipped.xsh", File(kHeader, {Shader(1, 3)}));
   dir.Put("user.xsh", File(kOldHeader, {Shader(2, 2)}));
   CHECK(SeedStorageFile(dir.path / "shipped.xsh", dir.path / "user.xsh", kShaders).result ==
@@ -148,7 +143,7 @@ TEST_CASE("Pipeline descriptions merge by their hash, damaged ones dropped",
   const auto outcome =
       SeedStorageFile(dir.path / "shipped.xpso", dir.path / "user.xpso", pipelines);
   CHECK(outcome.result == SeedResult::kMerged);
-  // Reading stops at the damaged record, as the pipeline cache's does.
+
   CHECK(outcome.added == 1);
   CHECK(dir.Get("user.xpso") == File(header, {Pipeline(2), Pipeline(1)}));
 }

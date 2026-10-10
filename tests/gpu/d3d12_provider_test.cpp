@@ -21,8 +21,6 @@ namespace {
 
 using rex::ui::d3d12::D3D12Provider;
 
-// Adapter selection is read once at creation, so each case sets it and
-// restores the default afterwards.
 std::unique_ptr<D3D12Provider> CreateProvider(int32_t adapter, bool dred = false) {
   static bool logging_initialized = [] {
     rex::InitLogging();
@@ -43,7 +41,7 @@ void PrintMetadata(const char* label, const D3D12Provider& provider) {
               uint32_t(provider.GetMaxFeatureLevel()), uint32_t(provider.GetHighestShaderModel()));
 }
 
-}  // namespace
+}
 
 TEST_CASE("WARP adapter records capability metadata", "[gpu][d3d12]") {
   if (!D3D12Provider::IsD3D12APIAvailable()) {

@@ -18,24 +18,10 @@
 namespace rex::graphics {
 namespace xenos {
 
-// Based on X360GammaToLinear and X360LinearToGamma from the Source Engine, with
-// additional logic from Direct3D 9 code in game executable disassembly, located
-// via the floating-point constants involved.
-// https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/mathlib/color_conversion.cpp#L329
-// These are provided here in part as a reference for shader translators.
-
 float PWLGammaToLinear(float gamma) {
-  // Not found in game executables, so just using the logic similar to that in
-  // the Source Engine.
   gamma = rex::saturate(gamma);
   float scale, offset;
-  // While the compiled code for linear to gamma conversion uses `vcmpgtfp
-  // constant, value` comparison (constant > value, or value < constant), it's
-  // preferable to use `value >= constant` condition for the higher pieces, as
-  // it will never pass for NaN, and in case of NaN, the 0...64/255 case will be
-  // selected regardless of whether it's saturated before or after the
-  // comparisons (always pre-saturating here, but shader translators may choose
-  // to saturate later for convenience), as saturation will flush NaN to 0.
+
   if (gamma >= 96.0f / 255.0f) {
     if (gamma >= 192.0f / 255.0f) {
       scale = 8.0f / 1024.0f;
@@ -51,32 +37,21 @@ float PWLGammaToLinear(float gamma) {
     } else {
       scale = 1.0f / 1024.0f;
       offset = 0.0f;
-      // No `floor` term in this case in the Source Engine, but for the largest
-      // value, 1.0, `floor(255.0f * (1.0f / 1024.0f))` is 0 anyway.
     }
   }
-  // Though in the Source Engine, the 1/1024 multiplication is done for the
-  // truncated part specifically, pre-baking it into the scale is lossless -
-  // both 1024 and `scale` are powers of 2.
+
   float linear = gamma * ((255.0f * 1024.0f) * scale) + offset;
-  // For consistency with linear to gamma, and because it's more logical here
-  // (0 rather than 1 at -epsilon), using `trunc` instead of `floor`.
+
   linear += std::trunc(linear * scale);
   linear *= 1.0f / 1023.0f;
-  // Clamping is not necessary (1 * (255 * 8) - 1024 + 7 is exactly 1023).
+
   return linear;
 }
 
 float LinearToPWLGamma(float linear) {
   linear = rex::saturate(linear);
   float scale, offset;
-  // While the compiled code uses `vcmpgtfp constant, value` comparison
-  // (constant > value, or value < constant), it's preferable to use `value >=
-  // constant` condition for the higher pieces, as it will never pass for NaN,
-  // and in case of NaN, the 0...64/1023 case will be selected regardless of
-  // whether it's saturated before or after the comparisons (always
-  // pre-saturating here, but shader translators may choose to saturate later
-  // for convenience), as saturation will flush NaN to 0.
+
   if (linear >= 128.0f / 1023.0f) {
     if (linear >= 512.0f / 1023.0f) {
       scale = 1023.0f / 8.0f;
@@ -94,16 +69,9 @@ float LinearToPWLGamma(float linear) {
       offset = 0.0f;
     }
   }
-  // The truncation isn't in X360LinearToGamma in the Source Engine, but is
-  // there in Direct3D 9 disassembly (the `vrfiz` instructions).
-  // It also prevents conversion of 1.0 to 1.0034313725490196078431372549016
-  // that's handled via clamping in the Source Engine.
-  // 127.875 (1023 / 8) is truncated to 127, which, after scaling, becomes
-  // 127 / 255, and when 128 / 255 is added, the result is 1.
+
   return std::trunc(linear * scale) * (1.0f / 255.0f) + offset;
 }
-
-// https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
 
 float Float7e3To32(uint32_t f10) {
   f10 &= 0x3FF;
@@ -113,8 +81,6 @@ float Float7e3To32(uint32_t f10) {
   uint32_t mantissa = f10 & 0x7F;
   uint32_t exponent = f10 >> 7;
   if (!exponent) {
-    // Normalize the value in the resulting float.
-    // do { Exponent--; Mantissa <<= 1; } while ((Mantissa & 0x80) == 0)
     uint32_t mantissa_lzcnt = rex::lzcnt(mantissa) - (32 - 8);
     exponent = uint32_t(1 - int32_t(mantissa_lzcnt));
     mantissa = (mantissa << mantissa_lzcnt) & 0x7F;
@@ -122,27 +88,18 @@ float Float7e3To32(uint32_t f10) {
   return rex::memory::Reinterpret<float>(uint32_t(((exponent + 124) << 23) | (mantissa << 16)));
 }
 
-// Based on CFloat24 from d3dref9.dll and the 6e4 code from:
-// https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
-// 6e4 has a different exponent bias allowing [0,512) values, 20e4 allows [0,2).
-
 uint32_t Float32To20e4(float f32, bool round_to_nearest_even) {
   if (!(f32 > 0.0f)) {
-    // Positive only, and not -0 or NaN.
     return 0;
   }
   auto f32u32 = rex::memory::Reinterpret<uint32_t>(f32);
   if (f32u32 >= 0x3FFFFFF8) {
-    // Saturate.
     return 0xFFFFFF;
   }
   if (f32u32 < 0x38800000) {
-    // The number is too small to be represented as a normalized 20e4.
-    // Convert it to a denormalized value.
     uint32_t shift = std::min(uint32_t(113 - (f32u32 >> 23)), uint32_t(24));
     f32u32 = (0x800000 | (f32u32 & 0x7FFFFF)) >> shift;
   } else {
-    // Rebias the exponent to represent the value as a normalized 20e4.
     f32u32 += 0xC8000000u;
   }
   if (round_to_nearest_even) {
@@ -159,8 +116,6 @@ float Float20e4To32(uint32_t f24) {
   uint32_t mantissa = f24 & 0xFFFFF;
   uint32_t exponent = f24 >> 20;
   if (!exponent) {
-    // Normalize the value in the resulting float.
-    // do { Exponent--; Mantissa <<= 1; } while ((Mantissa & 0x100000) == 0)
     uint32_t mantissa_lzcnt = rex::lzcnt(mantissa) - (32 - 21);
     exponent = uint32_t(1 - int32_t(mantissa_lzcnt));
     mantissa = (mantissa << mantissa_lzcnt) & 0xFFFFF;
@@ -210,5 +165,5 @@ const char* GetDepthRenderTargetFormatName(DepthRenderTargetFormat format) {
   }
 }
 
-}  // namespace xenos
-}  // namespace rex::graphics
+}
+}

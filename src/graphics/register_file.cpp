@@ -37,4 +37,4 @@ const RegisterInfo* RegisterFile::GetRegisterInfo(uint32_t index) {
   }
 }
 
-}  // namespace rex::graphics
+}

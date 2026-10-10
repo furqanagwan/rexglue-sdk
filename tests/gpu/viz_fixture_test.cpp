@@ -31,7 +31,6 @@ using namespace rex::testing::guest_draw;  // NOLINT
 constexpr uint32_t kVizId = 5;
 constexpr uint32_t kBackground = 0xFF0000FF, kConsumer = 0xFF00FF00;
 
-// The fixtures' cvars outlive them.
 struct RestoreCvars {
   ~RestoreCvars() {
     for (const char* name : {"occlusion_query_viz", "render_target_path_d3d12",
@@ -53,8 +52,6 @@ void SetVizRegister(GpuFixture& fixture, bool enable) {
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_PA_SC_VIZ_QUERY, {viz.value}));
 }
 
-// DrawRect, through PM4_DRAW_INDX with a VIZ token: drawn only if the token's
-// ID was visible.
 void DrawRectWithToken(GpuFixture& fixture, uint32_t token, uint32_t color) {
   reg::PA_SC_WINDOW_SCISSOR_TL window_tl = {};
   window_tl.window_offset_disable = 1;
@@ -74,17 +71,14 @@ void DrawRectWithToken(GpuFixture& fixture, uint32_t token, uint32_t color) {
 
 struct RunOptions {
   bool viz_enabled = true;
-  // Behind the background's 0.5 or in front of it.
+
   float survey_z = 0.75f;
-  // Surveys only depth test with hi-Z on.
+
   bool hiz = true;
-  // Finishes the submission between the survey and its consumer, so the
-  // consumer uses the resolved answer instead of the predicate.
+
   bool flush_before_consumer = false;
 };
 
-// The background writes depth 0.5; the survey for kVizId is at survey_z; the
-// consumer carries the ID's token. Returns the first texel of the color target.
 bool Run(const char* path, const RunOptions& run, uint32_t& texel_out, std::string& error) {
   auto fixture =
       GpuFixture::Create(&error, {{"occlusion_query_viz", run.viz_enabled ? "true" : "false"},
@@ -102,7 +96,7 @@ bool Run(const char* path, const RunOptions& run, uint32_t& texel_out, std::stri
 
   const Surface surface = {xenos::MsaaSamples::k1X, 64};
   DrawOptions options;
-  // Color after the depth buffer in EDRAM rather than aliasing it.
+
   options.color_base_tiles = 16;
   options.depth_control.z_enable = 1;
   options.depth_control.z_write_enable = 1;
@@ -111,7 +105,6 @@ bool Run(const char* path, const RunOptions& run, uint32_t& texel_out, std::stri
   SetupDraw(*fixture, surface, 32, 32, options);
   DrawRect(*fixture, 0, 0, 32, 32, kBackground);
 
-  // The survey: tested against the background's depth, never drawn.
   options.depth_control.z_write_enable = 0;
   options.depth_control.zfunc = xenos::CompareFunction::kLess;
   options.z = run.survey_z;
@@ -128,7 +121,6 @@ bool Run(const char* path, const RunOptions& run, uint32_t& texel_out, std::stri
     REQUIRE(fixture->Flush());
   }
 
-  // The consumer, in front of everything.
   options.depth_control.zfunc = xenos::CompareFunction::kAlways;
   options.z = 0.1f;
   SetupDraw(*fixture, surface, 32, 32, options);
@@ -141,7 +133,7 @@ bool Run(const char* path, const RunOptions& run, uint32_t& texel_out, std::stri
   return true;
 }
 
-}  // namespace
+}
 
 TEST_CASE("A VIZ survey hidden behind depth skips its consumer draw", "[gpu][viz]") {
   const char* path = GENERATE("rtv", "rov");
@@ -162,10 +154,10 @@ TEST_CASE("A VIZ survey hidden behind depth skips its consumer draw", "[gpu][viz
   REQUIRE(Run(path, run, visible, error));
   INFO(std::hex << "hidden 0x" << hidden << ", visible 0x" << visible << ", VIZ off 0x"
                 << disabled);
-  // With VIZ off every consumer draws, as before.
+
   CHECK(disabled == kConsumer);
   CHECK(visible == kConsumer);
-  // Hidden: the consumer was skipped, leaving the background.
+
   CHECK(hidden == kBackground);
 }
 
@@ -175,7 +167,7 @@ TEST_CASE("A VIZ survey with nothing rejecting it keeps its consumer draw", "[gp
   RestoreCvars restore;
   std::string error;
   RunOptions run;
-  // Behind the background, but without hi-Z nothing rejects the survey.
+
   run.hiz = false;
   uint32_t texel = 0;
   if (!Run(path, run, texel, error)) {

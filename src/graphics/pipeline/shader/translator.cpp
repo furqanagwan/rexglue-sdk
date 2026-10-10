@@ -26,47 +26,18 @@ namespace rex::graphics {
 
 using namespace ucode;
 
-// The Xbox 360 GPU is effectively an Adreno A200:
-// https://github.com/freedreno/freedreno/wiki/A2XX-Shader-Instruction-Set-Architecture
-//
-// A lot of this information is derived from the freedreno drivers, AMD's
-// documentation, publicly available Xbox presentations (from GDC/etc), and
-// other reverse engineering.
-//
-// Naming has been matched as closely as possible to the real thing by using the
-// publicly available XNA Game Studio shader assembler.
-// You can find a tool for exploring this under tools/shader-playground/,
-// allowing interative assembling/disassembling of shader code.
-//
-// Though the 360's GPU is similar to the Adreno r200, the microcode format is
-// slightly different. Though this is a great guide it cannot be assumed it
-// matches the 360 in all areas:
-// https://github.com/freedreno/freedreno/blob/master/util/disasm-a2xx.c
-//
-// Lots of naming comes from the disassembly spit out by the XNA GS compiler
-// and dumps of d3dcompiler and games: https://pastebin.com/i4kAv7bB
-
 void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
   if (is_ucode_analyzed_) {
     return;
   }
 
-  // Control flow instructions come paired in blocks of 3 dwords and all are
-  // listed at the top of the ucode.
-  // Each control flow instruction is executed sequentially until the final
-  // ending instruction.
-  // Gather the upper bound of the control flow instructions, and label
-  // addresses, which are needed for disassembly.
   cf_pair_index_bound_ = uint32_t(ucode_data_.size() / 3);
-  // Jumps back (source, target) for finding what may reenter a label.
+
   std::vector<std::pair<uint32_t, uint32_t>> backward_jumps;
   for (uint32_t i = 0; i < cf_pair_index_bound_; ++i) {
     ControlFlowInstruction cf_ab[2];
     UnpackControlFlowInstructions(ucode_data_.data() + i * 3, cf_ab);
     for (uint32_t j = 0; j < 2; ++j) {
-      // Guess how long the control flow program is by scanning for the first
-      // kExec-ish and instruction and using its address as the upper bound.
-      // This is what freedreno does.
       const ControlFlowInstruction& cf = cf_ab[j];
       if (IsControlFlowOpcodeExec(cf.opcode())) {
         cf_pair_index_bound_ = std::min(cf_pair_index_bound_, cf.exec.address());
@@ -74,8 +45,7 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
       switch (cf.opcode()) {
         case ControlFlowOpcode::kCondCall:
           label_addresses_.insert(cf.cond_call.address());
-          // The instruction after the call is the subroutine return point, so
-          // it must be a label that ret can jump back to.
+
           label_addresses_.insert(i * 2 + j + 1);
           uses_subroutine_calls_ = true;
           break;
@@ -100,7 +70,6 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
     }
   }
 
-  // Disassemble and gather information.
   ucode_disasm_buffer.Reset();
   VertexFetchInstruction previous_vfetch_full;
   std::memset(&previous_vfetch_full, 0, sizeof(previous_vfetch_full));
@@ -198,9 +167,6 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
   }
   ucode_disassembly_ = ucode_disasm_buffer.to_string();
 
-  // A label jumped back to may be reentered after anything within the span of
-  // the jumps back overlapping it. With subroutines, anything may be executed
-  // before returning to a label.
   auto get_components_written = [this](uint32_t first, uint32_t last) {
     uint64_t components_written = 0;
     for (uint32_t cf_index = first; cf_index <= last; ++cf_index) {
@@ -244,26 +210,17 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
   }
 
   if (constant_register_map_.float_dynamic_addressing) {
-    // All potentially can be referenced.
     constant_register_map_.float_count = 256;
     memset(constant_register_map_.float_bitmap, UINT8_MAX,
            sizeof(constant_register_map_.float_bitmap));
   } else {
     constant_register_map_.float_count = 0;
     for (int i = 0; i < 4; ++i) {
-      // Each bit indicates a vec4 (4 floats).
       constant_register_map_.float_count += rex::bit_count(constant_register_map_.float_bitmap[i]);
     }
   }
 
   if (!cf_memexport_info_.empty()) {
-    // Gather potentially "dirty" memexport elements before each control flow
-    // instruction. `alloc` (any, not only `export`) flushes the previous memory
-    // export. On the guest GPU, yielding / serializing also terminates memory
-    // exports, but for simplicity disregarding that, as that functionally does
-    // nothing compared to flushing the previous memory export only at `alloc`
-    // or even only specifically at `alloc export`, Microsoft's validator checks
-    // if eM# aren't written after a `serialize`.
     std::vector<uint32_t> successor_stack;
     for (uint32_t i = 0; i < cf_pair_index_bound_; ++i) {
       ControlFlowInstruction eM_writing_cf_ab[2];
@@ -273,16 +230,12 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
         uint32_t eM_written_by_cf_instr =
             cf_memexport_info_[eM_writing_cf_index].eM_potentially_written_by_exec;
         if (eM_writing_cf_ab[j].opcode() == ControlFlowOpcode::kCondCall) {
-          // Until subroutine calls are handled accurately, assume that all eM#
-          // have potentially been written by the subroutine for simplicity.
           eM_written_by_cf_instr = memexport_eM_written_;
         }
         if (!eM_written_by_cf_instr) {
           continue;
         }
 
-        // If the control flow instruction potentially results in any eM# being
-        // written, mark those eM# as potentially written before each successor.
         bool is_successor_graph_head = true;
         successor_stack.push_back(eM_writing_cf_index);
         while (!successor_stack.empty()) {
@@ -293,15 +246,9 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
               cf_memexport_info_[successor_cf_index];
           if ((successor_memexport_info.eM_potentially_written_before & eM_written_by_cf_instr) ==
               eM_written_by_cf_instr) {
-            // Already marked as written before this instruction (and thus
-            // before all its successors too). Possibly this instruction is in a
-            // loop, in this case an instruction may succeed itself.
             break;
           }
-          // The first instruction in the traversal is the writing instruction
-          // itself, not its successor. However, if it has been visited by the
-          // traversal twice, it's in a loop, so it succeeds itself, and thus
-          // writes from it are potentially done before it too.
+
           if (!is_successor_graph_head) {
             successor_memexport_info.eM_potentially_written_before |= eM_written_by_cf_instr;
           }
@@ -315,42 +262,41 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
           bool next_instr_is_new_successor = true;
           switch (successor_cf.opcode()) {
             case ControlFlowOpcode::kExecEnd:
-              // One successor: end.
+
               memexport_eM_potentially_written_before_end_ |= eM_written_by_cf_instr;
               next_instr_is_new_successor = false;
               break;
             case ControlFlowOpcode::kCondExecEnd:
             case ControlFlowOpcode::kCondExecPredEnd:
             case ControlFlowOpcode::kCondExecPredCleanEnd:
-              // Two successors: next, end.
+
               memexport_eM_potentially_written_before_end_ |= eM_written_by_cf_instr;
               break;
             case ControlFlowOpcode::kLoopStart:
-              // Two successors: next, skip.
+
               successor_stack.push_back(successor_cf.loop_start.address());
               break;
             case ControlFlowOpcode::kLoopEnd:
-              // Two successors: next, repeat.
+
               successor_stack.push_back(successor_cf.loop_end.address());
               break;
             case ControlFlowOpcode::kCondCall:
-              // Two successors: next, target.
+
               successor_stack.push_back(successor_cf.cond_call.address());
               break;
             case ControlFlowOpcode::kReturn:
-              // Currently treating all subroutine calls as potentially writing
-              // all eM# for simplicity, so just exit the subroutine.
+
               next_instr_is_new_successor = false;
               break;
             case ControlFlowOpcode::kCondJmp:
-              // One or two successors: next if conditional, target.
+
               successor_stack.push_back(successor_cf.cond_jmp.address());
               if (successor_cf.cond_jmp.is_unconditional()) {
                 next_instr_is_new_successor = false;
               }
               break;
             case ControlFlowOpcode::kAlloc:
-              // Any `alloc` ends the previous export.
+
               next_instr_is_new_successor = false;
               break;
             default:
@@ -370,8 +316,6 @@ void Shader::AnalyzeUcode(string::StringBuffer& ucode_disasm_buffer) {
 
   is_ucode_analyzed_ = true;
 
-  // An empty shader can be created internally by shader translators as a dummy,
-  // don't dump it.
   if (!REXCVAR_GET(dump_shaders).empty() && !ucode_data().empty()) {
     DumpUcode(REXCVAR_GET(dump_shaders));
   }
@@ -387,7 +331,6 @@ uint32_t Shader::GetInterpolatorInputMask(reg::SQ_PROGRAM_CNTL sq_program_cntl,
                         GetDynamicAddressableRegisterCount(sq_program_cntl.ps_num_reg)));
   uint32_t interpolator_mask = (UINT32_C(1) << interpolator_count) - 1;
   if (sq_program_cntl.param_gen && sq_context_misc.param_gen_pos < interpolator_count) {
-    // Will be overwritten by PsParamGen.
     interpolator_mask &= ~(UINT32_C(1) << sq_context_misc.param_gen_pos);
     param_gen_pos_out = sq_context_misc.param_gen_pos;
   } else {
@@ -437,28 +380,20 @@ void Shader::GatherVertexFetchInformation(const VertexFetchInstruction& op, uint
 
   GatherFetchResultInformation(fetch_instr.result, exec_cf_index);
 
-  // Mini-fetches inherit the operands from full fetches.
   if (!fetch_instr.is_mini_fetch) {
     for (size_t i = 0; i < fetch_instr.operand_count; ++i) {
       GatherOperandInformation(fetch_instr.operands[i]);
     }
   }
 
-  // Don't bother setting up a binding for an instruction that fetches nothing.
-  // In case of vfetch_full, however, it may still be used to set up addressing
-  // for the subsequent vfetch_mini, so operand information must still be
-  // gathered.
   if (!fetch_instr.result.GetUsedResultComponents()) {
     return;
   }
 
-  // Try to allocate an attribute on an existing binding.
-  // If no binding for this fetch slot is found create it.
   using VertexBinding = Shader::VertexBinding;
   VertexBinding::Attribute* attrib = nullptr;
   for (auto& vertex_binding : vertex_bindings_) {
     if (vertex_binding.fetch_constant == op.fetch_constant_index()) {
-      // It may not hold that all strides are equal, but I hope it does.
       assert_true(!fetch_instr.attributes.stride ||
                   vertex_binding.stride_words == fetch_instr.attributes.stride);
       vertex_binding.attributes.push_back({});
@@ -477,7 +412,6 @@ void Shader::GatherVertexFetchInformation(const VertexFetchInstruction& op, uint
     attrib = &vertex_bindings_.back().attributes.back();
   }
 
-  // Populate attribute.
   attrib->fetch_instr = fetch_instr;
 }
 
@@ -493,8 +427,7 @@ void Shader::GatherTextureFetchInformation(const TextureFetchInstruction& op,
   for (size_t i = 0; i < binding.fetch_instr.operand_count; ++i) {
     GatherOperandInformation(binding.fetch_instr.operands[i]);
   }
-  // Coordinates of fetches that may snap to texel centers, for translators
-  // that keep them exact (xenia-edge).
+
   const InstructionOperand& coordinates_operand = binding.fetch_instr.operands[0];
   if (binding.fetch_instr.CanSnapToTexelCenter(false) &&
       coordinates_operand.storage_source == InstructionStorageSource::kRegister &&
@@ -511,16 +444,15 @@ void Shader::GatherTextureFetchInformation(const TextureFetchInstruction& op,
     case FetchOpcode::kSetTextureLod:
     case FetchOpcode::kSetTextureGradientsHorz:
     case FetchOpcode::kSetTextureGradientsVert:
-      // Doesn't use bindings.
+
       return;
     default:
-      // Continue.
+
       break;
   }
   binding.binding_index = -1;
   binding.fetch_constant = binding.fetch_instr.operands[1].storage_index;
 
-  // Check and see if this fetch constant was previously used...
   for (auto& tex_binding : texture_bindings_) {
     if (tex_binding.fetch_constant == binding.fetch_constant) {
       binding.binding_index = tex_binding.binding_index;
@@ -529,7 +461,6 @@ void Shader::GatherTextureFetchInformation(const TextureFetchInstruction& op,
   }
 
   if (binding.binding_index == -1) {
-    // Assign a unique binding index.
     binding.binding_index = unique_texture_bindings++;
   }
 
@@ -557,14 +488,6 @@ void Shader::GatherAluInstructionInformation(const AluInstruction& op, uint32_t 
     GatherOperandInformation(instr.scalar_operands[i]);
   }
 
-  // Store used memexport constants because CPU code needs addresses and sizes.
-  // eA is (hopefully) always written to using:
-  // mad eA, r#, const0100, c#
-  // (though there are some exceptions, shaders in 4D5307E6 for some reason set
-  // eA to zeros, but the swizzle of the constant is not .xyzw in this case, and
-  // they don't write to eM#).
-  // Export is done to vector_dest of the ucode instruction for both vector and
-  // scalar operations - no need to check separately.
   if (instr.vector_and_constant_result.storage_target == InstructionStorageTarget::kExportAddress) {
     uint32_t memexport_stream_constant = instr.GetMemExportStreamConstant();
     if (memexport_stream_constant != UINT32_MAX) {
@@ -589,9 +512,6 @@ void Shader::GatherOperandInformation(const InstructionOperand& operand) {
       break;
     case InstructionStorageSource::kConstantFloat:
       if (operand.storage_addressing_mode == InstructionStorageAddressingMode::kAbsolute) {
-        // Store used float constants before translating so the
-        // translator can use tightly packed indices if not dynamically
-        // indexed.
         constant_register_map_.float_bitmap[operand.storage_index >> 6] |=
             uint64_t(1) << (operand.storage_index & 63);
       } else {
@@ -611,8 +531,7 @@ void Shader::GatherFetchResultInformation(const InstructionResult& result, uint3
   if (!result.GetUsedWriteMask()) {
     return;
   }
-  // Fetch instructions can't export - don't need the current memexport count
-  // operand.
+
   assert_true(result.storage_target == InstructionStorageTarget::kRegister);
   GatherRegisterWriteInformation(result, exec_cf_index);
   if (result.storage_addressing_mode == InstructionStorageAddressingMode::kAbsolute) {
@@ -623,7 +542,6 @@ void Shader::GatherFetchResultInformation(const InstructionResult& result, uint3
   }
 }
 
-// Registers 0-15 (4 components each) the control flow instruction writes.
 void Shader::GatherRegisterWriteInformation(const InstructionResult& result,
                                             uint32_t exec_cf_index) {
   uint64_t& cf_components_written = cf_register_components_written_[exec_cf_index];
@@ -696,9 +614,6 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
 
   register_count_ = shader.register_static_address_bound();
   if (shader.uses_register_dynamic_addressing()) {
-    // An array of registers at the end of the r# space may be dynamically
-    // addressable - ensure enough space, as specified in SQ_PROGRAM_CNTL, is
-    // allocated.
     register_count_ = std::max(register_count_, GetModificationRegisterCount());
   }
 
@@ -716,7 +631,6 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
   }
   PreProcessControlFlowInstructions(cf_instructions);
 
-  // Translate all instructions.
   const std::set<uint32_t>& label_addresses = shader.label_addresses();
   for (uint32_t i = 0; i < cf_pair_index_bound; ++i) {
     ControlFlowInstruction cf_ab[2];
@@ -747,11 +661,6 @@ bool ShaderTranslator::TranslateAnalyzedShader(Shader::Translation& translation)
 
   PostTranslation();
 
-  // Not published here: the backend still prepares the translation (binding
-  // layouts, disassembly) and calls PublishTranslated when it's done, so a
-  // thread that sees is_translated() never reads a half-prepared translation
-  // (has207/xenia-edge 462a1ac85, adapted).
-  // In case is_valid_ is modified by PostTranslation, reload.
   return translation.is_valid();
 }
 
@@ -1037,7 +946,6 @@ static void ParseFetchInstructionResult(uint32_t dest, uint32_t swizzle, bool is
         result.original_write_mask &= ~(UINT32_C(1) << i);
         break;
       default:
-        // ucode::FetchDestinationSwizzle::k0 or the invalid swizzle 6.
 
         assert_true(component_swizzle == ucode::FetchDestinationSwizzle::k0);
         component_source = SwizzleSource::k0;
@@ -1058,7 +966,6 @@ bool ParseVertexFetchInstruction(const VertexFetchInstruction& op,
 
   ParseFetchInstructionResult(op.dest(), op.dest_swizzle(), op.is_dest_relative(), instr.result);
 
-  // Reuse previous vfetch_full if this is a mini.
   const auto& full_op = op.is_mini_fetch() ? previous_full_op : op;
   auto& src_op = instr.operands[instr.operand_count++];
   src_op.storage_source = InstructionStorageSource::kRegister;
@@ -1209,8 +1116,7 @@ uint32_t ParsedTextureFetchInstruction::GetNonZeroResultComponents() const {
       components = 0b0001;
       break;
     case FetchOpcode::kGetTextureComputedLod:
-      // Not checking if the MipFilter is basemap because XNA doesn't accept
-      // MipFilter for getCompTexLOD.
+
       components = 0b0001;
       break;
     case FetchOpcode::kGetTextureWeights:
@@ -1273,7 +1179,6 @@ static void ParseAluInstructionOperand(const AluInstruction& op, uint32_t i,
   out_op.component_count = swizzle_component_count;
   uint32_t swizzle = op.src_swizzle(i);
   if (swizzle_component_count == 1) {
-    // Scalar `a` (W).
     out_op.components[0] = GetSwizzledAluSourceComponent(swizzle, 3);
   } else if (swizzle_component_count == 2) {
     out_op.components[0] = GetSwizzledAluSourceComponent(swizzle, 3);
@@ -1309,11 +1214,6 @@ bool ParsedAluInstruction::IsVectorOpDefaultNop() const {
       return false;
     }
   } else {
-    // In case both vector and scalar operations are nop, still need to write
-    // somewhere that it's an export, not mov r0._, r0 + retain_prev r0._.
-    // Accurate round trip is possible only if the target is o0 or oC0, because
-    // if the total write mask is empty, the XNA assembler forces the
-    // destination to be o0/oC0, but this doesn't really matter in this case.
     if (IsScalarOpDefaultNop()) {
       return false;
     }
@@ -1332,7 +1232,7 @@ void ParseAluInstruction(const AluInstruction& op, xenos::ShaderType shader_type
   uint32_t storage_index_export = 0;
   if (is_export) {
     storage_target = InstructionStorageTarget::kNone;
-    // Both vector and scalar operation export to vector_dest.
+
     ExportRegister export_register = ExportRegister(op.vector_dest());
     if (export_register == ExportRegister::kExportAddress) {
       storage_target = InstructionStorageTarget::kExportAddress;
@@ -1368,8 +1268,6 @@ void ParseAluInstruction(const AluInstruction& op, xenos::ShaderType shader_type
           uint32_t(export_register));
     }
   }
-
-  // Vector operation and constant 0/1 writes.
 
   ucode::AluVectorOpcode vector_opcode = op.vector_opcode();
   instr.vector_opcode = vector_opcode;
@@ -1410,8 +1308,6 @@ void ParseAluInstruction(const AluInstruction& op, xenos::ShaderType shader_type
     ParseAluInstructionOperand(op, i + 1, 4, vector_operand);
   }
 
-  // Scalar operation.
-
   ucode::AluScalarOpcode scalar_opcode = op.scalar_opcode();
   instr.scalar_opcode = scalar_opcode;
   const ucode::AluScalarOpcodeInfo& scalar_opcode_info =
@@ -1441,12 +1337,9 @@ void ParseAluInstruction(const AluInstruction& op, xenos::ShaderType shader_type
                                  instr.scalar_operands[0],
                                  vector_opcode_info.ScalarSecondSourceComponent());
     } else {
-      // Constant and temporary register.
-
       bool src3_negate = op.src_negate(3);
       uint32_t src3_swizzle = op.src_swizzle(3);
 
-      // Left-hand constant operand (`a` - W swizzle).
       InstructionOperand& const_op = instr.scalar_operands[0];
       const_op.is_negated = src3_negate;
       const_op.is_absolute_value = op.abs_constants();
@@ -1465,7 +1358,6 @@ void ParseAluInstruction(const AluInstruction& op, xenos::ShaderType shader_type
       const_op.component_count = 1;
       const_op.components[0] = GetSwizzledAluSourceComponent(src3_swizzle, 3);
 
-      // Right-hand temporary register operand (`b` - X swizzle).
       InstructionOperand& temp_op = instr.scalar_operands[1];
       temp_op.is_negated = src3_negate;
       temp_op.is_absolute_value = op.abs_constants();
@@ -1489,8 +1381,7 @@ bool ParsedAluInstruction::IsScalarOpDefaultNop() const {
       return false;
     }
   }
-  // For exports, if both are nop, the vector operation will be kept to state in
-  // the microcode that the destination in the microcode is an export.
+
   return true;
 }
 
@@ -1514,4 +1405,4 @@ uint32_t ParsedAluInstruction::GetMemExportStreamConstant() const {
   return UINT32_MAX;
 }
 
-}  // namespace rex::graphics
+}

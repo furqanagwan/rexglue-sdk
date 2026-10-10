@@ -28,5 +28,5 @@ const Register RB_BLENDCONTROL::rt_register_indices[4] = {
     XE_GPU_REG_RB_BLENDCONTROL3,
 };
 
-}  // namespace reg
-}  // namespace rex::graphics
+}
+}

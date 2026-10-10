@@ -23,18 +23,14 @@
 
 namespace rex::graphics {
 
-// SpvBuilder with extra helpers.
-
 class SpirvBuilder : public spv::Builder {
  public:
   SpirvBuilder(unsigned int spv_version, unsigned int user_number, spv::SpvBuildLogger* logger)
       : spv::Builder(spv_version, user_number, logger) {}
 
-  // When true, createNoContraction* helpers emit plain operations.
   void SetAllowContraction(bool allow) { allow_contraction_ = allow; }
   bool AllowsContraction() const { return allow_contraction_; }
 
-  // Decorate every float arithmetic result with NoContraction.
   void SetNoContractionAll(bool all) { no_contraction_all_ = all; }
 
   spv::Id createUnaryOp(spv::Op op_code, spv::Id type_id, spv::Id operand) {
@@ -48,31 +44,20 @@ class SpirvBuilder : public spv::Builder {
     return result;
   }
 
-  // Make public rather than protected.
   using spv::Builder::createSelectionMerge;
 
-  // Backward compatibility wrapper for createBranch
   void createBranch(spv::Block* block) { spv::Builder::createBranch(true, block); }
 
-  // Backward compatibility wrapper for makeFunctionEntry
-  // For shaders, we use LinkageType::Max which means no linkage decoration
   spv::Function* makeFunctionEntry(spv::Decoration precision, spv::Id returnType, const char* name,
                                    const std::vector<spv::Id>& paramTypes,
                                    const std::vector<std::vector<spv::Decoration>>& precisions,
                                    spv::Block** entry = nullptr) {
-    // LinkageType::Max means no linkage decoration will be added (correct for
-    // shader entry points)
     return spv::Builder::makeFunctionEntry(precision, returnType, name, spv::LinkageType::Max,
                                            paramTypes, precisions, entry);
   }
 
-  // Hide base class createAccessChain to workaround the way
-  // glslang 11.6.0+ uses internal accessChain state instead of parameters.
   spv::Id createAccessChain(spv::StorageClass storage_class, spv::Id base,
                             const std::vector<spv::Id>& offsets) {
-    // glslang 11.6.0+ uses the accessChain member
-    // in getResultingAccessChainType() but doesn't populate it from the
-    // parameters. We need to set it up correctly before calling the parent.
     clearAccessChain();
     setAccessChainLValue(base);
     for (const auto& offset : offsets) {
@@ -81,7 +66,6 @@ class SpirvBuilder : public spv::Builder {
 
     spv::Id result = spv::Builder::createAccessChain(storage_class, base, offsets);
 
-    // Clear the state again to avoid affecting subsequent operations
     clearAccessChain();
 
     return result;
@@ -101,12 +85,8 @@ class SpirvBuilder : public spv::Builder {
   spv::Id createTriBuiltinCall(spv::Id result_type, spv::Id builtins, int entry_point,
                                spv::Id operand1, spv::Id operand2, spv::Id operand3);
 
-  // Makes a constant of a float scalar or vector value_type with all
-  // components set to value.
   spv::Id smearFloatConstant(float value, spv::Id value_type);
 
-  // Helper to use for building nested control flow with if-then-else with
-  // additions over SpvBuilder::If.
   class IfBuilder {
    public:
     IfBuilder(spv::Id condition, spv::SelectionControlMask control, SpirvBuilder& builder,
@@ -121,8 +101,6 @@ class SpirvBuilder : public spv::Builder {
     void makeBeginElse(bool branchToMerge = true);
     void makeEndIf(bool branchToMerge = true);
 
-    // If there's no then/else block that branches to the merge block, the phi
-    // parent is the header block - this simplifies then-only usage.
     spv::Id getThenPhiParent() const { return thenPhiParent; }
     spv::Id getElsePhiParent() const { return elsePhiParent; }
 
@@ -159,8 +137,6 @@ class SpirvBuilder : public spv::Builder {
 #endif
   };
 
-  // Simpler and more flexible (such as multiple cases pointing to the same
-  // block) compared to makeSwitch.
   class SwitchBuilder {
    public:
     SwitchBuilder(spv::Id selector, spv::SelectionControlMask selection_control,
@@ -172,8 +148,6 @@ class SpirvBuilder : public spv::Builder {
     void addCurrentCaseLiteral(unsigned int literal);
     void makeEndSwitch();
 
-    // If there's no default block that branches to the merge block, the phi
-    // parent is the header block - this simplifies case-only usage.
     spv::Id getDefaultPhiParent() const { return default_phi_parent_; }
 
    private:
@@ -204,13 +178,12 @@ class SpirvBuilder : public spv::Builder {
   };
 
  private:
-  // Defined in the .cc since the spv enum shim is not visible in headers.
   void MarkNoContractionAll(spv::Op op_code, spv::Id result);
 
   bool allow_contraction_ = false;
   bool no_contraction_all_ = false;
 };
 
-}  // namespace rex::graphics
+}
 
-#endif  // REX_GRAPHICS_PIPELINE_SHADER_SPIRV_BUILDER_H_
+#endif

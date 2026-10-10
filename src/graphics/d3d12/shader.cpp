@@ -97,4 +97,4 @@ Shader::Translation* D3D12Shader::CreateTranslationInstance(uint64_t modificatio
   return new D3D12Translation(*this, modification);
 }
 
-}  // namespace rex::graphics::d3d12
+}

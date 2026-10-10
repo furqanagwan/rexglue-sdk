@@ -42,4 +42,4 @@ typedef struct UntileInfo {
 
 void Untile(uint8_t* output_buffer, const uint8_t* input_buffer, const UntileInfo* untile_info);
 
-}  // namespace rex::graphics::texture_conversion
+}

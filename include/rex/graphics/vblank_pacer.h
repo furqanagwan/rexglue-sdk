@@ -12,16 +12,11 @@
 
 namespace rex::graphics {
 
-// Guest vblanks at a fixed cadence, one per interval. Adapted from the
-// xenia-edge frame limiter (src/xenia/gpu/graphics_system.cc): a waiter that
-// wakes late fires once and keeps the cadence; one more than two intervals
-// late starts a new cadence instead of firing a burst of vblanks.
 class VblankPacer {
  public:
   VblankPacer(uint64_t interval_ticks, uint64_t now)
       : interval_(interval_ticks), next_(now + interval_ticks) {}
 
-  // True when a vblank is due at `now`; it is then counted.
   bool Due(uint64_t now) {
     if (now < next_) {
       return false;
@@ -34,7 +29,6 @@ class VblankPacer {
     return true;
   }
 
-  // Ticks until the next vblank (0 when one is due).
   uint64_t TicksUntilDue(uint64_t now) const { return now < next_ ? next_ - now : 0; }
 
   uint64_t interval() const { return interval_; }
@@ -44,4 +38,4 @@ class VblankPacer {
   uint64_t next_;
 };
 
-}  // namespace rex::graphics
+}

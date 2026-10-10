@@ -31,23 +31,13 @@ inline uint32_t PackXY(uint32_t x, uint32_t y) {
   return x | (y << 16);
 }
 
-// Guest microcode, hand-assembled (see include/rex/graphics/format/ucode.h).
-// Control flow instructions are 48 bits, two per three dwords; ALU and fetch
-// instructions follow as three dwords each, addressed in three-dword units.
-
-// exec (vfetch r1, r0.x, vf0 as float4, stride 4); alloc position;
-// exec_end (max oPos, r1, r1). The vertex index is in r0.x.
 inline const std::vector<uint32_t> kVertexShader = {
-    0x00011002, 0x00001000, 0xC2000000,  // exec 2 fetch; alloc position
-    0x00001003, 0x00002000, 0x00000000,  // exec_end 3 ALU; nop
-    0x00081000, 0x00260688, 0x00000004,  // vfetch r1.xyzw, r0.x, vf0
-    0xC80F803E, 0x00000000, 0xC2010100,  // max oPos.xyzw, r1, r1
+    0x00011002, 0x00001000, 0xC2000000, 0x00001003, 0x00002000, 0x00000000,
+    0x00081000, 0x00260688, 0x00000004, 0xC80F803E, 0x00000000, 0xC2010100,
 };
 
-// alloc colors; exec_end (max oC0, c0, c0).
 inline const std::vector<uint32_t> kPixelShader = {
-    0x00000000, 0x1001C400, 0x20000000,  // alloc colors; exec_end 1 ALU
-    0xC80F8000, 0x00000000, 0x02000000,  // max oC0.xyzw, c0, c0
+    0x00000000, 0x1001C400, 0x20000000, 0xC80F8000, 0x00000000, 0x02000000,
 };
 
 inline std::vector<uint32_t> LoadShader(xenos::ShaderType type,
@@ -61,35 +51,29 @@ inline std::vector<uint32_t> LoadShader(xenos::ShaderType type,
 
 struct Surface {
   xenos::MsaaSamples msaa;
-  // In samples, as in RB_SURFACE_INFO.
+
   uint32_t pitch;
 };
 
 struct DrawOptions {
-  // Depth at the left and the right edges of the region, 0 to 1 (right is
-  // the left one if negative).
   float z = 0.0f;
   float z_right = -1.0f;
   uint32_t color_base_tiles = 0;
   xenos::ColorRenderTargetFormat color_format = xenos::ColorRenderTargetFormat::k_8_8_8_8;
   xenos::DepthRenderTargetFormat depth_format = xenos::DepthRenderTargetFormat::kD24S8;
   reg::RB_DEPTHCONTROL depth_control = {};
-  // RB_COLOR_MASK bits of color target 0.
+
   uint32_t color_mask = 0xF;
-  // Of the vertex fetch constant; titles sometimes leave the wrong one.
+
   xenos::FetchConstantType fetch_type = xenos::FetchConstantType::kVertex;
 };
 
-// Sets up drawing constant-color rectangles into a color target and a depth
-// target at EDRAM base 0, within (0, 0)-(width, height).
 inline void SetupDraw(GpuFixture& fixture, const Surface& surface, uint32_t width, uint32_t height,
                       const DrawOptions& options = {}) {
   uint32_t vertices = fixture.AllocPhysical(0x100);
-  // Past the region on every side: with the Direct3D 9 pixel center
-  // convention, the geometry is shifted by half a pixel, which would leave
-  // MSAA samples of the first row and column uncovered. The scissor clips.
+
   float l = -8.0f, r = float(width + 8), t = -8.0f, b = float(height + 8);
-  // Extrapolated to the extended edges.
+
   float z_right = options.z_right < 0.0f ? options.z : options.z_right;
   float dz = (z_right - options.z) / float(width);
   float zl = options.z + dz * l, zr = options.z + dz * r;
@@ -127,7 +111,7 @@ inline void SetupDraw(GpuFixture& fixture, const Surface& surface, uint32_t widt
       XE_GPU_REG_RB_SURFACE_INFO, {surface_info.value, color_info.value, depth_info.value}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_MODECONTROL, {mode_control.value}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_COLOR_MASK, {options.color_mask}));
-  // One * source + zero * destination for color and alpha.
+
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_BLENDCONTROL0, {0x00010001}));
   fixture.Submit(
       GpuFixture::SetRegisters(XE_GPU_REG_RB_DEPTHCONTROL, {options.depth_control.value}));
@@ -144,8 +128,6 @@ inline void SetupDraw(GpuFixture& fixture, const Surface& surface, uint32_t widt
                                           {fetch.dword_0, fetch.dword_1}));
 }
 
-// Draws (x0, y0)-(x1, y1) with the constant pixel shader output c0, clipped by
-// the window scissor, with the state from SetupDraw.
 inline void DrawRectFloat(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
                           float r, float g, float b, float a) {
   reg::PA_SC_WINDOW_SCISSOR_TL window_tl = {};
@@ -162,7 +144,6 @@ inline void DrawRectFloat(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_
   fixture.Submit({xenos::MakePacketType3(xenos::PM4_DRAW_INDX_2, 1), initiator.value});
 }
 
-// DrawRectFloat with an 8-bit normalized RGBA color (red in the low byte).
 inline void DrawRect(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
                      uint32_t color) {
   DrawRectFloat(fixture, x0, y0, x1, y1, float(color & 0xFF) / 255.0f,
@@ -170,16 +151,12 @@ inline void DrawRect(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1,
                 float(color >> 24) / 255.0f);
 }
 
-// The source and destination formats of Resolve.
 struct ResolveFormat {
   xenos::ColorRenderTargetFormat source = xenos::ColorRenderTargetFormat::k_8_8_8_8;
   xenos::ColorFormat dest = xenos::ColorFormat::k_8_8_8_8;
   xenos::SurfaceNumberFormat dest_number = xenos::SurfaceNumberFormat::kUnsignedRepeatingFraction;
 };
 
-// Resolves (0, 0)-(width, height) of the 32bpp color target at EDRAM base 0,
-// one sample of it with MSAA, to a 32-high k_8_8_8_8 tiled texture (or the
-// formats given).
 inline void Resolve(GpuFixture& fixture, const Surface& surface, uint32_t width, uint32_t height,
                     xenos::CopySampleSelect sample, uint32_t dest, uint32_t dest_pitch = 32,
                     uint32_t color_base_tiles = 0, const ResolveFormat& format = {}) {
@@ -238,11 +215,8 @@ inline uint32_t ReadTexel(const GpuFixture& fixture, uint32_t texture, uint32_t 
       texture + uint32_t(texture_util::GetTiledOffset2D(int32_t(x), int32_t(y), pitch, 2)));
 }
 
-// Microcode encoders for hand-assembled shaders.
-
-// Control flow instructions, packed two per three dwords.
 struct Cf {
-  uint32_t dword_0, dword_1;  // dword_1 has 16 bits.
+  uint32_t dword_0, dword_1;
 };
 inline Cf Exec(uint32_t address, uint32_t count, uint32_t fetch_sequence, bool end) {
   return {address | (count << 12) | (fetch_sequence << 16), end ? 0x2000u : 0x1000u};
@@ -255,10 +229,6 @@ inline void PackCf(std::vector<uint32_t>& out, Cf a, Cf b) {
                          (b.dword_0 >> 16) | (b.dword_1 << 16)});
 }
 
-// ALU vector operation exporting all four components to export register
-// `dest` (32 is eA, 33 is eM0, 62 is the position), with the scalar operation
-// retaining the previous value. `sel` bits select temporary registers (1) or
-// float constants (0) for sources 1..3.
 inline std::vector<uint32_t> AluExport(uint32_t dest, uint32_t opcode, uint32_t src1, uint32_t src2,
                                        uint32_t src3, uint32_t src1_swizzle, bool src1_temp,
                                        bool src2_temp, bool src3_temp) {
@@ -269,7 +239,7 @@ inline std::vector<uint32_t> AluExport(uint32_t dest, uint32_t opcode, uint32_t 
 
 constexpr uint32_t kAluMax = 2;
 constexpr uint32_t kAluMad = 11;
-// Component-relative swizzle replicating X.
+
 constexpr uint32_t kSwizzleXXXX = 0 | (3 << 2) | (2 << 4) | (1 << 6);
 
-}  // namespace rex::testing::guest_draw
+}

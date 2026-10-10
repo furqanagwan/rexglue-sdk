@@ -29,12 +29,10 @@ namespace xenos = rex::graphics::xenos;
 constexpr uint32_t kSize = 32;
 constexpr uint32_t kColor = 0xFF5599CC;
 
-}  // namespace
+}
 
 TEST_CASE("A one-off draw under async compilation waits for its pipeline",
           "[gpu][async-pipeline]") {
-  // In samples: 32 is a 1-tile render target (small, generated-data sized);
-  // 320 is 4 tiles wide. Both are drawn once, never before.
   auto pitch = GENERATE(uint32_t(32), uint32_t(320));
   INFO("render target pitch " << pitch << " samples");
   std::string error;
@@ -47,8 +45,7 @@ TEST_CASE("A one-off draw under async compilation waits for its pipeline",
   const Surface surface{xenos::MsaaSamples::k1X, pitch};
   uint32_t dest = fixture->AllocPhysical(kSize * kSize * 4);
   SetupDraw(*fixture, surface, kSize, kSize);
-  // A pixel shader this fixture hasn't seen, so its pipeline is created
-  // asynchronously when the draw needs it.
+
   DrawRect(*fixture, 0, 0, kSize, kSize, kColor);
   Resolve(*fixture, surface, kSize, kSize, xenos::CopySampleSelect::k0, dest);
   REQUIRE(fixture->Flush());

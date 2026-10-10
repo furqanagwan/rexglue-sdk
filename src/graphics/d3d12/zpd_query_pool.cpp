@@ -38,7 +38,7 @@ bool CreateCounterResources(const ui::d3d12::D3D12Provider& provider, uint32_t c
           D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&counter)))) {
     return false;
   }
-  // Not D3D12_HEAP_FLAG_CREATE_NOT_ZEROED: this one must start zeroed.
+
   ui::d3d12::util::FillBufferResourceDesc(desc, XenosZPDReport::kCounterSizeBytes,
                                           D3D12_RESOURCE_FLAG_NONE);
   if (FAILED(device->CreateCommittedResource(
@@ -61,7 +61,7 @@ bool CreateCounterResources(const ui::d3d12::D3D12Provider& provider, uint32_t c
   return true;
 }
 
-}  // namespace
+}
 
 bool D3D12ZPDQueryPool::EnsureInitialized(const ui::d3d12::D3D12Provider& provider,
                                           uint32_t requested_capacity, bool with_counter) {
@@ -155,7 +155,6 @@ void D3D12ZPDQueryPool::Shutdown() {
   capacity_ = 0;
 
   if (readback_mapping_ && readback_buffer_) {
-    // CPU never writes to this READBACK buffer - empty written range.
     D3D12_RANGE written_range = {0, 0};
     readback_buffer_->Unmap(0, &written_range);
   }
@@ -187,8 +186,7 @@ bool D3D12ZPDQueryPool::AcquireQueryIndex(uint32_t& query_index, uint32_t& query
   free_indices_.pop_back();
 
   assert_true(query_index < index_generations_.size());
-  // Bump the generation. Any in-flight readbacks for the slot's previous
-  // occupants are ignored.
+
   query_generation = ++index_generations_[query_index];
   return true;
 }
@@ -198,7 +196,6 @@ void D3D12ZPDQueryPool::ReleaseQueryIndex(uint32_t query_index, uint32_t query_g
     return;
   }
 
-  // Bump generation so a second release with the same generation is rejected.
   ++index_generations_[query_index];
   free_indices_.push_back(query_index);
 }
@@ -258,13 +255,12 @@ void D3D12ZPDQueryPool::TransitionCounterBuffer(DeferredCommandList& deferred_co
 void D3D12ZPDQueryPool::ClearCounter(DeferredCommandList& deferred_command_list,
                                      uint64_t submission, uint32_t query_index) {
   assert_true(counter_initialized() && query_index < capacity_);
-  // The transition also orders the reset after the atomics of the query that
-  // last owned this slot.
+
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_COPY_DEST);
   deferred_command_list.D3DCopyBufferRegion(
       counter_buffer_.Get(), uint64_t(query_index) * XenosZPDReport::kCounterSizeBytes,
       counter_zero_buffer_.Get(), 0, XenosZPDReport::kCounterSizeBytes);
-  // And the atomics of this query after the reset.
+
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
@@ -280,7 +276,7 @@ void D3D12ZPDQueryPool::CopyCounterZPassTo(DeferredCommandList& deferred_command
                                            uint64_t submission, uint32_t query_index,
                                            ID3D12Resource* dest, uint64_t dest_offset) {
   assert_true(counter_initialized() && query_index < capacity_);
-  // Out of UNORDERED_ACCESS orders the copy after the pixel shaders' atomics.
+
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_COPY_SOURCE);
   deferred_command_list.D3DCopyBufferRegion(
       dest, dest_offset, counter_buffer_.Get(),
@@ -297,7 +293,6 @@ void D3D12ZPDQueryPool::FlushResolveBatch(DeferredCommandList& deferred_command_
   }
   assert_true(initialized());
 
-  // Sorts the indices and coalesces contiguous runs into resolve_batch_ranges_.
   auto build_ranges = [this](std::vector<uint32_t>& indices) {
     std::sort(indices.begin(), indices.end());
     resolve_batch_ranges_.clear();
@@ -336,8 +331,7 @@ void D3D12ZPDQueryPool::FlushResolveBatch(DeferredCommandList& deferred_command_
     return;
   }
   assert_true(counter_initialized());
-  // State is per resource, so the whole buffer goes to COPY_SOURCE for the
-  // copies and back to UNORDERED_ACCESS for draws still counting.
+
   TransitionCounterBuffer(deferred_command_list, submission, D3D12_RESOURCE_STATE_COPY_SOURCE);
   build_ranges(counter_resolve_batch_indices_);
   for (const ResolveRange& range : resolve_batch_ranges_) {
@@ -369,4 +363,4 @@ XenosZPDReport D3D12ZPDQueryPool::GetQueryReadbackValue(uint32_t query_index, bo
   return XenosZPDReport::FromNativeQuery(readback_mapping_[query_index]);
 }
 
-}  // namespace rex::graphics::d3d12
+}

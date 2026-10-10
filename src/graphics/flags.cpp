@@ -15,9 +15,6 @@
 #include <rex/logging.h>
 #include <rex/ui/renderdoc_api.h>
 
-// On by default, as in Xenia Canary and Edge: titles leave fetch constants
-// with the "invalid" type bits set for textures they still sample (NHL Legacy
-// Edition's gameplay drew black, RG-GDK-069).
 REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, true, "GPU",
                     "Allow texture and vertex fetch constants with the invalid type (off skips "
                     "the draws that use them)");
@@ -44,9 +41,7 @@ bool IsGpuDebugMarkersEnabled() {
     REXLOG_INFO("GPU debug markers enabled via CVar");
     return true;
   }
-  // Attached tools don't come and go while the device exists, so they're
-  // detected once. PIX injects its capturer DLLs when it launches the title
-  // (GPU capture or timing capture).
+
   static const char* const attached_tool = []() -> const char* {
     if (GetModuleHandleW(L"WinPixGpuCapturer.dll")) {
       return "PIX GPU capture";

@@ -34,7 +34,6 @@
 
 namespace rex::graphics::d3d12 {
 
-// Generated with `xb buildshaders`.
 namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/texture_load_128bpb_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/texture_load_128bpb_scaled_cs.h"
@@ -78,282 +77,266 @@ namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/texture_load_r5g5b6_b5g6r5_swizzle_rbga_scaled_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/texture_load_r5g6b5_b5g6r5_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/texture_load_r5g6b5_b5g6r5_scaled_cs.h"
-}  // namespace shaders
+}
 
 const D3D12TextureCache::HostFormat D3D12TextureCache::host_formats_[64] = {
-    // k_1_REVERSE
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_1
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_8
+
     {DXGI_FORMAT_R8_TYPELESS, DXGI_FORMAT_R8_UNORM, kLoadShaderIndex8bpb, DXGI_FORMAT_R8_SNORM,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_1_5_5_5
-    // Red and blue swapped in the load shader for simplicity.
+
     {DXGI_FORMAT_B5G5R5A1_UNORM, DXGI_FORMAT_B5G5R5A1_UNORM, kLoadShaderIndexR5G5B5A1ToB5G5R5A1,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_5_6_5
-    // Red and blue swapped in the load shader for simplicity.
+
     {DXGI_FORMAT_B5G6R5_UNORM, DXGI_FORMAT_B5G6R5_UNORM, kLoadShaderIndexR5G6B5ToB5G6R5,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_6_5_5
-    // On the host, green bits in blue, blue bits in green.
+
     {DXGI_FORMAT_B5G6R5_UNORM, DXGI_FORMAT_B5G6R5_UNORM,
      kLoadShaderIndexR5G5B6ToB5G6R5WithRBGASwizzle, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, XE_GPU_MAKE_TEXTURE_SWIZZLE(R, B, G, G)},
-    // k_8_8_8_8
+
     {DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndex32bpb,
      DXGI_FORMAT_R8G8B8A8_SNORM, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_2_10_10_10
+
     {DXGI_FORMAT_R10G10B10A2_TYPELESS, DXGI_FORMAT_R10G10B10A2_UNORM, kLoadShaderIndex32bpb,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_8_A
+
     {DXGI_FORMAT_R8_TYPELESS, DXGI_FORMAT_R8_UNORM, kLoadShaderIndex8bpb, DXGI_FORMAT_R8_SNORM,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_8_B
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_8_8
+
     {DXGI_FORMAT_R8G8_TYPELESS, DXGI_FORMAT_R8G8_UNORM, kLoadShaderIndex16bpb,
      DXGI_FORMAT_R8G8_SNORM, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_Cr_Y1_Cb_Y0_REP
-    // Red and blue swapped in the load shader for simplicity.
 
     {DXGI_FORMAT_G8R8_G8B8_UNORM, DXGI_FORMAT_G8R8_G8B8_UNORM, kLoadShaderIndexGBGR8ToGRGB8,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM,
      kLoadShaderIndexGBGR8ToRGB8, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_Y1_Cr_Y0_Cb_REP
-    // Red and blue swapped in the load shader for simplicity.
 
     {DXGI_FORMAT_R8G8_B8G8_UNORM, DXGI_FORMAT_R8G8_B8G8_UNORM, kLoadShaderIndexBGRG8ToRGBG8,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM,
      kLoadShaderIndexBGRG8ToRGB8, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_16_16_EDRAM
-    // Not usable as a texture, also has -32...32 range.
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_8_8_8_8_A
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_4_4_4_4
-    // Red and blue swapped in the load shader for simplicity.
+
     {DXGI_FORMAT_B4G4R4A4_UNORM, DXGI_FORMAT_B4G4R4A4_UNORM, kLoadShaderIndexRGBA4ToBGRA4,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_10_11_11
+
     {DXGI_FORMAT_R16G16B16A16_TYPELESS, DXGI_FORMAT_R16G16B16A16_UNORM,
      kLoadShaderIndexR11G11B10ToRGBA16, DXGI_FORMAT_R16G16B16A16_SNORM,
      kLoadShaderIndexR11G11B10ToRGBA16SNorm, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_11_11_10
+
     {DXGI_FORMAT_R16G16B16A16_TYPELESS, DXGI_FORMAT_R16G16B16A16_UNORM,
      kLoadShaderIndexR10G11B11ToRGBA16, DXGI_FORMAT_R16G16B16A16_SNORM,
      kLoadShaderIndexR10G11B11ToRGBA16SNorm, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_DXT1
+
     {DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM, kLoadShaderIndex64bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT1ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_DXT2_3
+
     {DXGI_FORMAT_BC2_UNORM, DXGI_FORMAT_BC2_UNORM, kLoadShaderIndex128bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT3ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_DXT4_5
+
     {DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC3_UNORM, kLoadShaderIndex128bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT5ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_16_16_16_16_EDRAM
-    // Not usable as a texture, also has -32...32 range.
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // R32_FLOAT for depth because shaders would require an additional SRV to
-    // sample stencil, which we don't provide.
-    // k_24_8
+
     {DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, kLoadShaderIndexDepthUnorm,
      DXGI_FORMAT_R32_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_24_8_FLOAT
+
     {DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, kLoadShaderIndexDepthFloat,
      DXGI_FORMAT_R32_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16
+
     {DXGI_FORMAT_R16_TYPELESS, DXGI_FORMAT_R16_UNORM, kLoadShaderIndex16bpb, DXGI_FORMAT_R16_SNORM,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_16
+
     {DXGI_FORMAT_R16G16_TYPELESS, DXGI_FORMAT_R16G16_UNORM, kLoadShaderIndex32bpb,
      DXGI_FORMAT_R16G16_SNORM, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_16_16_16_16
+
     {DXGI_FORMAT_R16G16B16A16_TYPELESS, DXGI_FORMAT_R16G16B16A16_UNORM, kLoadShaderIndex64bpb,
      DXGI_FORMAT_R16G16B16A16_SNORM, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_16_EXPAND
+
     {DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT, kLoadShaderIndex16bpb, DXGI_FORMAT_R16_FLOAT,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_16_EXPAND
+
     {DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_FLOAT, kLoadShaderIndex32bpb,
      DXGI_FORMAT_R16G16_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_16_16_16_16_EXPAND
+
     {DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT, kLoadShaderIndex64bpb,
      DXGI_FORMAT_R16G16B16A16_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_16_FLOAT
+
     {DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT, kLoadShaderIndex16bpb, DXGI_FORMAT_R16_FLOAT,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_16_FLOAT
+
     {DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_FLOAT, kLoadShaderIndex32bpb,
      DXGI_FORMAT_R16G16_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_16_16_16_16_FLOAT
+
     {DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT, kLoadShaderIndex64bpb,
      DXGI_FORMAT_R16G16B16A16_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_32
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_32_32
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_32_32_32_32
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_32_FLOAT
+
     {DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, kLoadShaderIndex32bpb, DXGI_FORMAT_R32_FLOAT,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_32_32_FLOAT
+
     {DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32_FLOAT, kLoadShaderIndex64bpb,
      DXGI_FORMAT_R32G32_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_32_32_32_32_FLOAT
+
     {DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, kLoadShaderIndex128bpb,
      DXGI_FORMAT_R32G32B32A32_FLOAT, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_32_AS_8
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_32_AS_8_8
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_16_MPEG
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_16_MPEG
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_8_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_32_AS_8_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_32_AS_8_8_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_16_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_MPEG_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_16_16_MPEG_INTERLACED
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_DXN
+
     {DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_UNORM, kLoadShaderIndex128bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8_UNORM, kLoadShaderIndexDXNToRG8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_8_8_8_8_AS_16_16_16_16
+
     {DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndex32bpb,
      DXGI_FORMAT_R8G8B8A8_SNORM, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_DXT1_AS_16_16_16_16
+
     {DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM, kLoadShaderIndex64bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT1ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_DXT2_3_AS_16_16_16_16
+
     {DXGI_FORMAT_BC2_UNORM, DXGI_FORMAT_BC2_UNORM, kLoadShaderIndex128bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT3ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_DXT4_5_AS_16_16_16_16
+
     {DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC3_UNORM, kLoadShaderIndex128bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8G8B8A8_UNORM, kLoadShaderIndexDXT5ToRGBA8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_2_10_10_10_AS_16_16_16_16
+
     {DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, kLoadShaderIndex32bpb,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_10_11_11_AS_16_16_16_16
+
     {DXGI_FORMAT_R16G16B16A16_TYPELESS, DXGI_FORMAT_R16G16B16A16_UNORM,
      kLoadShaderIndexR11G11B10ToRGBA16, DXGI_FORMAT_R16G16B16A16_SNORM,
      kLoadShaderIndexR11G11B10ToRGBA16SNorm, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_11_11_10_AS_16_16_16_16
+
     {DXGI_FORMAT_R16G16B16A16_TYPELESS, DXGI_FORMAT_R16G16B16A16_UNORM,
      kLoadShaderIndexR10G11B11ToRGBA16, DXGI_FORMAT_R16G16B16A16_SNORM,
      kLoadShaderIndexR10G11B11ToRGBA16SNorm, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_32_32_32_FLOAT
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBB},
-    // k_DXT3A
-    // R8_UNORM has the same size as BC2, but doesn't have the 4x4 size
-    // alignment requirement.
+
     {DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM, kLoadShaderIndexDXT3A, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_DXT5A
+
     {DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_UNORM, kLoadShaderIndex64bpb, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, true, DXGI_FORMAT_R8_UNORM, kLoadShaderIndexDXT5AToR8,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RRRR},
-    // k_CTX1
+
     {DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, kLoadShaderIndexCTX1, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGGG},
-    // k_DXT3A_AS_1_1_1_1
+
     {DXGI_FORMAT_B4G4R4A4_UNORM, DXGI_FORMAT_B4G4R4A4_UNORM, kLoadShaderIndexDXT3AAs1111ToBGRA4,
      DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_8_8_8_8_GAMMA_EDRAM
-    // Not usable as a texture.
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
-    // k_2_10_10_10_FLOAT_EDRAM
-    // Not usable as a texture.
+
     {DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown, DXGI_FORMAT_UNKNOWN,
      kLoadShaderIndexUnknown, false, DXGI_FORMAT_UNKNOWN, kLoadShaderIndexUnknown,
      xenos::XE_GPU_TEXTURE_SWIZZLE_RGBA},
@@ -370,11 +353,8 @@ D3D12TextureCache::D3D12TextureCache(const RegisterFile& register_file,
       bindless_resources_used_(bindless_resources_used) {}
 
 D3D12TextureCache::~D3D12TextureCache() {
-  // While the texture descriptor cache still exists (referenced by
-  // ~D3D12Texture), destroy all textures.
   DestroyAllTextures(true);
 
-  // First release the buffers to detach them from the heaps.
   for (std::unique_ptr<ScaledResolveVirtualBuffer>& scaled_resolve_buffer_ptr :
        scaled_resolve_2gb_buffers_) {
     scaled_resolve_buffer_ptr.reset();
@@ -388,8 +368,6 @@ bool D3D12TextureCache::Initialize() {
   ID3D12Device* device = provider.GetDevice();
 
   if (IsDrawResolutionScaled()) {
-    // Buffers not used yet - no need aliasing barriers to change ownership of
-    // gigabytes between even and odd buffers.
     std::memset(scaled_resolve_1gb_buffer_indices_, UINT8_MAX,
                 sizeof(scaled_resolve_1gb_buffer_indices_));
     assert_true(scaled_resolve_heaps_.empty());
@@ -401,16 +379,14 @@ bool D3D12TextureCache::Initialize() {
   }
   scaled_resolve_heap_count_ = 0;
 
-  // Create the loading root signature.
   D3D12_ROOT_PARAMETER root_parameters[3];
-  // Parameter 0 is constants (changed multiple times when untiling).
+
   root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
   root_parameters[0].Constants.ShaderRegister = 0;
   root_parameters[0].Constants.RegisterSpace = 0;
   root_parameters[0].Constants.Num32BitValues = sizeof(LoadConstants) / sizeof(uint32_t);
   root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-  // Parameter 1 is the source (may be changed multiple times for the same
-  // destination).
+
   D3D12_DESCRIPTOR_RANGE root_dest_range;
   root_dest_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
   root_dest_range.NumDescriptors = 1;
@@ -421,7 +397,7 @@ bool D3D12TextureCache::Initialize() {
   root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
   root_parameters[1].DescriptorTable.pDescriptorRanges = &root_dest_range;
   root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-  // Parameter 2 is the destination.
+
   D3D12_DESCRIPTOR_RANGE root_source_range;
   root_source_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
   root_source_range.NumDescriptors = 1;
@@ -447,7 +423,6 @@ bool D3D12TextureCache::Initialize() {
     return false;
   }
 
-  // Specify the load shader code.
   D3D12_SHADER_BYTECODE load_shader_code[kLoadShaderCount] = {};
   load_shader_code[kLoadShaderIndex8bpb] =
       D3D12_SHADER_BYTECODE{shaders::texture_load_8bpb_cs, sizeof(shaders::texture_load_8bpb_cs)};
@@ -553,7 +528,6 @@ bool D3D12TextureCache::Initialize() {
                               sizeof(shaders::texture_load_depth_float_scaled_cs)};
   }
 
-  // Create the loading pipelines.
   for (size_t i = 0; i < kLoadShaderCount; ++i) {
     const D3D12_SHADER_BYTECODE& current_load_shader_code = load_shader_code[i];
     if (!current_load_shader_code.pShaderBytecode) {
@@ -589,9 +563,6 @@ bool D3D12TextureCache::Initialize() {
 
   srv_descriptor_cache_allocated_ = 0;
 
-  // Create a heap with null SRV descriptors, since it's faster to copy a
-  // descriptor than to create an SRV, and null descriptors are used a lot (for
-  // the signed version when only unsigned is used, for instance).
   D3D12_DESCRIPTOR_HEAP_DESC null_srv_descriptor_heap_desc;
   null_srv_descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
   null_srv_descriptor_heap_desc.NumDescriptors = uint32_t(NullSRVDescriptorIndex::kCount);
@@ -644,7 +615,6 @@ bool D3D12TextureCache::Initialize() {
 void D3D12TextureCache::ClearCache() {
   TextureCache::ClearCache();
 
-  // Clear texture descriptor cache.
   srv_descriptor_cache_free_.clear();
   srv_descriptor_cache_allocated_ = 0;
   srv_descriptor_cache_.clear();
@@ -653,7 +623,6 @@ void D3D12TextureCache::ClearCache() {
 void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
   TextureCache::BeginSubmission(new_submission_index);
 
-  // ExecuteCommandLists is a full UAV and aliasing barrier.
   if (IsDrawResolutionScaled()) {
     size_t scaled_resolve_buffer_count = GetScaledResolveBufferCount();
     for (size_t i = 0; i < scaled_resolve_buffer_count; ++i) {
@@ -674,7 +643,6 @@ void D3D12TextureCache::BeginFrame() {
 }
 
 void D3D12TextureCache::EndFrame() {
-  // Report used unsupported texture formats.
   bool unsupported_header_written = false;
   for (uint32_t i = 0; i < 64; ++i) {
     uint32_t unsupported_features = unsupported_format_features_used_[i];
@@ -696,12 +664,10 @@ void D3D12TextureCache::EndFrame() {
 void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+#endif
 
   TextureCache::RequestTextures(used_texture_mask);
 
-  // Pre-create 3D-as-2D wrappers before draw setup. Wrapper loading may bind
-  // compute pipelines and must happen in the texture request phase.
   if (REXCVAR_GET(gpu_3d_to_2d_texture)) {
     uint32_t textures_3d = used_texture_mask;
     uint32_t index_3d;
@@ -724,12 +690,6 @@ void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {
     }
   }
 
-  // Transition the textures to the needed usage - always in
-  // NON_PIXEL_SHADER_RESOURCE | PIXEL_SHADER_RESOURCE states because barriers
-  // between read-only stages, if needed, are discouraged (also if these were
-  // tracked separately, checks would be needed to make sure, if the same
-  // texture is bound through different fetch constants to both VS and PS, it
-  // would be in both states).
   uint32_t textures_remaining = used_texture_mask;
   uint32_t index;
   while (rex::bit_scan_forward(textures_remaining, &index)) {
@@ -740,7 +700,6 @@ void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {
     }
     D3D12Texture* binding_texture = static_cast<D3D12Texture*>(binding->texture);
     if (binding_texture != nullptr) {
-      // Will be referenced by the command list, so mark as used.
       binding_texture->MarkAsUsed();
       command_processor_.PushTransitionBarrier(
           binding_texture->resource(),
@@ -813,8 +772,6 @@ void D3D12TextureCache::WriteActiveTextureBindfulSRV(
                                host_shader_binding.dimension == xenos::FetchOpDimension::k2D);
     const D3D12TextureBinding& d3d12_binding = d3d12_texture_bindings_[fetch_constant_index];
     if (texture_util::IsSignedViewBound(binding->swizzled_signs, host_shader_binding.is_signed)) {
-      // Not supporting signed compressed textures - hopefully DXN and DXT5A are
-      // not used as signed.
       if (texture_util::IsAnySignSigned(binding->swizzled_signs)) {
         texture = IsSignedVersionSeparateForFormat(binding->key) ? binding->texture_signed
                                                                  : binding->texture;
@@ -868,7 +825,7 @@ void D3D12TextureCache::WriteActiveTextureBindfulSRV(
     SCOPE_profile_cpu_i("gpu",
                         "rex::graphics::d3d12::D3D12TextureCache::WriteActiveTextureBindfulSRV->"
                         "CopyDescriptorsSimple");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+#endif
     device->CopyDescriptorsSimple(1, handle, source_handle, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
   }
 }
@@ -1006,24 +963,18 @@ void D3D12TextureCache::WriteSampler(SamplerParameters parameters,
     desc.MaxAnisotropy = 1;
   }
   static const D3D12_TEXTURE_ADDRESS_MODE kAddressModeMap[] = {
-      /* kRepeat               */ D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-      /* kMirroredRepeat       */ D3D12_TEXTURE_ADDRESS_MODE_MIRROR,
-      /* kClampToEdge          */ D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-      /* kMirrorClampToEdge    */ D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE,
-      // No GL_CLAMP (clamp to half edge, half border) equivalent in Direct3D
-      // 12, but there's no Direct3D 9 equivalent anyway, and too weird to be
-      // suitable for intentional real usage.
-      /* kClampToHalfway       */ D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-      // No mirror and clamp to border equivalents in Direct3D 12, but they
-      // aren't there in Direct3D 9 either.
-      /* kMirrorClampToHalfway */ D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE,
-      /* kClampToBorder        */ D3D12_TEXTURE_ADDRESS_MODE_BORDER,
-      /* kMirrorClampToBorder  */ D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE,
+      D3D12_TEXTURE_ADDRESS_MODE_WRAP,        D3D12_TEXTURE_ADDRESS_MODE_MIRROR,
+      D3D12_TEXTURE_ADDRESS_MODE_CLAMP,       D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE,
+
+      D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+
+      D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE, D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+      D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE,
   };
   desc.AddressU = kAddressModeMap[uint32_t(parameters.clamp_x)];
   desc.AddressV = kAddressModeMap[uint32_t(parameters.clamp_y)];
   desc.AddressW = kAddressModeMap[uint32_t(parameters.clamp_z)];
-  // LOD biasing is performed in shaders.
+
   desc.MipLODBias = 0.0f;
   desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
   switch (parameters.border_color) {
@@ -1055,23 +1006,12 @@ void D3D12TextureCache::WriteSampler(SamplerParameters parameters,
   }
   desc.MinLOD = float(parameters.mip_min_level);
   if (parameters.mip_base_map) {
-    // "It is undefined whether LOD clamping based on MinLOD and MaxLOD Sampler
-    // states should happen before or after deciding if magnification is
-    // occuring" - Direct3D 11.3 Functional Specification.
-    // Using the GL_NEAREST / GL_LINEAR minification filter emulation logic
-    // described in the Vulkan VkSamplerCreateInfo specification, preserving
-    // magnification vs. minification - point mip sampling (usable only without
-    // anisotropic filtering on Direct3D 12) and MaxLOD 0.25. With anisotropic
-    // filtering, magnification vs. minification doesn't matter as the filter is
-    // always linear for both on Direct3D 12 - but linear filtering specifically
-    // is what must not be done for kBaseMap, so setting MaxLOD to MinLOD.
     desc.MaxLOD = desc.MinLOD;
     if (parameters.aniso_filter == xenos::AnisoFilter::kDisabled) {
       assert_false(parameters.mip_linear);
       desc.MaxLOD += 0.25f;
     }
   } else {
-    // Maximum mip level is in the texture resource itself.
     desc.MaxLOD = FLT_MAX;
   }
   ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
@@ -1087,7 +1027,7 @@ bool D3D12TextureCache::ClampDrawResolutionScaleToMaxSupported(
     scale_y = 1;
     return !was_clamped;
   }
-  // Limit to the virtual address space available for a resource.
+
   was_clamped = false;
   uint32_t virtual_address_bits_per_resource = provider.GetVirtualAddressBitsPerResource();
   while (scale_x > 1 || scale_y > 1) {
@@ -1095,9 +1035,7 @@ bool D3D12TextureCache::ClampDrawResolutionScaleToMaxSupported(
     if (uint32_t(64) - rex::lzcnt(highest_scaled_address) <= virtual_address_bits_per_resource) {
       break;
     }
-    // When reducing from a square size, prefer decreasing the horizontal
-    // resolution as vertical resolution difference is visible more clearly in
-    // perspective.
+
     was_clamped = true;
     if (scale_x >= scale_y) {
       --scale_x;
@@ -1118,7 +1056,6 @@ bool D3D12TextureCache::EnsureScaledResolveMemoryCommitted(uint32_t start_unscal
   }
   if (start_unscaled > SharedMemory::kBufferSize ||
       (SharedMemory::kBufferSize - start_unscaled) < length_unscaled) {
-    // Exceeds the physical address space.
     return false;
   }
 
@@ -1133,10 +1070,6 @@ bool D3D12TextureCache::EnsureScaledResolveMemoryCommitted(uint32_t start_unscal
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
   ID3D12Device* device = provider.GetDevice();
 
-  // Ensure GPU virtual memory for buffers that may be used to access the range
-  // is allocated - buffers are created. Always creating both buffers for all
-  // addresses before creating the heaps so when creating a new buffer, it can
-  // be safely assumed that no existing heaps should be mapped to it.
   std::array<size_t, 2> possible_buffers_first =
       GetPossibleScaledResolveBufferIndices(first_scaled);
   std::array<size_t, 2> possible_buffers_last = GetPossibleScaledResolveBufferIndices(last_scaled);
@@ -1147,14 +1080,14 @@ bool D3D12TextureCache::EnsureScaledResolveMemoryCommitted(uint32_t start_unscal
       continue;
     }
     D3D12_RESOURCE_DESC scaled_resolve_buffer_desc;
-    // Buffer indices are gigabytes.
+
     ui::d3d12::util::FillBufferResourceDesc(
         scaled_resolve_buffer_desc,
         std::min(
             uint64_t(1) << 31,
             uint64_t(SharedMemory::kBufferSize) * draw_resolution_scale_area - (uint64_t(i) << 30)),
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-    // The first access will be a resolve.
+
     constexpr D3D12_RESOURCE_STATES kScaledResolveVirtualBufferInitialState =
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     ID3D12Resource* scaled_resolve_buffer_resource;
@@ -1229,8 +1162,6 @@ bool D3D12TextureCache::MakeScaledResolveRangeCurrent(uint32_t start_unscaled,
 
   if (!length_unscaled || start_unscaled >= SharedMemory::kBufferSize ||
       (SharedMemory::kBufferSize - start_unscaled) < length_unscaled) {
-    // If length is 0, the needed buffer can't be chosen because no buffer is
-    // needed.
     return false;
   }
 
@@ -1242,7 +1173,6 @@ bool D3D12TextureCache::MakeScaledResolveRangeCurrent(uint32_t start_unscaled,
       ~length_scaled_alignment_bits;
   uint64_t last_scaled = start_scaled + (length_scaled - 1);
 
-  // Get one or two buffers that can hold the whole range.
   std::array<size_t, 2> possible_buffer_indices_first =
       GetPossibleScaledResolveBufferIndices(start_scaled);
   std::array<size_t, 2> possible_buffer_indices_last =
@@ -1271,18 +1201,14 @@ bool D3D12TextureCache::MakeScaledResolveRangeCurrent(uint32_t start_unscaled,
     }
   }
   if (!possible_buffer_indices_common_count) {
-    // Too wide range requested - no buffer that contains both the start and the
-    // end.
     return false;
   }
 
   size_t gigabyte_first = size_t(start_scaled >> 30);
   size_t gigabyte_last = size_t(last_scaled >> 30);
 
-  // Choose the buffer that the range will be accessed through.
   size_t new_buffer_index;
   if (possible_buffer_indices_common_count >= 2) {
-    // Prefer the buffer that is already used to make less aliasing barriers.
     assert_true(gigabyte_first + 1 >= gigabyte_last);
     size_t possible_buffer_indices_already_used[2] = {};
     for (size_t i = gigabyte_first; i <= gigabyte_last; ++i) {
@@ -1296,11 +1222,9 @@ bool D3D12TextureCache::MakeScaledResolveRangeCurrent(uint32_t start_unscaled,
     new_buffer_index = possible_buffer_indices_common[size_t(
         possible_buffer_indices_already_used[1] > possible_buffer_indices_already_used[0])];
   } else {
-    // The range can be accessed only by one buffer.
     new_buffer_index = possible_buffer_indices_common[0];
   }
 
-  // Switch the current buffer for the range.
   const ScaledResolveVirtualBuffer* new_buffer =
       scaled_resolve_2gb_buffers_[new_buffer_index].get();
   assert_not_null(new_buffer);
@@ -1316,7 +1240,7 @@ bool D3D12TextureCache::MakeScaledResolveRangeCurrent(uint32_t start_unscaled,
       assert_not_null(gigabyte_current_buffer);
       command_processor_.PushAliasingBarrier(gigabyte_current_buffer->resource(),
                                              new_buffer_resource);
-      // An aliasing barrier synchronizes and flushes everything.
+
       gigabyte_current_buffer->ClearUAVBarrierPending();
     }
     scaled_resolve_1gb_buffer_indices_[i] = new_buffer_index;
@@ -1378,9 +1302,7 @@ ID3D12Resource* D3D12TextureCache::RequestSwapTexture(D3D12_SHADER_RESOURCE_VIEW
     return nullptr;
   }
   texture->MarkAsUsed();
-  // The swap texture is likely to be used only for the presentation compute
-  // shader, and not during emulation, where it'd be NON_PIXEL_SHADER_RESOURCE |
-  // PIXEL_SHADER_RESOURCE.
+
   ID3D12Resource* texture_resource = texture->resource();
   command_processor_.PushTransitionBarrier(
       texture_resource, texture->SetResourceState(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
@@ -1394,8 +1316,7 @@ ID3D12Resource* D3D12TextureCache::RequestSwapTexture(D3D12_SHADER_RESOURCE_VIEW
   srv_desc_out.Texture2D.MipLevels = 1;
   srv_desc_out.Texture2D.PlaneSlice = 0;
   srv_desc_out.Texture2D.ResourceMinLODClamp = 0.0f;
-  // Only texture->key, not the result of BindingInfoFromFetchConstant, contains
-  // whether the texture is scaled.
+
   key = texture->key();
   if (width_unscaled_out) {
     *width_unscaled_out = key.GetWidth();
@@ -1436,8 +1357,7 @@ bool D3D12TextureCache::IsDecompressionNeeded(xenos::TextureFormat format, uint3
   if (!(width & (format_info->block_width - 1)) && !(height & (format_info->block_height - 1))) {
     return false;
   }
-  // UnalignedBlockTexturesSupported is for block-compressed textures with the
-  // block size of 4x4, but not for 2x1 (4:2:2) subsampled formats.
+
   if (format_info->block_width == 4 && format_info->block_height == 4 &&
       command_processor_.GetD3D12Provider().AreUnalignedBlockTexturesSupported()) {
     return false;
@@ -1468,8 +1388,6 @@ bool D3D12TextureCache::IsScaledResolveSupportedForFormat(TextureKey key) const 
 }
 
 uint32_t D3D12TextureCache::GetHostFormatSwizzle(TextureKey key) const {
-  // Dense cache-line-aligned swizzle array avoids cache misses from accessing
-  // the full HostFormat struct on every texture fetch.
   alignas(64) static const auto swizzle_cache = []() {
     std::array<uint16_t, 64> arr{};
     for (int i = 0; i < 64; ++i) {
@@ -1484,7 +1402,7 @@ uint32_t D3D12TextureCache::GetMaxHostTextureWidthHeight(xenos::DataDimension di
   switch (dimension) {
     case xenos::DataDimension::k1D:
     case xenos::DataDimension::k2DOrStacked:
-      // 1D and 2D are emulated as 2D arrays.
+
       return D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
     case xenos::DataDimension::k3D:
       return D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
@@ -1501,7 +1419,7 @@ uint32_t D3D12TextureCache::GetMaxHostTextureDepthOrArraySize(
   switch (dimension) {
     case xenos::DataDimension::k1D:
     case xenos::DataDimension::k2DOrStacked:
-      // 1D and 2D are emulated as 2D arrays.
+
       return D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
     case xenos::DataDimension::k3D:
       return D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
@@ -1523,7 +1441,6 @@ std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureK
   if (key.dimension == xenos::DataDimension::k3D) {
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
   } else {
-    // 1D textures are treated as 2D for simplicity.
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
   }
   desc.Alignment = 0;
@@ -1538,12 +1455,11 @@ std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureK
   desc.SampleDesc.Count = 1;
   desc.SampleDesc.Quality = 0;
   desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-  // Untiling through a buffer instead of using unordered access because copying
-  // is not done that often.
+
   desc.Flags = D3D12_RESOURCE_FLAG_NONE;
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
   ID3D12Device* device = provider.GetDevice();
-  // Assuming untiling will be the next operation.
+
   D3D12_RESOURCE_STATES resource_state = D3D12_RESOURCE_STATE_COPY_DEST;
   Microsoft::WRL::ComPtr<ID3D12Resource> resource;
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
@@ -1562,7 +1478,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
   DeferredCommandList& command_list = command_processor_.GetDeferredCommandList();
   ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
 
-  // Get the pipeline.
   LoadShaderIndex load_shader = GetLoadShaderIndex(texture_key);
   if (load_shader == kLoadShaderIndexUnknown) {
     return false;
@@ -1576,7 +1491,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
   }
   const LoadShaderInfo& load_shader_info = GetLoadShaderInfo(load_shader);
 
-  // Get the guest layout.
   const texture_util::TextureGuestLayout& guest_layout = d3d12_texture.guest_layout();
   xenos::DataDimension dimension = texture_key.dimension;
   bool is_3d = dimension == xenos::DataDimension::k3D;
@@ -1600,26 +1514,15 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
   uint32_t texture_resolution_scale_x = texture_resolution_scaled ? draw_resolution_scale_x() : 1;
   uint32_t texture_resolution_scale_y = texture_resolution_scaled ? draw_resolution_scale_y() : 1;
 
-  // The loop counter can mean two things depending on whether the packed mip
-  // tail is stored as mip 0, because in this case, it would be ambiguous since
-  // both the base and the mips would be on "level 0", but stored in separate
-  // places.
   uint32_t loop_level_first, loop_level_last;
   if (level_packed == 0) {
-    // Packed mip tail is the level 0 - may need to load mip tails for the base,
-    // the mips, or both.
-    // Loop iteration 0 - base packed mip tail.
-    // Loop iteration 1 - mips packed mip tail.
     loop_level_first = uint32_t(level_first != 0);
     loop_level_last = uint32_t(level_last != 0);
   } else {
-    // Packed mip tail is not the level 0.
-    // Loop iteration is the actual level being loaded.
     loop_level_first = level_stored_first;
     loop_level_last = level_stored_last;
   }
 
-  // Get the host layout and the buffer.
   bool host_block_compressed = host_formats_[uint32_t(guest_format)].is_block_compressed &&
                                !IsDecompressionNeeded(guest_format, width, height);
   uint32_t host_block_width = host_block_compressed ? block_width : 1;
@@ -1627,24 +1530,16 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
   uint32_t host_x_blocks_per_thread = UINT32_C(1)
                                       << load_shader_info.guest_x_blocks_per_thread_log2;
   if (!host_block_compressed) {
-    // Decompressing guest blocks.
     host_x_blocks_per_thread *= block_width;
   }
   UINT64 copy_buffer_size = 0;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT host_slice_layout_base;
   UINT64 host_slice_size_base;
-  // Indexing is the same as for guest stored mips:
-  // 1...min(level_last, level_packed) if level_packed is not 0, or only 0 if
-  // level_packed == 0.
+
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT
   host_slice_layouts_mips[xenos::kTextureMaxMips];
   UINT64 host_slice_sizes_mips[xenos::kTextureMaxMips];
-  // Using custom calculations instead of GetCopyableFootprints because
-  // shaders may unconditionally copy multiple blocks along X per thread for
-  // simplicity, to make sure all rows (also including the last one -
-  // GetCopyableFootprints aligns row offsets, but not the total size) are
-  // properly padded to the number of blocks copied in an invocation without
-  // implicit assumptions about D3D12_TEXTURE_DATA_PITCH_ALIGNMENT.
+
   DXGI_FORMAT host_copy_format = GetDXGIResourceFormat(guest_format, width, height);
   for (uint32_t loop_level = loop_level_first; loop_level <= loop_level_last; ++loop_level) {
     bool is_base = loop_level == 0;
@@ -1654,8 +1549,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
     level_host_slice_layout.Offset = copy_buffer_size;
     level_host_slice_layout.Footprint.Format = host_copy_format;
     if (level == level_packed) {
-      // Loading the packed tail for the base or the mips - load the whole tail
-      // to copy regions out of it.
       const texture_util::TextureGuestLayout::Level& guest_layout_packed =
           is_base ? guest_layout.base : guest_layout.mips[level];
       level_host_slice_layout.Footprint.Width = guest_layout_packed.x_extent_blocks * block_width;
@@ -1692,18 +1585,10 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
     return false;
   }
 
-  // Begin loading.
-  // May use different buffers for scaled base and mips, and also addressability
-  // of more than 128 * 2^20 (2^D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP)
-  // texels is not mandatory - need two separate UAV descriptors for base and
-  // mips.
-  // Destination.
   uint32_t descriptor_count = 1;
   if (texture_resolution_scaled) {
-    // Source - base and mips, one or both.
     descriptor_count += (level_first == 0 && level_last != 0) ? 2 : 1;
   } else {
-    // Source - shared memory.
     if (!bindless_resources_used_) {
       ++descriptor_count;
     }
@@ -1717,7 +1602,7 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
   uint32_t descriptor_write_index = 0;
   command_processor_.SetExternalPipeline(pipeline);
   command_list.D3DSetComputeRootSignature(load_root_signature_.Get());
-  // Set up the destination descriptor.
+
   assert_true(descriptor_write_index < descriptor_count);
   ui::d3d12::util::DescriptorCpuGpuHandlePair descriptor_dest =
       descriptors_allocated[descriptor_write_index++];
@@ -1726,9 +1611,7 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
       ui::d3d12::util::GetUintPow2DXGIFormat(load_shader_info.dest_bpe_log2),
       uint32_t(copy_buffer_size) >> load_shader_info.dest_bpe_log2);
   command_list.D3DSetComputeRootDescriptorTable(2, descriptor_dest.second);
-  // Set up the unscaled source descriptor (scaled needs two descriptors that
-  // depend on the buffer being current, so they will be set later - for mips,
-  // after loading the base is done).
+
   if (!texture_resolution_scaled) {
     D3D12SharedMemory& d3d12_shared_memory = static_cast<D3D12SharedMemory&>(shared_memory());
     d3d12_shared_memory.UseForReading();
@@ -1745,11 +1628,9 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
     command_list.D3DSetComputeRootDescriptorTable(1, descriptor_unscaled_source.second);
   }
 
-  // Submit the copy buffer population commands.
-
   auto& cbuffer_pool = command_processor_.GetConstantBufferPool();
   LoadConstants load_constants;
-  // 3 bits for each.
+
   assert_true(texture_resolution_scale_x <= 7);
   assert_true(texture_resolution_scale_y <= 7);
   load_constants.is_tiled_3d_endian_scale =
@@ -1757,10 +1638,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
       (uint32_t(texture_key.endianness) << 2) | (texture_resolution_scale_x << 4) |
       (texture_resolution_scale_y << 7);
 
-  // The loop is slices within levels because the base and the levels may need
-  // different portions of the scaled resolve virtual address space to be
-  // available through buffers, and to create a descriptor, the buffer start
-  // address is required - which may be different for base and mips.
   bool scaled_mips_source_set_up = false;
   uint32_t guest_x_blocks_per_group_log2 = load_shader_info.GetGuestXBlocksPerGroupLog2();
   for (uint32_t loop_level = loop_level_first; loop_level <= loop_level_last; ++loop_level) {
@@ -1769,8 +1646,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
 
     uint32_t guest_address = (is_base ? texture_key.base_page : texture_key.mip_page) << 12;
 
-    // Set up the base or mips source, also making it accessible if loading from
-    // scaled resolve memory.
     if (texture_resolution_scaled && (is_base || !scaled_mips_source_set_up)) {
       uint32_t guest_size_unscaled =
           is_base ? d3d12_texture.GetGuestBaseSize() : d3d12_texture.GetGuestMipsSize();
@@ -1792,9 +1667,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
     }
 
     if (texture_resolution_scaled) {
-      // Offset already applied in the buffer because more than 512 MB can't be
-      // directly addresses as R32 on some hardware (above
-      // 2^D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP).
       load_constants.guest_offset = 0;
     } else {
       load_constants.guest_offset = guest_address;
@@ -1807,7 +1679,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
         is_base ? guest_layout.base : guest_layout.mips[level];
     uint32_t level_guest_pitch = level_guest_layout.row_pitch_bytes;
     if (texture_key.tiled) {
-      // Shaders expect pitch in blocks for tiled textures.
       level_guest_pitch /= bytes_per_block;
       assert_zero(level_guest_pitch & (xenos::kTextureTileWidthHeight - 1));
     }
@@ -1818,9 +1689,6 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
 
     uint32_t level_width, level_height, level_depth;
     if (level == level_packed) {
-      // This is the packed mip tail, containing not only the specified level,
-      // but also other levels at different offsets - load the entire needed
-      // extents.
       level_width = level_guest_layout.x_extent_blocks * block_width;
       level_height = level_guest_layout.y_extent_blocks * block_height;
       level_depth = level_guest_layout.z_extent;
@@ -1873,10 +1741,8 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, 
     }
   }
 
-  // Update LRU caching because the texture will be used by the command list.
   d3d12_texture.MarkAsUsed();
 
-  // Submit copying from the copy buffer to the host texture.
   ID3D12Resource* texture_resource = d3d12_texture.resource();
   command_processor_.PushTransitionBarrier(
       texture_resource, d3d12_texture.SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST),
@@ -2039,7 +1905,6 @@ uint32_t D3D12TextureCache::FindOrCreateTextureDescriptor(D3D12Texture& texture,
   descriptor_key.host_swizzle = host_swizzle;
   descriptor_key.dimension = uint32_t(dimension);
 
-  // Try to find an existing descriptor.
   uint32_t existing_descriptor_index = texture.GetSRVDescriptorIndex(descriptor_key);
   if (existing_descriptor_index != UINT32_MAX) {
     PROFILE_TEXTURE_CACHE_HIT();
@@ -2049,18 +1914,14 @@ uint32_t D3D12TextureCache::FindOrCreateTextureDescriptor(D3D12Texture& texture,
 
   TextureKey texture_key = texture.key();
 
-  // Create a new bindless or cached descriptor if supported.
   D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
 
   if (IsSignedVersionSeparateForFormat(texture_key) &&
       texture_key.signed_separate != uint32_t(is_signed)) {
-    // Not the version with the needed signedness.
     return UINT32_MAX;
   }
   xenos::TextureFormat format = texture_key.format;
   if (is_signed) {
-    // Not supporting signed compressed textures - hopefully DXN and DXT5A are
-    // not used as signed.
     desc.Format = host_formats_[uint32_t(format)].dxgi_format_signed;
   } else {
     desc.Format = GetDXGIUnormFormat(texture_key);
@@ -2134,8 +1995,6 @@ uint32_t D3D12TextureCache::FindOrCreateTextureDescriptor(D3D12Texture& texture,
       descriptor_index = srv_descriptor_cache_free_.back();
       srv_descriptor_cache_free_.pop_back();
     } else {
-      // Allocated + 1 (including the descriptor that is being added), rounded
-      // up to kSRVDescriptorCachePageSize, (allocated + 1 + size - 1).
       uint32_t cache_pages_needed =
           (srv_descriptor_cache_allocated_ + kSRVDescriptorCachePageSize) /
           kSRVDescriptorCachePageSize;
@@ -2188,17 +2047,13 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12TextureCache::GetTextureDescriptorCPUHandle(
 
 xenos::ClampMode D3D12TextureCache::NormalizeClampMode(xenos::ClampMode clamp_mode) const {
   if (clamp_mode == xenos::ClampMode::kClampToHalfway) {
-    // No GL_CLAMP (clamp to half edge, half border) equivalent in Direct3D 12,
-    // but there's no Direct3D 9 equivalent anyway, and too weird to be suitable
-    // for intentional real usage.
     return xenos::ClampMode::kClampToEdge;
   }
   if (clamp_mode == xenos::ClampMode::kMirrorClampToHalfway ||
       clamp_mode == xenos::ClampMode::kMirrorClampToBorder) {
-    // No Direct3D 12 equivalents.
     return xenos::ClampMode::kMirrorClampToEdge;
   }
   return clamp_mode;
 }
 
-}  // namespace rex::graphics::d3d12
+}

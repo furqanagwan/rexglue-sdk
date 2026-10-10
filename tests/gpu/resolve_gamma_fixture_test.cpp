@@ -39,8 +39,6 @@ struct RestoreCvars {
   }
 };
 
-// Draws color into a kSize square render target of source_format and
-// resolves it with format. Returns the center texel.
 bool DrawAndResolve(const char* path, xenos::MsaaSamples msaa, xenos::CopySampleSelect sample,
                     uint32_t color, const ResolveFormat& format, uint32_t& texel,
                     std::string& error) {
@@ -70,7 +68,7 @@ bool Near(uint32_t value, uint32_t expected, uint32_t tolerance) {
   return uint32_t(std::abs(int32_t(value) - int32_t(expected))) <= tolerance;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Gamma render targets resolve to linear", "[gpu][resolve-gamma]") {
   const char* path = GENERATE("rtv", "rov");
@@ -83,8 +81,7 @@ TEST_CASE("Gamma render targets resolve to linear", "[gpu][resolve-gamma]") {
   const xenos::MsaaSamples samples = msaa ? xenos::MsaaSamples::k4X : xenos::MsaaSamples::k1X;
   const xenos::CopySampleSelect select =
       msaa ? xenos::CopySampleSelect::k0123 : xenos::CopySampleSelect::k0;
-  // Linear 0x80 (0.502) is 192 on the PWL curve, which decodes to 516/1023
-  // (8-bit 129, 10-bit 516). Raw copies of the encoded bytes give 192.
+
   uint32_t texel = 0;
   if (!DrawAndResolve(path, samples, select, 0xFF808080, format, texel, error)) {
     SKIP("GPU fixture host unavailable: " << error);
@@ -93,10 +90,9 @@ TEST_CASE("Gamma render targets resolve to linear", "[gpu][resolve-gamma]") {
   CHECK(Near(texel & 0xFF, 129, 2));
   CHECK(Near((texel >> 8) & 0xFF, 129, 2));
   CHECK(Near((texel >> 16) & 0xFF, 129, 2));
-  // Alpha isn't gamma encoded.
+
   CHECK((texel >> 24) == 0xFF);
 
-  // A destination that isn't 8_8_8_8 gets the same linear values.
   format.dest = xenos::ColorFormat::k_2_10_10_10;
   REQUIRE(DrawAndResolve(path, samples, select, 0xFF808080, format, texel, error));
   INFO(std::hex << "2_10_10_10 texel 0x" << texel);
@@ -114,13 +110,13 @@ TEST_CASE("Full resolves pack fixed destinations by copy_dest_number", "[gpu][re
     SKIP("GPU fixture host unavailable: " << error);
   }
   CHECK(unsigned_texel == 0xFFFFFFFF);
-  // 1.0 as a signed repeating fraction is 127; a raw copy would keep 255.
+
   format.dest_number = xenos::SurfaceNumberFormat::kSignedRepeatingFraction;
   uint32_t signed_texel = 0;
   REQUIRE(DrawAndResolve("rtv", xenos::MsaaSamples::k1X, xenos::CopySampleSelect::k0, 0xFFFFFFFF,
                          format, signed_texel, error));
   CHECK(signed_texel == 0x7F7F7F7F);
-  // An unsigned integer destination takes the value itself, clamped: 1.
+
   format.dest_number = xenos::SurfaceNumberFormat::kUnsignedInteger;
   uint32_t integer_texel = 0;
   REQUIRE(DrawAndResolve("rtv", xenos::MsaaSamples::k1X, xenos::CopySampleSelect::k0, 0xFFFFFFFF,

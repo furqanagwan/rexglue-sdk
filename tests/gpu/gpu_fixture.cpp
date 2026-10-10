@@ -32,7 +32,6 @@ namespace {
 
 namespace xenos = graphics::xenos;
 
-// Unattended test runs must fail rather than block on a debug CRT dialog.
 const bool kCrtReportsToStderr = [] {
   for (int type : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
     _CrtSetReportMode(type, _CRTDBG_MODE_FILE);
@@ -43,14 +42,12 @@ const bool kCrtReportsToStderr = [] {
   return true;
 }();
 
-// GPU registers are mapped at 0x7FC80000; CP_RB_WPTR is register 0x1C5.
 constexpr uint32_t kGpuRegisterBase = 0x7FC80000;
 constexpr uint32_t kCpRbWptr = 0x01C5;
 
-}  // namespace
+}
 
 std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error, CvarList cvars) {
-  // REXGLUE_GPU_FIXTURE_LOG names a log file to diagnose a failing fixture.
   static bool logging_initialized = [] {
     const char* log_file = std::getenv("REXGLUE_GPU_FIXTURE_LOG");
     rex::InitLogging(log_file && *log_file ? log_file : nullptr);
@@ -65,8 +62,6 @@ std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error, CvarList cvar
   std::filesystem::create_directories(fixture->root_, ec);
   fixture->runtime_ = std::make_unique<Runtime>(fixture->root_);
 
-  // REXGLUE_GPU_FIXTURE_ADAPTER selects the DXGI adapter like d3d12_adapter
-  // (-2 is WARP), so the fixtures also run on hosts without a hardware GPU.
   if (const char* adapter = std::getenv("REXGLUE_GPU_FIXTURE_ADAPTER"); adapter && *adapter) {
     REXCVAR_SET(d3d12_adapter, std::atoi(adapter));
   }
@@ -77,9 +72,7 @@ std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error, CvarList cvar
     *error = "the xenos GPU plugin could not be loaded";
     return nullptr;
   }
-  // REXGLUE_GPU_FIXTURE_CVARS="name=value;name=value" applies cvars after the
-  // plugin registered its own and before the GPU starts, e.g. to pick the
-  // render target path (render_target_path_d3d12=rov).
+
   if (const char* cvars = std::getenv("REXGLUE_GPU_FIXTURE_CVARS"); cvars && *cvars) {
     std::string_view rest(cvars);
     while (!rest.empty()) {
@@ -111,8 +104,7 @@ std::unique_ptr<GpuFixture> GpuFixture::Create(std::string* error, CvarList cvar
     return nullptr;
   }
   fixture->runtime_->graphics_system()->InitializeRingBuffer(fixture->ring_, kRingSizeLog2);
-  // The command processor sets up its host context on its own thread; the
-  // first fence proves it's ready before a fixture touches the device.
+
   if (!fixture->Flush()) {
     *error = "the command processor did not start";
     return nullptr;
@@ -127,7 +119,6 @@ GpuFixture::~GpuFixture() {
 }
 
 const ui::d3d12::D3D12Provider& GpuFixture::provider() const {
-  // The fixture always asks the plugin for the D3D12 backend.
   return *static_cast<const ui::d3d12::D3D12Provider*>(runtime_->graphics_system()->provider());
 }
 
@@ -136,8 +127,7 @@ uint32_t GpuFixture::AllocPhysical(uint32_t size, uint32_t alignment) {
   if (!address) {
     return 0;
   }
-  // Physical heaps may map at an offset (0xE0000000 is +4 KB), so masking the
-  // virtual address is not enough; the GPU only ever sees physical addresses.
+
   uint32_t physical = memory()->GetPhysicalAddress(address);
   physical_to_virtual_ = address - physical;
   std::memset(memory()->TranslatePhysical(physical), 0, size);
@@ -164,7 +154,6 @@ uint32_t GpuFixture::ReadDword(uint32_t address) const {
 
 bool GpuFixture::Submit(const std::vector<uint32_t>& dwords) {
   if (!read_pointer_writeback_) {
-    // Without the write-back there's no way to know the ring has drained.
     assert_true(write_index_ + dwords.size() < kRingDwords);
     WriteDwords(ring_ + write_index_ * 4, dwords);
     write_index_ += uint32_t(dwords.size());
@@ -172,9 +161,7 @@ bool GpuFixture::Submit(const std::vector<uint32_t>& dwords) {
                                                        write_index_);
     return true;
   }
-  // The write pointer only ever moves past whole submissions, as D3D reserves
-  // contiguous ring space for its packets, so wait until all of it fits. One
-  // slot stays empty so a full ring isn't mistaken for an empty one.
+
   assert_true(dwords.size() < kRingDwords);
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
   while (true) {
@@ -204,7 +191,7 @@ uint32_t GpuFixture::EnableReadPointerWriteBack(uint32_t block_size_log2) {
   if (!read_pointer_writeback_) {
     read_pointer_writeback_ = AllocPhysical(0x1000);
   }
-  // Before the command processor has published anything.
+
   WriteDwords(read_pointer_writeback_, {write_index_});
   runtime_->graphics_system()->EnableReadPointerWriteBack(read_pointer_writeback_, block_size_log2);
   return read_pointer_writeback_;
@@ -261,4 +248,4 @@ std::vector<uint32_t> GpuFixture::IndirectBuffer(uint32_t address, uint32_t dwor
   return {xenos::MakePacketType3(xenos::PM4_INDIRECT_BUFFER, 2), address, dword_count};
 }
 
-}  // namespace rex::testing
+}

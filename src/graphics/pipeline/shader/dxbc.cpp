@@ -24,4 +24,4 @@ Shader::Translation* DxbcShader::CreateTranslationInstance(uint64_t modification
   return new DxbcTranslation(*this, modification);
 }
 
-}  // namespace rex::graphics
+}

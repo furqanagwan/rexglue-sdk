@@ -32,9 +32,8 @@ class ShaderInterpreter {
   class ExportSink {
    public:
     virtual ~ExportSink() = default;
-    virtual void AllocExport(ucode::AllocType /*type*/, uint32_t /*size*/) {}
-    virtual void Export(ucode::ExportRegister /*export_register*/, const float* /*value*/,
-                        uint32_t /*value_mask*/) {}
+    virtual void AllocExport(ucode::AllocType, uint32_t) {}
+    virtual void Export(ucode::ExportRegister, const float*, uint32_t) {}
   };
 
   ExportSink* GetExportSink() const { return export_sink_; }
@@ -45,9 +44,7 @@ class ShaderInterpreter {
 
   static bool CanInterpretShader(const Shader& shader) {
     assert_true(shader.is_ucode_analyzed());
-    // Texture instructions are not very common in vertex shaders (and not used
-    // in Direct3D 9's internal rectangles such as clears) and are extremely
-    // complex, not implemented.
+
     if (shader.uses_texture_fetch_instruction_results()) {
       return false;
     }
@@ -85,9 +82,7 @@ class ShaderInterpreter {
         return 0;
       }
       xenos::LoopConstant loop_constant = loop_constants[loop_stack_depth];
-      // Clamp to the real range specified in the IPR2015-00325 sequencer
-      // specification.
-      // https://portal.unifiedpatents.com/ptab/case/IPR2015-00325
+
       return std::min(INT32_C(256),
                       std::max(INT32_C(-256), int32_t(int32_t(loop_iterators[loop_stack_depth]) *
                                                           loop_constant.step +
@@ -126,10 +121,9 @@ class ShaderInterpreter {
   xenos::ShaderType shader_type_ = xenos::ShaderType::kVertex;
   const uint32_t* ucode_ = nullptr;
 
-  // For both inputs and locals.
   float temp_registers_[xenos::kMaxShaderTempRegisters][4];
 
   State state_;
 };
 
-}  // namespace rex::graphics
+}

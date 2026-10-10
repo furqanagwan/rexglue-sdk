@@ -28,21 +28,17 @@ texture_util::TextureGuestLayout Layout(xenos::DataDimension dimension, uint32_t
                                              depth_or_array_size, is_tiled, format, false, true, 3);
 }
 
-}  // namespace
+}
 
-// Expected offsets follow D3D's FindTextureSize: a mip level of an N-slice 2D
-// array is padded to align(N, 4) slices, and a 3D mip's slice count comes from
-// the level's own depth, not the base depth. Source: xenia-canary #1243.
 TEST_CASE("2D array mips are padded to four slices", "[graphics][texture_layout]") {
   auto layout =
       Layout(xenos::DataDimension::k2DOrStacked, 64, 64, 3, true, xenos::TextureFormat::k_8_8_8_8);
-  // Level 1 and 2 are both one 32x32 k_8_8_8_8 tile (4 KB) per slice.
+
   CHECK(layout.mips[1].array_slice_stride_bytes == 0x1000);
   CHECK(layout.mip_offsets_bytes[1] == 0);
   CHECK(layout.mip_offsets_bytes[2] == 4 * 0x1000);
   CHECK(layout.mip_offsets_bytes[3] == 8 * 0x1000);
 
-  // A single slice isn't an array and a cube keeps its six faces.
   auto single =
       Layout(xenos::DataDimension::k2DOrStacked, 64, 64, 1, true, xenos::TextureFormat::k_8_8_8_8);
   CHECK(single.mip_offsets_bytes[2] == 0x1000);
@@ -53,7 +49,7 @@ TEST_CASE("2D array mips are padded to four slices", "[graphics][texture_layout]
 TEST_CASE("3D mips use their own depth for the slice stride", "[graphics][texture_layout]") {
   auto layout =
       Layout(xenos::DataDimension::k3D, 64, 64, 16, true, xenos::TextureFormat::k_8_8_8_8);
-  // Level 1 is 32x32x8, level 2 is 16x16x4 padded to 32x32x4.
+
   CHECK(layout.mips[1].array_slice_stride_bytes == 8 * 0x1000);
   CHECK(layout.mips[2].array_slice_stride_bytes == 4 * 0x1000);
   CHECK(layout.mip_offsets_bytes[2] == 8 * 0x1000);
@@ -62,12 +58,11 @@ TEST_CASE("3D mips use their own depth for the slice stride", "[graphics][textur
 
 TEST_CASE("Linear mip rows align to max(256 / block size, 32) blocks",
           "[graphics][texture_layout]") {
-  // 96bpp: 256 / 12 < 32, so a 32 texel row is 32 * 12 bytes, not 512.
   auto rgb32f = Layout(xenos::DataDimension::k2DOrStacked, 64, 64, 1, false,
                        xenos::TextureFormat::k_32_32_32_FLOAT);
   CHECK(rgb32f.mips[1].row_pitch_bytes == 32 * 12);
   CHECK(rgb32f.mips[2].row_pitch_bytes == 32 * 12);
-  // 8bpp and 32bpp still pad to 256 bytes, 128bpp to 32 blocks.
+
   auto r8 = Layout(xenos::DataDimension::k2DOrStacked, 64, 64, 1, false, xenos::TextureFormat::k_8);
   CHECK(r8.mips[1].row_pitch_bytes == 256);
   auto rgba8 =
@@ -79,16 +74,12 @@ TEST_CASE("Linear mip rows align to max(256 / block size, 32) blocks",
 }
 
 TEST_CASE("Packed 3D 1x1 mips stack along Z from the level", "[graphics][texture_layout]") {
-  // 32x32x256: level 6 is 1x1x4 in the packed tail. D3D places it at
-  // Z = (log2(depth) - level) * 4 = 8.
   uint32_t x, y, z;
   REQUIRE(
       texture_util::GetPackedMipOffset(32, 32, 256, xenos::TextureFormat::k_8_8_8_8, 6, x, y, z));
   CHECK(z == 8);
 }
 
-// Independent oracle: every texel's address comes from the per-texel tiling
-// function, and the bounds must contain all of them.
 TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout]") {
   uint32_t failures = 0;
   for (uint32_t bpp_log2 = 0; bpp_log2 <= 2; ++bpp_log2) {
@@ -102,7 +93,7 @@ TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout
           for (uint32_t top : {0u, 8u, 32u}) {
             for (uint32_t height : {1u, 32u}) {
               uint32_t right = left + width, bottom = top + height;
-              // 2D.
+
               int64_t min2d = INT64_MAX, max2d = INT64_MIN;
               for (uint32_t y = top; y < bottom; ++y) {
                 for (uint32_t x = left; x < right; ++x) {
@@ -120,7 +111,7 @@ TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout
                                              << ")");
                 ++failures;
               }
-              // 3D, including the odd Z/4 groups.
+
               for (uint32_t front : {0u, 1u, 4u, 5u, 8u}) {
                 for (uint32_t depth : {1u, 4u}) {
                   uint32_t back = front + depth;
@@ -137,7 +128,7 @@ TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout
                   }
                   uint64_t lower3d = texture_util::GetTiledAddressLowerBound3D(
                       left, top, front, pitch, kHeight, bpp_log2);
-                  // For a whole 32x32x4 tile the lower bound is also tight.
+
                   bool whole_tile =
                       !(top & 31) && width == 32 && height == 32 && !(front & 3) && depth == 4;
                   if (lower3d > uint64_t(min3d) || (whole_tile && lower3d != uint64_t(min3d)) ||
@@ -160,8 +151,6 @@ TEST_CASE("Tiled address bounds contain every texel", "[graphics][texture_layout
   CHECK(failures == 0);
 }
 
-// xenia-canary #1249: when level 0 is the packed tail, D3D leaves the mip
-// address 0 and keeps the rest of the tail at the base address.
 TEST_CASE("A packed level 0 tail takes its mips from the base address",
           "[graphics][texture_layout]") {
   xenos::xe_gpu_texture_fetch_t fetch = {};
@@ -177,7 +166,7 @@ TEST_CASE("A packed level 0 tail takes its mips from the base address",
                                                  &mip_page, &mip_min_level, &mip_max_level);
   CHECK(mip_page == base_page);
   CHECK(mip_max_level == 4);
-  // A base level above the tail with no mips still has none.
+
   fetch.size_2d.width = 64 - 1;
   fetch.size_2d.height = 64 - 1;
   texture_util::GetSubresourcesFromFetchConstant(fetch, nullptr, nullptr, nullptr, &base_page,
@@ -188,8 +177,6 @@ TEST_CASE("A packed level 0 tail takes its mips from the base address",
 
 TEST_CASE("A packed level 0 volume uses its power-of-two depth for the slice stride",
           "[graphics][texture_layout]") {
-  // 8x8x9 k_8_8_8_8: one 32x32 tile (4 KB) per slice; the tail's depth is
-  // next_pow2(9) = 16, not 9 rounded to 12.
   auto packed = texture_util::GetGuestTextureLayout(xenos::DataDimension::k3D, 1, 8, 8, 9, true,
                                                     xenos::TextureFormat::k_8_8_8_8, true, true, 0);
   REQUIRE(packed.packed_level == 0);
@@ -199,8 +186,6 @@ TEST_CASE("A packed level 0 volume uses its power-of-two depth for the slice str
   CHECK(unpacked.base.array_slice_stride_bytes == 2 * 2 * 12 * 0x1000);
 }
 
-// xenia-canary #1249: the 3D upper bound is the last block's end exactly,
-// where the closed form it replaced reached up to a page further.
 TEST_CASE("The tiled 3D upper bound is exact for a box from the origin",
           "[graphics][texture_layout]") {
   int failures = 0;

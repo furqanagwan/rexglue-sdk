@@ -38,16 +38,13 @@ namespace rex::graphics {
 
 namespace {
 
-// Scalar approximation results, reduced when gpu_scalar_approximation_rounding
-// is enabled, as the translated shaders do.
 float ApproximationResult(float value) {
   return REXCVAR_GET(gpu_scalar_approximation_rounding) ? ReduceFloatPrecision(value, 21) : value;
 }
 
-}  // namespace
+}
 
 void ShaderInterpreter::Execute() {
-  // For more consistency between invocations in case of a malformed shader.
   state_.Reset();
 
   const uint32_t* bool_constants = &register_file_[XE_GPU_REG_SHADER_CONSTANT_BOOL_000_031];
@@ -120,7 +117,6 @@ void ShaderInterpreter::Execute() {
             if (fetch_instr.opcode() == ucode::FetchOpcode::kVertexFetch) {
               ExecuteVertexFetchInstruction(fetch_instr.vertex_fetch());
             } else {
-              // Not supporting texture fetching (very complex).
               float zero_result[4] = {};
               StoreFetchResult(fetch_instr.dest(), fetch_instr.is_dest_relative(),
                                fetch_instr.dest_swizzle(), zero_result);
@@ -213,8 +209,6 @@ void ShaderInterpreter::Execute() {
       } break;
 
       case ucode::ControlFlowOpcode::kReturn: {
-        // No stack depth assertion - skipping the return is a well-defined
-        // behavior for `return` outside a function call.
         if (!state_.call_stack_depth) {
           continue;
         }
@@ -282,7 +276,6 @@ const std::array<float, 4> ShaderInterpreter::GetFloatConstant(uint32_t address,
 }
 
 void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
-  // Vector operation.
   float vector_result[4] = {};
   ucode::AluVectorOpcode vector_opcode = instr.vector_opcode();
   const ucode::AluVectorOpcodeInfo& vector_opcode_info =
@@ -333,7 +326,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       } break;
       case ucode::AluVectorOpcode::kMul: {
         for (uint32_t i = 0; i < 4; ++i) {
-          // Direct3D 9 behavior (0 or denormal * anything = +0).
           vector_result[i] = (vector_operands[0][i] && vector_operands[1][i])
                                  ? vector_operands[0][i] * vector_operands[1][i]
                                  : 0.0f;
@@ -391,9 +383,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       } break;
       case ucode::AluVectorOpcode::kMad: {
         for (uint32_t i = 0; i < 4; ++i) {
-          // Direct3D 9 behavior (0 or denormal * anything = +0).
-          // Doing the addition rather than conditional assignment even for zero
-          // operands because +0 + -0 must be +0.
           vector_result[i] = ((vector_operands[0][i] && vector_operands[1][i])
                                   ? vector_operands[0][i] * vector_operands[1][i]
                                   : 0.0f) +
@@ -422,9 +411,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       case ucode::AluVectorOpcode::kDp4: {
         vector_result[0] = 0.0f;
         for (uint32_t i = 0; i < 4; ++i) {
-          // Direct3D 9 behavior (0 or denormal * anything = +0).
-          // Doing the addition even for zero operands because +0 + -0 must be
-          // +0.
           vector_result[0] += (vector_operands[0][i] && vector_operands[1][i])
                                   ? vector_operands[0][i] * vector_operands[1][i]
                                   : 0.0f;
@@ -434,9 +420,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       case ucode::AluVectorOpcode::kDp3: {
         vector_result[0] = 0.0f;
         for (uint32_t i = 0; i < 3; ++i) {
-          // Direct3D 9 behavior (0 or denormal * anything = +0).
-          // Doing the addition even for zero operands because +0 + -0 must be
-          // +0.
           vector_result[0] += (vector_operands[0][i] && vector_operands[1][i])
                                   ? vector_operands[0][i] * vector_operands[1][i]
                                   : 0.0f;
@@ -444,10 +427,8 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
         replicate_vector_result_x = true;
       } break;
       case ucode::AluVectorOpcode::kDp2Add: {
-        // Doing the addition even for zero operands because +0 + -0 must be +0.
         vector_result[0] = 0.0f;
         for (uint32_t i = 0; i < 2; ++i) {
-          // Direct3D 9 behavior (0 or denormal * anything = +0).
           vector_result[0] += (vector_operands[0][i] && vector_operands[1][i])
                                   ? vector_operands[0][i] * vector_operands[1][i]
                                   : 0.0f;
@@ -456,12 +437,11 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
         replicate_vector_result_x = true;
       } break;
       case ucode::AluVectorOpcode::kCube: {
-        // Operand [0] is .z_xy.
         float x = vector_operands[0][2];
         float y = vector_operands[0][3];
         float z = vector_operands[0][0];
         float x_abs = std::abs(x), y_abs = std::abs(y), z_abs = std::abs(z);
-        // Result is T coordinate, S coordinate, 2 * major axis, face ID.
+
         if (z_abs >= x_abs && z_abs >= y_abs) {
           bool z_negative = std::isless(z, 0.0f);
           vector_result[0] = -y;
@@ -530,8 +510,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
                 : vector_operands[0][0] + 1.0f;
         replicate_vector_result_x = true;
       } break;
-      // Not implementing pixel kill currently, the interpreter is currently
-      // used only for vertex shaders.
+
       case ucode::AluVectorOpcode::kKillEq: {
         vector_result[0] = float(vector_operands[0][0] == vector_operands[1][0] ||
                                  vector_operands[0][1] == vector_operands[1][1] ||
@@ -563,7 +542,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       } break;
       case ucode::AluVectorOpcode::kDst: {
         vector_result[0] = 1.0f;
-        // Direct3D 9 behavior (0 or denormal * anything = +0).
+
         vector_result[1] = (vector_operands[0][1] && vector_operands[1][1])
                                ? vector_operands[0][1] * vector_operands[1][1]
                                : 0.0f;
@@ -590,7 +569,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
     }
   }
 
-  // Scalar operation.
   ucode::AluScalarOpcode scalar_opcode = instr.scalar_opcode();
   const ucode::AluScalarOpcodeInfo& scalar_opcode_info =
       ucode::GetAluScalarOpcodeInfo(scalar_opcode);
@@ -599,7 +577,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
   bool scalar_src_absolute = false;
   switch (scalar_opcode_info.operand_count) {
     case 1: {
-      // r#/c#.w or r#/c#.wx.
       const float* scalar_src_ptr;
       uint32_t scalar_src_register = instr.src_reg(3);
       std::array<float, 4> scalar_src_float_constant;
@@ -627,11 +604,11 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       uint32_t scalar_src_absolute_mask = ~(uint32_t(instr.abs_constants()) << 31);
       uint32_t scalar_src_negate_bit = uint32_t(instr.src_negate(3)) << 31;
       uint32_t scalar_src_swizzle = instr.src_swizzle(3);
-      // c#.w.
+
       scalar_operands[0] = GetFloatConstant(instr.src_reg(3), instr.src_const_is_addressed(3),
                                             instr.is_const_address_register_relative())
           [ucode::AluInstruction::GetSwizzledComponentIndex(scalar_src_swizzle, 3)];
-      // r#.x.
+
       scalar_operands[1] = GetTempRegister(
           instr.scalar_const_reg_op_src_temp_reg(),
           false)[ucode::AluInstruction::GetSwizzledComponentIndex(scalar_src_swizzle, 0)];
@@ -658,20 +635,18 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       state_.previous_scalar = scalar_operands[0] + state_.previous_scalar;
     } break;
     case ucode::AluScalarOpcode::kMuls: {
-      // Direct3D 9 behavior (0 or denormal * anything = +0).
       state_.previous_scalar = (scalar_operands[0] && scalar_operands[1])
                                    ? scalar_operands[0] * scalar_operands[1]
                                    : 0.0f;
     } break;
     case ucode::AluScalarOpcode::kMulsc0:
     case ucode::AluScalarOpcode::kMulsc1: {
-      // Direct3D 9 behavior (0 or denormal * anything = +0).
       float product = 0.0f;
       if (scalar_operands[0] && scalar_operands[1]) {
         product = scalar_operands[0] * scalar_operands[1];
         if (REXCVAR_GET(mulsc_round_toward_zero) && std::isfinite(product)) {
           const double exact_product = double(scalar_operands[0]) * double(scalar_operands[1]);
-          // Step back if the float multiply rounded away from zero.
+
           if (std::abs(double(product)) > std::abs(exact_product)) {
             product = std::nextafter(product, 0.0f);
           }
@@ -680,7 +655,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       state_.previous_scalar = product;
     } break;
     case ucode::AluScalarOpcode::kMulsPrev: {
-      // Direct3D 9 behavior (0 or denormal * anything = +0).
       state_.previous_scalar = (scalar_operands[0] && state_.previous_scalar)
                                    ? scalar_operands[0] * state_.previous_scalar
                                    : 0.0f;
@@ -690,7 +664,6 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
           !std::isfinite(scalar_operands[1]) || std::islessequal(scalar_operands[1], 0.0f)) {
         state_.previous_scalar = -FLT_MAX;
       } else {
-        // Direct3D 9 behavior (0 or denormal * anything = +0).
         state_.previous_scalar = (scalar_operands[0] && state_.previous_scalar)
                                      ? scalar_operands[0] * state_.previous_scalar
                                      : 0.0f;
@@ -833,8 +806,7 @@ void ShaderInterpreter::ExecuteAluInstruction(ucode::AluInstruction instr) {
       state_.predicate = scalar_operands[0] == 0.0f;
       state_.previous_scalar = state_.predicate ? 0.0f : scalar_operands[0];
     } break;
-    // Not implementing pixel kill currently, the interpreter is currently used
-    // only for vertex shaders.
+
     case ucode::AluScalarOpcode::kKillsEq: {
       state_.previous_scalar = float(scalar_operands[0] == 0.0f);
     } break;
@@ -944,7 +916,6 @@ void ShaderInterpreter::StoreFetchResult(uint32_t dest, bool is_dest_relative, u
       case ucode::FetchDestinationSwizzle::kKeep:
         break;
       default:
-        // ucode::FetchDestinationSwizzle::k0 or the invalid swizzle 6.
 
         assert_true(component_swizzle == ucode::FetchDestinationSwizzle::k0);
         dest_data[i] = 0.0f;
@@ -962,7 +933,6 @@ void ShaderInterpreter::ExecuteVertexFetchInstruction(ucode::VertexFetchInstruct
       register_file_.GetVertexFetch(state_.vfetch_full_last.fetch_constant_index());
 
   if (!instr.is_mini_fetch()) {
-    // Get the part of the address that depends on vfetch_full data.
     uint32_t vertex_index = uint32_t(
         std::floor(GetTempRegister(instr.src(), instr.is_src_relative())[instr.src_swizzle()] +
                    (instr.is_index_rounded() ? 0.5f : 0.0f)));
@@ -1075,8 +1045,6 @@ void ShaderInterpreter::ExecuteVertexFetchInstruction(ucode::VertexFetchInstruct
             } else {
               for (uint32_t i = 0; i < 4; ++i) {
                 result[i] /= 2147483647.0f;
-                // No need to clamp to -1 if signed - the smallest value will be
-                // -2^23 / 2^23 due to rounding.
               }
             }
           }
@@ -1165,4 +1133,4 @@ void ShaderInterpreter::ExecuteVertexFetchInstruction(ucode::VertexFetchInstruct
   StoreFetchResult(instr.dest(), instr.is_dest_relative(), instr.dest_swizzle(), result);
 }
 
-}  // namespace rex::graphics
+}

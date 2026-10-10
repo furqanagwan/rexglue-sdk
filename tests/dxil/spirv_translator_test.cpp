@@ -27,8 +27,6 @@
 
 #include "../gpu/guest_draw.h"
 
-// Defined in plugin sources the test doesn't compile (command processor, DXBC
-// translator), with their defaults.
 REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU", "");
 REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU", "");
 REXCVAR_DEFINE_BOOL(draw_resolution_scaled_texture_offsets, true, "GPU/Shader", "");
@@ -38,7 +36,7 @@ namespace {
 using namespace rex::graphics;  // NOLINT
 
 std::unique_ptr<SpirvShaderTranslator> CreateTranslator(bool rov) {
-  SpirvShaderTranslator::Features features(/*all=*/true);
+  SpirvShaderTranslator::Features features(true);
   features.fragment_shader_sample_interlock = false;
   features.fragment_shader_barycentric = true;
   features.signed_zero_inf_nan_preserve_float32 = false;
@@ -47,7 +45,6 @@ std::unique_ptr<SpirvShaderTranslator> CreateTranslator(bool rov) {
   return std::make_unique<SpirvShaderTranslator>(features, true, false, rov, false, 1, 1);
 }
 
-// Guest ucode to SPIR-V; empty on failure.
 std::vector<uint8_t> ToSpirv(SpirvShaderTranslator& translator, SpirvShader& shader) {
   rex::string::StringBuffer disassembly;
   shader.AnalyzeUcode(disassembly);
@@ -62,7 +59,7 @@ std::vector<uint8_t> ToSpirv(SpirvShaderTranslator& translator, SpirvShader& sha
   return translation->translated_binary();
 }
 
-}  // namespace
+}
 
 TEST_CASE("The SPIR-V translator turns guest shaders into signed DXIL", "[dxil][spirv]") {
   REQUIRE(SpirvToDxilCompiler::IsSignerAvailable());
@@ -81,11 +78,9 @@ TEST_CASE("The SPIR-V translator turns guest shaders into signed DXIL", "[dxil][
   std::memcpy(&magic, spirv.data(), sizeof(magic));
   CHECK(magic == 0x07230203);
 
-  // Translate signs the DXIL; dxil.dll validation rejecting it returns empty.
   std::vector<uint8_t> dxil = SpirvToDxilCompiler::Translate(
       reinterpret_cast<const uint32_t*>(spirv.data()), spirv.size() / sizeof(uint32_t),
-      vertex ? SpirvToDxilCompiler::Stage::kVertex : SpirvToDxilCompiler::Stage::kPixel,
-      /*lower_to_bindless=*/true);
+      vertex ? SpirvToDxilCompiler::Stage::kVertex : SpirvToDxilCompiler::Stage::kPixel, true);
   REQUIRE(dxil.size() > 32);
   CHECK(std::memcmp(dxil.data(), "DXBC", 4) == 0);
 }

@@ -115,4 +115,4 @@ const AluVectorOpcodeInfo kAluVectorOpcodeInfos[32] = {
     {"opcode_31", {}, kAluOpChangedStateNone},
 };
 
-}  // namespace rex::graphics::ucode
+}

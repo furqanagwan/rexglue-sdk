@@ -16,14 +16,6 @@
 
 namespace rex::graphics {
 
-// Reduces a finite float to mantissa_bits (1-22) mantissa bits, rounding to
-// nearest with halfway values away from zero, for the scalar approximations
-// (EXP, LOG, LOGC, RCP*, RSQ*, SQRT) when gpu_scalar_approximation_rounding is
-// enabled. The console's actual precision and midpoint behavior are unknown;
-// this is what 4E4D07D1 needs. Inf and NaN are returned unchanged, signed
-// zero stays signed, and a finite value is never rounded up to infinity (the
-// truncated value is kept instead). The DXBC translator emits the same
-// operations (DxbcShaderTranslator::ReduceFloatPrecision).
 inline float ReduceFloatPrecision(float value, uint32_t mantissa_bits) {
   uint32_t value_bits;
   std::memcpy(&value_bits, &value, sizeof(value_bits));
@@ -44,4 +36,4 @@ inline float ReduceFloatPrecision(float value, uint32_t mantissa_bits) {
   return result;
 }
 
-}  // namespace rex::graphics
+}

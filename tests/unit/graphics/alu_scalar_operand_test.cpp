@@ -37,7 +37,7 @@ ParsedAluInstruction Parse(AluVectorOpcode vector_opcode, AluScalarOpcode scalar
   return parsed;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Two-component scalar ops read W and X beside a two-source vector op",
           "[graphics][shader]") {

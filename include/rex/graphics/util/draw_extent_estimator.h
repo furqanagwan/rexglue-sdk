@@ -27,7 +27,6 @@ class DrawExtentEstimator {
         memory_(memory),
         shader_interpreter_(register_file, memory) {}
 
-  // The shader must have its ucode analyzed.
   uint32_t EstimateVertexMaxY(const Shader& vertex_shader);
   uint32_t EstimateMaxY(bool try_to_estimate_vertex_max_y, const Shader& vertex_shader);
 
@@ -62,4 +61,4 @@ class DrawExtentEstimator {
   ShaderInterpreter shader_interpreter_;
 };
 
-}  // namespace rex::graphics
+}

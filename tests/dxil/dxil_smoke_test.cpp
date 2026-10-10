@@ -27,7 +27,6 @@
 
 #include "spirv_to_dxil.h"
 
-// The Agility SDK the build deploys to .\D3D12\ (rexglue_deploy_d3d12_redist).
 extern "C" {
 __declspec(dllexport) extern const UINT D3D12SDKVersion = REXGLUE_D3D12_SDK_VERSION;
 __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
@@ -37,29 +36,11 @@ namespace {
 
 using Microsoft::WRL::ComPtr;
 
-// An empty compute shader, hand-assembled:
-//   OpCapability Shader
-//   OpMemoryModel Logical GLSL450
-//   OpEntryPoint GLCompute %1 "main"
-//   OpExecutionMode %1 LocalSize 1 1 1
-//   %2 = OpTypeVoid
-//   %3 = OpTypeFunction %2
-//   %1 = OpFunction %2 None %3
-//   %4 = OpLabel
-//   OpReturn
-//   OpFunctionEnd
 constexpr uint32_t kEmptyCompute[] = {
-    0x07230203, 0x00010000, 0,  5,          0,     // header, bound 5
-    0x00020011, 1,                                 // OpCapability Shader
-    0x0003000E, 0,          1,                     // OpMemoryModel
-    0x0005000F, 5,          1,  0x6E69616D, 0,     // OpEntryPoint "main"
-    0x00060010, 1,          17, 1,          1, 1,  // OpExecutionMode LocalSize
-    0x00020013, 2,                                 // OpTypeVoid
-    0x00030021, 3,          2,                     // OpTypeFunction
-    0x00050036, 2,          1,  0,          3,     // OpFunction
-    0x000200F8, 4,                                 // OpLabel
-    0x000100FD,                                    // OpReturn
-    0x00010038,                                    // OpFunctionEnd
+    0x07230203, 0x00010000, 0, 5,          0,          0x00020011, 1,          0x0003000E, 0, 1,
+    0x0005000F, 5,          1, 0x6E69616D, 0,          0x00060010, 1,          17,         1, 1,
+    1,          0x00020013, 2, 0x00030021, 3,          2,          0x00050036, 2,          1, 0,
+    3,          0x000200F8, 4, 0x000100FD, 0x00010038,
 };
 
 std::filesystem::path ExeDir() {
@@ -68,7 +49,6 @@ std::filesystem::path ExeDir() {
   return std::filesystem::path(path).parent_path();
 }
 
-// A blob over caller memory, for the validator's in-place signing.
 class InPlaceBlob : public IDxcBlob {
  public:
   InPlaceBlob(void* data, size_t size) : data_(data), size_(size) {}
@@ -117,7 +97,6 @@ Validator LoadValidator() {
   return v;
 }
 
-// SPIR-V to signed DXIL, or empty.
 std::vector<uint8_t> Translate(Validator& v, std::string& error) {
   dxil_spirv_runtime_conf conf = {};
   conf.runtime_data_cbv.register_space = 31;
@@ -151,7 +130,7 @@ std::vector<uint8_t> Translate(Validator& v, std::string& error) {
   return dxil;
 }
 
-}  // namespace
+}
 
 TEST_CASE("Mesa spirv_to_dxil output is signed by the pinned dxil.dll", "[dxil]") {
   Validator v = LoadValidator();
@@ -163,7 +142,7 @@ TEST_CASE("Mesa spirv_to_dxil output is signed by the pinned dxil.dll", "[dxil]"
   INFO(error);
   REQUIRE(dxil.size() > 32);
   CHECK(std::memcmp(dxil.data(), "DXBC", 4) == 0);
-  // Signing writes the container digest after the magic.
+
   uint8_t zero[16] = {};
   CHECK(std::memcmp(dxil.data() + 4, zero, 16) != 0);
 }
@@ -173,7 +152,7 @@ TEST_CASE("The Agility SDK runtime creates a pipeline from it", "[dxil]") {
   if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)))) {
     SKIP("no D3D12 device");
   }
-  // The Agility SDK, not the OS runtime, is the one loaded.
+
   HMODULE core = GetModuleHandleW(L"D3D12Core.dll");
   REQUIRE(core);
   wchar_t core_path[MAX_PATH];
@@ -211,8 +190,6 @@ TEST_CASE("The Agility SDK runtime creates a pipeline from it", "[dxil]") {
 }
 
 TEST_CASE("The Agility SDK survives a probe load and unload of D3D12.dll", "[dxil]") {
-  // D3D12Provider::IsD3D12APIAvailable loads and frees D3D12.dll before the
-  // provider loads it for good.
   HMODULE probe = LoadLibraryW(L"D3D12.dll");
   REQUIRE(probe);
   FreeLibrary(probe);

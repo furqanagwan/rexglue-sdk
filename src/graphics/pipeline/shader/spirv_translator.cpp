@@ -140,7 +140,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CreateDepthOnlyFragmentShader(
 
 std::vector<uint8_t> SpirvShaderTranslator::CreateDepthOnlyFragmentShader(
     xenos::MsaaSamples fsi_msaa_samples, bool viz_survey) {
-  // The sample count lives in depth_stencil_mode's bits on the FSI path.
   Modification modification(0);
   modification.pixel.set_fsi_msaa_samples(fsi_msaa_samples);
   return CreateDepthOnlyFragmentShader(modification.pixel.depth_stencil_mode, false, viz_survey);
@@ -153,17 +152,16 @@ void SpirvShaderTranslator::Reset() {
 
   uniform_float_constants_ = spv::NoResult;
 
-  // Vertex shader inputs.
   input_vertex_index_ = spv::NoResult;
-  // Tessellation evaluation shader inputs.
+
   input_control_point_index_ = spv::NoResult;
   input_tess_coord_ = spv::NoResult;
-  // Pixel shader inputs.
+
   input_point_coordinates_ = spv::NoResult;
   input_fragment_coordinates_ = spv::NoResult;
   input_front_facing_ = spv::NoResult;
   input_sample_mask_ = spv::NoResult;
-  // Barycentric interpolation inputs.
+
   input_barycentric_coord_ = spv::NoResult;
   input_barycentric_coord_no_persp_ = spv::NoResult;
   std::ranges::fill(input_interpolators_per_vertex_, spv::NoResult);
@@ -265,7 +263,7 @@ void SpirvShaderTranslator::BisectOverrideColorOutput() {
     return;
   }
   EnsureBuildPointAvailable();
-  // Past the last instruction the snapshot is the register's final value.
+
   if (!bisect_snapshot_emitted_) {
     BisectStoreSnapshot();
   }
@@ -293,7 +291,7 @@ void SpirvShaderTranslator::BisectOverrideColorOutput() {
                                   const_float4_0_);
   }
   builder_->createStore(value, output_or_var_fragment_data_[0]);
-  // The FSI path writes only the colors the shader marked as written.
+
   if (var_main_fsi_color_written_ != spv::NoResult) {
     builder_->createStore(
         builder_->createBinOp(spv::OpBitwiseOr, type_uint_,
@@ -377,7 +375,6 @@ void SpirvShaderTranslator::StartTranslation() {
   id_vector_temp_.push_back(const_float_1_);
   const_float2_0_1_ = builder_->makeCompositeConstant(type_float2_, id_vector_temp_);
 
-  // Common uniform buffer - system constants.
   struct SystemConstant {
     const char* name;
     size_t offset;
@@ -487,15 +484,12 @@ void SpirvShaderTranslator::StartTranslation() {
   bool memexport_used = IsMemoryExportUsed();
 
   if (!is_depth_only_fragment_shader_) {
-    // Common uniform buffer - float constants.
     uint32_t float_constant_count = current_shader().constant_register_map().float_count;
     if (float_constant_count) {
       id_vector_temp_.clear();
       id_vector_temp_.push_back(builder_->makeArrayType(
           type_float4_, builder_->makeUintConstant(float_constant_count), sizeof(float) * 4));
-      // Currently (as of October 24, 2020) makeArrayType only uses the stride
-      // to check if deduplication can be done - the array stride decoration
-      // needs to be applied explicitly.
+
       builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride,
                               sizeof(float) * 4);
       spv::Id type_float_constants = builder_->makeStructType(id_vector_temp_, "XeFloatConstants");
@@ -515,17 +509,13 @@ void SpirvShaderTranslator::StartTranslation() {
       }
     }
 
-    // Common uniform buffer - bool and loop constants.
-    // Uniform buffers must have std140 packing, so using arrays of 4-component
-    // vectors instead of scalar arrays because the latter would have padding to
-    // 16 bytes in each element.
     id_vector_temp_.clear();
-    // 256 bool constants.
+
     id_vector_temp_.push_back(
         builder_->makeArrayType(type_uint4_, builder_->makeUintConstant(2), sizeof(uint32_t) * 4));
     builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride,
                             sizeof(uint32_t) * 4);
-    // 32 loop constants.
+
     id_vector_temp_.push_back(
         builder_->makeArrayType(type_uint4_, builder_->makeUintConstant(8), sizeof(uint32_t) * 4));
     builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride,
@@ -549,8 +539,6 @@ void SpirvShaderTranslator::StartTranslation() {
       main_interface_.push_back(uniform_bool_loop_constants_);
     }
 
-    // Common uniform buffer - fetch constants (32 x 6 uints packed in std140 as
-    // 4-component vectors).
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeArrayType(
         type_uint4_, builder_->makeUintConstant(32 * 6 / 4), sizeof(uint32_t) * 4));
@@ -571,11 +559,9 @@ void SpirvShaderTranslator::StartTranslation() {
       main_interface_.push_back(uniform_fetch_constants_);
     }
 
-    // Common storage buffers - shared memory uint[], each 128 MB or larger,
-    // depending on what's possible on the device.
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeRuntimeArray(type_uint_));
-    // Storage buffers have std430 packing, no padding to 4-component vectors.
+
     builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride, sizeof(uint32_t));
     spv::Id type_shared_memory = builder_->makeStructType(id_vector_temp_, "XeSharedMemory");
     builder_->addMemberName(type_shared_memory, 0, "shared_memory");
@@ -611,7 +597,6 @@ void SpirvShaderTranslator::StartTranslation() {
     StartFragmentShaderBeforeMain();
   }
 
-  // Begin the main function.
   std::vector<spv::Id> main_param_types;
   std::vector<std::vector<spv::Decoration>> main_precisions;
   spv::Block* function_main_entry;
@@ -619,7 +604,6 @@ void SpirvShaderTranslator::StartTranslation() {
       builder_->makeFunctionEntry(spv::NoPrecision, type_void_, "main", main_param_types,
                                   main_precisions, &function_main_entry);
 
-  // Load the flags system constant since it may be used in many places.
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantFlags));
   main_system_constant_flags_ =
@@ -628,8 +612,6 @@ void SpirvShaderTranslator::StartTranslation() {
                            spv::NoPrecision);
 
   if (!is_depth_only_fragment_shader_) {
-    // Begin ucode translation. Initialize everything, even without defined
-    // defaults, for safety.
     var_main_predicate_ =
         builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_bool_,
                                  "xe_var_predicate", builder_->makeBoolConstant(false));
@@ -661,8 +643,6 @@ void SpirvShaderTranslator::StartTranslation() {
         builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_float3_,
                                  "xe_var_tfetch_gradients_v", const_float3_0_);
     if (register_count()) {
-      // Pass stride -1 to force creation of a new type without decoration
-      // to avoid reusing types with ArrayStride decorations
       spv::Id type_register_array =
           builder_->makeArrayType(type_float4_, builder_->makeUintConstant(register_count()), -1);
       var_main_registers_ = builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction,
@@ -693,8 +673,6 @@ void SpirvShaderTranslator::StartTranslation() {
     }
   }
 
-  // Write the execution model-specific prologue with access to variables in the
-  // main function.
   if (is_vertex_shader()) {
     StartVertexOrTessEvalShaderInMain();
   } else if (is_pixel_shader()) {
@@ -708,12 +686,6 @@ void SpirvShaderTranslator::StartTranslation() {
   if (main_vertex_rect_list_as_triangle_strip_) {
     assert_true(IsSpirvVertexShader());
     assert_true(var_main_rect_list_guest_vertex_indices_ != spv::NoResult);
-
-    // Run the translated guest vertex shader 3 times for the rectangle
-    // vertices, and store the results to build the triangle strip vertex in
-    // CompleteVertexOrTessEvalShaderInMain. Only reachable on hosts without
-    // geometry shaders (currently Metal; MoltenVK / GS-less Vulkan also land
-    // here), selected by PrimitiveProcessor via kRectangleListAsTriangleStrip.
 
     spv::Block& main_rect_list_loop_pre_header = *builder_->getBuildPoint();
     main_rect_list_loop_header_ = &builder_->makeNewBlock();
@@ -750,28 +722,19 @@ void SpirvShaderTranslator::StartTranslation() {
         spv::NoPrecision));
   }
 
-  // Open the main loop.
   spv::Block& main_loop_pre_header = *builder_->getBuildPoint();
   main_loop_header_ = &builder_->makeNewBlock();
   spv::Block& main_loop_body = builder_->makeNewBlock();
-  // Added later because the body has nested control flow, but according to the
-  // specification:
-  // "The order of blocks in a function must satisfy the rule that blocks appear
-  //  before all blocks they dominate."
+
   main_loop_continue_ = new spv::Block(builder_->getUniqueId(), *function_main_);
   main_loop_merge_ = new spv::Block(builder_->getUniqueId(), *function_main_);
   builder_->createBranch(main_loop_header_);
 
-  // If no jumps, don't create a switch, but still create a loop so exece can
-  // break.
   bool has_main_switch = !current_shader().label_addresses().empty();
 
-  // Main loop header - based on whether it's the first iteration (entered from
-  // the function or from the continuation), choose the program counter.
   builder_->setBuildPoint(main_loop_header_);
   spv::Id main_loop_pc_current = spv::NoResult;
   if (has_main_switch) {
-    // OpPhi must be the first in the block.
     id_vector_temp_.clear();
     id_vector_temp_.push_back(const_int_0_);
     id_vector_temp_.push_back(main_loop_pre_header.getId());
@@ -785,26 +748,21 @@ void SpirvShaderTranslator::StartTranslation() {
                             uint_vector_temp_);
   builder_->createBranch(&main_loop_body);
 
-  // Main loop body.
   builder_->setBuildPoint(&main_loop_body);
   if (has_main_switch) {
-    // Create the program counter switch with cases for every label and for
-    // label 0.
     main_switch_header_ = builder_->getBuildPoint();
     main_switch_merge_ = new spv::Block(builder_->getUniqueId(), *function_main_);
     builder_->createSelectionMerge(main_switch_merge_, spv::SelectionControlDontFlattenMask);
     main_switch_op_ = std::make_unique<spv::Instruction>(spv::OpSwitch);
     main_switch_op_->addIdOperand(main_loop_pc_current);
     main_switch_op_->addIdOperand(main_switch_merge_->getId());
-    // The default case (the merge here) must have the header as a predecessor.
+
     main_switch_merge_->addPredecessor(main_switch_header_);
-    // The instruction will be inserted later, when all cases are filled.
-    // Insert and enter case 0.
+
     spv::Block* main_switch_case_0_block = new spv::Block(builder_->getUniqueId(), *function_main_);
     main_switch_op_->addImmediateOperand(0);
     main_switch_op_->addIdOperand(main_switch_case_0_block->getId());
-    // Every switch case must have the OpSelectionMerge/OpSwitch block as a
-    // predecessor.
+
     main_switch_case_0_block->addPredecessor(main_switch_header_);
     function_main_->addBlock(main_switch_case_0_block);
     builder_->setBuildPoint(main_switch_case_0_block);
@@ -813,38 +771,24 @@ void SpirvShaderTranslator::StartTranslation() {
 
 std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
   if (!is_depth_only_fragment_shader_) {
-    // Close flow control within the last switch case.
     CloseExecConditionals();
     bool has_main_switch = !current_shader().label_addresses().empty();
-    // After the final exec (if it happened to be not exece, which would already
-    // have a break branch), break from the switch if it exists, or from the
-    // loop it doesn't.
+
     if (!builder_->getBuildPoint()->isTerminated()) {
       builder_->createBranch(has_main_switch ? main_switch_merge_ : main_loop_merge_);
     }
     if (has_main_switch) {
-      // Insert the switch instruction with all cases added as operands.
       builder_->setBuildPoint(main_switch_header_);
       builder_->getBuildPoint()->addInstruction(std::move(main_switch_op_));
-      // Build the main switch merge, breaking out of the loop after falling
-      // through the end or breaking from exece (only continuing if a jump -
-      // from a guest loop or from jmp/call - was made).
+
       function_main_->addBlock(main_switch_merge_);
       builder_->setBuildPoint(main_switch_merge_);
       builder_->createBranch(main_loop_merge_);
     }
 
-    // Main loop continuation - choose the program counter based on the path
-    // taken (-1 if not from a jump as a safe fallback, which would result in
-    // not hitting any switch case and reaching the final break in the body).
     function_main_->addBlock(main_loop_continue_);
     builder_->setBuildPoint(main_loop_continue_);
     if (has_main_switch) {
-      // OpPhi, if added, must be the first in the block.
-      // If labels were added, but not jumps (for example, due to the call
-      // instruction not being implemented as of October 18, 2020), send an
-      // impossible program counter value (-1) to the OpPhi at the next
-      // iteration.
       if (main_switch_next_pc_phi_operands_.empty()) {
         main_switch_next_pc_phi_operands_.push_back(builder_->makeIntConstant(-1));
       }
@@ -858,15 +802,12 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
     }
     builder_->createBranch(main_loop_header_);
 
-    // Add the main loop merge block and go back to the function.
     function_main_->addBlock(main_loop_merge_);
     builder_->setBuildPoint(main_loop_merge_);
     if (main_vertex_rect_list_as_triangle_strip_) {
       assert_true(main_rect_list_loop_vertex_index_ != spv::NoResult);
       assert_true(var_main_rect_list_guest_positions_ != spv::NoResult);
 
-      // Store the current guest vertex shader outputs for this rectangle
-      // vertex iteration.
       id_vector_temp_.clear();
       id_vector_temp_.push_back(builder_->makeIntConstant(kOutputPerVertexMemberPosition));
       spv::Id position = builder_->createLoad(
@@ -894,7 +835,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
                                                       rect_list_interpolators, id_vector_temp_));
       }
 
-      // Finalize memexport for this guest vertex shader execution.
       ExportToMemory(current_shader().memexport_eM_potentially_written_before_end());
       if (var_main_memexport_data_written_ != spv::NoResult) {
         builder_->createStore(const_uint_0_, var_main_memexport_data_written_);
@@ -902,7 +842,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
 
       builder_->createBranch(main_rect_list_loop_continue_);
 
-      // Rectangle vertex loop continuation.
       function_main_->addBlock(main_rect_list_loop_continue_);
       builder_->setBuildPoint(main_rect_list_loop_continue_);
       std::unique_ptr<spv::Instruction> main_rect_list_vertex_index_next_op =
@@ -913,13 +852,11 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
       builder_->getBuildPoint()->addInstruction(std::move(main_rect_list_vertex_index_next_op));
       builder_->createBranch(main_rect_list_loop_header_);
 
-      // Rectangle vertex loop merge.
       function_main_->addBlock(main_rect_list_loop_merge_);
       builder_->setBuildPoint(main_rect_list_loop_merge_);
     }
   }
 
-  // Write data for the last memexport.
   if (!main_vertex_rect_list_as_triangle_strip_) {
     ExportToMemory(current_shader().memexport_eM_potentially_written_before_end());
   }
@@ -930,10 +867,8 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
     CompleteFragmentShaderInMain();
   }
 
-  // End the main function.
   builder_->leaveFunction();
 
-  // Make the main function the entry point.
   spv::ExecutionModel execution_model;
   if (is_pixel_shader()) {
     execution_model = spv::ExecutionModelFragment;
@@ -941,15 +876,12 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
     if (IsExecutionModeEarlyFragmentTests()) {
       builder_->addExecutionMode(function_main_, spv::ExecutionModeEarlyFragmentTests);
     }
-    // FSI handles depth manually.
+
     if (!edram_fragment_shader_interlock_ &&
         (current_shader().writes_depth() || DSV_IsWritingFloat24Depth() ||
          DSV_IsApplyingPolygonOffset())) {
       builder_->addExecutionMode(function_main_, spv::ExecutionModeDepthReplacing);
-      // Truncating float24 conversion of the rasterizer's own depth rounds
-      // towards zero, so the output is always <= the original - announce that
-      // to keep coarse early-Z culling possible. Matches SV_DepthLessEqual in
-      // the DXBC backend.
+
       if (!current_shader().writes_depth() && !DSV_IsApplyingPolygonOffset() &&
           GetHostRtShaderModification().pixel.depth_stencil_mode ==
               Modification::DepthStencilMode::kFloat24Truncating) {
@@ -957,8 +889,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
       }
     }
     if (edram_fragment_shader_interlock_) {
-      // Accessing per-sample values, so interlocking just when there's common
-      // coverage is enough if the device exposes that.
       if (features_.fragment_shader_sample_interlock && !REXCVAR_GET(spirv_pixel_interlock_only)) {
         builder_->addCapability(spv::CapabilityFragmentShaderSampleInterlockEXT);
         builder_->addExecutionMode(function_main_, spv::ExecutionModeSampleInterlockOrderedEXT);
@@ -971,10 +901,10 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
     assert_true(is_vertex_shader());
     if (IsSpirvTessEvalShader()) {
       execution_model = spv::ExecutionModelTessellationEvaluation;
-      // Set tessellation execution modes based on the domain shader type.
+
       Modification shader_modification = GetSpirvShaderModification();
       Shader::HostVertexShaderType host_type = shader_modification.vertex.host_vertex_shader_type;
-      // Tessellation domain (triangles vs quads).
+
       switch (host_type) {
         case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
         case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed:
@@ -992,35 +922,23 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
           assert_unhandled_case(host_type);
           break;
       }
-      // Tessellation spacing. In SPIR-V the spacing is part of the domain
-      // shader rather than the hull shader. Match the Direct3D 12 hull shader
-      // partitioning - integer (equal) for discrete, fractional even for
-      // continuous and adaptive.
+
       builder_->addExecutionMode(function_main_, shader_modification.vertex.tessellation_mode ==
                                                          xenos::TessellationMode::kDiscrete
                                                      ? spv::ExecutionModeSpacingEqual
                                                      : spv::ExecutionModeSpacingFractionalEven);
-      // Vertex ordering. Xenia does not flip the clip space Y on Vulkan
-      // (origin_bottom_left is false, so ndc_scale.y keeps the guest sign), so
-      // the tessellator must wind the same way as the Direct3D 12 hull shaders,
-      // which use triangle_cw. Counter-clockwise here inverts the facing and
-      // the guest backface culling removes the whole surface.
+
       builder_->addExecutionMode(function_main_, spv::ExecutionModeVertexOrderCw);
     } else {
       execution_model = spv::ExecutionModelVertex;
     }
   }
   if (features_.denorm_flush_to_zero_float32) {
-    // Flush to zero, similar to the real hardware, also for things like Shader
-    // Model 3 multiplication emulation.
     builder_->addCapability(spv::CapabilityDenormFlushToZero);
     builder_->addExecutionMode(function_main_, spv::ExecutionModeDenormFlushToZero, 32);
   }
   if (features_.signed_zero_inf_nan_preserve_float32 &&
       !REXCVAR_GET(spirv_disable_signed_zero_inf_nan_preserve)) {
-    // Signed zero used to get VFACE from ps_param_gen, also special behavior
-    // for infinity in certain instructions (such as logarithm, reciprocal,
-    // muls_prev2).
     builder_->addCapability(spv::CapabilitySignedZeroInfNanPreserve);
     builder_->addExecutionMode(function_main_, spv::ExecutionModeSignedZeroInfNanPreserve, 32);
   }
@@ -1034,9 +952,6 @@ std::vector<uint8_t> SpirvShaderTranslator::CompleteTranslation() {
   }
 
   if (!is_depth_only_fragment_shader_) {
-    // Specify the binding indices for samplers when the number of textures is
-    // known, as samplers are located after images in the texture descriptor
-    // set.
     size_t texture_binding_count = texture_bindings_.size();
     size_t sampler_binding_count = sampler_bindings_.size();
     for (size_t i = 0; i < sampler_binding_count; ++i) {
@@ -1068,7 +983,7 @@ void SpirvShaderTranslator::PostTranslation() {
     spirv_shader->texture_bindings_.reserve(texture_bindings_.size());
     for (const TextureBinding& translator_binding : texture_bindings_) {
       SpirvShader::TextureBinding& shader_binding = spirv_shader->texture_bindings_.emplace_back();
-      // For a stable hash.
+
       std::memset(&shader_binding, 0, sizeof(shader_binding));
       shader_binding.fetch_constant = translator_binding.fetch_constant;
       shader_binding.dimension = translator_binding.dimension;
@@ -1087,43 +1002,32 @@ void SpirvShaderTranslator::PostTranslation() {
       shader_binding.border_color_forced = translator_binding.border_color_forced;
       shader_binding.forced_border_color = translator_binding.forced_border_color;
     }
-    // Publish the bindings to draw-thread readers (GetGuestMesaSpirvShader)
-    // after they are fully written, so a PS translated on a creation thread is
-    // only consulted once its bindings are complete.
+
     spirv_shader->bindings_ready_.store(true, std::memory_order_release);
   }
 }
 
 void SpirvShaderTranslator::ProcessLabel(uint32_t cf_index) {
   if (cf_index == 0) {
-    // 0 already added in the beginning.
     return;
   }
 
-  // Writes after a label may reach it by jumping back. Writes skipped by
-  // jumping forward are already in main_interpolators_unmodified_.
   main_interpolators_unmodified_ &=
       ~current_shader().GetRegisterComponentsWrittenBeforeReentering(cf_index);
 
   assert_false(current_shader().label_addresses().empty());
 
-  // Close flow control within the previous switch case.
   CloseExecConditionals();
 
   spv::Function& function = builder_->getBuildPoint()->getParent();
-  // Create the next switch case and fallthrough to it.
+
   spv::Block* new_case = new spv::Block(builder_->getUniqueId(), function);
   main_switch_op_->addImmediateOperand(cf_index);
   main_switch_op_->addIdOperand(new_case->getId());
-  // Every switch case must have the OpSelectionMerge/OpSwitch block as a
-  // predecessor.
+
   new_case->addPredecessor(main_switch_header_);
-  // The previous block may have already been terminated if was exece.
+
   if (!builder_->getBuildPoint()->isTerminated()) {
-    // Don't fall through directly into the next case block. An OpSwitch case
-    // fall-through inside the main loop makes the NVIDIA shader compiler emit a
-    // non-terminating loop. Instead re-enter the loop with this label as the
-    // program counter, like an unconditional jump to it does.
     main_switch_next_pc_phi_operands_.push_back(builder_->makeIntConstant(int(cf_index)));
     main_switch_next_pc_phi_operands_.push_back(builder_->getBuildPoint()->getId());
     builder_->createBranch(main_loop_continue_);
@@ -1138,7 +1042,6 @@ void SpirvShaderTranslator::ProcessExecInstructionBegin(const ParsedExecInstruct
 
 void SpirvShaderTranslator::ProcessExecInstructionEnd(const ParsedExecInstruction& instr) {
   if (instr.is_end) {
-    // Break out of the main switch (if exists) and the main loop.
     CloseInstructionPredication();
     if (!builder_->getBuildPoint()->isTerminated()) {
       builder_->createBranch(current_shader().label_addresses().empty() ? main_loop_merge_
@@ -1149,22 +1052,18 @@ void SpirvShaderTranslator::ProcessExecInstructionEnd(const ParsedExecInstructio
 }
 
 void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartInstruction& instr) {
-  // loop il<idx>, L<idx> - loop with loop data il<idx>, end @ L<idx>
-
-  // Loop control is outside execs - actually close the last exec.
   CloseExecConditionals();
 
   EnsureBuildPointAvailable();
 
   id_vector_temp_.clear();
-  // Loop constants (member 1).
+
   id_vector_temp_.push_back(builder_->makeIntConstant(1));
-  // 4-component vector.
+
   id_vector_temp_.push_back(builder_->makeIntConstant(int(instr.loop_constant_index >> 2)));
-  // Scalar within the vector.
+
   id_vector_temp_.push_back(builder_->makeIntConstant(int(instr.loop_constant_index & 3)));
-  // Count (unsigned) in bits 0:7 of the loop constant (struct member 1),
-  // initial aL (unsigned) in 8:15.
+
   spv::Id loop_constant = builder_->createLoad(
       builder_->createAccessChain(spv::StorageClassUniform, uniform_bool_loop_constants_,
                                   id_vector_temp_),
@@ -1172,8 +1071,6 @@ void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartIns
 
   spv::Id const_int_8 = builder_->makeIntConstant(8);
 
-  // Push the count to the loop count stack - move XYZ to YZW and set X to the
-  // new iteration count (swizzling the way glslang does it for similar GLSL).
   spv::Id loop_count_stack_old = builder_->createLoad(var_main_loop_count_, spv::NoPrecision);
   spv::Id loop_count_new = builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, loop_constant,
                                                  const_int_0_, const_int_8);
@@ -1186,8 +1083,6 @@ void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartIns
   builder_->createStore(builder_->createCompositeConstruct(type_uint4_, id_vector_temp_),
                         var_main_loop_count_);
 
-  // Push aL - keep the same value as in the previous loop if repeating, or the
-  // new one otherwise.
   spv::Id address_relative_stack_old =
       builder_->createLoad(var_main_loop_address_, spv::NoPrecision);
   id_vector_temp_.clear();
@@ -1209,8 +1104,6 @@ void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartIns
   builder_->createStore(builder_->createCompositeConstruct(type_int4_, id_vector_temp_),
                         var_main_loop_address_);
 
-  // Break (jump to the skip label) if the loop counter is 0 (since the
-  // condition is checked in the end).
   spv::Block& head_block = *builder_->getBuildPoint();
   spv::Id loop_count_zero =
       builder_->createBinOp(spv::OpIEqual, type_bool_, loop_count_new, const_uint_0_);
@@ -1223,7 +1116,7 @@ void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartIns
     branch_conditional_op->addIdOperand(loop_count_zero);
     branch_conditional_op->addIdOperand(skip_block.getId());
     branch_conditional_op->addIdOperand(body_block.getId());
-    // More likely to enter than to skip.
+
     branch_conditional_op->addImmediateOperand(1);
     branch_conditional_op->addImmediateOperand(2);
     head_block.addInstruction(std::move(branch_conditional_op));
@@ -1239,14 +1132,10 @@ void SpirvShaderTranslator::ProcessLoopStartInstruction(const ParsedLoopStartIns
 }
 
 void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruction& instr) {
-  // endloop il<idx>, L<idx> - end loop w/ data il<idx>, head @ L<idx>
-
-  // Loop control is outside execs - actually close the last exec.
   CloseExecConditionals();
 
   EnsureBuildPointAvailable();
 
-  // Subtract 1 from the loop counter (will store later).
   spv::Id loop_count_stack_old = builder_->createLoad(var_main_loop_count_, spv::NoPrecision);
   spv::Id loop_count =
       builder_->createBinOp(spv::OpISub, type_uint_,
@@ -1255,12 +1144,6 @@ void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruc
   spv::Id address_relative_stack_old =
       builder_->createLoad(var_main_loop_address_, spv::NoPrecision);
 
-  // Predicated break works like break if (loop_count == 0 || [!]p0).
-  // Three options, due to logical operations usage (so OpLogicalNot is not
-  // required):
-  // - Continue if (loop_count != 0).
-  // - Continue if (loop_count != 0 && p0), if breaking if !p0.
-  // - Break if (loop_count == 0 || p0), if breaking if p0.
   bool break_is_true = instr.is_predicated_break && instr.predicate_condition;
   spv::Id condition = builder_->createBinOp(break_is_true ? spv::OpIEqual : spv::OpINotEqual,
                                             type_bool_, loop_count, const_uint_0_);
@@ -1278,7 +1161,7 @@ void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruc
     std::unique_ptr<spv::Instruction> branch_conditional_op =
         std::make_unique<spv::Instruction>(spv::OpBranchConditional);
     branch_conditional_op->addIdOperand(condition);
-    // More likely to continue than to break.
+
     if (break_is_true) {
       branch_conditional_op->addIdOperand(break_block.getId());
       branch_conditional_op->addIdOperand(continue_block.getId());
@@ -1295,20 +1178,18 @@ void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruc
   continue_block.addPredecessor(&body_block);
   break_block.addPredecessor(&body_block);
 
-  // Continue case.
   builder_->setBuildPoint(&continue_block);
-  // Store the loop count with 1 subtracted.
+
   builder_->createStore(
       builder_->createCompositeInsert(loop_count, loop_count_stack_old, type_uint4_, 0),
       var_main_loop_count_);
-  // Extract the value to add to aL (signed, in bits 16:23 of the loop
-  // constant).
+
   id_vector_temp_.clear();
-  // Loop constants (member 1).
+
   id_vector_temp_.push_back(builder_->makeIntConstant(1));
-  // 4-component vector.
+
   id_vector_temp_.push_back(builder_->makeIntConstant(int(instr.loop_constant_index >> 2)));
-  // Scalar within the vector.
+
   id_vector_temp_.push_back(builder_->makeIntConstant(int(instr.loop_constant_index & 3)));
   spv::Id loop_constant = builder_->createLoad(
       builder_->createAccessChain(spv::StorageClassUniform, uniform_bool_loop_constants_,
@@ -1326,16 +1207,14 @@ void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruc
                   builder_->makeIntConstant(16), builder_->makeIntConstant(8))),
           address_relative_stack_old, type_int4_, 0),
       var_main_loop_address_);
-  // Jump back to the beginning of the loop body.
+
   main_switch_next_pc_phi_operands_.push_back(
       builder_->makeIntConstant(int(instr.loop_body_address)));
   main_switch_next_pc_phi_operands_.push_back(builder_->getBuildPoint()->getId());
   builder_->createBranch(main_loop_continue_);
 
-  // Break case.
   builder_->setBuildPoint(&break_block);
-  // Pop the current loop off the loop counter and the relative address stacks -
-  // move YZW to XYZ and set W to 0.
+
   id_vector_temp_.clear();
   for (unsigned int i = 1; i < 4; ++i) {
     id_vector_temp_.push_back(
@@ -1352,11 +1231,9 @@ void SpirvShaderTranslator::ProcessLoopEndInstruction(const ParsedLoopEndInstruc
   id_vector_temp_.push_back(const_int_0_);
   builder_->createStore(builder_->createCompositeConstruct(type_int4_, id_vector_temp_),
                         var_main_loop_address_);
-  // Now going to fall through to the next control flow instruction.
 }
 
 void SpirvShaderTranslator::ProcessJumpInstruction(const ParsedJumpInstruction& instr) {
-  // Treat like exec, merge with execs if possible, since it's an if too.
   ParsedExecInstruction::Type type;
   if (instr.type == ParsedJumpInstruction::Type::kConditional) {
     type = ParsedExecInstruction::Type::kConditional;
@@ -1367,14 +1244,9 @@ void SpirvShaderTranslator::ProcessJumpInstruction(const ParsedJumpInstruction& 
   }
   UpdateExecConditionals(type, instr.bool_constant_index, instr.condition);
 
-  // UpdateExecConditionals may not necessarily close the instruction-level
-  // predicate check (it's not necessary if the execs are merged), but here the
-  // instruction itself is on the control flow level, so the predicate check is
-  // on the control flow level too.
   CloseInstructionPredication();
 
   if (builder_->getBuildPoint()->isTerminated()) {
-    // Unreachable for some reason.
     return;
   }
   main_switch_next_pc_phi_operands_.push_back(builder_->makeIntConstant(int(instr.target_address)));
@@ -1392,9 +1264,9 @@ void SpirvShaderTranslator::ProcessAllocInstruction(const ParsedAllocInstruction
 
   if (export_eM) {
     ExportToMemory(export_eM);
-    // Reset which eM# elements have been written.
+
     builder_->createStore(const_uint_0_, var_main_memexport_data_written_);
-    // Break dependencies from the previous memexport.
+
     uint8_t export_eM_remaining = export_eM;
     uint32_t eM_index;
     while (rex::bit_scan_forward(export_eM_remaining, &eM_index)) {
@@ -1404,7 +1276,6 @@ void SpirvShaderTranslator::ProcessAllocInstruction(const ParsedAllocInstruction
   }
 
   if (start_memexport) {
-    // Initialize eA to an invalid address.
     builder_->createStore(const_float4_0_, var_main_memexport_address_);
   }
 }
@@ -1433,8 +1304,7 @@ spv::Id SpirvShaderTranslator::SpirvSmearScalarResultOrConstant(spv::Id scalar,
 uint32_t SpirvShaderTranslator::GetPsParamGenInterpolator() const {
   assert_true(is_pixel_shader());
   Modification modification = GetSpirvShaderModification();
-  // param_gen_interpolator is already 4 bits, no need for an interpolator count
-  // safety check.
+
   return (modification.pixel.param_gen_enable &&
           modification.pixel.param_gen_interpolator < register_count())
              ? modification.pixel.param_gen_interpolator
@@ -1482,20 +1352,16 @@ void SpirvShaderTranslator::ResetUcodeInvocationStateInMain() {
 void SpirvShaderTranslator::ResetVertexShaderInvocationStateInMain() {
   if (var_main_point_size_edge_flag_kill_vertex_ != spv::NoResult) {
     id_vector_temp_.clear();
-    // Set the point size to a negative value to tell the point sprite expansion
-    // that it should use the default point size if the vertex shader does not
-    // override it.
+
     id_vector_temp_.push_back(builder_->makeFloatConstant(-1.0f));
-    // The edge flag is ignored.
+
     id_vector_temp_.push_back(const_float_0_);
-    // Don't kill by default (zero bits 0:30).
+
     id_vector_temp_.push_back(const_float_0_);
     builder_->createStore(builder_->makeCompositeConstant(type_float3_, id_vector_temp_),
                           var_main_point_size_edge_flag_kill_vertex_);
   }
 
-  // Zero general-purpose registers to prevent crashes when the game references
-  // them after only initializing them conditionally.
   for (uint32_t i = 0; i < register_count(); ++i) {
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
@@ -1504,7 +1370,6 @@ void SpirvShaderTranslator::ResetVertexShaderInvocationStateInMain() {
                                                      id_vector_temp_));
   }
 
-  // Zero the interpolators.
   uint32_t interpolators_remaining = GetModificationInterpolatorMask();
   uint32_t interpolator_index;
   while (rex::bit_scan_forward(interpolators_remaining, &interpolator_index)) {
@@ -1526,14 +1391,7 @@ void SpirvShaderTranslator::WriteVertexIndexToRegister0(spv::Id vertex_index) {
 }
 
 void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
-  // Create the inputs.
   if (IsSpirvTessEvalShader()) {
-    // Per-control-point index input from the hull shader, mirroring the control
-    // point input read by the Direct3D 12 domain shader. The hull shader has
-    // already applied the endian swap, the vertex index offset, the low 24-bit
-    // wrap and the min/max clamp, so this is the index the guest expects rather
-    // than the raw gl_PrimitiveID. The array size matches the hull shader's
-    // output control point count for the domain type.
     uint32_t control_point_count = 1;
     switch (GetSpirvShaderModification().vertex.host_vertex_shader_type) {
       case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
@@ -1543,7 +1401,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
         control_point_count = 4;
         break;
       default:
-        // Patch-indexed (and line) domains output a single control point.
+
         control_point_count = 1;
         break;
     }
@@ -1554,8 +1412,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
     builder_->addDecoration(input_control_point_index_, spv::DecorationLocation, 0);
     main_interface_.push_back(input_control_point_index_);
 
-    // Tessellation coordinates (barycentric coordinates for the tessellated
-    // vertex within the patch).
     input_tess_coord_ = builder_->createVariable(spv::NoPrecision, spv::StorageClassInput,
                                                  type_float3_, "gl_TessCoord");
     builder_->addDecoration(input_tess_coord_, spv::DecorationBuiltIn,
@@ -1571,7 +1427,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
 
   uint32_t output_location = 0;
 
-  // Create the interpolator outputs.
   {
     uint32_t interpolators_remaining = GetModificationInterpolatorMask();
     uint32_t interpolator_index;
@@ -1593,7 +1448,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
   if (shader_modification.vertex.output_point_parameters) {
     if (shader_modification.vertex.host_vertex_shader_type ==
         Shader::HostVertexShaderType::kPointListAsTriangleStrip) {
-      // Create the point coordinates output.
       output_point_coordinates_ = builder_->createVariable(
           spv::NoPrecision, spv::StorageClassOutput, type_float2_, "xe_out_point_coordinates");
       builder_->addDecoration(output_point_coordinates_, spv::DecorationLocation,
@@ -1602,10 +1456,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
       main_interface_.push_back(output_point_coordinates_);
       ++output_location;
     } else {
-      // Create the point size output. Not using gl_PointSize from gl_PerVertex
-      // not to rely on the shaderTessellationAndGeometryPointSize feature, and
-      // also because the value written to gl_PointSize must be greater than
-      // zero.
       output_point_size_ = builder_->createVariable(spv::NoPrecision, spv::StorageClassOutput,
                                                     type_float_, "xe_out_point_size");
       builder_->addDecoration(output_point_size_, spv::DecorationLocation, int(output_location));
@@ -1615,13 +1465,10 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
     }
   }
 
-  // Create the gl_PerVertex output for used system outputs.
   std::vector<spv::Id> struct_per_vertex_members;
   struct_per_vertex_members.reserve(kOutputPerVertexMemberCount);
   struct_per_vertex_members.push_back(type_float4_);
 
-  // Only allocate ClipDistance/CullDistance arrays when user clip planes are
-  // actually enabled (count > 0).
   uint32_t user_clip_plane_count = shader_modification.vertex.user_clip_plane_count;
   uint32_t clip_distance_count = 0;
   uint32_t cull_distance_count = 0;
@@ -1630,8 +1477,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
   } else {
     clip_distance_count = user_clip_plane_count;
   }
-  // Vertex kill with the "and" operator writes a dedicated cull distance after
-  // the user clip plane cull distances.
+
   if (shader_modification.vertex.vertex_kill_and) {
     ++cull_distance_count;
   }
@@ -1656,7 +1502,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderBeforeMain() {
   builder_->addMemberDecoration(type_struct_per_vertex, kOutputPerVertexMemberPosition,
                                 spv::DecorationBuiltIn, static_cast<int>(spv::BuiltIn::Position));
 
-  // Decorate clip/cull arrays only if allocated.
   if (clip_distance_count > 0) {
     builder_->addMemberName(type_struct_per_vertex, output_per_vertex_clip_distance_member_index_,
                             "gl_ClipDistance");
@@ -1683,16 +1528,13 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
   Modification shader_modification = GetSpirvShaderModification();
   main_vertex_rect_list_as_triangle_strip_ = IsSpirvRectListAsTriangleStrip();
 
-  // The edge flag isn't used for any purpose by the translator.
   if (current_shader().writes_point_size_edge_flag_kill_vertex() & 0b101) {
     id_vector_temp_.clear();
-    // Set the point size to a negative value to tell the point sprite expansion
-    // that it should use the default point size if the vertex shader does not
-    // override it.
+
     id_vector_temp_.push_back(builder_->makeFloatConstant(-1.0f));
-    // The edge flag is ignored.
+
     id_vector_temp_.push_back(const_float_0_);
-    // Don't kill by default (zero bits 0:30).
+
     id_vector_temp_.push_back(const_float_0_);
     var_main_point_size_edge_flag_kill_vertex_ =
         builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_float3_,
@@ -1704,13 +1546,9 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
     ResetVertexShaderInvocationStateInMain();
   }
 
-  // Check if memory export should be allowed for this host vertex of the guest
-  // primitive to make sure export is done only once for each guest vertex.
   if (IsMemoryExportUsed()) {
     spv::Id memexport_allowed_for_host_vertex_of_guest_primitive = spv::NoResult;
     if (main_vertex_rect_list_as_triangle_strip_) {
-      // Run memory export for all 3 guest rectangle vertices only in one host
-      // invocation (when emitting strip vertex 0).
       memexport_allowed_for_host_vertex_of_guest_primitive = builder_->createBinOp(
           spv::OpIEqual, type_bool_,
           builder_->createBinOp(
@@ -1721,7 +1559,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           const_uint_0_);
     } else if (shader_modification.vertex.host_vertex_shader_type ==
                Shader::HostVertexShaderType::kPointListAsTriangleStrip) {
-      // Only for one host vertex for the point.
       memexport_allowed_for_host_vertex_of_guest_primitive = builder_->createBinOp(
           spv::OpIEqual, type_bool_,
           builder_->createBinOp(
@@ -1742,7 +1579,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
   }
 
   if (main_vertex_rect_list_as_triangle_strip_) {
-    // Expanded strip vertex index in [0, 3].
     spv::Id host_vertex_index = builder_->createUnaryOp(
         spv::OpBitcast, type_uint_, builder_->createLoad(input_vertex_index_, spv::NoPrecision));
     var_main_rect_list_strip_vertex_ =
@@ -1772,9 +1608,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           fmt::format("xe_var_rect_guest_interpolators_{}", interpolator_index).c_str());
     }
 
-    // Load the 3 guest rectangle vertex indices. For DMA draws, indices are
-    // fetched from guest memory and endian-swapped, same as in the point list
-    // fallback path.
     spv::Id rect_index = builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
                                                host_vertex_index, builder_->makeUintConstant(2));
     spv::Id rect_vertex_base =
@@ -1869,12 +1702,8 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
     }
   }
 
-  // Load the vertex index or the tessellation parameters.
   if (register_count()) {
     if (IsSpirvTessEvalShader()) {
-      // Tessellation evaluation shader (domain shader).
-      // Copy barycentric coordinates (gl_TessCoord) to r0 with appropriate
-      // swizzle based on the domain type.
       Shader::HostVertexShaderType host_type = shader_modification.vertex.host_vertex_shader_type;
 
       spv::Id tess_coord = builder_->createLoad(input_tess_coord_, spv::NoPrecision);
@@ -1882,20 +1711,18 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
       switch (host_type) {
         case Shader::HostVertexShaderType::kTriangleDomainCPIndexed:
         case Shader::HostVertexShaderType::kTriangleDomainPatchIndexed: {
-          // Triangle domain: gl_TessCoord.xyz -> r0.zyx
-          // ZYX swizzle according to 415607E1 and 4D5307F2.
           uint_vector_temp_.clear();
-          uint_vector_temp_.push_back(2);  // z -> r0.x
-          uint_vector_temp_.push_back(1);  // y -> r0.y
-          uint_vector_temp_.push_back(0);  // x -> r0.z
+          uint_vector_temp_.push_back(2);
+          uint_vector_temp_.push_back(1);
+          uint_vector_temp_.push_back(0);
           spv::Id tess_coord_zyx = builder_->createRvalueSwizzle(spv::NoPrecision, type_float3_,
                                                                  tess_coord, uint_vector_temp_);
-          // Store to r0.xyz
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id r0_ptr = builder_->createAccessChain(spv::StorageClassFunction,
                                                        var_main_registers_, id_vector_temp_);
-          // Build float4 from swizzled xyz and w=1.0
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(
               builder_->createCompositeExtract(tess_coord_zyx, type_float_, 0));
@@ -1909,20 +1736,16 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           break;
         }
         case Shader::HostVertexShaderType::kQuadDomainCPIndexed: {
-          // Quad domain CP-indexed, matching the Direct3D 12 domain shader:
-          // r0.xy = domain location, r0.z = control point index 0,
-          // r1.xyz = control point indices 1, 2, 3 (already endian swapped and
-          // converted to float by the host vertex and hull shaders).
           spv::Id tess_coord_x = builder_->createCompositeExtract(tess_coord, type_float_, 0);
           spv::Id tess_coord_y = builder_->createCompositeExtract(tess_coord, type_float_, 1);
-          // Load control point index 0.
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id control_point_index_0 = builder_->createLoad(
               builder_->createAccessChain(spv::StorageClassInput, input_control_point_index_,
                                           id_vector_temp_),
               spv::NoPrecision);
-          // Store r0 = (domain.x, domain.y, control point index 0, 0).
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id r0_ptr = builder_->createAccessChain(spv::StorageClassFunction,
@@ -1934,7 +1757,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           id_vector_temp_.push_back(const_float_0_);
           builder_->createStore(builder_->createCompositeConstruct(type_float4_, id_vector_temp_),
                                 r0_ptr);
-          // Store r1.xyz = control point indices 1, 2, 3.
+
           for (uint32_t i = 1; i <= 3 && register_count() >= 2; ++i) {
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
@@ -1952,25 +1775,19 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           break;
         }
         case Shader::HostVertexShaderType::kQuadDomainPatchIndexed: {
-          // Quad domain patch-indexed: gl_TessCoord.xy -> r0.yz,
-          // patch index -> r0.x, r0.w = 1
-          // XY swizzle according to the ground shader in 4D5307F2.
           uint_vector_temp_.clear();
-          uint_vector_temp_.push_back(0);  // x -> r0.y
-          uint_vector_temp_.push_back(1);  // y -> r0.z
+          uint_vector_temp_.push_back(0);
+          uint_vector_temp_.push_back(1);
           spv::Id tess_coord_xy = builder_->createRvalueSwizzle(spv::NoPrecision, type_float2_,
                                                                 tess_coord, uint_vector_temp_);
-          // Read the patch index from control point 0 (already endian swapped,
-          // offset, wrapped and clamped by the host vertex and hull shaders),
-          // matching the Direct3D 12 domain shader, rather than using the raw
-          // gl_PrimitiveID.
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id patch_index_float = builder_->createLoad(
               builder_->createAccessChain(spv::StorageClassInput, input_control_point_index_,
                                           id_vector_temp_),
               spv::NoPrecision);
-          // Store to r0: x = patch index, yz = tess coord, w = 1
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id r0_ptr = builder_->createAccessChain(spv::StorageClassFunction,
@@ -1984,7 +1801,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           id_vector_temp_.push_back(const_float_1_);
           builder_->createStore(builder_->createCompositeConstruct(type_float4_, id_vector_temp_),
                                 r0_ptr);
-          // Also set r1.x = 0.0f (swizzle indicator for identity swizzle).
+
           if (register_count() >= 2) {
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->makeIntConstant(1));
@@ -1997,7 +1814,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
         }
         case Shader::HostVertexShaderType::kLineDomainCPIndexed:
         case Shader::HostVertexShaderType::kLineDomainPatchIndexed:
-          // Line domain tessellation is not yet implemented.
+
           REXGPU_ERROR(
               "SPIRV: Line domain tessellation not implemented for host type "
               "{}",
@@ -2008,30 +1825,22 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
           break;
       }
 
-      // For triangle patch-indexed mode, store patch index to r1.x and
-      // swizzle indicator (0.0f) to r1.y.
       if (register_count() >= 2) {
         if (host_type == Shader::HostVertexShaderType::kTriangleDomainPatchIndexed) {
-          // Read the patch index from control point 0 (already endian swapped,
-          // offset, wrapped and clamped by the host vertex and hull shaders),
-          // matching the Direct3D 12 domain shader, rather than using the raw
-          // gl_PrimitiveID.
           id_vector_temp_.clear();
           id_vector_temp_.push_back(const_int_0_);
           spv::Id patch_index_float = builder_->createLoad(
               builder_->createAccessChain(spv::StorageClassInput, input_control_point_index_,
                                           id_vector_temp_),
               spv::NoPrecision);
-          // Store patch index to r1.x
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(builder_->makeIntConstant(1));
           id_vector_temp_.push_back(const_int_0_);
           builder_->createStore(patch_index_float,
                                 builder_->createAccessChain(spv::StorageClassFunction,
                                                             var_main_registers_, id_vector_temp_));
-          // Store swizzle indicator (0.0f = identity) to r1.y
-          // According to D3D12 implementation and comments in
-          // adaptive_triangle.hs.glsl, r1.y == 0 means identity swizzle.
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(builder_->makeIntConstant(1));
           id_vector_temp_.push_back(builder_->makeIntConstant(1));
@@ -2039,9 +1848,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                                 builder_->createAccessChain(spv::StorageClassFunction,
                                                             var_main_registers_, id_vector_temp_));
         } else if (host_type == Shader::HostVertexShaderType::kTriangleDomainCPIndexed) {
-          // Store the three control point indices (already endian swapped and
-          // converted to float by the host vertex and hull shaders) to r1.xyz,
-          // matching the Direct3D 12 domain shader.
           for (uint32_t i = 0; i < 3; ++i) {
             id_vector_temp_.clear();
             id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
@@ -2068,19 +1874,14 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                                       id_vector_temp_),
           spv::NoPrecision);
       if (main_vertex_rect_list_as_triangle_strip_) {
-        // For rectangle list VS expansion, the translated guest shader is
-        // executed 3 times in an outer loop, and r0.x is written there.
       } else if (shader_modification.vertex.host_vertex_shader_type ==
                  Shader::HostVertexShaderType::kPointListAsTriangleStrip) {
-        // Load the point index, autogenerated or indirectly from the index
-        // buffer.
-        // Extract the primitive index from the two-triangle strip vertex index.
         spv::Id const_uint_2 = builder_->makeUintConstant(2);
         vertex_index =
             builder_->createBinOp(spv::OpShiftRightLogical, type_uint_, vertex_index, const_uint_2);
         spv::Id vertex_index_in_bounds =
             builder_->createBinOp(spv::OpULessThan, type_bool_, vertex_index, vertex_index_count);
-        // Check if the index needs to be loaded from the index buffer.
+
         spv::Id load_vertex_index = builder_->createBinOp(
             spv::OpINotEqual, type_bool_,
             builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_system_constant_flags_,
@@ -2093,14 +1894,13 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
             load_vertex_index_safe, spv::SelectionControlDontFlattenMask, *builder_);
         spv::Id loaded_vertex_index;
         {
-          // Check if the index is 32-bit.
           spv::Id vertex_index_is_32bit = builder_->createBinOp(
               spv::OpINotEqual, type_bool_,
               builder_->createBinOp(spv::OpBitwiseAnd, type_uint_, main_system_constant_flags_,
                                     builder_->makeUintConstant(static_cast<unsigned int>(
                                         kSysFlag_ComputeOrPrimitiveVertexIndexLoad32Bit))),
               const_uint_0_);
-          // Calculate the vertex index address in the shared memory.
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(
               builder_->makeIntConstant(kSystemConstantVertexIndexLoadAddress));
@@ -2114,14 +1914,12 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                   spv::OpShiftLeftLogical, type_uint_, vertex_index,
                   builder_->createTriOp(spv::OpSelect, type_uint_, vertex_index_is_32bit,
                                         const_uint_2, builder_->makeUintConstant(1))));
-          // Load the 32 bits containing the whole vertex index or two 16-bit
-          // vertex indices.
 
           loaded_vertex_index = LoadUint32FromSharedMemory(
               builder_->createUnaryOp(spv::OpBitcast, type_int_,
                                       builder_->createBinOp(spv::OpShiftRightLogical, type_uint_,
                                                             vertex_index_address, const_uint_2)));
-          // Extract the 16-bit index from the loaded 32 bits if needed.
+
           loaded_vertex_index = builder_->createTriOp(
               spv::OpSelect, type_uint_, vertex_index_is_32bit, loaded_vertex_index,
               builder_->createTriOp(
@@ -2131,7 +1929,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                                                               vertex_index_address, const_uint_2),
                                         builder_->makeUintConstant(4 - 1)),
                   builder_->makeUintConstant(16)));
-          // Endian-swap the loaded index.
+
           id_vector_temp_.clear();
           id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantVertexIndexEndian));
           loaded_vertex_index = EndianSwap32Uint(
@@ -2142,7 +1940,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                   spv::NoPrecision));
         }
         load_vertex_index_if.makeEndIf();
-        // Select between the loaded index and the original index from Vulkan.
+
         vertex_index = load_vertex_index_if.createMergePhi(loaded_vertex_index, vertex_index);
         vertex_index = builder_->createTriOp(spv::OpSelect, type_uint_, vertex_index_in_bounds,
                                              vertex_index, const_uint_0_);
@@ -2150,7 +1948,7 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
         if (!features_.full_draw_index_uint32) {
           spv::Id vertex_index_in_bounds =
               builder_->createBinOp(spv::OpULessThan, type_bool_, vertex_index, vertex_index_count);
-          // Check if the full 32-bit index needs to be loaded indirectly.
+
           spv::Id load_vertex_index = builder_->createBinOp(
               spv::OpINotEqual, type_bool_,
               builder_->createBinOp(
@@ -2163,8 +1961,6 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
               load_vertex_index_safe, spv::SelectionControlDontFlattenMask, *builder_);
           spv::Id loaded_vertex_index;
           {
-            // Load the 32-bit index.
-
             id_vector_temp_.clear();
             id_vector_temp_.push_back(
                 builder_->makeIntConstant(kSystemConstantVertexIndexLoadAddress));
@@ -2182,17 +1978,15 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                     vertex_index)));
           }
           load_vertex_index_if.makeEndIf();
-          // Select between the loaded index and the original index from Vulkan.
+
           vertex_index = load_vertex_index_if.createMergePhi(loaded_vertex_index, vertex_index);
-          // Clamp only the indirection index position used for shared-memory
-          // loads. For regular indexed draws, input_vertex_index is already the
-          // fetched vertex index value and must not be bounded by index count.
+
           spv::Id vertex_index_clamped = builder_->createTriOp(
               spv::OpSelect, type_uint_, vertex_index_in_bounds, vertex_index, const_uint_0_);
           vertex_index = builder_->createTriOp(spv::OpSelect, type_uint_, load_vertex_index,
                                                vertex_index_clamped, vertex_index);
         }
-        // Endian-swap the index.
+
         id_vector_temp_.clear();
         id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantVertexIndexEndian));
         vertex_index = EndianSwap32Uint(
@@ -2202,9 +1996,8 @@ void SpirvShaderTranslator::StartVertexOrTessEvalShaderInMain() {
                                                spv::NoPrecision));
       }
       if (!main_vertex_rect_list_as_triangle_strip_) {
-        // Convert the index to a signed integer.
         vertex_index = builder_->createUnaryOp(spv::OpBitcast, type_int_, vertex_index);
-        // Add the base to the index.
+
         id_vector_temp_.clear();
         id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantVertexBaseIndex));
         vertex_index = builder_->createBinOp(
@@ -2255,8 +2048,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
               builder_->createUnaryOp(spv::OpIsNan, type_bool4_, rect_positions[i])));
     }
 
-    // Choose the diagonal to build the strip from (matching the geometry shader
-    // path using host-converted clip-space XY).
     spv::Id is_w_not_reciprocal = builder_->createBinOp(
         spv::OpINotEqual, type_bool_,
         builder_->createBinOp(
@@ -2382,7 +2173,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
                                   spv::NoPrecision);
     };
 
-    // Build and write the final guest position for this strip vertex.
     spv::Id position_v0 = load_rect_list_position(vertex_indices[0]);
     spv::Id position_v1 = load_rect_list_position(vertex_indices[1]);
     spv::Id position_v2 = load_rect_list_position(vertex_indices[2]);
@@ -2402,7 +2192,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
         position_final);
     builder_->createStore(position_final, position_ptr);
 
-    // Build and write the final guest interpolators for this strip vertex.
     uint32_t interpolators_remaining = GetModificationInterpolatorMask();
     uint32_t interpolator_index;
     while (rex::bit_scan_forward(interpolators_remaining, &interpolator_index)) {
@@ -2428,8 +2217,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
   }
   spv::Id guest_position = builder_->createLoad(position_ptr, spv::NoPrecision);
 
-  // Check if the shader already returns W, not 1/W, and if it doesn't, turn 1/W
-  // into W.
   spv::Id position_w = builder_->createCompositeExtract(guest_position, type_float_, 3);
   spv::Id is_w_not_reciprocal = builder_->createBinOp(
       spv::OpINotEqual, type_bool_,
@@ -2444,11 +2231,7 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
 
   spv::Id position_xyz;
 
-  // Open a scope since position_xy and position_z won't be synchronized anymore
-  // after position_xyz is built and modified later.
   {
-    // Check if the shader returns XY/W rather than XY, and if it does, revert
-    // that.
     uint_vector_temp_.clear();
     uint_vector_temp_.push_back(0);
     uint_vector_temp_.push_back(1);
@@ -2467,8 +2250,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
         builder_->smearScalar(spv::NoPrecision, is_xy_divided_by_w, type_bool2_),
         guest_position_xy_mul_w, position_xy);
 
-    // Check if the shader returns Z/W rather than Z, and if it does, revert
-    // that.
     spv::Id position_z = builder_->createCompositeExtract(guest_position, type_float_, 2);
     spv::Id is_z_divided_by_w = builder_->createBinOp(
         spv::OpINotEqual, type_bool_,
@@ -2481,7 +2262,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     position_z = builder_->createTriOp(spv::OpSelect, type_float_, is_z_divided_by_w,
                                        guest_position_z_mul_w, position_z);
 
-    // Build XYZ of the position with W format handled.
     {
       std::unique_ptr<spv::Instruction> composite_construct_op = std::make_unique<spv::Instruction>(
           builder_->getUniqueId(), type_float3_, spv::OpCompositeConstruct);
@@ -2492,12 +2272,8 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     }
   }
 
-  // Compute user clip/cull distances BEFORE NDC transform.
-  // Clip planes must operate on the original clip-space position.
   uint32_t user_clip_plane_count = shader_modification.vertex.user_clip_plane_count;
   if (user_clip_plane_count > 0) {
-    // Reconstruct the original clip-space position (x, y, z, w) for dot
-    // product. Use the untransformed position_xyz and corrected position_w.
     spv::Id clip_space_position;
     {
       std::unique_ptr<spv::Instruction> composite_construct_op = std::make_unique<spv::Instruction>(
@@ -2508,29 +2284,23 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
       builder_->getBuildPoint()->addInstruction(std::move(composite_construct_op));
     }
 
-    // Determine which member index to use based on whether we're using
-    // ClipDistance or CullDistance.
     bool user_clip_plane_cull = shader_modification.vertex.user_clip_plane_cull;
     unsigned int clip_cull_distance_member_index =
         user_clip_plane_cull ? output_per_vertex_cull_distance_member_index_
                              : output_per_vertex_clip_distance_member_index_;
 
-    // Compute distance to each enabled user clip plane via dot product.
     for (uint32_t i = 0; i < user_clip_plane_count; ++i) {
-      // Load user clip plane from the system constants buffer.
       id_vector_temp_.clear();
       id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantUserClipPlanes));
-      id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));  // Array index
+      id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
       spv::Id clip_plane = builder_->createLoad(
           builder_->createAccessChain(spv::StorageClassUniform, uniform_system_constants_,
                                       id_vector_temp_),
           spv::NoPrecision);
 
-      // Compute dot product: distance = dot(clip_space_position, clip_plane).
       spv::Id distance =
           builder_->createBinOp(spv::OpDot, type_float_, clip_space_position, clip_plane);
 
-      // Store to gl_ClipDistance[i] or gl_CullDistance[i].
       id_vector_temp_.clear();
       id_vector_temp_.push_back(builder_->makeIntConstant(clip_cull_distance_member_index));
       id_vector_temp_.push_back(builder_->makeIntConstant(int(i)));
@@ -2540,7 +2310,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     }
   }
 
-  // Apply the NDC scale and offset for guest to host viewport transformation.
   id_vector_temp_.clear();
   id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantNdcScale));
   spv::Id ndc_scale =
@@ -2560,20 +2329,16 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
   position_xyz =
       builder_->createNoContractionBinOp(spv::OpFAdd, type_float3_, position_xyz, ndc_offset_mul_w);
 
-  // Apply vertex killing requested via the kill flag (oPts.z) - bits 0:30 of
-  // the value being non-zero kills. Done after the NDC transform since the kill
-  // cull distance is just a flag and the position is about to be written.
   if (current_shader().writes_point_size_edge_flag_kill_vertex() & 0b100) {
     assert_true(var_main_point_size_edge_flag_kill_vertex_ != spv::NoResult);
     id_vector_temp_.clear();
-    // Z vector component.
+
     id_vector_temp_.push_back(builder_->makeIntConstant(2));
     spv::Id kill_value = builder_->createLoad(
         builder_->createAccessChain(spv::StorageClassFunction,
                                     var_main_point_size_edge_flag_kill_vertex_, id_vector_temp_),
         spv::NoPrecision);
-    // Test the integer bits 0:30 rather than comparing the float to avoid
-    // denormal flushing affecting the result (matching the Direct3D 12 path).
+
     spv::Id vertex_killed = builder_->createBinOp(
         spv::OpINotEqual, type_bool_,
         builder_->createBinOp(spv::OpBitwiseAnd, type_uint_,
@@ -2581,8 +2346,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
                               builder_->makeUintConstant(UINT32_C(0x7FFFFFFF))),
         const_uint_0_);
     if (shader_modification.vertex.vertex_kill_and) {
-      // "and" operator - write -1 to the dedicated cull distance when killed
-      // (the primitive is culled only if it's negative for all the vertices).
       uint32_t vertex_kill_cull_distance_index =
           shader_modification.vertex.user_clip_plane_cull ? user_clip_plane_count : 0;
       id_vector_temp_.clear();
@@ -2595,8 +2358,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
           builder_->createAccessChain(spv::StorageClassOutput, output_per_vertex_,
                                       id_vector_temp_));
     } else {
-      // "or" operator - setting the position W to NaN kills the whole primitive
-      // if any of its vertices requests the kill.
       position_w = builder_->createTriOp(
           spv::OpSelect, type_float_, vertex_killed,
           builder_->createUnaryOp(spv::OpBitcast, type_float_,
@@ -2605,32 +2366,25 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     }
   }
 
-  // Write the point size.
   if (output_point_size_ != spv::NoResult) {
     spv::Id point_size;
     if (current_shader().writes_point_size_edge_flag_kill_vertex() & 0b001) {
       assert_true(var_main_point_size_edge_flag_kill_vertex_ != spv::NoResult);
       id_vector_temp_.clear();
-      // X vector component.
+
       id_vector_temp_.push_back(const_int_0_);
       point_size = builder_->createLoad(
           builder_->createAccessChain(spv::StorageClassFunction,
                                       var_main_point_size_edge_flag_kill_vertex_, id_vector_temp_),
           spv::NoPrecision);
     } else {
-      // Not statically overridden - write a negative value.
       point_size = builder_->makeFloatConstant(-1.0f);
     }
     builder_->createStore(point_size, output_point_size_);
   }
 
-  // Expand the point sprite.
   if (shader_modification.vertex.host_vertex_shader_type ==
       Shader::HostVertexShaderType::kPointListAsTriangleStrip) {
-    // Top-left, bottom-left, top-right, bottom-right order (chosen arbitrarily,
-    // simply based on counterclockwise meaning front with
-    // frontFace = VkFrontFace(0), but faceness is ignored for non-polygon
-    // primitive types).
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeUintConstant(0b10));
     id_vector_temp_.push_back(builder_->makeUintConstant(0b01));
@@ -2646,8 +2400,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
             builder_->createCompositeConstruct(type_uint2_, id_vector_temp_)),
         SpirvSmearScalarResultOrConstant(const_uint_0_, type_uint2_));
 
-    // Load the point diameter in guest pixels, with the override from the
-    // vertex shader if provided.
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantPointConstantDiameter));
     spv::Id point_guest_diameter = builder_->createLoad(
@@ -2662,11 +2414,7 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
           builder_->createAccessChain(spv::StorageClassFunction,
                                       var_main_point_size_edge_flag_kill_vertex_, id_vector_temp_),
           spv::NoPrecision);
-      // The vertex shader's header writes -1.0 to point_size by default, so any
-      // non-negative value means that it was overwritten by the translated
-      // vertex shader, and needs to be used instead of the constant size. The
-      // per-vertex diameter has already been clamped earlier in translation
-      // (combined with making it non-negative).
+
       point_guest_diameter = builder_->createTriOp(
           spv::OpSelect, type_float2_,
           builder_->smearScalar(spv::NoPrecision,
@@ -2676,8 +2424,7 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
           builder_->smearScalar(spv::NoPrecision, point_vertex_diameter, type_float2_),
           point_guest_diameter);
     }
-    // Transform the diameter in the guest screen coordinates to radius in the
-    // normalized device coordinates.
+
     id_vector_temp_.clear();
     id_vector_temp_.push_back(
         builder_->makeIntConstant(kSystemConstantPointScreenDiameterToNdcRadius));
@@ -2687,12 +2434,10 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
             builder_->createAccessChain(spv::StorageClassUniform, uniform_system_constants_,
                                         id_vector_temp_),
             spv::NoPrecision));
-    // Transform the radius from the normalized device coordinates to the clip
-    // space.
+
     point_radius = builder_->createNoContractionBinOp(spv::OpVectorTimesScalar, type_float2_,
                                                       point_radius, position_w);
 
-    // Expand the point sprite in the direction for the current host vertex.
     uint_vector_temp_.clear();
     uint_vector_temp_.push_back(0);
     uint_vector_temp_.push_back(1);
@@ -2703,12 +2448,9 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
         builder_->createTriOp(
             spv::OpSelect, type_float2_, point_vertex_positive, point_radius,
             builder_->createNoContractionUnaryOp(spv::OpFNegate, type_float2_, point_radius)));
-    // Store the position.
+
     spv::Id position;
     {
-      // Bypass the `getNumTypeConstituents(typeId) == (int)constituents.size()`
-      // assertion in createCompositeConstruct, OpCompositeConstruct can
-      // construct vectors not only from scalars, but also from other vectors.
       std::unique_ptr<spv::Instruction> composite_construct_op = std::make_unique<spv::Instruction>(
           builder_->getUniqueId(), type_float4_, spv::OpCompositeConstruct);
       composite_construct_op->addIdOperand(point_position_xy);
@@ -2720,7 +2462,6 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     }
     builder_->createStore(position, position_ptr);
 
-    // Write the point coordinates.
     if (output_point_coordinates_ != spv::NoResult) {
       builder_->createStore(
           builder_->createTriOp(spv::OpSelect, type_float2_, point_vertex_positive, const_float2_1_,
@@ -2729,12 +2470,8 @@ void SpirvShaderTranslator::CompleteVertexOrTessEvalShaderInMain() {
     }
 
   } else {
-    // Store the position converted to the host.
     spv::Id position;
     {
-      // Bypass the `getNumTypeConstituents(typeId) == (int)constituents.size()`
-      // assertion in createCompositeConstruct, OpCompositeConstruct can
-      // construct vectors not only from scalars, but also from other vectors.
       std::unique_ptr<spv::Instruction> composite_construct_op = std::make_unique<spv::Instruction>(
           builder_->getUniqueId(), type_float4_, spv::OpCompositeConstruct);
       composite_construct_op->addIdOperand(position_xyz);
@@ -2752,10 +2489,9 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
   if (edram_fragment_shader_interlock_) {
     builder_->addExtension("SPV_EXT_fragment_shader_interlock");
 
-    // EDRAM buffer uint[].
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeRuntimeArray(type_uint_));
-    // Storage buffers have std430 packing, no padding to 4-component vectors.
+
     builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride, sizeof(uint32_t));
     spv::Id type_edram = builder_->makeStructType(id_vector_temp_, "XeEdram");
     builder_->addMemberName(type_edram, 0, "edram");
@@ -2779,7 +2515,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
   }
 
   if (edram_fragment_shader_interlock_ || IsZpdTotal()) {
-    // ZPD counter buffer uint[], for FSI and hybrid queries.
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeRuntimeArray(type_uint_));
     builder_->addDecoration(id_vector_temp_.back(), spv::DecorationArrayStride, sizeof(uint32_t));
@@ -2810,31 +2545,19 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
   if (!is_depth_only_fragment_shader_) {
     uint32_t input_location = 0;
 
-    // Interpolator inputs.
-    // When fragment_shader_barycentric is enabled, create per-vertex
-    // interpolator arrays (float4[3]) with PerVertexKHR decoration for manual
-    // barycentric interpolation. This works around Nvidia driver differences
-    // in hardware interpolation that can cause noise artifacts in games that
-    // do exact equality comparisons in shaders (e.g., Perfect Dark, Tenchu Z).
-    // Skip barycentric for point primitives - barycentric coordinates are only
-    // meaningful for triangles.
     bool use_barycentric_interpolation = precise_interpolation_ &&
                                          features_.fragment_shader_barycentric &&
                                          !shader_modification.pixel.param_gen_point;
     if (use_barycentric_interpolation) {
-      // Add extension and capability for barycentric interpolation.
       builder_->addExtension("SPV_KHR_fragment_shader_barycentric");
       builder_->addCapability(spv::CapabilityFragmentBarycentricKHR);
 
-      // Create gl_BaryCoordKHR builtin input (float3).
       input_barycentric_coord_ = builder_->createVariable(spv::NoPrecision, spv::StorageClassInput,
                                                           type_float3_, "gl_BaryCoordKHR");
       builder_->addDecoration(input_barycentric_coord_, spv::DecorationBuiltIn,
                               static_cast<int>(spv::BuiltInBaryCoordKHR));
       main_interface_.push_back(input_barycentric_coord_);
 
-      // Create per-vertex interpolator inputs as float4[3] arrays with
-      // PerVertexKHR decoration.
       spv::Id type_float4_array_3 =
           builder_->makeArrayType(type_float4_, builder_->makeUintConstant(3), 0);
       uint32_t interpolators_remaining = GetModificationInterpolatorMask();
@@ -2848,13 +2571,11 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
         builder_->addDecoration(interpolator_per_vertex, spv::DecorationLocation,
                                 int(input_location));
         builder_->addDecoration(interpolator_per_vertex, spv::DecorationPerVertexKHR);
-        // Note: Centroid decoration is not applicable with PerVertexKHR since
-        // we're doing manual interpolation.
+
         main_interface_.push_back(interpolator_per_vertex);
         ++input_location;
       }
     } else {
-      // Standard hardware interpolation path.
       uint32_t interpolators_remaining = GetModificationInterpolatorMask();
       uint32_t interpolator_index;
       while (rex::bit_scan_forward(interpolators_remaining, &interpolator_index)) {
@@ -2873,7 +2594,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
       }
     }
 
-    // Point coordinate input.
     if (shader_modification.pixel.param_gen_point) {
       if (param_gen_needed) {
         input_point_coordinates_ = builder_->createVariable(
@@ -2886,14 +2606,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
     }
   }
 
-  // Fragment coordinates.
-  // FSI: Always needed for EDRAM offset calculation and depth derivatives.
-  // param_gen: Needed for PsParamGen calculation.
-  // FBO alpha-to-coverage: Needed for dithering pattern, but only when
-  // alpha-to-coverage can actually run (no early fragment tests).
-  // FBO float24 in-PS conversion of the rasterizer's depth: reads
-  // gl_FragCoord.z
-  // - and must do so per-sample for MSAA antialiasing of intersections.
   bool need_frag_coord =
       edram_fragment_shader_interlock_ || param_gen_needed || IsSampleRate() ||
       DSV_IsApplyingPolygonOffset() || IsGuestPixelCenterFetchNeeded() ||
@@ -2905,15 +2617,12 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
     builder_->addDecoration(input_fragment_coordinates_, spv::DecorationBuiltIn,
                             static_cast<int>(spv::BuiltIn::FragCoord));
     if (IsSampleRate()) {
-      // Per the Vulkan spec, a Sample-decorated fragment input forces
-      // per-sample shader invocation - no explicit sampleShadingEnable needed.
       builder_->addCapability(spv::CapabilitySampleRateShading);
       builder_->addDecoration(input_fragment_coordinates_, spv::DecorationSample);
     }
     main_interface_.push_back(input_fragment_coordinates_);
   }
 
-  // Is front facing.
   if (edram_fragment_shader_interlock_ || DSV_IsApplyingPolygonOffset() ||
       (param_gen_needed && !GetSpirvShaderModification().pixel.param_gen_point)) {
     input_front_facing_ = builder_->createVariable(spv::NoPrecision, spv::StorageClassInput,
@@ -2923,9 +2632,7 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
     main_interface_.push_back(input_front_facing_);
   }
 
-  // Sample mask input.
   if (edram_fragment_shader_interlock_ || IsZpdTotal()) {
-    // SampleMask depends on SampleRateShading in some SPIR-V revisions.
     builder_->addCapability(spv::CapabilitySampleRateShading);
     input_sample_mask_ = builder_->createVariable(
         spv::NoPrecision, spv::StorageClassInput,
@@ -2937,11 +2644,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
   }
 
   if (!is_depth_only_fragment_shader_) {
-    // Framebuffer color attachment outputs (FBO path only).
-    // For FBO, we create Output variables here and Function-scoped variables
-    // in StartFragmentShaderInMain. The Function-scoped variables are used
-    // throughout the shader (so we can read them for alpha test), and copied
-    // to the Output variables at the end.
     if (!edram_fragment_shader_interlock_) {
       std::ranges::fill(output_fragment_data_, spv::NoResult);
       static const char* const kFragmentDataOutputNames[] = {
@@ -2950,8 +2652,7 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
           "xe_out_fragment_data_2",
           "xe_out_fragment_data_3",
       };
-      // Only create outputs for color targets that are both written by the
-      // shader and actually bound in the render pass.
+
       Modification shader_modification = GetHostRtShaderModification();
       uint32_t color_targets_remaining =
           current_shader().writes_color_targets() & shader_modification.pixel.color_targets_used;
@@ -2964,16 +2665,13 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
         output_fragment_data_[color_target_index] = output_fragment_data_rt;
         builder_->addDecoration(output_fragment_data_rt, spv::DecorationLocation,
                                 int(color_target_index));
-        // Make invariant as pixel shaders may be used for various precise
-        // computations.
+
         builder_->addDecoration(output_fragment_data_rt, spv::DecorationInvariant);
         main_interface_.push_back(output_fragment_data_rt);
       }
     }
   }
 
-  // FBO fragment depth output. Used for guest oDepth, float24 conversion, and
-  // the narrow host RT decal path. FSI manages depth in EDRAM instead.
   if (!edram_fragment_shader_interlock_ &&
       (current_shader().writes_depth() || DSV_IsWritingFloat24Depth() ||
        DSV_IsApplyingPolygonOffset())) {
@@ -2985,11 +2683,8 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
     main_interface_.push_back(output_fragment_depth_);
   }
 
-  // Sample mask output for alpha-to-coverage.
-  // Only needed for non-FSI mode. FSI uses main_fsi_sample_mask_ instead.
   output_fragment_sample_mask_ = spv::NoResult;
   if (!edram_fragment_shader_interlock_ && !is_depth_only_fragment_shader_) {
-    // gl_SampleMask is an array of int in SPIR-V.
     spv::Id type_sample_mask_array =
         builder_->makeArrayType(type_int_, builder_->makeUintConstant(1), 0);
     output_fragment_sample_mask_ = builder_->createVariable(
@@ -3001,8 +2696,6 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
 }
 
 void SpirvShaderTranslator::StartFragmentShaderInMain() {
-  // The ZPD Total counter tracks coverage entering the shader until all
-  // pre-depth/stencil tests finish dropping samples.
   var_main_zpd_coverage_ = spv::NoResult;
   if (IsZpdTotal()) {
     assert_true(input_sample_mask_ != spv::NoResult);
@@ -3022,11 +2715,6 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
         var_main_zpd_coverage_);
   }
 
-  // Set up pixel killing from within the translated shader without affecting
-  // the control flow (unlike with OpKill), similarly to how pixel killing works
-  // on the Xenos, and also keeping a single critical section exit and return
-  // for safety across different Vulkan implementations with fragment shader
-  // interlock.
   if (current_shader().kills_pixels()) {
     if (features_.demote_to_helper_invocation) {
       builder_->addExtension("SPV_EXT_demote_to_helper_invocation");
@@ -3036,15 +2724,8 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
           builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_bool_,
                                    "xe_var_kill_pixel", builder_->makeBoolConstant(false));
     }
-    // For killing with fragment shader interlock when demotion is supported,
-    // using OpIsHelperInvocationEXT to avoid allocating a variable in addition
-    // to the execution mask GPUs naturally have.
   }
 
-  // Initialize color output variables as Function-scoped for both FSI and FBO.
-  // For FBO, this allows reading the color values back (e.g., for alpha test),
-  // which isn't possible with Output storage class. The values are copied to
-  // the actual Output variables at the end of the shader for FBO.
   std::ranges::fill(output_or_var_fragment_data_, spv::NoResult);
   var_main_fsi_color_written_ = spv::NoResult;
   uint32_t color_targets_written = current_shader().writes_color_targets();
@@ -3063,18 +2744,12 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
           builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_float4_,
                                    kFragmentDataVariableNames[color_target_index], const_float4_0_);
     }
-    // Color write tracking for both FSI and FBO paths.
-    // This is used to conditionally skip alpha test / alpha-to-coverage if
-    // render target 0 wasn't written on the execution path.
+
     var_main_fsi_color_written_ =
         builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_uint_,
                                  "xe_var_color_written", const_uint_0_);
   }
 
-  // Staging variable for guest oDepth writes.
-  // Created whenever the shader uses oDepth:
-  //   * FSI reads it during its EDRAM depth write inside the interlock.
-  //   * FBO copies it to gl_FragDepth at the end of the shader.
   if (current_shader().writes_depth()) {
     output_or_var_fragment_depth_ =
         builder_->createVariable(spv::NoPrecision, spv::StorageClassFunction, type_float_,
@@ -3082,8 +2757,6 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
   }
 
   if (DSV_IsApplyingPolygonOffset()) {
-    // The decal path needs the original triangle depth slope, not the slope of
-    // whichever lanes survive guest control flow or kill.
     assert_true(input_fragment_coordinates_ != spv::NoResult);
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(2));
@@ -3104,20 +2777,14 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
     builder_->createNoResultOp(spv::OpBeginInvocationInterlockEXT);
     FSI_DepthStencilTest(false);
     if (zpd_full_counters_) {
-      // Failed samples never reach the end of an early-tested shader, so
-      // they're counted here before the quad can be discarded.
       FSI_AddMSAASamplesToZPD(false, true);
     }
     if (!is_depth_only_fragment_shader_) {
-      // Skip the rest of the shader if the whole quad (due to derivatives) has
-      // failed the depth / stencil test, and there are no depth and stencil
-      // values to conditionally write after running the shader to check if
-      // samples don't additionally need to be discarded.
       spv::Id quad_needs_execution =
           builder_->createBinOp(spv::OpINotEqual, type_bool_, main_fsi_sample_mask_, const_uint_0_);
 
       builder_->addCapability(spv::CapabilityDerivativeControl);
-      // Query the horizontally adjacent pixel.
+
       quad_needs_execution = builder_->createBinOp(
           spv::OpLogicalOr, type_bool_, quad_needs_execution,
           builder_->createBinOp(
@@ -3127,7 +2794,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                   builder_->createTriOp(spv::OpSelect, type_float_, quad_needs_execution,
                                         const_float_1_, const_float_0_)),
               const_float_0_));
-      // Query the vertically adjacent pair of pixels.
+
       quad_needs_execution = builder_->createBinOp(
           spv::OpLogicalOr, type_bool_, quad_needs_execution,
           builder_->createBinOp(
@@ -3154,29 +2821,18 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
 
   uint32_t param_gen_interpolator = GetPsParamGenInterpolator();
 
-  // Zero general-purpose registers to prevent crashes when the game
-  // references them after only initializing them conditionally, and copy
-  // interpolants to GPRs.
   uint32_t interpolator_mask = GetModificationInterpolatorMask();
 
-  // When barycentric interpolation is enabled, manually compute interpolated
-  // values using barycentric coordinates to avoid Nvidia driver interpolation
-  // differences. Skip for point primitives since barycentric coordinates are
-  // only meaningful for triangles.
   Modification shader_modification = GetSpirvShaderModification();
   bool use_barycentric_interpolation = precise_interpolation_ &&
                                        features_.fragment_shader_barycentric &&
                                        !shader_modification.pixel.param_gen_point;
-  // Barycentric weights splatted to float4 for interpolation.
-  // Using only bary.y and bary.z since we anchor on v0 (bary.x = 1 - y - z).
+
   spv::Id bary_y_vec4 = spv::NoResult;
   spv::Id bary_z_vec4 = spv::NoResult;
   if (use_barycentric_interpolation && interpolator_mask) {
-    // Load barycentric coordinates once for all interpolators.
     spv::Id barycentric_coords = builder_->createLoad(input_barycentric_coord_, spv::NoPrecision);
 
-    // Extract and smear bary.y and bary.z to float4 for vectorized ops.
-    // We don't need bary.x since we use v0 as anchor (AMD-style interpolation).
     spv::Id bary_y = builder_->createCompositeExtract(barycentric_coords, type_float_, 1);
     spv::Id bary_z = builder_->createCompositeExtract(barycentric_coords, type_float_, 2);
     id_vector_temp_util_.clear();
@@ -3193,13 +2849,6 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
     bary_z_vec4 = builder_->createCompositeConstruct(type_float4_, id_vector_temp_util_);
   }
 
-  // The Xenos samples a pixel once, at its center. With resolution scaling, the
-  // host pixels are up to (scale - 1) / (2 * scale) guest pixels away from it,
-  // which with a coordinate bias the guest was fine with, such as the quarter
-  // texel in 43430814's GPU animation passes, makes point sampled fetches read
-  // the neighbor texel. Over at most (scale - 1) / 2 host pixels, interpolants
-  // are close enough to affine for the derivatives to give their value at the
-  // guest pixel center.
   spv::Id guest_pixel_center_offsets[2] = {};
   bool guest_pixel_center_fetch = IsGuestPixelCenterFetchNeeded();
   if (guest_pixel_center_fetch) {
@@ -3217,7 +2866,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                                       id_vector_temp_),
           spv::NoPrecision);
       spv::Id pixel_scale = builder_->makeFloatConstant(float(pixel_scales[i]));
-      // (floor(position / scale) + 0.5) * scale - position.
+
       spv::Id guest_center = builder_->createNoContractionBinOp(
           spv::OpFMul, type_float_,
           builder_->createNoContractionBinOp(
@@ -3243,21 +2892,8 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
     spv::Id interpolated_value;
     if (i < xenos::kMaxInterpolators && (interpolator_mask & (UINT32_C(1) << i))) {
       if (use_barycentric_interpolation) {
-        // AMD-style barycentric interpolation using v0 as anchor.
-        // This matches real AMD GPU hardware (V_INTERP_P1_F32/V_INTERP_P2_F32):
-        //   result = v0 + (v1 - v0) * bary.y + (v2 - v0) * bary.z
-        //
-        // Since bary.x + bary.y + bary.z = 1, this is equivalent to:
-        //   result = v0 * bary.x + v1 * bary.y + v2 * bary.z
-        //
-        // When v0 = v1 = v2 = V:
-        //   (v1 - v0) = 0, (v2 - v0) = 0, result = v0 = V (exact)
-        //
-        // This avoids floating-point precision issues that cause noise
-        // artifacts on Nvidia GPUs when games do exact equality comparisons.
         spv::Id per_vertex_array = input_interpolators_per_vertex_[i];
 
-        // Load per-vertex values (vertex 0, 1, 2).
         id_vector_temp_util_.clear();
         id_vector_temp_util_.push_back(builder_->makeIntConstant(0));
         spv::Id v0 = builder_->createLoad(
@@ -3277,17 +2913,14 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                                         id_vector_temp_util_),
             spv::NoPrecision);
 
-        // Compute deltas from v0 (anchor vertex).
         spv::Id d1 = builder_->createBinOp(spv::OpFSub, type_float4_, v1, v0);
         spv::Id d2 = builder_->createBinOp(spv::OpFSub, type_float4_, v2, v0);
 
-        // Compute: v0 + d1*bary.y + d2*bary.z
         spv::Id term1 = builder_->createBinOp(spv::OpFMul, type_float4_, d1, bary_y_vec4);
         spv::Id term2 = builder_->createBinOp(spv::OpFMul, type_float4_, d2, bary_z_vec4);
         spv::Id sum_terms = builder_->createBinOp(spv::OpFAdd, type_float4_, term1, term2);
         interpolated_value = builder_->createBinOp(spv::OpFAdd, type_float4_, v0, sum_terms);
       } else {
-        // Standard hardware interpolation path.
         interpolated_value = builder_->createLoad(input_output_interpolators_[i], spv::NoPrecision);
       }
       if (guest_pixel_center_fetch &&
@@ -3317,26 +2950,14 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                                                       var_main_registers_, id_vector_temp_));
   }
 
-  // The beginning of the shader may be jumped back to.
   main_interpolators_unmodified_ &=
       ~current_shader().GetRegisterComponentsWrittenBeforeReentering(0);
 
-  // Pixel parameters.
   if (param_gen_interpolator != UINT32_MAX) {
     Modification modification = GetSpirvShaderModification();
-    // Rounding the position down, and taking the absolute value, so in case the
-    // host GPU for some reason has quads used for derivative calculation at odd
-    // locations, the left and top edges will have correct derivative magnitude
-    // and LODs.
-    // Assuming that if PsParamGen is needed at all, param_gen_point is always
-    // set for point primitives, and is always disabled for other primitive
-    // types.
-    // OpFNegate requires sign bit flipping even for 0.0 (in this case, the
-    // first column or row of pixels) only since SPIR-V 1.5 revision 2 (not the
-    // base 1.5).
 
     spv::Id const_sign_bit = builder_->makeUintConstant(UINT32_C(1) << 31);
-    // X - pixel X .0 in the magnitude, is back-facing in the sign bit.
+
     assert_true(input_fragment_coordinates_ != spv::NoResult);
     id_vector_temp_.clear();
     id_vector_temp_.push_back(const_int_0_);
@@ -3348,7 +2969,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                 builder_->createAccessChain(spv::StorageClassInput, input_fragment_coordinates_,
                                             id_vector_temp_),
                 spv::NoPrecision)));
-    // Apply resolution scale inversion after truncating.
+
     if (GetCurrentDrawResolutionScaleX() > 1) {
       param_gen_x = builder_->createBinOp(
           spv::OpFMul, type_float_, param_gen_x,
@@ -3374,7 +2995,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                   builder_->createUnaryOp(spv::OpBitcast, type_uint_, param_gen_x),
                   const_sign_bit)));
     }
-    // Y - pixel Y .0 in the magnitude, is point in the sign bit.
+
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeIntConstant(1));
     spv::Id param_gen_y = builder_->createUnaryBuiltinCall(
@@ -3385,7 +3006,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                 builder_->createAccessChain(spv::StorageClassInput, input_fragment_coordinates_,
                                             id_vector_temp_),
                 spv::NoPrecision)));
-    // Apply resolution scale inversion after truncating.
+
     if (GetCurrentDrawResolutionScaleY() > 1) {
       param_gen_y = builder_->createBinOp(
           spv::OpFMul, type_float_, param_gen_y,
@@ -3398,13 +3019,11 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
                                 builder_->createUnaryOp(spv::OpBitcast, type_uint_, param_gen_y),
                                 const_sign_bit));
     }
-    // Z - point S in the magnitude, is line in the sign bit.
-    // W - point T in the magnitude.
+
     spv::Id param_gen_z, param_gen_w;
     if (modification.pixel.param_gen_point) {
       assert_true(input_point_coordinates_ != spv::NoResult);
-      // Saturate to avoid negative point coordinates if the center of the pixel
-      // is not covered, and extrapolation is done.
+
       spv::Id param_gen_point_coordinates = builder_->createTriBuiltinCall(
           type_float2_, ext_inst_glsl_std_450_, GLSLstd450NClamp,
           builder_->createLoad(input_point_coordinates_, spv::NoPrecision), const_float2_0_,
@@ -3424,7 +3043,7 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
               const_sign_bit, const_uint_0_));
       param_gen_w = const_float_0_;
     }
-    // Store the pixel parameters.
+
     id_vector_temp_.clear();
     id_vector_temp_.push_back(param_gen_x);
     id_vector_temp_.push_back(param_gen_y);
@@ -3441,26 +3060,18 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
 
 void SpirvShaderTranslator::UpdateExecConditionals(ParsedExecInstruction::Type type,
                                                    uint32_t bool_constant_index, bool condition) {
-  // Check if we can merge the new exec with the previous one, or the jump with
-  // the previous exec. The instruction-level predicate check is also merged in
-  // this case.
   if (type == ParsedExecInstruction::Type::kConditional) {
-    // Can merge conditional with conditional, as long as the bool constant and
-    // the expected values are the same.
     if (cf_exec_conditional_merge_ && cf_exec_bool_constant_or_predicate_ == bool_constant_index &&
         cf_exec_condition_ == condition) {
       return;
     }
   } else if (type == ParsedExecInstruction::Type::kPredicated) {
-    // Can merge predicated with predicated if the conditions are the same and
-    // the previous exec hasn't modified the predicate register.
     if (!cf_exec_predicate_written_ && cf_exec_conditional_merge_ &&
         cf_exec_bool_constant_or_predicate_ == kCfExecBoolConstantPredicate &&
         cf_exec_condition_ == condition) {
       return;
     }
   } else {
-    // Can merge unconditional with unconditional.
     assert_true(type == ParsedExecInstruction::Type::kUnconditional);
     if (!cf_exec_conditional_merge_) {
       return;
@@ -3477,11 +3088,11 @@ void SpirvShaderTranslator::UpdateExecConditionals(ParsedExecInstruction::Type t
   spv::Id condition_id;
   if (type == ParsedExecInstruction::Type::kConditional) {
     id_vector_temp_.clear();
-    // Bool constants (member 0).
+
     id_vector_temp_.push_back(const_int_0_);
-    // 128-bit vector.
+
     id_vector_temp_.push_back(builder_->makeIntConstant(int(bool_constant_index >> 7)));
-    // 32-bit scalar of a 128-bit vector.
+
     id_vector_temp_.push_back(builder_->makeIntConstant(int((bool_constant_index >> 5) & 3)));
     spv::Id bool_constant_scalar = builder_->createLoad(
         builder_->createAccessChain(spv::StorageClassUniform, uniform_bool_loop_constants_,
@@ -3520,16 +3131,11 @@ void SpirvShaderTranslator::UpdateInstructionPredication(bool predicated, bool c
 
   if (cf_instruction_predicate_merge_) {
     if (cf_instruction_predicate_condition_ == condition) {
-      // Already in the needed instruction-level conditional.
       return;
     }
     CloseInstructionPredication();
   }
 
-  // If the instruction predicate condition is the same as the exec predicate
-  // condition, no need to open a check. However, if there was a `setp` prior
-  // to this instruction, the predicate value now may be different than it was
-  // in the beginning of the exec.
   if (!cf_exec_predicate_written_ && cf_exec_conditional_merge_ &&
       cf_exec_bool_constant_or_predicate_ == kCfExecBoolConstantPredicate &&
       cf_exec_condition_ == condition) {
@@ -3563,9 +3169,8 @@ void SpirvShaderTranslator::CloseInstructionPredication() {
 }
 
 void SpirvShaderTranslator::CloseExecConditionals() {
-  // Within the exec - instruction-level predicate check.
   CloseInstructionPredication();
-  // Exec level.
+
   if (cf_exec_conditional_merge_) {
     spv::Block& inner_block = *builder_->getBuildPoint();
     if (!inner_block.isTerminated()) {
@@ -3575,7 +3180,7 @@ void SpirvShaderTranslator::CloseExecConditionals() {
     builder_->setBuildPoint(cf_exec_conditional_merge_);
     cf_exec_conditional_merge_ = nullptr;
   }
-  // Nothing relies on the predicate value being unchanged now.
+
   cf_exec_predicate_written_ = false;
 }
 
@@ -3602,7 +3207,7 @@ spv::Id SpirvShaderTranslator::GetStorageAddressingIndex(
       base_pointer = var_main_address_register_;
       break;
     case InstructionStorageAddressingMode::kLoopRelative:
-      // Load X component.
+
       id_vector_temp_util_.clear();
       id_vector_temp_util_.push_back(const_int_0_);
       base_pointer = builder_->createAccessChain(spv::StorageClassFunction, var_main_loop_address_,
@@ -3616,9 +3221,7 @@ spv::Id SpirvShaderTranslator::GetStorageAddressingIndex(
     index = builder_->createBinOp(spv::OpIAdd, type_int_, index,
                                   builder_->makeIntConstant(int(storage_index)));
   }
-  // a0 and aL are whatever the guest put there, so clamp to the array. Direct3D
-  // 12 binds the float constants as a root CBV, which carries no size to bound
-  // the read, unlike a Vulkan uniform buffer under robust buffer access.
+
   uint32_t index_count = is_float_constant ? constant_register_map.float_count : register_count();
   if (index_count) {
     index = builder_->createTriBuiltinCall(type_int_, ext_inst_glsl_std_450_, GLSLstd450SClamp,
@@ -3638,7 +3241,7 @@ spv::Id SpirvShaderTranslator::LoadOperandStorage(const InstructionOperand& oper
     case InstructionStorageSource::kRegister:
       assert_true(var_main_registers_ != spv::NoResult);
       id_vector_temp_util_.clear();
-      // Array element.
+
       id_vector_temp_util_.push_back(index);
       vec4_pointer = builder_->createAccessChain(spv::StorageClassFunction, var_main_registers_,
                                                  id_vector_temp_util_);
@@ -3646,9 +3249,9 @@ spv::Id SpirvShaderTranslator::LoadOperandStorage(const InstructionOperand& oper
     case InstructionStorageSource::kConstantFloat:
       assert_true(uniform_float_constants_ != spv::NoResult);
       id_vector_temp_util_.clear();
-      // The first and the only structure member.
+
       id_vector_temp_util_.push_back(const_int_0_);
-      // Array element.
+
       id_vector_temp_util_.push_back(index);
       vec4_pointer = builder_->createAccessChain(spv::StorageClassUniform, uniform_float_constants_,
                                                  id_vector_temp_util_);
@@ -3761,12 +3364,11 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       break;
     case InstructionStorageTarget::kRegister: {
       assert_true(var_main_registers_ != spv::NoResult);
-      // Must call GetStorageAddressingIndex first because of
-      // id_vector_temp_util_ usage in it.
+
       spv::Id register_index =
           GetStorageAddressingIndex(result.storage_addressing_mode, result.storage_index);
       id_vector_temp_util_.clear();
-      // Array element.
+
       id_vector_temp_util_.push_back(register_index);
       target_pointer = builder_->createAccessChain(spv::StorageClassFunction, var_main_registers_,
                                                    id_vector_temp_util_);
@@ -3774,7 +3376,7 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
     case InstructionStorageTarget::kInterpolator: {
       assert_true(is_vertex_shader());
       target_pointer = input_output_interpolators_[result.storage_index];
-      // Unused interpolators are spv::NoResult in input_output_interpolators_.
+
     } break;
     case InstructionStorageTarget::kPosition: {
       assert_true(is_vertex_shader());
@@ -3803,14 +3405,11 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       }
     } break;
     case InstructionStorageTarget::kExportAddress: {
-      // spv::NoResult if memory export usage is unsupported or invalid.
       target_pointer = var_main_memexport_address_;
     } break;
     case InstructionStorageTarget::kExportData: {
-      // spv::NoResult if memory export usage is unsupported or invalid.
       target_pointer = var_main_memexport_data_[result.storage_index];
       if (target_pointer != spv::NoResult) {
-        // Mark that the eM# has been written to and needs to be exported.
         assert_true(var_main_memexport_data_written_ != spv::NoResult);
         builder_->createStore(
             builder_->createBinOp(
@@ -3821,19 +3420,12 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       }
     } break;
     case InstructionStorageTarget::kDepth: {
-      // oDepth is scalar. The FBO path copies it to gl_FragDepth (in
-      // CompleteFragmentShader_DSV_DepthTo24Bit), while FSI writes it to a
-      // depth variable consumed by FSI_DepthStencilTest.
       assert_true(is_pixel_shader());
       assert_true(used_write_mask == 0b0001);
       assert_true(current_shader().writes_depth());
       assert_true(output_or_var_fragment_depth_ != spv::NoResult);
       target_pointer = output_or_var_fragment_depth_;
-      // Depth outside [0, 1] needs to be clamped for safety, similar to D3D12.
-      // Though 20e4 float depth can store values between 1 and 2, it's a very
-      // unusual case. In Vulkan, gl_FragDepth can accept any values when the
-      // depth buffer is floating-point, but we clamp for consistency.
-      // Clamp the depth value to [0, 1] if not already saturated.
+
       if (value != spv::NoResult && !result.is_clamped) {
         value =
             builder_->createTriBuiltinCall(type_float_, ext_inst_glsl_std_450_, GLSLstd450NClamp,
@@ -3841,7 +3433,7 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       }
     } break;
     default:
-      // All storage targets should be handled above.
+
       assert_unhandled_case(result.storage_target);
       break;
   }
@@ -3852,9 +3444,6 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
   uint32_t constant_values;
   uint32_t constant_components = result.GetUsedConstantComponents(constant_values);
   if (value == spv::NoResult) {
-    // The instruction processing function decided that nothing useful needs to
-    // be stored for some reason, however, some components still need to be
-    // written on the guest side - fill them with zeros.
     constant_components = used_write_mask;
   }
   uint32_t non_constant_components = used_write_mask & ~constant_components;
@@ -3863,16 +3452,12 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       value != spv::NoResult ? static_cast<unsigned int>(builder_->getNumComponents(value)) : 0;
 
   if (result.is_clamped && non_constant_components) {
-    // Apply the saturation modifier to the result.
     value = builder_->createTriBuiltinCall(type_float_vectors_[value_num_components - 1],
                                            ext_inst_glsl_std_450_, GLSLstd450NClamp, value,
                                            const_float_vectors_0_[value_num_components - 1],
                                            const_float_vectors_1_[value_num_components - 1]);
   }
 
-  // The value contains either result.GetUsedResultComponents() in a condensed
-  // way, or a scalar to be replicated. Decompress them to create a mapping from
-  // guest result components to the ones in the value vector.
   uint32_t used_result_components = result.GetUsedResultComponents();
   unsigned int result_unswizzled_value_components[4] = {};
   if (value_num_components > 1) {
@@ -3886,8 +3471,6 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
     }
   }
 
-  // Get swizzled mapping of non-constant components to the components of
-  // `value`.
   unsigned int result_swizzled_value_components[4] = {};
   for (uint32_t i = 0; i < 4; ++i) {
     if (!(non_constant_components & (1 << i))) {
@@ -3908,28 +3491,9 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
 
   spv::Id value_to_store;
   if (target_component_mask == used_write_mask) {
-    // All components are overwritten - no need to load the original value.
-    // Possible cases:
-    // * Non-constants only.
-    //   * Vector target.
-    //     * Vector source.
-    //       * Identity swizzle - store directly.
-    //       * Non-identity swizzle - shuffle.
-    //     * Scalar source - smear.
-    //   * Scalar target.
-    //     * Vector source - extract.
-    //     * Scalar source - store directly.
-    // * Constants only.
-    //   * Vector target - make composite constant.
-    //   * Scalar target - store directly.
-    // * Mixed non-constants and constants (only for vector targets - scalar
-    //   targets fully covered by the previous cases).
-    //   * Vector source - shuffle with {0, 1} also applying swizzle.
-    //   * Scalar source - construct composite.
     if (!constant_components) {
       if (target_num_components > 1) {
         if (value_num_components > 1) {
-          // Non-constants only - vector target, vector source.
           bool is_identity_swizzle = target_num_components == value_num_components;
           for (uint32_t i = 0; is_identity_swizzle && i < target_num_components; ++i) {
             is_identity_swizzle &= result_swizzled_value_components[i] == i;
@@ -3945,22 +3509,18 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
                                                            uint_vector_temp_util_);
           }
         } else {
-          // Non-constants only - vector target, scalar source.
           value_to_store = builder_->smearScalar(spv::NoPrecision, value, target_type);
         }
       } else {
         if (value_num_components > 1) {
-          // Non-constants only - scalar target, vector source.
           value_to_store = builder_->createCompositeExtract(value, type_float_,
                                                             result_swizzled_value_components[0]);
         } else {
-          // Non-constants only - scalar target, scalar source.
           value_to_store = value;
         }
       }
     } else if (!non_constant_components) {
       if (target_num_components > 1) {
-        // Constants only - vector target.
         id_vector_temp_util_.clear();
         for (uint32_t i = 0; i < target_num_components; ++i) {
           id_vector_temp_util_.push_back((constant_values & (1 << i)) ? const_float_1_
@@ -3968,13 +3528,11 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
         }
         value_to_store = builder_->makeCompositeConstant(target_type, id_vector_temp_util_);
       } else {
-        // Constants only - scalar target.
         value_to_store = (constant_values & 0b0001) ? const_float_1_ : const_float_0_;
       }
     } else {
       assert_true(target_num_components > 1);
       if (value_num_components > 1) {
-        // Mixed non-constants and constants - vector source.
         std::unique_ptr<spv::Instruction> shuffle_op = std::make_unique<spv::Instruction>(
             builder_->getUniqueId(), target_type, spv::OpVectorShuffle);
         shuffle_op->addIdOperand(value);
@@ -3987,7 +3545,6 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
         value_to_store = shuffle_op->getResultId();
         builder_->getBuildPoint()->addInstruction(std::move(shuffle_op));
       } else {
-        // Mixed non-constants and constants - scalar source.
         id_vector_temp_util_.clear();
         for (uint32_t i = 0; i < target_num_components; ++i) {
           if (constant_components & (1 << i)) {
@@ -4001,16 +3558,9 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
       }
     }
   } else {
-    // Only certain components are overwritten.
-    // Scalar targets are always overwritten fully, can't reach this case for
-    // them.
     assert_true(target_num_components > 1);
     value_to_store = builder_->createLoad(target_pointer, spv::NoPrecision);
-    // Two steps:
-    // 1) Insert constants by shuffling (first so dependency chain of step 2 is
-    //    simpler if constants are written first).
-    // 2) Insert value components - via shuffling for vector source, via
-    //    composite inserts for scalar value.
+
     if (constant_components) {
       std::unique_ptr<spv::Instruction> shuffle_op = std::make_unique<spv::Instruction>(
           builder_->getUniqueId(), target_type, spv::OpVectorShuffle);
@@ -4050,11 +3600,6 @@ void SpirvShaderTranslator::StoreResult(const InstructionResult& result, spv::Id
 
   if (result.storage_target == InstructionStorageTarget::kPointSizeEdgeFlagKillVertex &&
       used_write_mask & 0b001) {
-    // Make the point size non-negative as negative is used to indicate that the
-    // default size must be used, and also clamp it to the bounds the way the
-    // R400 (Adreno 200, to be more precise) hardware clamps it (functionally
-    // like a signed 32-bit integer, -NaN and -Infinity...-0 to the minimum,
-    // +NaN to the maximum).
     spv::Id point_size =
         builder_->createUnaryOp(spv::OpBitcast, type_int_,
                                 builder_->createCompositeExtract(value_to_store, type_float_, 0));
@@ -4111,7 +3656,6 @@ spv::Id SpirvShaderTranslator::EndianSwap32Uint(spv::Id value, spv::Id endian) {
     const_uint_16_typed = const_uint_16_scalar;
   }
 
-  // 8-in-16 or one half of 8-in-32 (doing 8-in-16 swap).
   spv::Id is_8in16 = builder_->createBinOp(
       spv::OpIEqual, type_bool_, endian,
       builder_->makeUintConstant(static_cast<unsigned int>(xenos::Endian::k8in16)));
@@ -4137,7 +3681,6 @@ spv::Id SpirvShaderTranslator::EndianSwap32Uint(spv::Id value, spv::Id endian) {
   if_8in16.makeEndIf();
   value = if_8in16.createMergePhi(swapped_8in16, value);
 
-  // 16-in-32 or another half of 8-in-32 (doing 16-in-32 swap).
   spv::Id is_16in32 = builder_->createBinOp(
       spv::OpIEqual, type_bool_, endian,
       builder_->makeUintConstant(static_cast<unsigned int>(xenos::Endian::k16in32)));
@@ -4158,8 +3701,6 @@ spv::Id SpirvShaderTranslator::EndianSwap32Uint(spv::Id value, spv::Id endian) {
 }
 
 spv::Id SpirvShaderTranslator::EndianSwap128Uint4(spv::Id value, spv::Id endian) {
-  // Change 8-in-64 and 8-in-128 to 8-in-32, and then swap within 32 bits.
-
   spv::Id is_8in64 = builder_->createBinOp(
       spv::OpIEqual, type_bool_, endian,
       builder_->makeUintConstant(static_cast<unsigned int>(xenos::Endian128::k8in64)));
@@ -4202,20 +3743,14 @@ spv::Id SpirvShaderTranslator::LoadUint32FromSharedMemory(spv::Id address_dwords
   uint32_t binding_count_log2 = GetSharedMemoryStorageBufferCountLog2();
 
   if (!binding_count_log2) {
-    // Single binding - load directly.
     id_vector_temp_.clear();
-    // The only SSBO struct member.
+
     id_vector_temp_.push_back(const_int_0_);
     id_vector_temp_.push_back(address_dwords_int);
     return builder_->createLoad(
         builder_->createAccessChain(storage_class, buffers_shared_memory_, id_vector_temp_),
         spv::NoPrecision);
   }
-
-  // The memory is split into multiple bindings - check which binding to load
-  // from. 29 is log2(512 MB), but addressing in dwords (4 B). Not indexing the
-  // array with the variable itself because it needs non-uniform storage buffer
-  // indexing.
 
   uint32_t binding_address_bits = (29 - 2) - binding_count_log2;
   spv::Id binding_index =
@@ -4228,7 +3763,7 @@ spv::Id SpirvShaderTranslator::LoadUint32FromSharedMemory(spv::Id address_dwords
 
   auto value_phi_op =
       std::make_unique<spv::Instruction>(builder_->getUniqueId(), type_uint_, spv::OpPhi);
-  // Zero if out of bounds.
+
   value_phi_op->addIdOperand(const_uint_0_);
   value_phi_op->addIdOperand(builder_->getBuildPoint()->getId());
 
@@ -4238,7 +3773,7 @@ spv::Id SpirvShaderTranslator::LoadUint32FromSharedMemory(spv::Id address_dwords
 
   id_vector_temp_.clear();
   id_vector_temp_.push_back(spv::NoResult);
-  // The only SSBO struct member.
+
   id_vector_temp_.push_back(const_int_0_);
   id_vector_temp_.push_back(binding_address);
 
@@ -4272,8 +3807,6 @@ void SpirvShaderTranslator::StoreUint32ToSharedMemory(spv::Id value, spv::Id add
 
   auto store = [&](spv::Id pointer) {
     if (replace_mask != spv::NoResult) {
-      // Don't touch the other bits in the buffer, just modify the needed bits
-      // in the most up to date uint32 at the address.
       spv::Id const_scope_device =
           builder_->makeUintConstant(static_cast<unsigned int>(spv::ScopeDevice));
       spv::Id const_semantics_relaxed = const_uint_0_;
@@ -4289,19 +3822,13 @@ void SpirvShaderTranslator::StoreUint32ToSharedMemory(spv::Id value, spv::Id add
   uint32_t binding_count_log2 = GetSharedMemoryStorageBufferCountLog2();
 
   if (!binding_count_log2) {
-    // Single binding - store directly.
     id_vector_temp_.clear();
-    // The only SSBO struct member.
+
     id_vector_temp_.push_back(const_int_0_);
     id_vector_temp_.push_back(address_dwords_int);
     store(builder_->createAccessChain(storage_class, buffers_shared_memory_, id_vector_temp_));
     return;
   }
-
-  // The memory is split into multiple bindings - check which binding to store
-  // to. 29 is log2(512 MB), but addressing in dwords (4 B). Not indexing the
-  // array with the variable itself because it needs non-uniform storage buffer
-  // indexing.
 
   uint32_t binding_address_bits = (29 - 2) - binding_count_log2;
   spv::Id binding_index =
@@ -4318,7 +3845,7 @@ void SpirvShaderTranslator::StoreUint32ToSharedMemory(spv::Id value, spv::Id add
 
   id_vector_temp_.clear();
   id_vector_temp_.push_back(spv::NoResult);
-  // The only SSBO struct member.
+
   id_vector_temp_.push_back(const_int_0_);
   id_vector_temp_.push_back(binding_address);
 
@@ -4346,7 +3873,6 @@ spv::Id SpirvShaderTranslator::PWLGammaToLinear(SpirvBuilder* builder_, spv::Id 
   spv::Id const_vector_0 = builder_->smearFloatConstant(0.0f, value_type);
 
   if (!pre_saturated) {
-    // Saturate, flushing NaN to 0.
     gamma = builder_->createTriBuiltinCall(value_type, ext_inst_glsl_std_450_, GLSLstd450NClamp,
                                            gamma, const_vector_0,
                                            builder_->smearFloatConstant(1.0f, value_type));
@@ -4383,7 +3909,7 @@ spv::Id SpirvShaderTranslator::PWLGammaToLinear(SpirvBuilder* builder_, spv::Id 
                                          offset_3_or_2, offset_1_or_0);
 
   spv::Op value_times_scalar_opcode = is_vector ? spv::OpVectorTimesScalar : spv::OpFMul;
-  // linear = gamma * (255.0f * 1024.0f) * scale + offset
+
   spv::Id linear = builder_->createNoContractionBinOp(
       spv::OpFAdd, value_type,
       builder_->createNoContractionBinOp(
@@ -4392,13 +3918,13 @@ spv::Id SpirvShaderTranslator::PWLGammaToLinear(SpirvBuilder* builder_, spv::Id 
                                              builder_->makeFloatConstant(255.0f * 1024.0f)),
           scale),
       offset);
-  // linear += trunc(linear * scale)
+
   linear = builder_->createNoContractionBinOp(
       spv::OpFAdd, value_type, linear,
       builder_->createUnaryBuiltinCall(
           value_type, ext_inst_glsl_std_450_, GLSLstd450Trunc,
           builder_->createNoContractionBinOp(spv::OpFMul, value_type, linear, scale)));
-  // linear *= 1.0f / 1023.0f
+
   linear = builder_->createNoContractionBinOp(value_times_scalar_opcode, value_type, linear,
                                               builder_->makeFloatConstant(1.0f / 1023.0f));
   return linear;
@@ -4419,7 +3945,6 @@ spv::Id SpirvShaderTranslator::LinearToPWLGamma(SpirvBuilder* builder_, spv::Id 
   spv::Id const_vector_0 = builder_->smearFloatConstant(0.0f, value_type);
 
   if (!pre_saturated) {
-    // Saturate, flushing NaN to 0.
     linear = builder_->createTriBuiltinCall(value_type, ext_inst_glsl_std_450_, GLSLstd450NClamp,
                                             linear, const_vector_0,
                                             builder_->smearFloatConstant(1.0f, value_type));
@@ -4456,7 +3981,6 @@ spv::Id SpirvShaderTranslator::LinearToPWLGamma(SpirvBuilder* builder_, spv::Id 
   spv::Id offset = builder_->createTriOp(spv::OpSelect, value_type, is_piece_at_least_2,
                                          offset_3_or_2, offset_1_or_0);
 
-  // gamma = trunc(linear * scale) * (1.0f / 255.0f) + offset
   return builder_->createNoContractionBinOp(
       spv::OpFAdd, value_type,
       builder_->createNoContractionBinOp(
@@ -4468,4 +3992,4 @@ spv::Id SpirvShaderTranslator::LinearToPWLGamma(SpirvBuilder* builder_, spv::Id 
       offset);
 }
 
-}  // namespace rex::graphics
+}

@@ -35,11 +35,9 @@ std::optional<Bytes> ReadFile(const std::filesystem::path& path) {
 
 struct Record {
   uint64_t hash;
-  std::span<const uint8_t> bytes;  // the whole record
+  std::span<const uint8_t> bytes;
 };
 
-// The valid records after the header, in order, stopping at the first
-// damaged or cut-off one. Empty when the header is not `format`'s.
 std::optional<std::vector<Record>> Records(const Bytes& file, const StorageFormat& format) {
   if (file.size() < format.header.size() ||
       !std::equal(format.header.begin(), format.header.end(), file.begin())) {
@@ -98,7 +96,7 @@ bool Write(const std::filesystem::path& path, std::span<const uint8_t> header,
   return true;
 }
 
-}  // namespace
+}
 
 SeedOutcome SeedStorageFile(const std::filesystem::path& shipped, const std::filesystem::path& user,
                             const StorageFormat& format) {
@@ -115,8 +113,6 @@ SeedOutcome SeedStorageFile(const std::filesystem::path& shipped, const std::fil
   const auto user_bytes = ReadFile(user);
   const auto user_records = user_bytes ? Records(*user_bytes, format) : std::nullopt;
   if (!user_records) {
-    // The player has none, or another version's, which the pipeline cache
-    // would discard.
     if (!Write(user, format.header, *shipped_records, {}, &outcome.error)) {
       outcome.result = SeedResult::kFailed;
       return outcome;
@@ -148,4 +144,4 @@ SeedOutcome SeedStorageFile(const std::filesystem::path& shipped, const std::fil
   return outcome;
 }
 
-}  // namespace rex::graphics
+}

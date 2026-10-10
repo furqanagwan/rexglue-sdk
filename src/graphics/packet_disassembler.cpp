@@ -110,35 +110,25 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
   bool result = true;
   switch (opcode) {
     case PM4_ME_INIT: {
-      // initialize CP's micro-engine
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_ME_INIT"};
       out_info->type_info = &op_info;
       break;
     }
     case PM4_NOP: {
-      // skip N 32-bit words to get to the next packet
-      // No-op, ignore some data.
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_NOP"};
       out_info->type_info = &op_info;
       break;
     }
     case PM4_INTERRUPT: {
-      // generate interrupt from the command stream
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_INTERRUPT"};
       out_info->type_info = &op_info;
       uint32_t cpu_mask = memory::load_and_swap<uint32_t>(ptr + 0);
       for (int n = 0; n < 6; n++) {
-        if (cpu_mask & (1 << n)) {
-          // graphics_system_->DispatchInterruptCallback(1, n);
-        }
+        if (cpu_mask & (1 << n)) {}
       }
       break;
     }
     case PM4_XE_SWAP: {
-      // Xenia-specific VdSwap hook.
-      // VdSwap will post this to tell us we need to swap the screen/fire an
-      // interrupt.
-      // 63 words here, but only the first has any data.
       static const PacketTypeInfo op_info = {PacketCategory::kSwap, "PM4_XE_SWAP"};
       out_info->type_info = &op_info;
       uint32_t frontbuffer_ptr = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -146,7 +136,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
     }
     case PM4_INDIRECT_BUFFER:
     case PM4_INDIRECT_BUFFER_PFD: {
-      // indirect buffer dispatch
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_INDIRECT_BUFFER"};
       out_info->type_info = &op_info;
       uint32_t list_ptr = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -154,7 +143,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_WAIT_REG_MEM: {
-      // wait until a register or memory location is a specific value
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_WAIT_REG_MEM"};
       out_info->type_info = &op_info;
       uint32_t wait_info = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -165,8 +153,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_REG_RMW: {
-      // register read/modify/write
-      // ? (used during shader upload and edram setup)
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_REG_RMW"};
       out_info->type_info = &op_info;
       uint32_t rmw_info = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -175,7 +161,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_COND_WRITE: {
-      // conditional write to memory or register
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_COND_WRITE"};
       out_info->type_info = &op_info;
       uint32_t wait_info = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -187,14 +172,12 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_EVENT_WRITE: {
-      // generate an event that creates a write to memory when completed
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_EVENT_WRITE"};
       out_info->type_info = &op_info;
       uint32_t initiator = memory::load_and_swap<uint32_t>(ptr + 0);
       break;
     }
     case PM4_EVENT_WRITE_SHD: {
-      // generate a VS|PS_done event
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_EVENT_WRITE_SHD"};
       out_info->type_info = &op_info;
       uint32_t initiator = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -203,7 +186,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_EVENT_WRITE_EXT: {
-      // generate a screen extent event
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_EVENT_WRITE_EXT"};
       out_info->type_info = &op_info;
       uint32_t unk0 = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -211,8 +193,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_DRAW_INDX: {
-      // initiate fetch of index buffer and draw
-      // dword0 = viz query info
       static const PacketTypeInfo op_info = {PacketCategory::kDraw, "PM4_DRAW_INDX"};
       out_info->type_info = &op_info;
       uint32_t dword0 = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -221,7 +201,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       auto prim_type = static_cast<xenos::PrimitiveType>(dword1 & 0x3F);
       uint32_t src_sel = (dword1 >> 6) & 0x3;
       if (src_sel == 0x0) {
-        // Indexed draw.
         uint32_t guest_base = memory::load_and_swap<uint32_t>(ptr + 8);
         uint32_t index_size = memory::load_and_swap<uint32_t>(ptr + 12);
         auto endianness = static_cast<xenos::Endian>(index_size >> 30);
@@ -229,50 +208,44 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
         bool index_32bit = (dword1 >> 11) & 0x1;
         index_size *= index_32bit ? 4 : 2;
       } else if (src_sel == 0x2) {
-        // Auto draw.
       } else {
-        // Unknown source select.
         assert_always();
       }
       break;
     }
     case PM4_DRAW_INDX_2: {
-      // draw using supplied indices in packet
       static const PacketTypeInfo op_info = {PacketCategory::kDraw, "PM4_DRAW_INDX_2"};
       out_info->type_info = &op_info;
       uint32_t dword0 = memory::load_and_swap<uint32_t>(ptr + 0);
       uint32_t index_count = dword0 >> 16;
       auto prim_type = static_cast<xenos::PrimitiveType>(dword0 & 0x3F);
       uint32_t src_sel = (dword0 >> 6) & 0x3;
-      assert_true(src_sel == 0x2);  // 'SrcSel=AutoIndex'
+      assert_true(src_sel == 0x2);
       bool index_32bit = (dword0 >> 11) & 0x1;
       uint32_t indices_size = index_count * (index_32bit ? 4 : 2);
       auto index_ptr = ptr + 4;
       break;
     }
     case PM4_SET_CONSTANT: {
-      // load constant into chip and to memory
-      // PM4_REG(reg) ((0x4 << 16) | (GSL_HAL_SUBBLOCK_OFFSET(reg)))
-      //                                     reg - 0x2000
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_SET_CONSTANT"};
       out_info->type_info = &op_info;
       uint32_t offset_type = memory::load_and_swap<uint32_t>(ptr + 0);
       uint32_t index = offset_type & 0x7FF;
       uint32_t type = (offset_type >> 16) & 0xFF;
       switch (type) {
-        case 0:  // ALU
+        case 0:
           index += 0x4000;
           break;
-        case 1:  // FETCH
+        case 1:
           index += 0x4800;
           break;
-        case 2:  // BOOL
+        case 2:
           index += 0x4900;
           break;
-        case 3:  // LOOP
+        case 3:
           index += 0x4908;
           break;
-        case 4:  // REGISTERS
+        case 4:
           index += 0x2000;
           break;
         default:
@@ -299,7 +272,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       break;
     }
     case PM4_LOAD_ALU_CONSTANT: {
-      // load constants from memory
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_LOAD_ALU_CONSTANT"};
       out_info->type_info = &op_info;
       uint32_t address = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -310,19 +282,19 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       size_dwords &= 0xFFF;
       uint32_t type = (offset_type >> 16) & 0xFF;
       switch (type) {
-        case 0:  // ALU
+        case 0:
           index += 0x4000;
           break;
-        case 1:  // FETCH
+        case 1:
           index += 0x4800;
           break;
-        case 2:  // BOOL
+        case 2:
           index += 0x4900;
           break;
-        case 3:  // LOOP
+        case 3:
           index += 0x4908;
           break;
-        case 4:  // REGISTERS
+        case 4:
           index += 0x2000;
           break;
         default:
@@ -330,8 +302,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
           return true;
       }
       for (uint32_t n = 0; n < size_dwords; n++, index++) {
-        // Hrm, ?
-        // memory::load_and_swap<uint32_t>(membase_ + GpuToCpu(address + n * 4));
         uint32_t data = 0xDEADBEEF;
         out_info->actions.emplace_back(PacketAction::RegisterWrite(index, data));
       }
@@ -349,7 +319,6 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       return true;
     }
     case PM4_IM_LOAD: {
-      // load sequencer instruction memory (pointer-based)
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_IM_LOAD"};
       out_info->type_info = &op_info;
       uint32_t addr_type = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -357,12 +326,11 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       uint32_t addr = addr_type & ~0x3;
       uint32_t start_size = memory::load_and_swap<uint32_t>(ptr + 4);
       uint32_t start = start_size >> 16;
-      uint32_t size_dwords = start_size & 0xFFFF;  // dwords
+      uint32_t size_dwords = start_size & 0xFFFF;
       assert_true(start == 0);
       break;
     }
     case PM4_IM_LOAD_IMMEDIATE: {
-      // load sequencer instruction memory (code embedded in packet)
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_IM_LOAD_IMMEDIATE"};
       out_info->type_info = &op_info;
       uint32_t dword0 = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -370,12 +338,11 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       auto shader_type = static_cast<xenos::ShaderType>(dword0);
       uint32_t start_size = dword1;
       uint32_t start = start_size >> 16;
-      uint32_t size_dwords = start_size & 0xFFFF;  // dwords
+      uint32_t size_dwords = start_size & 0xFFFF;
       assert_true(start == 0);
       break;
     }
     case PM4_INVALIDATE_STATE: {
-      // selective invalidation of state pointers
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_INVALIDATE_STATE"};
       out_info->type_info = &op_info;
       uint32_t mask = memory::load_and_swap<uint32_t>(ptr + 0);
@@ -385,7 +352,7 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_SET_BIN_MASK_LO"};
       out_info->type_info = &op_info;
       uint32_t value = memory::load_and_swap<uint32_t>(ptr);
-      // bin_mask_ = (bin_mask_ & 0xFFFFFFFF00000000ull) | value;
+
       out_info->actions.emplace_back(PacketAction::SetBinMask(value));
       break;
     }
@@ -393,15 +360,14 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_SET_BIN_MASK_HI"};
       out_info->type_info = &op_info;
       uint32_t value = memory::load_and_swap<uint32_t>(ptr);
-      // bin_mask_ =
-      //  (bin_mask_ & 0xFFFFFFFFull) | (static_cast<uint64_t>(value) << 32);
+
       break;
     }
     case PM4_SET_BIN_SELECT_LO: {
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_SET_BIN_SELECT_LO"};
       out_info->type_info = &op_info;
       uint32_t value = memory::load_and_swap<uint32_t>(ptr);
-      // bin_select_ = (bin_select_ & 0xFFFFFFFF00000000ull) | value;
+
       out_info->actions.emplace_back(PacketAction::SetBinSelect(value));
       break;
     }
@@ -409,19 +375,16 @@ bool PacketDisassembler::DisasmPacketType3(const uint8_t* base_ptr, uint32_t pac
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_SET_BIN_SELECT_HI"};
       out_info->type_info = &op_info;
       uint32_t value = memory::load_and_swap<uint32_t>(ptr);
-      // bin_select_ =
-      //  (bin_select_ & 0xFFFFFFFFull) | (static_cast<uint64_t>(value) <<
-      //  32);
+
       break;
     }
 
-    // Ignored packets - useful if breaking on the default handler below.
-    case 0x50: {  // 0xC0015000 usually 2 words, 0xFFFFFFFF / 0x00000000
+    case 0x50: {
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_TYPE3_0x50"};
       out_info->type_info = &op_info;
       break;
     }
-    case 0x51: {  // 0xC0015100 usually 2 words, 0xFFFFFFFF / 0xFFFFFFFF
+    case 0x51: {
       static const PacketTypeInfo op_info = {PacketCategory::kGeneric, "PM4_TYPE3_0x51"};
       out_info->type_info = &op_info;
       break;
@@ -453,4 +416,4 @@ bool PacketDisassembler::DisasmPacket(const uint8_t* base_ptr, PacketInfo* out_i
   }
 }
 
-}  // namespace rex::graphics
+}

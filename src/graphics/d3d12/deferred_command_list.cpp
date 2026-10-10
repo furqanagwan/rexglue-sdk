@@ -33,7 +33,7 @@ void DeferredCommandList::Execute(ID3D12GraphicsCommandList* command_list,
                                   ID3D12GraphicsCommandList1* command_list_1) {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+#endif
   const uintmax_t* stream = command_stream_.data();
   size_t stream_remaining = command_stream_.size();
   ID3D12PipelineState* current_pipeline_state = nullptr;
@@ -299,4 +299,4 @@ void* DeferredCommandList::WriteCommand(Command command, size_t arguments_size_b
   return command_stream_.data() + (offset + kCommandHeaderSizeElements);
 }
 
-}  // namespace rex::graphics::d3d12
+}

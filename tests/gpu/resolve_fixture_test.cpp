@@ -45,7 +45,6 @@ struct ResolveTarget {
   xenos::MsaaSamples msaa = xenos::MsaaSamples::k1X;
 };
 
-// Writes the resolve rectangle (x0, y0)-(x1, y1) for vertex fetch 0.
 uint32_t AllocRectangle(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1) {
   uint32_t vertices = fixture.AllocPhysical(0x100);
   fixture.WriteDwords(vertices,
@@ -58,12 +57,10 @@ uint32_t AllocRectangle(GpuFixture& fixture, uint32_t width, uint32_t height) {
   return AllocRectangle(fixture, 0, 0, width, height);
 }
 
-// Direct3D 9 resolves by drawing a 3-vertex rectangle list with RB_MODECONTROL
-// in copy mode. The rectangle comes from vertex fetch constant 0.
 void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& target,
                    uint32_t clear_color) {
   reg::RB_SURFACE_INFO surface_info = {};
-  // The EDRAM pitch is in samples, two per pixel horizontally with 4x MSAA.
+
   surface_info.surface_pitch = kSize * (target.msaa == xenos::MsaaSamples::k4X ? 2 : 1);
   surface_info.msaa_samples = target.msaa;
   reg::RB_COLOR_INFO color_info = {};
@@ -110,7 +107,7 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& 
   fixture.Submit({xenos::MakePacketType3(xenos::PM4_DRAW_INDX_2, 1), initiator.value});
 }
 
-}  // namespace
+}
 
 TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][resolve]") {
   auto msaa = GENERATE(xenos::MsaaSamples::k1X, xenos::MsaaSamples::k2X, xenos::MsaaSamples::k4X);
@@ -129,8 +126,6 @@ TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][reso
   target.msaa = msaa;
   INFO("MSAA samples log2 " << uint32_t(msaa));
 
-  // The clear happens after the copy, so the first resolve clears EDRAM and
-  // the second one copies the cleared color out.
   SubmitResolve(*fixture, vertices, target, kClearColor);
   SubmitResolve(*fixture, vertices, target, kClearColor);
   REQUIRE(fixture->Flush());
@@ -146,10 +141,6 @@ TEST_CASE("EDRAM clear resolves to guest memory with full readback", "[gpu][reso
   CHECK(mismatches == 0);
 }
 
-// D3D advances RB_COPY_DEST_BASE by whole 32x32 macro tiles, which are 1 KB at
-// 8bpp and 2 KB at 16bpp, so the base can sit inside a 4 KB tiled subresource.
-// The texel at (x, y) then belongs at (x + 32 * phase, y) of the surface that
-// starts at the 4 KB boundary. Source: xenia-canary #1240.
 TEST_CASE("Sub-32bpp resolve keeps the macro tile phase of the base", "[gpu][resolve]") {
   struct Case {
     xenos::ColorFormat format;
@@ -180,8 +171,6 @@ TEST_CASE("Sub-32bpp resolve keeps the macro tile phase of the base", "[gpu][res
   SubmitResolve(*fixture, vertices, target, 0xFFFFFFFF);
   REQUIRE(fixture->Flush());
 
-  // Every byte of the allocation must be written exactly where the oracle
-  // places the rectangle's texels, and nowhere else.
   std::vector<uint8_t> expected(kBytes, 0);
   uint32_t bytes_per_texel = uint32_t(1) << test.bpp_log2;
   for (uint32_t y = 0; y < kRect; ++y) {
@@ -208,11 +197,6 @@ TEST_CASE("Sub-32bpp resolve keeps the macro tile phase of the base", "[gpu][res
   CHECK(stray == 0);
 }
 
-// A uniform clear can't show texels read back from the wrong place, so this
-// resolves a 4x4 grid of 8x8 cells, each with its own color, into the same
-// destination. Each cell's texels must hold one value, distinct per cell, at
-// the addresses the tiling oracle gives. Run with draw_resolution_scale_* to
-// cover the scaled readback (#58).
 TEST_CASE("Resolve readback keeps texel positions", "[gpu][resolve]") {
   struct Case {
     xenos::ColorFormat format;
@@ -243,7 +227,7 @@ TEST_CASE("Resolve readback keeps texel positions", "[gpu][resolve]") {
   for (uint32_t cell = 0; cell < kCells * kCells; ++cell) {
     uint32_t x = (cell % kCells) * kCellSize, y = (cell / kCells) * kCellSize;
     uint32_t vertices = AllocRectangle(*fixture, x, y, x + kCellSize, y + kCellSize);
-    // Channels of 15 * (cell + 1) stay distinct even when packed to 5 bits.
+
     uint32_t color = 0x01010101 * (15 * (cell + 1));
     SubmitResolve(*fixture, vertices, target, color);
     SubmitResolve(*fixture, vertices, target, color);
@@ -294,8 +278,6 @@ TEST_CASE("Resolve readback keeps texel positions", "[gpu][resolve]") {
   CHECK(stray == 0);
 }
 
-// Hidden: the backend treats device loss as fatal, so this case ends the
-// process. CTest runs it on its own and requires the fatal-error report.
 TEST_CASE("Device removal before a submission is reported", "[.device-removal]") {
   REXCVAR_SET(d3d12_dred, true);
   std::string error;
@@ -310,7 +292,6 @@ TEST_CASE("Device removal before a submission is reported", "[.device-removal]")
   REQUIRE(SUCCEEDED(fixture->provider().GetDevice()->QueryInterface(IID_PPV_ARGS(&device))));
   device->RemoveDevice();
 
-  // The resolve opens a submission, which checks the device first.
   SubmitResolve(*fixture, vertices, target, 0);
   fixture->Flush(std::chrono::seconds(10));
   FAIL("device loss was not reported");

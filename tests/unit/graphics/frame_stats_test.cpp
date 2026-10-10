@@ -25,7 +25,7 @@ TEST_CASE("Frame stats summarize steady 60 fps", "[graphics][frame-stats]") {
   CHECK(s.fps == Approx(60.0));
   CHECK(s.average_ms == Approx(16.667).epsilon(0.001));
   CHECK(s.p99_ms == Approx(16.667).epsilon(0.001));
-  // Jitter within a millisecond of a refresh is not a late frame.
+
   CHECK(s.over_16_7_ms == 0);
   CHECK(s.over_33_3_ms == 0);
   CHECK(stats.empty());
@@ -38,9 +38,9 @@ TEST_CASE("Frame stats count late frames and tail percentiles", "[graphics][fram
     stats.Add(16.7);
   }
   for (int i = 0; i < 9; ++i) {
-    stats.Add(33.3);  // missed one refresh
+    stats.Add(33.3);
   }
-  stats.Add(100.0);  // a hitch
+  stats.Add(100.0);
   auto s = stats.Take();
   CHECK(s.frames == 100);
   CHECK(s.over_16_7_ms == 10);

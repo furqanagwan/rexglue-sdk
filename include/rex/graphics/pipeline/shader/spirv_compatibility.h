@@ -17,10 +17,6 @@
 
 namespace spv {
 
-// Backward compatibility for Op codes - old style was spv::OpXXX, new is
-// spv::Op::OpXXX We provide the old style as direct aliases in the spv
-// namespace
-// Op code compatibility macros
 #define OpNop Op::OpNop
 #define OpUndef Op::OpUndef
 #define OpSourceContinued Op::OpSourceContinued
@@ -310,13 +306,6 @@ namespace spv {
 #define OpAtomicFlagClear Op::OpAtomicFlagClear
 #define OpImageSampleFootprintNV Op::OpImageSampleFootprintNV
 
-// Direct aliases for Op codes in the main spv namespace
-// This allows code like spv::OpFAdd to work without qualification
-
-// Inject old-style OpXXX names into spv namespace
-
-// Backward compatibility for Decoration names
-// Only include decorations that actually exist
 #define DecorationArrayStride Decoration::ArrayStride
 #define DecorationBlock Decoration::Block
 #define DecorationOffset Decoration::Offset
@@ -343,24 +332,20 @@ namespace spv {
 #define DecorationAlignmentId Decoration::AlignmentId
 #define DecorationMaxByteOffsetId Decoration::MaxByteOffsetId
 
-// Backward compatibility for ImageOperands
 #define ImageOperandsGradMask ImageOperandsMask::Grad
 #define ImageOperandsLodMask ImageOperandsMask::Lod
 #define ImageOperandsBiasMask ImageOperandsMask::Bias
 #define ImageOperandsMaskNone ImageOperandsMask::MaskNone
 
-// Backward compatibility for StorageClass
 #define StorageClassUniformConstant StorageClass::UniformConstant
 #define StorageClassInput StorageClass::Input
 #define StorageClassUniform StorageClass::Uniform
 #define StorageClassOutput StorageClass::Output
 #define StorageClassFunction StorageClass::Function
 
-// Backward compatibility for SelectionControl
 #define SelectionControlMaskNone SelectionControlMask::MaskNone
 #define SelectionControlDontFlattenMask SelectionControlMask::DontFlatten
 
-// Backward compatibility for Capability
 #define CapabilityShader Capability::Shader
 #define CapabilityGeometry Capability::Geometry
 #define CapabilityTessellation Capability::Tessellation
@@ -377,23 +362,18 @@ namespace spv {
 #define CapabilityStencilExportEXT Capability::StencilExportEXT
 #define CapabilityFragmentBarycentricKHR Capability::FragmentBarycentricKHR
 
-// Backward compatibility for AddressingModel
 #define AddressingModelLogical AddressingModel::Logical
 
-// Backward compatibility for MemoryModel
 #define MemoryModelGLSL450 MemoryModel::GLSL450
 
-// Backward compatibility for SourceLanguage
 #define SourceLanguageUnknown SourceLanguage::Unknown
 
-// Backward compatibility for ExecutionModel
 #define ExecutionModelVertex ExecutionModel::Vertex
 #define ExecutionModelTessellationEvaluation ExecutionModel::TessellationEvaluation
 #define ExecutionModelGeometry ExecutionModel::Geometry
 #define ExecutionModelFragment ExecutionModel::Fragment
 #define ExecutionModelGLCompute ExecutionModel::GLCompute
 
-// Backward compatibility for ExecutionMode
 #define ExecutionModeOriginUpperLeft ExecutionMode::OriginUpperLeft
 #define ExecutionModeEarlyFragmentTests ExecutionMode::EarlyFragmentTests
 #define ExecutionModeDenormFlushToZero ExecutionMode::DenormFlushToZero
@@ -421,7 +401,6 @@ namespace spv {
 #define ExecutionModeStencilRefReplacingEXT ExecutionMode::StencilRefReplacingEXT
 #define ExecutionModeLocalSize ExecutionMode::LocalSize
 
-// Backward compatibility for Decoration
 #define DecorationPerVertexKHR Decoration::PerVertexKHR
 #define DecorationRestrict Decoration::Restrict
 #define DecorationNonWritable Decoration::NonWritable
@@ -432,32 +411,25 @@ namespace spv {
 #define DecorationSpecId Decoration::SpecId
 #define DecorationNonReadable Decoration::NonReadable
 
-// Backward compatibility for LoopControl
 #define LoopControlDontUnrollMask LoopControlMask::DontUnroll
 
-// Backward compatibility for StorageClass (additional)
 #define StorageClassStorageBuffer StorageClass::StorageBuffer
 #define StorageClassPushConstant StorageClass::PushConstant
 
-// Backward compatibility for Dim
 #define Dim2D Dim::Dim2D
 #define Dim3D Dim::Dim3D
 #define DimCube Dim::Cube
 
-// Backward compatibility for ImageFormat
 #define ImageFormatUnknown ImageFormat::Unknown
 
-// Backward compatibility for OpDemoteToHelperInvocationEXT
 #define OpDemoteToHelperInvocationEXT Op::OpDemoteToHelperInvocationEXT
 #define OpBeginInvocationInterlockEXT Op::OpBeginInvocationInterlockEXT
 #define OpEndInvocationInterlockEXT Op::OpEndInvocationInterlockEXT
 #define OpIsHelperInvocationEXT Op::OpIsHelperInvocationEXT
 
-// Backward compatibility for Scope
 #define ScopeDevice Scope::Device
 
-// Fragment barycentric BuiltIn values
 #define BuiltInBaryCoordKHR BuiltIn::BaryCoordKHR
 #define BuiltInBaryCoordNoPerspKHR BuiltIn::BaryCoordNoPerspKHR
 
-}  // namespace spv
+}

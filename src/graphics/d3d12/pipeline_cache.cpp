@@ -77,7 +77,6 @@ REXCVAR_DEFINE_BOOL(d3d12_tessellation_wireframe, false, "GPU/D3D12",
 
 namespace rex::graphics::d3d12 {
 
-// Generated with `xb buildshaders`.
 namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/adaptive_quad_hs.h"
 #include "../shaders/bytecode/d3d12_5_1/adaptive_triangle_hs.h"
@@ -93,10 +92,10 @@ namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/float24_truncate_ps.h"
 #include "../shaders/bytecode/d3d12_5_1/tessellation_adaptive_vs.h"
 #include "../shaders/bytecode/d3d12_5_1/tessellation_indexed_vs.h"
-}  // namespace shaders
+}
 
 #if REXGLUE_SHADER_DXIL
-// Generated from shaders/spirv by glslang at build time.
+
 namespace shaders_spirv {
 #include "spirv_shaders/adaptive_quad_hs.h"
 #include "spirv_shaders/adaptive_triangle_hs.h"
@@ -110,7 +109,7 @@ namespace shaders_spirv {
 #include "spirv_shaders/discrete_triangle_3cp_hs.h"
 #include "spirv_shaders/tessellation_adaptive_vs.h"
 #include "spirv_shaders/tessellation_indexed_vs.h"
-}  // namespace shaders_spirv
+}
 #endif
 
 PipelineCache::PipelineCache(D3D12CommandProcessor& command_processor,
@@ -167,7 +166,6 @@ bool PipelineCache::Initialize() {
     REXGPU_INFO("Shader replacements: {} from {}", count, rex::path_to_utf8(folder));
   }
 
-  // Initialize the command processor thread DXIL objects.
   dxbc_converter_ = nullptr;
   dxc_utils_ = nullptr;
   dxc_compiler_ = nullptr;
@@ -192,12 +190,9 @@ bool PipelineCache::Initialize() {
 
   uint32_t logical_processor_count = rex::thread::logical_processor_count();
   if (!logical_processor_count) {
-    // Pick some reasonable amount if couldn't determine the number of cores.
     logical_processor_count = 6;
   }
-  // Initialize creation thread synchronization data even if not using creation
-  // threads because they may be used anyway to create pipelines from the
-  // storage.
+
   creation_threads_busy_ = 0;
   creation_completion_event_ = rex::thread::Event::CreateManualResetEvent(true);
   assert_not_null(creation_completion_event_);
@@ -216,10 +211,7 @@ bool PipelineCache::Initialize() {
           rex::thread::Thread::Create({}, [this, i]() { CreationThread(i); });
       assert_not_null(creation_thread);
       creation_thread->set_name("D3D12 Pipelines");
-      // These compile during gameplay, three quarters of the cores at once; at
-      // normal priority they preempt the command processor and the guest,
-      // which the title sees as a long frame (RG-GDK-038). The draw is skipped
-      // or awaited either way, so creation losing the CPU costs nothing.
+
       creation_thread->set_priority(rex::thread::ThreadPriority::kBelowNormal);
       creation_threads_.push_back(std::move(creation_thread));
     }
@@ -259,8 +251,6 @@ bool PipelineCache::Initialize() {
 }
 
 void PipelineCache::Shutdown() {
-  // Shut down all threads, before destroying the pipelines since they may be
-  // creating them.
   if (!creation_threads_.empty()) {
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
@@ -274,10 +264,8 @@ void PipelineCache::Shutdown() {
   }
   creation_completion_event_.reset();
 
-  // Shut down the persistent shader / pipeline storage.
   ShutdownShaderStorage();
 
-  // Destroy all pipelines.
   current_pipeline_ = nullptr;
   for (auto it : pipelines_) {
     ID3D12PipelineState* state = it.second->state.load(std::memory_order_acquire);
@@ -289,7 +277,6 @@ void PipelineCache::Shutdown() {
   pipelines_.clear();
   COUNT_profile_set("gpu/pipeline_cache/pipelines", 0);
 
-  // Destroy all shaders.
   if (bindless_resources_used_) {
     bindless_sampler_layout_map_.clear();
     bindless_sampler_layouts_.clear();
@@ -302,7 +289,6 @@ void PipelineCache::Shutdown() {
   shaders_.clear();
   shader_storage_index_ = 0;
 
-  // Shut down shader translation.
   ui::d3d12::util::ReleaseAndNull(dxc_compiler_);
   ui::d3d12::util::ReleaseAndNull(dxc_utils_);
   ui::d3d12::util::ReleaseAndNull(dxbc_converter_);
@@ -313,12 +299,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
   ShutdownShaderStorage();
 
   auto shader_storage_root = cache_root / "shaders";
-  // For files that can be moved between different hosts.
-  // Host PSO blobs - if ever added - should be stored in shaders/local/ (they
-  // currently aren't used because because they may be not very practical -
-  // would need to invalidate them every commit likely, and additional I/O
-  // cost - though D3D's internal validation would possibly be enough to ensure
-  // they are up to date).
+
   auto shader_storage_shareable_root = shader_storage_root / "shareable";
   if (!std::filesystem::exists(shader_storage_shareable_root)) {
     if (!std::filesystem::create_directories(shader_storage_shareable_root)) {
@@ -333,17 +314,15 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
   bool edram_rov_used =
       render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
 
-  // Initialize the pipeline storage stream - read pipeline descriptions and
-  // collect used shader modifications to translate.
   std::vector<PipelineStoredDescription> pipeline_stored_descriptions;
-  // <Shader hash, modification bits>.
+
   std::set<std::pair<uint64_t, uint64_t>> shader_translations_needed;
   auto pipeline_storage_file_path =
       shader_storage_shareable_root /
       fmt::format("{:08X}.{}{}.d3d12.xpso", title_id, edram_rov_used ? "rov" : "rtv",
-                  // Full ZPD counters change every ROV pixel shader.
+
                   edram_rov_used && REXCVAR_GET(occlusion_query_full_counters) ? "-fc" : "");
-  // The cache shipped with the title seeds this PC's first (RG-GDK-064).
+
   const std::filesystem::path shipped_root =
       REXCVAR_GET(shader_cache_shipped).empty()
           ? rex::filesystem::GetExecutableFolder() / "shader_cache"
@@ -386,9 +365,9 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
     return;
   }
   pipeline_storage_file_flush_needed_ = false;
-  // 'XEPS'.
+
   const uint32_t pipeline_storage_magic = 0x53504558;
-  // 'DXRO' or 'DXRT'.
+
   const uint32_t pipeline_storage_magic_api = edram_rov_used ? 0x4F525844 : 0x54525844;
   const uint32_t pipeline_storage_version_swapped = rex::byte_swap(
       std::max(PipelineDescription::kVersion, DxbcShaderTranslator::Modification::kVersion));
@@ -420,8 +399,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       for (size_t i = 0; i < pipeline_storage_read_count; ++i) {
         const PipelineStoredDescription& pipeline_stored_description =
             pipeline_stored_descriptions[i];
-        // Validate file integrity, stop and truncate the stream if data is
-        // corrupted.
+
         if (XXH3_64bits(&pipeline_stored_description.description,
                         sizeof(pipeline_stored_description.description)) !=
             pipeline_stored_description.description_hash) {
@@ -446,11 +424,9 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
 
   size_t logical_processor_count = rex::thread::logical_processor_count();
   if (!logical_processor_count) {
-    // Pick some reasonable amount if couldn't determine the number of cores.
     logical_processor_count = 6;
   }
 
-  // Initialize the Xenos shader storage stream.
   uint64_t shader_storage_initialization_start = rex::chrono::Clock::QueryHostTickCount();
   auto shader_storage_file_path =
       shader_storage_shareable_root / fmt::format("{:08X}.xsh", title_id);
@@ -478,21 +454,19 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
     uint32_t magic;
     uint32_t version_swapped;
   } shader_storage_file_header;
-  // 'XESH'.
+
   const uint32_t shader_storage_magic = 0x48534558;
   if (fread(&shader_storage_file_header, sizeof(shader_storage_file_header), 1,
             shader_storage_file_) &&
       shader_storage_file_header.magic == shader_storage_magic &&
       rex::byte_swap(shader_storage_file_header.version_swapped) == ShaderStoredHeader::kVersion) {
     uint64_t shader_storage_valid_bytes = sizeof(shader_storage_file_header);
-    // Load and translate shaders written by previous Xenia executions until the
-    // end of the file or until a corrupted one is detected.
+
     ShaderStoredHeader shader_header;
     std::vector<uint32_t> ucode_dwords;
     ucode_dwords.reserve(0xFFFF);
     size_t shaders_translated = 0;
 
-    // Threads overlapping file reading.
     std::mutex shaders_translation_thread_mutex;
     std::condition_variable shaders_translation_thread_cond;
     std::deque<D3D12Shader*> shaders_to_translate;
@@ -509,8 +483,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
           render_target_cache_.msaa_2x_supported(), render_target_cache_.draw_resolution_scale_x(),
           render_target_cache_.draw_resolution_scale_y(),
           provider.GetGraphicsAnalysis() != nullptr);
-      // If needed and possible, create objects needed for DXIL conversion and
-      // disassembly on this thread.
+
       IDxbcConverter* dxbc_converter = nullptr;
       IDxcUtils* dxc_utils = nullptr;
       IDxcCompiler* dxc_compiler = nullptr;
@@ -537,8 +510,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
           break;
         }
         shader_to_translate->AnalyzeUcode(ucode_disasm_buffer);
-        // Translate each needed modification on this thread after performing
-        // modification-independent analysis of the whole shader.
+
         uint64_t ucode_data_hash = shader_to_translate->ucode_data_hash();
         for (auto modification_it = shader_translations_needed.lower_bound(
                  std::make_pair(ucode_data_hash, uint64_t(0)));
@@ -547,10 +519,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
              ++modification_it) {
           D3D12Shader::D3D12Translation* translation = static_cast<D3D12Shader::D3D12Translation*>(
               shader_to_translate->GetOrCreateTranslation(modification_it->second));
-          // Only try (and delete in case of failure) if it's a new translation.
-          // If it's a shader previously encountered in the game, translation of
-          // which has failed, and the shader storage is loaded later, keep it
-          // this way not to try to translate it again.
+
           if (!translation->is_translated() &&
               !TranslateAnalyzedShader(translator, *translation, dxbc_converter, dxc_utils,
                                        dxc_compiler)) {
@@ -587,22 +556,17 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       }
       uint64_t ucode_data_hash = XXH3_64bits(ucode_dwords.data(), ucode_byte_count);
       if (shader_header.ucode_data_hash != ucode_data_hash) {
-        // Validation failed.
         break;
       }
       shader_storage_valid_bytes += sizeof(shader_header) + ucode_byte_count;
       D3D12Shader* shader = LoadShader(shader_header.type, ucode_dwords.data(),
                                        shader_header.ucode_dword_count, ucode_data_hash);
       if (shader->ucode_storage_index() == shader_storage_index_) {
-        // Appeared twice in this file for some reason - skip, otherwise race
-        // condition will be caused by translating twice in parallel.
         continue;
       }
-      // Loaded from the current storage - don't write again.
+
       shader->set_ucode_storage_index(shader_storage_index_);
-      // Create new threads if the currently existing threads can't keep up
-      // with file reading, but not more than the number of logical processors
-      // minus one.
+
       size_t shader_translation_threads_needed;
       {
         std::lock_guard<std::mutex> lock(shaders_translation_thread_mutex);
@@ -616,8 +580,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         thread->set_name("Shader Translation");
         shader_translation_threads.push_back(std::move(thread));
       }
-      // Request ucode information gathering and translation of all the needed
-      // shaders.
+
       {
         std::lock_guard<std::mutex> lock(shaders_translation_thread_mutex);
         shaders_to_translate.push_back(shader);
@@ -656,12 +619,9 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
            shader_storage_file_);
   }
 
-  // Create the pipelines.
   if (!pipeline_stored_descriptions.empty()) {
     uint64_t pipeline_creation_start_ = rex::chrono::Clock::QueryHostTickCount();
 
-    // Launch additional creation threads to use all cores to create
-    // pipelines faster. Will also be using the main thread, so minus 1.
     size_t creation_thread_original_count = creation_threads_.size();
     size_t creation_thread_needed_count =
         std::max(std::min(pipeline_stored_descriptions.size(), logical_processor_count) - size_t(1),
@@ -778,7 +738,6 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       pipelines_.emplace(pipeline_stored_description.description_hash, new_pipeline);
       COUNT_profile_set("gpu/pipeline_cache/pipelines", pipelines_.size());
       if (!creation_threads_.empty()) {
-        // Submit the pipeline for creation to any available thread.
         new_pipeline->creation_pending.store(true, std::memory_order_relaxed);
         {
           std::lock_guard<std::mutex> lock(creation_request_lock_);
@@ -798,8 +757,6 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         {
           std::lock_guard<std::mutex> lock(creation_request_lock_);
           creation_threads_shutdown_from_ = creation_thread_original_count;
-          // Assuming the queue is empty because of
-          // CreateQueuedPipelinesOnProcessorThread.
         }
         creation_request_cond_.notify_all();
         while (creation_threads_.size() > creation_thread_original_count) {
@@ -808,12 +765,9 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         }
         bool await_creation_completion_event;
         {
-          // Cleanup so additional threads can be created later again.
           std::lock_guard<std::mutex> lock(creation_request_lock_);
           creation_threads_shutdown_from_ = SIZE_MAX;
-          // If the invocation is blocking, all the shader storage
-          // initialization is expected to be done before proceeding, to avoid
-          // latency in the command processor after the invocation.
+
           await_creation_completion_event = blocking && creation_threads_busy_ != 0;
           if (await_creation_completion_event) {
             creation_completion_event_->Reset();
@@ -833,8 +787,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         pipelines_created,
         (rex::chrono::Clock::QueryHostTickCount() - pipeline_creation_start_) * 1000 /
             rex::chrono::Clock::QueryHostTickFrequency());
-    // If any pipeline descriptions were corrupted (or the whole file has excess
-    // bytes in the end), truncate to the last valid pipeline description.
+
     rex::filesystem::TruncateStdioFile(
         pipeline_storage_file_,
         uint64_t(sizeof(pipeline_storage_file_header) +
@@ -851,7 +804,6 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
   shader_storage_cache_root_ = cache_root;
   shader_storage_title_id_ = title_id;
 
-  // Start the storage writing thread.
   storage_write_flush_shaders_ = false;
   storage_write_flush_pipelines_ = false;
   storage_write_thread_shutdown_ = false;
@@ -908,13 +860,11 @@ void PipelineCache::EndSubmission() {
     creation_request_cond_.notify_one();
   } else if (!creation_threads_.empty()) {
     CreateQueuedPipelinesOnProcessorThread();
-    // Await creation of all queued pipelines.
+
     bool await_creation_completion_event;
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
-      // Assuming the creation queue is already empty (because the processor
-      // thread also worked on creating the leftover pipelines), so only check
-      // if there are threads with pipelines currently being created.
+
       await_creation_completion_event = creation_threads_busy_ != 0;
       if (await_creation_completion_event) {
         creation_completion_event_->Reset();
@@ -934,7 +884,6 @@ void PipelineCache::AwaitPipeline(void* handle) {
     return;
   }
   if (!pipeline->creation_claimed.exchange(true, std::memory_order_acq_rel)) {
-    // Not started: create it here rather than wait for the queue before it.
     PipelineRuntimeDescription runtime_description;
     pipeline->state.store(PrepareRuntimeDescriptionForQueuedCreation(pipeline, runtime_description)
                               ? CreateD3D12Pipeline(runtime_description)
@@ -943,7 +892,7 @@ void PipelineCache::AwaitPipeline(void* handle) {
     pipeline->creation_pending.store(false, std::memory_order_release);
     return;
   }
-  // A creation thread has it.
+
   while (pipeline->creation_pending.load(std::memory_order_acquire)) {
     std::this_thread::yield();
   }
@@ -988,7 +937,6 @@ void PipelineCache::AwaitPipelineCompletion() {
 
 D3D12Shader* PipelineCache::LoadShader(xenos::ShaderType shader_type, const uint32_t* host_address,
                                        uint32_t dword_count) {
-  // Hash the input memory and lookup the shader.
   return LoadShader(shader_type, host_address, dword_count,
                     XXH3_64bits(host_address, dword_count * sizeof(uint32_t)));
 }
@@ -997,12 +945,9 @@ D3D12Shader* PipelineCache::LoadShader(xenos::ShaderType shader_type, const uint
                                        uint32_t dword_count, uint64_t data_hash) {
   auto it = shaders_.find(data_hash);
   if (it != shaders_.end()) {
-    // Shader has been previously loaded.
     return it->second;
   }
-  // Always create the shader and stash it away.
-  // We need to track it even if it fails translation so we know not to try
-  // again.
+
   D3D12Shader* shader = new D3D12Shader(shader_type, data_hash, host_address, dword_count);
   shaders_.emplace(data_hash, shader);
   return shader;
@@ -1098,7 +1043,7 @@ bool PipelineCache::ConfigurePipeline(
     ID3D12RootSignature** root_signature_out) {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
-#endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
+#endif
 
   assert_not_null(pipeline_handle_out);
   assert_not_null(root_signature_out);
@@ -1106,16 +1051,12 @@ bool PipelineCache::ConfigurePipeline(
   bool use_async = REXCVAR_GET(async_shader_compilation) && !creation_threads_.empty() &&
                    pixel_shader != nullptr;
 
-  // Ensure shaders are translated - needed now for GetCurrentStateDescription.
-  // Edge flags are not supported yet (because polygon primitives are not).
   assert_true(register_file_.Get<reg::SQ_PROGRAM_CNTL>().vs_export_mode !=
                   xenos::VertexShaderExportMode::kPosition2VectorsEdge &&
               register_file_.Get<reg::SQ_PROGRAM_CNTL>().vs_export_mode !=
                   xenos::VertexShaderExportMode::kPosition2VectorsEdgeKill);
   assert_false(register_file_.Get<reg::SQ_PROGRAM_CNTL>().gen_index_vtx);
-  // Ucode analysis is always needed on the main thread (for modification and
-  // hash computation). Translation can be deferred to background threads when
-  // async compilation is enabled.
+
   if (!vertex_shader->shader().is_ucode_analyzed()) {
     vertex_shader->shader().AnalyzeUcode(ucode_disasm_buffer_);
   }
@@ -1141,7 +1082,6 @@ bool PipelineCache::ConfigurePipeline(
     }
   }
   if (!use_async && !vertex_shader->is_valid()) {
-    // Translation attempted previously, but not valid.
     return false;
   }
   if (pixel_shader != nullptr) {
@@ -1188,7 +1128,6 @@ bool PipelineCache::ConfigurePipeline(
     return true;
   }
 
-  // Find an existing pipeline in the cache.
   uint64_t hash = XXH3_64bits(&description, sizeof(description));
   auto found_range = pipelines_.equal_range(hash);
   for (auto it = found_range.first; it != found_range.second; ++it) {
@@ -1220,7 +1159,7 @@ bool PipelineCache::ConfigurePipeline(
         bound_rts, shader_writes_color_targets, shader_writes_depth);
     new_pipeline->pending_vertex_shader = vertex_shader;
     new_pipeline->pending_pixel_shader = pixel_shader;
-    // Submit the pipeline for creation to any available thread.
+
     new_pipeline->creation_pending.store(true, std::memory_order_relaxed);
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
@@ -1256,16 +1195,12 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
                                             IDxcCompiler* dxc_compiler) {
   D3D12Shader& shader = static_cast<D3D12Shader&>(translation.shader());
 
-  // Perform translation.
-  // If this fails the shader will be marked as invalid and ignored later.
   if (!translator.TranslateAnalyzedShader(translation)) {
     REXGPU_ERROR("Shader {:016X} translation failed; marking as ignored", shader.ucode_data_hash());
     translation.PublishTranslated();
     return false;
   }
 
-  // A title's replacement stands in for the translated code, keeping the
-  // translation's bindings (RG-GDK-067). Domain shaders are not replaced.
   if (!shader_replacements_.empty()) {
     const bool is_vertex = shader.type() == xenos::ShaderType::kVertex;
     const bool replaceable =
@@ -1321,7 +1256,6 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
                      shader.ucode_dword_count() * sizeof(uint32_t), shader.ucode_data_hash(),
                      shader.ucode_disassembly().c_str());
 
-  // Set up texture and sampler binding layouts.
   if (shader.EnterBindingLayoutUserUIDSetup()) {
     const std::vector<D3D12Shader::TextureBinding>& texture_bindings =
         shader.GetTextureBindingsAfterTranslation();
@@ -1348,13 +1282,9 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
       }
       bindless_sampler_layout_hash = XXH3_64bits_digest(&hash_state);
     }
-    // Obtain the unique IDs of binding layouts if there are any texture
-    // bindings or bindless samplers, for invalidation in the command processor.
+
     size_t texture_binding_layout_uid = kLayoutUIDEmpty;
-    // Use sampler count for the bindful case because it's the only thing that
-    // must be the same for layouts to be compatible in this case
-    // (instruction-specified parameters are used as overrides for actual
-    // samplers).
+
     static_assert(kLayoutUIDEmpty == 0,
                   "Empty layout UID is assumed to be 0 because for bindful samplers, the "
                   "UID is their count");
@@ -1430,7 +1360,6 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
     shader.SetSamplerBindingLayoutUserUID(sampler_binding_layout_uid);
   }
 
-  // Disassemble the shader for dumping.
   const ui::d3d12::D3D12Provider& provider = command_processor_.GetD3D12Provider();
   if (REXCVAR_GET(d3d12_dxbc_disasm_dxilconv)) {
     translation.DisassembleDxbcAndDxil(provider, REXCVAR_GET(d3d12_dxbc_disasm), dxbc_converter,
@@ -1439,7 +1368,6 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
     translation.DisassembleDxbcAndDxil(provider, REXCVAR_GET(d3d12_dxbc_disasm));
   }
 
-  // Dump shader files if desired.
   if (!REXCVAR_GET(dump_shaders).empty()) {
     bool edram_rov_used =
         render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
@@ -1448,8 +1376,6 @@ bool PipelineCache::TranslateAnalyzedShader(DxbcShaderTranslator& translator,
                                                     : "d3d12");
   }
 
-  // Last: other threads read the translation without the translation lock as
-  // soon as is_translated() is true.
   translation.PublishTranslated();
   return translation.is_valid();
 }
@@ -1461,9 +1387,6 @@ bool PipelineCache::GetCurrentStateDescription(
     bool viz_survey, uint32_t bound_depth_and_color_render_target_bits,
     const uint32_t* bound_depth_and_color_render_target_formats,
     PipelineRuntimeDescription& runtime_description_out, bool for_placeholder) {
-  // Translated shaders needed at least for the root signature, unless in
-  // placeholder mode (async compilation) where both VS and PS translation
-  // may be deferred to background threads.
   assert_true(for_placeholder || (vertex_shader->is_translated() && vertex_shader->is_valid()));
   assert_true(for_placeholder || !pixel_shader ||
               (pixel_shader->is_translated() && pixel_shader->is_valid()));
@@ -1473,7 +1396,6 @@ bool PipelineCache::GetCurrentStateDescription(
   const auto& regs = register_file_;
   auto pa_su_sc_mode_cntl = regs.Get<reg::PA_SU_SC_MODE_CNTL>();
 
-  // Initialize all unused fields to zero for comparison/hashing.
   std::memset(&runtime_description_out, 0, sizeof(runtime_description_out));
 
   assert_true(DxbcShaderTranslator::Modification(vertex_shader->modification())
@@ -1482,11 +1404,7 @@ bool PipelineCache::GetCurrentStateDescription(
   bool tessellated = primitive_processing_result.IsTessellated();
   bool primitive_polygonal = draw_util::IsPrimitivePolygonal(regs);
   bool rasterization_enabled = draw_util::IsRasterizationPotentiallyDone(regs, primitive_polygonal);
-  // In Direct3D, rasterization (along with pixel counting) is disabled by
-  // disabling the pixel shader and depth / stencil. However, if rasterization
-  // should be disabled, the pixel shader must be disabled externally, to ensure
-  // things like texture binding layout is correct for the shader actually being
-  // used (don't replace anything here).
+
   if (!rasterization_enabled) {
     assert_null(pixel_shader);
     if (pixel_shader) {
@@ -1497,7 +1415,6 @@ bool PipelineCache::GetCurrentStateDescription(
   bool edram_rov_used =
       render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
 
-  // Root signature.
   runtime_description_out.root_signature = command_processor_.GetRootSignature(
       static_cast<const DxbcShader*>(&vertex_shader->shader()),
       (pixel_shader && !for_placeholder) ? static_cast<const DxbcShader*>(&pixel_shader->shader())
@@ -1507,12 +1424,10 @@ bool PipelineCache::GetCurrentStateDescription(
     return false;
   }
 
-  // Vertex shader.
   runtime_description_out.vertex_shader = vertex_shader;
   description_out.vertex_shader_hash = vertex_shader->shader().ucode_data_hash();
   description_out.vertex_shader_modification = vertex_shader->modification();
 
-  // Index buffer strip cut value.
   if (primitive_processing_result.host_primitive_reset_enabled) {
     description_out.strip_cut_index =
         primitive_processing_result.host_index_format == xenos::IndexFormat::kInt16
@@ -1522,7 +1437,6 @@ bool PipelineCache::GetCurrentStateDescription(
     description_out.strip_cut_index = PipelineStripCutIndex::kNone;
   }
 
-  // Host vertex shader type and primitive topology.
   if (tessellated) {
     description_out.primitive_topology_type_or_tessellation_mode =
         uint32_t(primitive_processing_result.tessellation_mode);
@@ -1534,7 +1448,7 @@ bool PipelineCache::GetCurrentStateDescription(
         break;
       case xenos::PrimitiveType::kLineList:
       case xenos::PrimitiveType::kLineStrip:
-      // Quads are emulated as line lists with adjacency.
+
       case xenos::PrimitiveType::kQuadList:
       case xenos::PrimitiveType::k2DLineStrip:
         description_out.primitive_topology_type_or_tessellation_mode =
@@ -1557,8 +1471,7 @@ bool PipelineCache::GetCurrentStateDescription(
         break;
       case xenos::PrimitiveType::kLineList:
       case xenos::PrimitiveType::kLineStrip:
-        // Host lines are 1 host pixel wide; a guest line covers 1 guest pixel
-        // (has207/xenia-edge 7d0a45263).
+
         description_out.geometry_shader = (render_target_cache_.draw_resolution_scale_x() > 1 ||
                                            render_target_cache_.draw_resolution_scale_y() > 1)
                                               ? PipelineGeometryShader::kLineList
@@ -1579,44 +1492,23 @@ bool PipelineCache::GetCurrentStateDescription(
           ? &GetGeometryShader(geometry_shader_key)
           : nullptr;
 
-  // The rest doesn't matter when rasterization is disabled (thus no writing to
-  // anywhere from post-geometry stages and no samples are counted).
   if (!rasterization_enabled) {
     description_out.cull_mode = PipelineCullMode::kDisableRasterization;
     return true;
   }
 
-  // Pixel shader.
   if (pixel_shader) {
     runtime_description_out.pixel_shader = pixel_shader;
     description_out.pixel_shader_hash = pixel_shader->shader().ucode_data_hash();
     description_out.pixel_shader_modification = pixel_shader->modification();
   }
 
-  // Rasterizer state.
-  // Because Direct3D 12 doesn't support per-side fill mode and depth bias, the
-  // values to use depends on the current culling state.
-  // If front faces are culled, use the ones for back faces.
-  // If back faces are culled, it's the other way around.
-  // If culling is not enabled, assume the developer wanted to draw things in a
-  // more special way - so if one side is wireframe or has a depth bias, then
-  // that's intentional (if both sides have a depth bias, the one for the front
-  // faces is used, though it's unlikely that they will ever be different -
-  // SetRenderState sets the same offset for both sides).
-  // Points fill mode (0) also isn't supported in Direct3D 12, but assume the
-  // developer didn't want to fill the whole primitive and use wireframe (like
-  // Xenos fill mode 1).
-  // Here we also assume that only one side is culled - if two sides are culled,
-  // rasterization will be disabled externally, or the draw call will be dropped
-  // early if the vertex shader doesn't export to memory.
   bool cull_front, cull_back;
   if (primitive_polygonal) {
     description_out.front_counter_clockwise = pa_su_sc_mode_cntl.face == 0;
     cull_front = pa_su_sc_mode_cntl.cull_front != 0;
     cull_back = pa_su_sc_mode_cntl.cull_back != 0;
     if (cull_front) {
-      // The case when both faces are culled should be handled by disabling
-      // rasterization.
       assert_false(cull_back);
       description_out.cull_mode = PipelineCullMode::kFront;
     } else if (cull_back) {
@@ -1624,17 +1516,13 @@ bool PipelineCache::GetCurrentStateDescription(
     } else {
       description_out.cull_mode = PipelineCullMode::kNone;
     }
-    // With ROV, the depth bias is applied in the pixel shader because
-    // per-sample depth is needed for MSAA.
+
     if (!cull_front) {
-      // Front faces aren't culled.
-      // Direct3D 12, unfortunately, doesn't support point fill mode.
       if (pa_su_sc_mode_cntl.polymode_front_ptype != xenos::PolygonType::kTriangles) {
         description_out.fill_mode_wireframe = 1;
       }
     }
     if (!cull_back) {
-      // Back faces aren't culled.
       if (pa_su_sc_mode_cntl.polymode_back_ptype != xenos::PolygonType::kTriangles) {
         description_out.fill_mode_wireframe = 1;
       }
@@ -1643,7 +1531,6 @@ bool PipelineCache::GetCurrentStateDescription(
       description_out.fill_mode_wireframe = 0;
     }
   } else {
-    // Filled front faces only, without culling.
     cull_front = false;
     cull_back = false;
   }
@@ -1664,8 +1551,6 @@ bool PipelineCache::GetCurrentStateDescription(
   description_out.depth_clip = !regs.Get<reg::PA_CL_CLIP_CNTL>().clip_disable;
   bool depth_stencil_bound_and_used = false;
   if (!edram_rov_used) {
-    // Depth/stencil. No stencil, always passing depth test and no depth writing
-    // means depth disabled.
     if (bound_depth_and_color_render_target_bits & 1) {
       if (normalized_depth_control.z_enable) {
         description_out.depth_func = normalized_depth_control.zfunc;
@@ -1677,8 +1562,7 @@ bool PipelineCache::GetCurrentStateDescription(
         description_out.stencil_enable = 1;
         bool stencil_backface_enable =
             primitive_polygonal && normalized_depth_control.backface_enable;
-        // Per-face masks not supported by Direct3D 12, choose the back face
-        // ones only if drawing only back faces.
+
         Register stencil_ref_mask_reg;
         if (stencil_backface_enable && cull_front) {
           stencil_ref_mask_reg = XE_GPU_REG_RB_STENCILREFMASK_BF;
@@ -1704,7 +1588,7 @@ bool PipelineCache::GetCurrentStateDescription(
           description_out.stencil_back_func = description_out.stencil_front_func;
         }
       }
-      // If not binding the DSV, ignore the format in the hash.
+
       if (description_out.depth_func != xenos::CompareFunction::kAlways ||
           description_out.depth_write || description_out.stencil_enable) {
         description_out.depth_format =
@@ -1715,66 +1599,38 @@ bool PipelineCache::GetCurrentStateDescription(
       description_out.depth_func = xenos::CompareFunction::kAlways;
     }
 
-    // Render targets and blending state. 32 because of 0x1F mask, for safety
-    // (all unknown to zero).
     static const PipelineBlendFactor kBlendFactorMap[32] = {
-        /*  0 */ PipelineBlendFactor::kZero,
-        /*  1 */ PipelineBlendFactor::kOne,
-        /*  2 */ PipelineBlendFactor::kZero,  // ?
-        /*  3 */ PipelineBlendFactor::kZero,  // ?
-        /*  4 */ PipelineBlendFactor::kSrcColor,
-        /*  5 */ PipelineBlendFactor::kInvSrcColor,
-        /*  6 */ PipelineBlendFactor::kSrcAlpha,
-        /*  7 */ PipelineBlendFactor::kInvSrcAlpha,
-        /*  8 */ PipelineBlendFactor::kDestColor,
-        /*  9 */ PipelineBlendFactor::kInvDestColor,
-        /* 10 */ PipelineBlendFactor::kDestAlpha,
-        /* 11 */ PipelineBlendFactor::kInvDestAlpha,
-        // CONSTANT_COLOR
-        /* 12 */ PipelineBlendFactor::kBlendFactor,
-        // ONE_MINUS_CONSTANT_COLOR
-        /* 13 */ PipelineBlendFactor::kInvBlendFactor,
-        // CONSTANT_ALPHA
-        /* 14 */ PipelineBlendFactor::kBlendFactor,
-        // ONE_MINUS_CONSTANT_ALPHA
-        /* 15 */ PipelineBlendFactor::kInvBlendFactor,
-        /* 16 */ PipelineBlendFactor::kSrcAlphaSat,
+        PipelineBlendFactor::kZero,           PipelineBlendFactor::kOne,
+        PipelineBlendFactor::kZero,           PipelineBlendFactor::kZero,
+        PipelineBlendFactor::kSrcColor,       PipelineBlendFactor::kInvSrcColor,
+        PipelineBlendFactor::kSrcAlpha,       PipelineBlendFactor::kInvSrcAlpha,
+        PipelineBlendFactor::kDestColor,      PipelineBlendFactor::kInvDestColor,
+        PipelineBlendFactor::kDestAlpha,      PipelineBlendFactor::kInvDestAlpha,
+
+        PipelineBlendFactor::kBlendFactor,
+
+        PipelineBlendFactor::kInvBlendFactor,
+
+        PipelineBlendFactor::kBlendFactor,
+
+        PipelineBlendFactor::kInvBlendFactor, PipelineBlendFactor::kSrcAlphaSat,
     };
-    // Like kBlendFactorMap, but with color modes changed to alpha. Some
-    // pipelines aren't created in 545407E0 because a color mode is used for
-    // alpha.
+
     static const PipelineBlendFactor kBlendFactorAlphaMap[32] = {
-        /*  0 */ PipelineBlendFactor::kZero,
-        /*  1 */ PipelineBlendFactor::kOne,
-        /*  2 */ PipelineBlendFactor::kZero,  // ?
-        /*  3 */ PipelineBlendFactor::kZero,  // ?
-        /*  4 */ PipelineBlendFactor::kSrcAlpha,
-        /*  5 */ PipelineBlendFactor::kInvSrcAlpha,
-        /*  6 */ PipelineBlendFactor::kSrcAlpha,
-        /*  7 */ PipelineBlendFactor::kInvSrcAlpha,
-        /*  8 */ PipelineBlendFactor::kDestAlpha,
-        /*  9 */ PipelineBlendFactor::kInvDestAlpha,
-        /* 10 */ PipelineBlendFactor::kDestAlpha,
-        /* 11 */ PipelineBlendFactor::kInvDestAlpha,
-        /* 12 */ PipelineBlendFactor::kBlendFactor,
-        // ONE_MINUS_CONSTANT_COLOR
-        /* 13 */ PipelineBlendFactor::kInvBlendFactor,
-        // CONSTANT_ALPHA
-        /* 14 */ PipelineBlendFactor::kBlendFactor,
-        // ONE_MINUS_CONSTANT_ALPHA
-        /* 15 */ PipelineBlendFactor::kInvBlendFactor,
-        /* 16 */ PipelineBlendFactor::kSrcAlphaSat,
+        PipelineBlendFactor::kZero,           PipelineBlendFactor::kOne,
+        PipelineBlendFactor::kZero,           PipelineBlendFactor::kZero,
+        PipelineBlendFactor::kSrcAlpha,       PipelineBlendFactor::kInvSrcAlpha,
+        PipelineBlendFactor::kSrcAlpha,       PipelineBlendFactor::kInvSrcAlpha,
+        PipelineBlendFactor::kDestAlpha,      PipelineBlendFactor::kInvDestAlpha,
+        PipelineBlendFactor::kDestAlpha,      PipelineBlendFactor::kInvDestAlpha,
+        PipelineBlendFactor::kBlendFactor,
+
+        PipelineBlendFactor::kInvBlendFactor,
+
+        PipelineBlendFactor::kBlendFactor,
+
+        PipelineBlendFactor::kInvBlendFactor, PipelineBlendFactor::kSrcAlphaSat,
     };
-    // While it's okay to specify fewer render targets in the pipeline state
-    // (even fewer than written by the shader) than actually bound to the
-    // command list (though this kind of truncation may only happen at the end -
-    // DXGI_FORMAT_UNKNOWN *requires* a null RTV descriptor to be bound), not
-    // doing that because sample counts of all render targets bound via
-    // OMSetRenderTargets, even those beyond NumRenderTargets, apparently must
-    // have their sample count matching the one set in the pipeline - however if
-    // we set NumRenderTargets to 0 and also disable depth / stencil, the sample
-    // count must be set to 1 - while the command list may still have
-    // multisampled render targets bound (happens in 4D5307E6 main menu).
 
     for (uint32_t i = 0; i < 4; ++i) {
       if (!(bound_depth_and_color_render_target_bits & (uint32_t(1) << (1 + i)))) {
@@ -1808,15 +1664,11 @@ bool PipelineCache::GetCurrentStateDescription(
   xenos::MsaaSamples host_msaa_samples = regs.Get<reg::RB_SURFACE_INFO>().msaa_samples;
   if (edram_rov_used) {
     if (host_msaa_samples == xenos::MsaaSamples::k2X) {
-      // 2 is not supported in ForcedSampleCount on Nvidia.
       host_msaa_samples = xenos::MsaaSamples::k4X;
     }
   } else {
     if (!(bound_depth_and_color_render_target_bits & ~uint32_t(1)) &&
         !depth_stencil_bound_and_used) {
-      // Direct3D 12 requires the sample count to be 1 when no color or depth /
-      // stencil render targets are bound.
-
       host_msaa_samples = xenos::MsaaSamples::k1X;
     }
   }
@@ -1861,10 +1713,8 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                                           point_user_cull_distance_count &&
                                           key.point_ps_ucp_mode >= 3;
 
-  // RDEF, ISGN, OSG5, SHEX, STAT.
   constexpr uint32_t kBlobCount = 5;
 
-  // Allocate space for the container header and the blob offsets.
   shader_out.resize(sizeof(dxbc::ContainerHeader) / sizeof(uint32_t) + kBlobCount);
   uint32_t blob_offset_position_dwords = sizeof(dxbc::ContainerHeader) / sizeof(uint32_t);
   uint32_t blob_position_dwords = uint32_t(shader_out.size());
@@ -1872,19 +1722,11 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   uint32_t name_ptr;
 
-  // ***************************************************************************
-  // Resource definition
-  // ***************************************************************************
-
   shader_out[blob_offset_position_dwords] = uint32_t(blob_position_dwords * sizeof(uint32_t));
   uint32_t rdef_position_dwords = blob_position_dwords + kBlobHeaderSizeDwords;
-  // Not needed, as the next operation done is resize, to allocate the space for
-  // both the blob header and the resource definition header.
-  // shader_out.resize(rdef_position_dwords);
 
-  // RDEF header - the actual definitions will be written if needed.
   shader_out.resize(rdef_position_dwords + sizeof(dxbc::RdefHeader) / sizeof(uint32_t));
-  // Generator name.
+
   dxbc::AppendAlignedString(shader_out, "Xenia");
   {
     auto& rdef_header =
@@ -1893,7 +1735,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     rdef_header.compile_flags =
         dxbc::kCompileFlagNoPreshader | dxbc::kCompileFlagPreferFlowControl |
         dxbc::kCompileFlagIeeeStrictness | dxbc::kCompileFlagAllResourcesBound;
-    // Generator name is right after the header.
+
     rdef_header.generator_name_ptr = sizeof(dxbc::RdefHeader);
     rdef_header.fourcc = dxbc::RdefHeader::FourCC::k5_1;
     rdef_header.InitializeSizes();
@@ -1903,15 +1745,10 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   if (key.type == PipelineGeometryShader::kPointList ||
       key.type == PipelineGeometryShader::kLineList) {
-    // Need point parameters from the system constants (lines only use the NDC
-    // size of a guest pixel).
-
-    // Constant types - float2 only.
-    // Names.
     name_ptr = uint32_t((shader_out.size() - rdef_position_dwords) * sizeof(uint32_t));
     uint32_t rdef_name_ptr_float2 = name_ptr;
     name_ptr += dxbc::AppendAlignedString(shader_out, "float2");
-    // Types.
+
     uint32_t rdef_type_float2_position_dwords = uint32_t(shader_out.size());
     uint32_t rdef_type_float2_ptr =
         uint32_t((rdef_type_float2_position_dwords - rdef_position_dwords) * sizeof(uint32_t));
@@ -1926,21 +1763,18 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       rdef_type_float2.name_ptr = rdef_name_ptr_float2;
     }
 
-    // Constants:
-    // - float2 xe_point_constant_diameter
-    // - float2 xe_point_screen_diameter_to_ndc_radius
     enum PointConstant : uint32_t {
       kPointConstantConstantDiameter,
       kPointConstantScreenDiameterToNDCRadius,
       kPointConstantCount,
     };
-    // Names.
+
     name_ptr = uint32_t((shader_out.size() - rdef_position_dwords) * sizeof(uint32_t));
     uint32_t rdef_name_ptr_xe_point_constant_diameter = name_ptr;
     name_ptr += dxbc::AppendAlignedString(shader_out, "xe_point_constant_diameter");
     uint32_t rdef_name_ptr_xe_point_screen_diameter_to_ndc_radius = name_ptr;
     name_ptr += dxbc::AppendAlignedString(shader_out, "xe_point_screen_diameter_to_ndc_radius");
-    // Constants.
+
     uint32_t rdef_constants_position_dwords = uint32_t(shader_out.size());
     uint32_t rdef_constants_ptr =
         uint32_t((rdef_constants_position_dwords - rdef_position_dwords) * sizeof(uint32_t));
@@ -1949,7 +1783,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     {
       auto rdef_constants =
           reinterpret_cast<dxbc::RdefVariable*>(shader_out.data() + rdef_constants_position_dwords);
-      // float2 xe_point_constant_diameter
+
       static_assert(sizeof(DxbcShaderTranslator::SystemConstants ::point_constant_diameter) ==
                         sizeof(float) * 2,
                     "DxbcShaderTranslator point_constant_diameter system constant size "
@@ -1967,7 +1801,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       rdef_constant_point_constant_diameter.type_ptr = rdef_type_float2_ptr;
       rdef_constant_point_constant_diameter.start_texture = UINT32_MAX;
       rdef_constant_point_constant_diameter.start_sampler = UINT32_MAX;
-      // float2 xe_point_screen_diameter_to_ndc_radius
+
       static_assert(
           sizeof(DxbcShaderTranslator::SystemConstants ::point_screen_diameter_to_ndc_radius) ==
               sizeof(float) * 2,
@@ -1987,13 +1821,10 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       rdef_constant_point_screen_diameter_to_ndc_radius.start_sampler = UINT32_MAX;
     }
 
-    // Constant buffers - xe_system_cbuffer only.
-
-    // Names.
     name_ptr = uint32_t((shader_out.size() - rdef_position_dwords) * sizeof(uint32_t));
     uint32_t rdef_name_ptr_xe_system_cbuffer = name_ptr;
     name_ptr += dxbc::AppendAlignedString(shader_out, "xe_system_cbuffer");
-    // Constant buffers.
+
     uint32_t rdef_cbuffer_position_dwords = uint32_t(shader_out.size());
     shader_out.resize(rdef_cbuffer_position_dwords + sizeof(dxbc::RdefCbuffer) / sizeof(uint32_t));
     {
@@ -2028,7 +1859,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       rdef_cbuffer_system.size_vector_aligned_bytes = system_cbuffer_size_vector_aligned_bytes;
     }
 
-    // Bindings - xe_system_cbuffer only.
     uint32_t rdef_binding_position_dwords = uint32_t(shader_out.size());
     shader_out.resize(rdef_binding_position_dwords +
                       sizeof(dxbc::RdefInputBind) / sizeof(uint32_t));
@@ -2043,7 +1873,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       rdef_binding_cbuffer_system.flags = dxbc::kRdefInputFlagUserPacked;
     }
 
-    // Pointers in the header.
     {
       auto& rdef_header =
           *reinterpret_cast<dxbc::RdefHeader*>(shader_out.data() + rdef_position_dwords);
@@ -2065,33 +1894,22 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                              shader_out[blob_offset_position_dwords++];
   }
 
-  // ***************************************************************************
-  // Input signature
-  // ***************************************************************************
-
-  // Clip and cull distances are tightly packed together into registers, but
-  // have separate signature parameters with each being a vec4-aligned window.
   uint32_t input_clip_distance_count = key.user_clip_plane_cull ? 0 : key.user_clip_plane_count;
   uint32_t input_cull_distance_count =
       (key.user_clip_plane_cull ? key.user_clip_plane_count : 0) + key.has_vertex_kill_and;
   uint32_t input_clip_and_cull_distance_count =
       input_clip_distance_count + input_cull_distance_count;
 
-  // Interpolators, position, clip and cull distances (parameters containing
-  // only clip or cull distances, and also one parameter containing both if
-  // present), point size.
   uint32_t isgn_parameter_count =
       key.interpolator_count + 1 + ((input_clip_and_cull_distance_count + 3) / 4) +
       uint32_t(input_cull_distance_count && (input_clip_distance_count & 3) != 0) +
       key.has_point_size;
 
-  // Reserve space for the header and the parameters.
   shader_out[blob_offset_position_dwords] = uint32_t(blob_position_dwords * sizeof(uint32_t));
   uint32_t isgn_position_dwords = blob_position_dwords + kBlobHeaderSizeDwords;
   shader_out.resize(isgn_position_dwords + sizeof(dxbc::Signature) / sizeof(uint32_t) +
                     sizeof(dxbc::SignatureParameter) / sizeof(uint32_t) * isgn_parameter_count);
 
-  // Names (after the parameters).
   name_ptr = uint32_t((shader_out.size() - isgn_position_dwords) * sizeof(uint32_t));
   uint32_t isgn_name_ptr_texcoord = name_ptr;
   if (key.interpolator_count) {
@@ -2112,25 +1930,21 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     name_ptr += dxbc::AppendAlignedString(shader_out, "XEPSIZE");
   }
 
-  // Header and parameters.
   uint32_t input_register_interpolators = UINT32_MAX;
   uint32_t input_register_position;
   uint32_t input_register_clip_and_cull_distances = UINT32_MAX;
   uint32_t input_register_point_size = UINT32_MAX;
   {
-    // Header.
     auto& isgn_header =
         *reinterpret_cast<dxbc::Signature*>(shader_out.data() + isgn_position_dwords);
     isgn_header.parameter_count = isgn_parameter_count;
     isgn_header.parameter_info_ptr = sizeof(dxbc::Signature);
 
-    // Parameters.
     auto isgn_parameters = reinterpret_cast<dxbc::SignatureParameter*>(
         shader_out.data() + isgn_position_dwords + sizeof(dxbc::Signature) / sizeof(uint32_t));
     uint32_t isgn_parameter_index = 0;
     uint32_t input_register_index = 0;
 
-    // Interpolators (TEXCOORD#).
     if (key.interpolator_count) {
       input_register_interpolators = input_register_index;
       for (uint32_t i = 0; i < key.interpolator_count; ++i) {
@@ -2145,7 +1959,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       }
     }
 
-    // Position (SV_Position).
     input_register_position = input_register_index;
     assert_true(isgn_parameter_index < isgn_parameter_count);
     dxbc::SignatureParameter& isgn_sv_position = isgn_parameters[isgn_parameter_index++];
@@ -2156,7 +1969,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     isgn_sv_position.mask = 0b1111;
     isgn_sv_position.always_reads_mask = 0b1111;
 
-    // Clip and cull distances (SV_ClipDistance#, SV_CullDistance#).
     if (input_clip_and_cull_distance_count) {
       input_register_clip_and_cull_distances = input_register_index;
       uint32_t isgn_cull_distance_semantic_index = 0;
@@ -2192,7 +2004,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       }
     }
 
-    // Point size (XEPSIZE).
     if (key.has_point_size) {
       input_register_point_size = input_register_index;
       assert_true(isgn_parameter_index < isgn_parameter_count);
@@ -2217,22 +2028,15 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                              shader_out[blob_offset_position_dwords++];
   }
 
-  // ***************************************************************************
-  // Output signature
-  // ***************************************************************************
-
-  // Interpolators, point coordinates, position, clip distances.
   uint32_t osgn_parameter_count = key.interpolator_count + key.has_point_coordinates + 1 +
                                   ((input_clip_distance_count + 3) / 4);
 
-  // Reserve space for the header and the parameters.
   shader_out[blob_offset_position_dwords] = uint32_t(blob_position_dwords * sizeof(uint32_t));
   uint32_t osgn_position_dwords = blob_position_dwords + kBlobHeaderSizeDwords;
   shader_out.resize(osgn_position_dwords + sizeof(dxbc::Signature) / sizeof(uint32_t) +
                     sizeof(dxbc::SignatureParameterForGS) / sizeof(uint32_t) *
                         osgn_parameter_count);
 
-  // Names (after the parameters).
   name_ptr = uint32_t((shader_out.size() - osgn_position_dwords) * sizeof(uint32_t));
   uint32_t osgn_name_ptr_texcoord = name_ptr;
   if (key.interpolator_count) {
@@ -2249,25 +2053,21 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     name_ptr += dxbc::AppendAlignedString(shader_out, "SV_ClipDistance");
   }
 
-  // Header and parameters.
   uint32_t output_register_interpolators = UINT32_MAX;
   uint32_t output_register_point_coordinates = UINT32_MAX;
   uint32_t output_register_position;
   uint32_t output_register_clip_distances = UINT32_MAX;
   {
-    // Header.
     auto& osgn_header =
         *reinterpret_cast<dxbc::Signature*>(shader_out.data() + osgn_position_dwords);
     osgn_header.parameter_count = osgn_parameter_count;
     osgn_header.parameter_info_ptr = sizeof(dxbc::Signature);
 
-    // Parameters.
     auto osgn_parameters = reinterpret_cast<dxbc::SignatureParameterForGS*>(
         shader_out.data() + osgn_position_dwords + sizeof(dxbc::Signature) / sizeof(uint32_t));
     uint32_t osgn_parameter_index = 0;
     uint32_t output_register_index = 0;
 
-    // Interpolators (TEXCOORD#).
     if (key.interpolator_count) {
       output_register_interpolators = output_register_index;
       for (uint32_t i = 0; i < key.interpolator_count; ++i) {
@@ -2281,7 +2081,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       }
     }
 
-    // Point coordinates (XESPRITETEXCOORD).
     if (key.has_point_coordinates) {
       output_register_point_coordinates = output_register_index;
       assert_true(osgn_parameter_index < osgn_parameter_count);
@@ -2294,7 +2093,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       osgn_point_coordinates.never_writes_mask = 0b1100;
     }
 
-    // Position (SV_Position).
     output_register_position = output_register_index;
     assert_true(osgn_parameter_index < osgn_parameter_count);
     dxbc::SignatureParameterForGS& osgn_sv_position = osgn_parameters[osgn_parameter_index++];
@@ -2304,7 +2102,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     osgn_sv_position.register_index = output_register_index++;
     osgn_sv_position.mask = 0b1111;
 
-    // Clip distances (SV_ClipDistance#).
     if (input_clip_distance_count) {
       output_register_clip_distances = output_register_index;
       for (uint32_t i = 0; i < input_clip_distance_count; i += 4) {
@@ -2334,16 +2131,12 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                              shader_out[blob_offset_position_dwords++];
   }
 
-  // ***************************************************************************
-  // Shader program
-  // ***************************************************************************
-
   shader_out[blob_offset_position_dwords] = uint32_t(blob_position_dwords * sizeof(uint32_t));
   uint32_t shex_position_dwords = blob_position_dwords + kBlobHeaderSizeDwords;
   shader_out.resize(shex_position_dwords);
 
   shader_out.push_back(dxbc::VersionToken(dxbc::ProgramType::kGeometryShader, 5, 1));
-  // Reserve space for the length token.
+
   shader_out.push_back(0);
 
   dxbc::Statistics stat;
@@ -2366,28 +2159,28 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
   uint32_t max_output_vertex_count = 0;
   switch (key.type) {
     case PipelineGeometryShader::kPointList:
-      // Point to a strip of 2 triangles.
+
       input_primitive = dxbc::Primitive::kPoint;
       input_primitive_vertex_count = 1;
       output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
       max_output_vertex_count = 4;
       break;
     case PipelineGeometryShader::kRectangleList:
-      // Triangle to a strip of 2 triangles.
+
       input_primitive = dxbc::Primitive::kTriangle;
       input_primitive_vertex_count = 3;
       output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
       max_output_vertex_count = 4;
       break;
     case PipelineGeometryShader::kQuadList:
-      // 4 vertices passed via kLineWithAdjacency to a strip of 2 triangles.
+
       input_primitive = dxbc::Primitive::kLineWithAdjacency;
       input_primitive_vertex_count = 4;
       output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
       max_output_vertex_count = 4;
       break;
     case PipelineGeometryShader::kLineList:
-      // Line (of a list or a strip) to a strip of 2 triangles.
+
       input_primitive = dxbc::Primitive::kLine;
       input_primitive_vertex_count = 2;
       output_primitive_topology = dxbc::PrimitiveTopology::kTriangleStrip;
@@ -2403,8 +2196,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
   }
   a.OpDclInputSIV(dxbc::Dest::V2D(input_primitive_vertex_count, input_register_position),
                   dxbc::Name::kPosition);
-  // Clip and cull plane declarations are separate in FXC-generated code even
-  // for a single register.
+
   assert_false(input_clip_and_cull_distance_count &&
                input_register_clip_and_cull_distances == UINT32_MAX);
   for (uint32_t i = 0; i < input_clip_and_cull_distance_count; i += 4) {
@@ -2429,8 +2221,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     a.OpDclInput(dxbc::Dest::V2D(input_primitive_vertex_count, input_register_point_size, 0b0001));
   }
 
-  // At least 1 temporary register needed to discard primitives with NaN
-  // position.
   size_t dcl_temps_count_position_dwords = a.OpDclTemps(1);
 
   a.OpDclInputPrimitive(input_primitive);
@@ -2457,17 +2247,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   a.OpDclMaxOutputVertexCount(max_output_vertex_count);
 
-  // Note that after every emit, all o# become initialized and must be written
-  // to again.
-  // Also, FXC generates only movs (from statically or dynamically indexed
-  // v[#][#], from r#, or from a literal) to o# for some reason.
-  // emit_then_cut_stream must not be used - it crashes the shader compiler of
-  // AMD Software: Adrenalin Edition 23.3.2 on RDNA 3 if it's conditional (after
-  // a `retc` or inside an `if`), and it doesn't seem to be generated by FXC or
-  // DXC at all.
-
-  // Discard the whole primitive if any vertex has a NaN position (may also be
-  // set to NaN for emulation of vertex killing with the OR operator).
   for (uint32_t i = 0; i < input_primitive_vertex_count; ++i) {
     a.OpNE(dxbc::Dest::R(0), dxbc::Src::V2D(i, input_register_position),
            dxbc::Src::V2D(i, input_register_position));
@@ -2477,10 +2256,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     a.OpRetC(true, dxbc::Src::R(0, dxbc::Src::kXXXX));
   }
 
-  // Cull the whole primitive if any cull distance for all vertices in the
-  // primitive is < 0.
-  // For point lists with ps_ucp_mode 3, user cull plane distances are
-  // calculated per expanded vertex later.
   if (input_cull_distance_count) {
     uint32_t cull_distance_start =
         point_recalculate_cull_distances ? point_user_cull_distance_count : 0;
@@ -2504,7 +2279,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   switch (key.type) {
     case PipelineGeometryShader::kPointList: {
-      // Expand the point sprite, with left-to-right, top-to-bottom UVs.
       dxbc::Src point_size_src(dxbc::Src::CB(
           0, uint32_t(DxbcShaderTranslator::CbufferRegister::kSystemConstants),
           offsetof(DxbcShaderTranslator::SystemConstants, point_constant_diameter) >> 4,
@@ -2513,29 +2287,18 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                 3)
                << 2)));
       if (key.has_point_size) {
-        // The vertex shader's header writes -1.0 to point_size by default, so
-        // any non-negative value means that it was overwritten by the
-        // translated vertex shader, and needs to be used instead of the
-        // constant size. The per-vertex diameter is already clamped in the
-        // vertex shader (combined with making it non-negative).
         a.OpGE(dxbc::Dest::R(0, 0b0001),
                dxbc::Src::V2D(0, input_register_point_size, dxbc::Src::kXXXX), dxbc::Src::LF(0.0f));
         a.OpMovC(dxbc::Dest::R(0, 0b0011), dxbc::Src::R(0, dxbc::Src::kXXXX),
                  dxbc::Src::V2D(0, input_register_point_size, dxbc::Src::kXXXX), point_size_src);
         point_size_src = dxbc::Src::R(0, 0b0100);
       }
-      // 4D5307F1 has zero-size snowflakes, drop them quicker, and also drop
-      // points with a constant size of zero since point lists may also be used
-      // as just "compute" with memexport.
-      // XY may contain the point size with the per-vertex override applied, use
-      // Z as temporary.
+
       for (uint32_t i = 0; i < 2; ++i) {
         a.OpLT(dxbc::Dest::R(0, 0b0100), dxbc::Src::LF(0.0f), point_size_src.SelectFromSwizzled(i));
         a.OpRetC(false, dxbc::Src::R(0, dxbc::Src::kZZZZ));
       }
-      // Transform the diameter in the guest screen coordinates to radius in the
-      // normalized device coordinates, and then to the clip space by
-      // multiplying by W.
+
       a.OpMul(dxbc::Dest::R(0, 0b0011), point_size_src,
               dxbc::Src::CB(0, uint32_t(DxbcShaderTranslator::CbufferRegister::kSystemConstants),
                             offsetof(DxbcShaderTranslator::SystemConstants,
@@ -2614,22 +2377,16 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
       }
 
       for (uint32_t i = 0; i < 4; ++i) {
-        // Same interpolators for the entire sprite.
         for (uint32_t j = 0; j < key.interpolator_count; ++j) {
           a.OpMov(dxbc::Dest::O(output_register_interpolators + j),
                   dxbc::Src::V2D(0, input_register_interpolators + j));
         }
-        // Top-left, top-right, bottom-left, bottom-right order (chosen
-        // arbitrarily, simply based on clockwise meaning front with
-        // FrontCounterClockwise = FALSE, but faceness is ignored for
-        // non-polygon primitive types).
-        // Bottom is -Y in Direct3D NDC, +V in point sprite coordinates.
+
         if (key.has_point_coordinates) {
           a.OpMov(dxbc::Dest::O(output_register_point_coordinates, 0b0011),
                   dxbc::Src::LF(float(i & 1), float(i >> 1), 0.0f, 0.0f));
         }
-        // FXC generates only `mov`s for o#, use temporary registers (r0.zw, as
-        // r0.xy already used for the point size) for calculations.
+
         a.OpAdd(dxbc::Dest::R(0, 0b0100),
                 dxbc::Src::V2D(0, input_register_position, dxbc::Src::kXXXX),
                 (i & 1) ? point_radius_x_src : -point_radius_x_src);
@@ -2640,8 +2397,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
         a.OpMov(dxbc::Dest::O(output_register_position, 0b1100),
                 dxbc::Src::V2D(0, input_register_position));
         if (point_recalculate_clip_distances) {
-          // Convert host clip space back to guest clip space before applying
-          // user clip planes.
           dxbc::Src ndc_scale_xy(dxbc::Src::CB(
               0, uint32_t(DxbcShaderTranslator::CbufferRegister::kSystemConstants),
               offsetof(DxbcShaderTranslator::SystemConstants, ndc_scale) >> 4,
@@ -2695,74 +2450,38 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     } break;
 
     case PipelineGeometryShader::kRectangleList: {
-      // Construct a strip with the fourth vertex generated by mirroring a
-      // vertex across the longest edge (the diagonal).
-      //
-      // Possible options:
-      //
-      // 0---1
-      // |  /|
-      // | / |  - 12 is the longest edge, strip 0123 (most commonly used)
-      // |/  |    v3 = v0 + (v1 - v0) + (v2 - v0), or v3 = -v0 + v1 + v2
-      // 2--[3]
-      //
-      // 1---2
-      // |  /|
-      // | / |  - 20 is the longest edge, strip 1203
-      // |/  |
-      // 0--[3]
-      //
-      // 2---0
-      // |  /|
-      // | / |  - 01 is the longest edge, strip 2013
-      // |/  |
-      // 1--[3]
-      //
-      // Input vertices are implicitly indexable, dcl_indexRange is not needed
-      // for the first dimension of a v[#][#] index.
-
-      // Get squares of edge lengths into r0.xyz to choose the longest edge.
-      // r0.x = ||12||^2
       a.OpAdd(dxbc::Dest::R(0, 0b0011), dxbc::Src::V2D(2, input_register_position, 0b0100),
               -dxbc::Src::V2D(1, input_register_position, 0b0100));
       a.OpDP2(dxbc::Dest::R(0, 0b0001), dxbc::Src::R(0, 0b0100), dxbc::Src::R(0, 0b0100));
-      // r0.y = ||20||^2
+
       a.OpAdd(dxbc::Dest::R(0, 0b0110), dxbc::Src::V2D(0, input_register_position, 0b0100 << 2),
               -dxbc::Src::V2D(2, input_register_position, 0b0100 << 2));
       a.OpDP2(dxbc::Dest::R(0, 0b0010), dxbc::Src::R(0, 0b1001), dxbc::Src::R(0, 0b1001));
-      // r0.z = ||01||^2
+
       a.OpAdd(dxbc::Dest::R(0, 0b1100), dxbc::Src::V2D(1, input_register_position, 0b0100 << 4),
               -dxbc::Src::V2D(0, input_register_position, 0b0100 << 4));
       a.OpDP2(dxbc::Dest::R(0, 0b0100), dxbc::Src::R(0, 0b1110), dxbc::Src::R(0, 0b1110));
 
-      // Find the longest edge, and select the strip vertex indices into r0.xyz.
-      // r0.w = 12 > 20
       a.OpLT(dxbc::Dest::R(0, 0b1000), dxbc::Src::R(0, dxbc::Src::kYYYY),
              dxbc::Src::R(0, dxbc::Src::kXXXX));
-      // r0.x = 12 > 01
+
       a.OpLT(dxbc::Dest::R(0, 0b0001), dxbc::Src::R(0, dxbc::Src::kZZZZ),
              dxbc::Src::R(0, dxbc::Src::kXXXX));
-      // r0.x = 12 > 20 && 12 > 01
+
       a.OpAnd(dxbc::Dest::R(0, 0b0001), dxbc::Src::R(0, dxbc::Src::kWWWW),
               dxbc::Src::R(0, dxbc::Src::kXXXX));
       a.OpIf(true, dxbc::Src::R(0, dxbc::Src::kXXXX));
-      {
-        // 12 is the longest edge, the first triangle in the strip is 012.
-        a.OpMov(dxbc::Dest::R(0, 0b0111), dxbc::Src::LU(0, 1, 2, 0));
-      }
+      { a.OpMov(dxbc::Dest::R(0, 0b0111), dxbc::Src::LU(0, 1, 2, 0)); }
       a.OpElse();
       {
-        // r0.x = 20 > 01
         a.OpLT(dxbc::Dest::R(0, 0b0001), dxbc::Src::R(0, dxbc::Src::kZZZZ),
                dxbc::Src::R(0, dxbc::Src::kYYYY));
-        // If 20 is the longest edge, the first triangle in the strip is 120.
-        // Otherwise, it's 201.
+
         a.OpMovC(dxbc::Dest::R(0, 0b0111), dxbc::Src::R(0, dxbc::Src::kXXXX),
                  dxbc::Src::LU(1, 2, 0, 0), dxbc::Src::LU(2, 0, 1, 0));
       }
       a.OpEndIf();
 
-      // Emit the triangle in the strip that consists of the original vertices.
       for (uint32_t i = 0; i < 3; ++i) {
         dxbc::Index input_vertex_index(0, i);
         for (uint32_t j = 0; j < key.interpolator_count; ++j) {
@@ -2784,8 +2503,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
         a.OpEmitStream(stream);
       }
 
-      // Construct the fourth vertex using r1 as temporary storage, including
-      // for the final operation as FXC generates only `mov`s for o#.
       stat.temp_register_count = std::max(UINT32_C(2), stat.temp_register_count);
       for (uint32_t j = 0; j < key.interpolator_count; ++j) {
         uint32_t input_register_interpolator = input_register_interpolators + j;
@@ -2820,9 +2537,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     } break;
 
     case PipelineGeometryShader::kQuadList: {
-      // Build the triangle strip from the original quad vertices in the
-      // 0, 1, 3, 2 order (like specified for GL_QUAD_STRIP).
-
       for (uint32_t i = 0; i < 4; ++i) {
         uint32_t input_vertex_index = i ^ (i >> 1);
         for (uint32_t j = 0; j < key.interpolator_count; ++j) {
@@ -2847,12 +2561,8 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     } break;
 
     case PipelineGeometryShader::kLineList: {
-      // Host lines are rasterized 1 host pixel wide, but a guest line covers
-      // 1 guest pixel, draw_resolution_scale host pixels. Expand the segment
-      // into a quad 1 guest pixel wide centered on the line, each end keeping
-      // its own attributes (has207/xenia-edge 7d0a45263).
       stat.temp_register_count = std::max(UINT32_C(3), stat.temp_register_count);
-      // The NDC radius of a 1 guest pixel diameter: half a guest pixel.
+
       dxbc::Src half_pixel_ndc(dxbc::Src::CB(
           0, uint32_t(DxbcShaderTranslator::CbufferRegister::kSystemConstants),
           offsetof(DxbcShaderTranslator::SystemConstants, point_screen_diameter_to_ndc_radius) >> 4,
@@ -2865,23 +2575,20 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
                  2) &
                 3)
                << 2)));
-      // The ends in half guest pixels (NDC over half a guest pixel's NDC
-      // size), so the direction is in screen space whatever the aspect:
-      // r1.xy for the first, r2.xy for the second.
+
       for (uint32_t i = 0; i < 2; ++i) {
         a.OpDiv(dxbc::Dest::R(1 + i, 0b0011), dxbc::Src::V2D(i, input_register_position),
                 dxbc::Src::V2D(i, input_register_position, dxbc::Src::kWWWW));
         a.OpDiv(dxbc::Dest::R(1 + i, 0b0011), dxbc::Src::R(1 + i), half_pixel_ndc);
       }
-      // r2.xy = direction.
+
       a.OpAdd(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2), -dxbc::Src::R(1));
-      // Drop zero-length (and NaN) lines: nothing to expand, and no normal.
+
       a.OpDP2(dxbc::Dest::R(1, 0b0100), dxbc::Src::R(2), dxbc::Src::R(2));
       a.OpLT(dxbc::Dest::R(1, 0b1000), dxbc::Src::LF(0.0f), dxbc::Src::R(1, dxbc::Src::kZZZZ));
       a.OpRetC(false, dxbc::Src::R(1, dxbc::Src::kWWWW));
       a.OpRSq(dxbc::Dest::R(1, 0b0100), dxbc::Src::R(1, dxbc::Src::kZZZZ));
-      // Unit normal (-dy, dx), then half a guest pixel along it in the NDC:
-      // r2.xy.
+
       a.OpMul(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2).Swizzle(0b11100001),
               dxbc::Src::R(1, dxbc::Src::kZZZZ));
       a.OpMul(dxbc::Dest::R(2, 0b0011), dxbc::Src::R(2), half_pixel_ndc);
@@ -2896,7 +2603,7 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
         if (key.has_point_coordinates) {
           a.OpMov(dxbc::Dest::O(output_register_point_coordinates, 0b0011), dxbc::Src::LF(0.0f));
         }
-        // The offset in the clip space is the NDC offset times W.
+
         a.OpMAd(dxbc::Dest::R(0, 0b0011), (i & 1) ? dxbc::Src::R(2) : -dxbc::Src::R(2),
                 dxbc::Src::V2D(vertex, input_register_position, dxbc::Src::kWWWW),
                 dxbc::Src::V2D(vertex, input_register_position));
@@ -2920,10 +2627,8 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
 
   a.OpRet();
 
-  // Write the actual number of temporary registers used.
   shader_out[dcl_temps_count_position_dwords] = stat.temp_register_count;
 
-  // Write the shader program length in dwords.
   shader_out[shex_position_dwords + 1] = uint32_t(shader_out.size()) - shex_position_dwords;
 
   {
@@ -2934,10 +2639,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     blob_header.size_bytes = (blob_position_dwords - kBlobHeaderSizeDwords) * sizeof(uint32_t) -
                              shader_out[blob_offset_position_dwords++];
   }
-
-  // ***************************************************************************
-  // Statistics
-  // ***************************************************************************
 
   shader_out[blob_offset_position_dwords] = uint32_t(blob_position_dwords * sizeof(uint32_t));
   uint32_t stat_position_dwords = blob_position_dwords + kBlobHeaderSizeDwords;
@@ -2952,10 +2653,6 @@ void PipelineCache::CreateDxbcGeometryShader(GeometryShaderKey key,
     blob_header.size_bytes = (blob_position_dwords - kBlobHeaderSizeDwords) * sizeof(uint32_t) -
                              shader_out[blob_offset_position_dwords++];
   }
-
-  // ***************************************************************************
-  // Container header
-  // ***************************************************************************
 
   uint32_t shader_size_bytes = uint32_t(shader_out.size() * sizeof(uint32_t));
   {
@@ -2998,10 +2695,8 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   bool edram_rov_used =
       render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
 
-  // Root signature.
   state_desc.pRootSignature = runtime_description.root_signature;
 
-  // Index buffer strip cut value.
   switch (description.strip_cut_index) {
     case PipelineStripCutIndex::kFFFF:
       state_desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF;
@@ -3014,16 +2709,11 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
       break;
   }
 
-  // Primitive topology, vertex, hull, domain and geometry shaders.
   if (description.dxil) {
-    // SPIR-V -> DXIL (RG-GDK-032): every stage, helper pixel shaders included,
-    // is DXIL (a pipeline can't mix DXBC and DXIL).
 #if REXGLUE_SHADER_DXIL
     if (Shader::IsHostVertexShaderTypeDomain(
             SpirvShaderTranslator::Modification(description.vertex_shader_modification)
                 .vertex.host_vertex_shader_type)) {
-      // The guest shader is the domain shader, linked with the host vertex
-      // and hull shaders.
       const DxilTessellation* tessellation =
           ConvertDxilTessellation(*runtime_description.dxil_vertex_spirv);
       if (!tessellation) {
@@ -3165,7 +2855,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     } else {
       assert_true(host_vertex_shader_type == Shader::HostVertexShaderType::kVertex);
       if (host_vertex_shader_type != Shader::HostVertexShaderType::kVertex) {
-        // Fallback vertex shaders are not needed on Direct3D 12.
         return nullptr;
       }
       state_desc.VS.pShaderBytecode = runtime_description.vertex_shader->translated_binary().data();
@@ -3189,9 +2878,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     }
   }
 
-  // Pixel shader.
   if (description.dxil) {
-    // Set above.
   } else if (runtime_description.pixel_shader != nullptr) {
     if (!runtime_description.pixel_shader->is_translated()) {
       REXGPU_ERROR("Pixel shader {:016X} not translated",
@@ -3202,8 +2889,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     state_desc.PS.pShaderBytecode = runtime_description.pixel_shader->translated_binary().data();
     state_desc.PS.BytecodeLength = runtime_description.pixel_shader->translated_binary().size();
   } else if (description.zpd_total && !zpd_total_depth_only_pixel_shader_.empty()) {
-    // Hybrid occlusion query draw without a guest pixel shader: the coverage
-    // still has to be counted (xenia-canary PR #1218).
     const std::vector<uint8_t>* zpd_total_pixel_shader = &zpd_total_depth_only_pixel_shader_;
     if (render_target_cache_.depth_float24_convert_in_pixel_shader() &&
         (description.depth_func != xenos::CompareFunction::kAlways || description.depth_write) &&
@@ -3215,7 +2900,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     state_desc.PS.pShaderBytecode = zpd_total_pixel_shader->data();
     state_desc.PS.BytecodeLength = zpd_total_pixel_shader->size();
   } else if (edram_rov_used) {
-    // VIZ surveys only mark the ZPass counter.
     const std::vector<uint8_t>& rov_pixel_shader =
         description.viz_survey && !viz_survey_depth_only_pixel_shader_.empty()
             ? viz_survey_depth_only_pixel_shader_
@@ -3234,22 +2918,17 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
         state_desc.PS.BytecodeLength = sizeof(shaders::float24_truncate_ps);
       }
     } else if (!description.depth_write && !description.stencil_write_mask) {
-      // Bind an empty PS to force rasterization.
-      // D3D drops PS-less draws without depth/stencil writes, breaking
-      // occlusion queries (4541096E, 5553083B). From xenia-canary PR #1218.
       state_desc.PS.pShaderBytecode = depth_only_pixel_shader_.data();
       state_desc.PS.BytecodeLength = depth_only_pixel_shader_.size();
     }
   }
 
-  // Geometry shader.
   if (!description.dxil && runtime_description.geometry_shader != nullptr) {
     state_desc.GS.pShaderBytecode = runtime_description.geometry_shader->data();
     state_desc.GS.BytecodeLength = sizeof(*runtime_description.geometry_shader->data()) *
                                    runtime_description.geometry_shader->size();
   }
 
-  // Rasterizer state.
   state_desc.RasterizerState.FillMode =
       description.fill_mode_wireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
   switch (description.cull_mode) {
@@ -3269,10 +2948,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
       description.front_counter_clockwise ? TRUE : FALSE;
   state_desc.RasterizerState.DepthBias = description.depth_bias;
   state_desc.RasterizerState.DepthBiasClamp = 0.0f;
-  // With non-square resolution scaling, make sure the worst-case impact is
-  // reverted (slope only along the scaled axis), thus max. More bias is better
-  // than less bias, because less bias means Z fighting with the background is
-  // more likely.
+
   state_desc.RasterizerState.SlopeScaledDepthBias =
       description.depth_bias_slope_scaled *
       float(std::max(render_target_cache_.draw_resolution_scale_x(),
@@ -3280,10 +2956,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   state_desc.RasterizerState.DepthClipEnable = description.depth_clip ? TRUE : FALSE;
   uint32_t msaa_sample_count = uint32_t(1) << uint32_t(description.host_msaa_samples);
   if (edram_rov_used) {
-    // Only 1, 4, 8 and (not on all GPUs) 16 are allowed, using sample 0 as 0
-    // and 3 as 1 for 2x instead (not exactly the same sample positions, but
-    // still top-left and bottom-right - however, this can be adjusted with
-    // programmable sample positions).
     assert_true(msaa_sample_count == 1 || msaa_sample_count == 4);
     if (msaa_sample_count != 1 && msaa_sample_count != 4) {
       return nullptr;
@@ -3292,7 +2964,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
                                                    << uint32_t(description.host_msaa_samples);
   }
 
-  // Sample mask and description.
   state_desc.SampleMask = UINT_MAX;
 
   if (edram_rov_used) {
@@ -3303,9 +2974,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
       return nullptr;
     }
     if (msaa_sample_count == 2 && !render_target_cache_.msaa_2x_supported()) {
-      // Using sample 0 as 0 and 3 as 1 for 2x instead (not exactly the same
-      // sample positions, but still top-left and bottom-right - however, this
-      // can be adjusted with programmable sample positions).
       state_desc.SampleMask = 0b1001;
       state_desc.SampleDesc.Count = 4;
     } else {
@@ -3314,13 +2982,11 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
   }
 
   if (!edram_rov_used) {
-    // Depth/stencil.
     if (description.depth_func != xenos::CompareFunction::kAlways || description.depth_write) {
       state_desc.DepthStencilState.DepthEnable = TRUE;
       state_desc.DepthStencilState.DepthWriteMask =
           description.depth_write ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-      // Comparison functions are the same in Direct3D 12 but plus one (minus
-      // one, bit 0 for less, bit 1 for equal, bit 2 for greater).
+
       state_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC(
           uint32_t(D3D12_COMPARISON_FUNC_NEVER) + uint32_t(description.depth_func));
     }
@@ -3328,7 +2994,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
       state_desc.DepthStencilState.StencilEnable = TRUE;
       state_desc.DepthStencilState.StencilReadMask = description.stencil_read_mask;
       state_desc.DepthStencilState.StencilWriteMask = description.stencil_write_mask;
-      // Stencil operations are the same in Direct3D 12 too but plus one.
+
       state_desc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP(
           uint32_t(D3D12_STENCIL_OP_KEEP) + uint32_t(description.stencil_front_fail_op));
       state_desc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP(
@@ -3351,7 +3017,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
           D3D12RenderTargetCache::GetDepthDSVDXGIFormat(description.depth_format);
     }
 
-    // Render targets and blending.
     state_desc.BlendState.IndependentBlendEnable = TRUE;
     static const D3D12_BLEND kBlendFactorMap[] = {
         D3D12_BLEND_ZERO,          D3D12_BLEND_ONE,
@@ -3362,7 +3027,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
         D3D12_BLEND_BLEND_FACTOR,  D3D12_BLEND_INV_BLEND_FACTOR,
         D3D12_BLEND_SRC_ALPHA_SAT,
     };
-    // 8 entries for safety since 3 bits from the guest are passed directly.
+
     static const D3D12_BLEND_OP kBlendOpMap[] = {
         D3D12_BLEND_OP_ADD, D3D12_BLEND_OP_SUBTRACT,     D3D12_BLEND_OP_MIN,
         D3D12_BLEND_OP_MAX, D3D12_BLEND_OP_REV_SUBTRACT, D3D12_BLEND_OP_ADD,
@@ -3370,8 +3035,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
       const PipelineRenderTarget& rt = description.render_targets[i];
       if (!rt.used) {
-        // Null RTV descriptors can be used for slots with DXGI_FORMAT_UNKNOWN
-        // in the pipeline state.
         state_desc.RTVFormats[i] = DXGI_FORMAT_UNKNOWN;
         continue;
       }
@@ -3399,11 +3062,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     }
   }
 
-  // Disable rasterization if needed (parameter combinations that make no
-  // difference when rasterization is disabled have already been handled in
-  // GetCurrentStateDescription) the way it's disabled in Direct3D by design
-  // (disabling a pixel shader and depth / stencil).
-
   if (description.cull_mode == PipelineCullMode::kDisableRasterization) {
     state_desc.PS.pShaderBytecode = nullptr;
     state_desc.PS.BytecodeLength = 0;
@@ -3411,7 +3069,6 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
     state_desc.DepthStencilState.StencilEnable = FALSE;
   }
 
-  // Create the D3D12 pipeline state object.
   ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
   ID3D12PipelineState* state;
   if (FAILED(device->CreateGraphicsPipelineState(&state_desc, IID_PPV_ARGS(&state)))) {
@@ -3423,7 +3080,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
       REXGPU_ERROR("Failed to create graphics pipeline with VS {:016X}{}",
                    description.vertex_shader_hash, description.dxil ? " (DXIL)" : "");
     }
-    // With the debug layer (d3d12_debug), its reasons.
+
     ID3D12InfoQueue* info_queue;
     if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
       UINT64 message_count = info_queue->GetNumStoredMessages();
@@ -3455,7 +3112,7 @@ ID3D12PipelineState* PipelineCache::CreateD3D12Pipeline(
 
 void PipelineCache::StorageWriteThread() {
   ShaderStoredHeader shader_header;
-  // Don't leak anything in unused bits.
+
   std::memset(&shader_header, 0, sizeof(shader_header));
 
   std::vector<uint32_t> ucode_guest_endian;
@@ -3514,8 +3171,7 @@ void PipelineCache::StorageWriteThread() {
       fwrite(&shader_header, sizeof(shader_header), 1, shader_storage_file_);
       if (shader_header.ucode_dword_count) {
         ucode_guest_endian.resize(shader_header.ucode_dword_count);
-        // Need to swap because the hash is calculated for the shader with guest
-        // endianness.
+
         memory::copy_and_swap(ucode_guest_endian.data(), shader->ucode_dwords(),
                               shader_header.ucode_dword_count);
         fwrite(ucode_guest_endian.data(), shader_header.ucode_dword_count * sizeof(uint32_t), 1,
@@ -3600,13 +3256,10 @@ void PipelineCache::CreationThread(size_t thread_index) {
   while (true) {
     Pipeline* pipeline_to_create = nullptr;
 
-    // Check if need to shut down or set the completion event and dequeue the
-    // pipeline if there is any.
     {
       std::unique_lock<std::mutex> lock(creation_request_lock_);
       if (thread_index >= creation_threads_shutdown_from_ || creation_queue_.empty()) {
         if (creation_completion_set_event_ && creation_threads_busy_ == 0) {
-          // Last pipeline in the queue created - signal the event if requested.
           creation_completion_set_event_ = false;
           creation_completion_event_->Set();
         }
@@ -3616,14 +3269,10 @@ void PipelineCache::CreationThread(size_t thread_index) {
         creation_request_cond_.wait(lock);
         continue;
       }
-      // Take the pipeline from the queue and increment the busy thread count
-      // until the pipeline is created - other threads must be able to dequeue
-      // requests, but can't set the completion event until the pipelines are
-      // fully created (rather than just started creating).
+
       pipeline_to_create = creation_queue_.top();
       creation_queue_.pop();
       if (pipeline_to_create->creation_claimed.exchange(true, std::memory_order_acq_rel)) {
-        // Created by an AwaitPipeline already.
         continue;
       }
       ++creation_threads_busy_;
@@ -3638,9 +3287,6 @@ void PipelineCache::CreationThread(size_t thread_index) {
     }
     pipeline_to_create->creation_pending.store(false, std::memory_order_release);
 
-    // Pipeline created - the thread is not busy anymore, safe to set the
-    // completion event if needed (at the next iteration, or in some other
-    // thread).
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
       --creation_threads_busy_;
@@ -3677,22 +3323,19 @@ void PipelineCache::CreateQueuedPipelinesOnProcessorThread() {
 #if REXGLUE_SHADER_DXIL
 std::unique_ptr<SpirvShaderTranslator> PipelineCache::DxilShaderCacheHost::CreateTranslator()
     const {
-  // As xenia-edge's D3D12 pipeline cache configures it for Mesa spirv_to_dxil.
-  SpirvShaderTranslator::Features features(/*all=*/true);
-  // Pixel (not sample) interlock: D3D12's rasterizer-ordered views.
+  SpirvShaderTranslator::Features features(true);
+
   features.fragment_shader_sample_interlock = false;
-  // Manual barycentric interpolation through SV_Barycentrics.
+
   features.fragment_shader_barycentric = true;
   features.signed_zero_inf_nan_preserve_float32 = false;
   features.denorm_flush_to_zero_float32 = true;
   features.rounding_mode_rte_float32 = false;
   const auto& render_target_cache = pipeline_cache_.render_target_cache_;
   return std::make_unique<SpirvShaderTranslator>(
-      features, render_target_cache.msaa_2x_supported(),
-      /*native_2x_msaa_no_attachments=*/false,
-      render_target_cache.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock,
-      /*precise_interpolation=*/false, render_target_cache.draw_resolution_scale_x(),
-      render_target_cache.draw_resolution_scale_y());
+      features, render_target_cache.msaa_2x_supported(), false,
+      render_target_cache.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock, false,
+      render_target_cache.draw_resolution_scale_x(), render_target_cache.draw_resolution_scale_y());
 }
 
 bool PipelineCache::DxilShaderCacheHost::depth_float24_round() const {
@@ -3745,19 +3388,17 @@ const std::vector<uint8_t>* PipelineCache::ConvertDxil(const Shader::Translation
     auto& by_modification = dxil_binaries_[shader.ucode_data_hash()];
     auto it = by_modification.find(translation.modification());
     if (it != by_modification.end()) {
-      // An empty entry is a cached failure.
       return it->second.empty() ? nullptr : &it->second;
     }
   }
-  // The conversion is the expensive step, outside the lock; two threads
-  // converting the same shader keep the first result.
+
   const std::vector<uint8_t>& spirv = translation.translated_binary();
   auto convert_start = std::chrono::steady_clock::now();
   std::vector<uint8_t> dxil = SpirvToDxilCompiler::Translate(
       reinterpret_cast<const uint32_t*>(spirv.data()), spirv.size() / sizeof(uint32_t),
       shader.type() == xenos::ShaderType::kVertex ? SpirvToDxilCompiler::Stage::kVertex
                                                   : SpirvToDxilCompiler::Stage::kPixel,
-      /*lower_to_bindless=*/true);
+      true);
   REXGPU_DEBUG(
       "DXIL conversion {:016X}: {:.1f} ms", shader.ucode_data_hash(),
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - convert_start)
@@ -3773,9 +3414,7 @@ const std::vector<uint8_t>* PipelineCache::ConvertDxil(const Shader::Translation
 }
 
 namespace {
-// The SPIR-V host tessellation vertex and hull shaders for a tessellation mode
-// and domain, as the DXBC ones are chosen in CreateD3D12Pipeline
-// (has207/xenia-edge GetMesaTessHostSpirv). False for an invalid combination.
+
 template <size_t kWords>
 void SetSpirv(const uint32_t (&spirv)[kWords], SpirvToDxilCompiler::LinkedStage& stage) {
   stage.spirv_words = spirv;
@@ -3787,7 +3426,6 @@ bool GetTessellationHostSpirv(xenos::TessellationMode tessellation_mode,
                               SpirvToDxilCompiler::LinkedStage& hull) {
   using HostVertexShaderType = Shader::HostVertexShaderType;
   if (tessellation_mode == xenos::TessellationMode::kAdaptive) {
-    // The edge factors come through the index buffer.
     SetSpirv(shaders_spirv::tessellation_adaptive_vs, vertex);
   } else {
     SetSpirv(shaders_spirv::tessellation_indexed_vs, vertex);
@@ -3842,7 +3480,7 @@ bool GetTessellationHostSpirv(xenos::TessellationMode tessellation_mode,
       return false;
   }
 }
-}  // namespace
+}
 
 const PipelineCache::DxilTessellation* PipelineCache::ConvertDxilTessellation(
     const Shader::Translation& translation) {
@@ -3855,7 +3493,7 @@ const PipelineCache::DxilTessellation* PipelineCache::ConvertDxilTessellation(
       return it->second.domain.empty() ? nullptr : &it->second;
     }
   }
-  // The domain shader's modification holds the domain and the mode.
+
   SpirvShaderTranslator::Modification modification(translation.modification());
   std::vector<SpirvToDxilCompiler::LinkedStage> stages(3);
   stages[0].stage = SpirvToDxilCompiler::Stage::kVertex;
@@ -3868,14 +3506,14 @@ const PipelineCache::DxilTessellation* PipelineCache::ConvertDxilTessellation(
   auto convert_start = std::chrono::steady_clock::now();
   if (GetTessellationHostSpirv(modification.vertex.tessellation_mode,
                                modification.vertex.host_vertex_shader_type, stages[0], stages[1])) {
-    dxil = SpirvToDxilCompiler::TranslateLinked(stages, /*lower_to_bindless=*/true);
+    dxil = SpirvToDxilCompiler::TranslateLinked(stages, true);
   }
   DxilTessellation tessellation;
   if (dxil.size() == 3 && !dxil[0].empty() && !dxil[1].empty() && !dxil[2].empty()) {
     tessellation.host_vertex = std::move(dxil[0]);
     tessellation.host_hull = std::move(dxil[1]);
     tessellation.domain = std::move(dxil[2]);
-    // Once per domain shader and modification, as xenia-edge logs it.
+
     REXGPU_INFO(
         "DXIL tessellation {:016X} (modification {:016X}): VS {} B, HS {} B, DS {} B, {:.1f} ms",
         shader.ucode_data_hash(), translation.modification(), tessellation.host_vertex.size(),
@@ -3900,12 +3538,9 @@ bool PipelineCache::InitializeDxilHelperPixelShaders() {
     }
     return SpirvToDxilCompiler::Translate(reinterpret_cast<const uint32_t*>(spirv.data()),
                                           spirv.size() / sizeof(uint32_t),
-                                          SpirvToDxilCompiler::Stage::kPixel,
-                                          /*lower_to_bindless=*/true);
+                                          SpirvToDxilCompiler::Stage::kPixel, true);
   };
   if (render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock) {
-    // Depth and stencil are in the EDRAM buffer, so without a guest pixel
-    // shader one still has to run the in-shader depth / stencil test.
     for (uint32_t i = 0; i < 3; ++i) {
       dxil_rov_depth_only_pixel_shaders_[i] =
           convert(translator.CreateDepthOnlyFragmentShader(xenos::MsaaSamples(i)));
@@ -3955,7 +3590,6 @@ bool PipelineCache::InitializeDxilHelperPixelShaders() {
 const std::vector<uint8_t>* PipelineCache::GetDxilHelperPixelShader(
     const PipelineDescription& description) const {
   if (render_target_cache_.GetPath() == RenderTargetCache::Path::kPixelShaderInterlock) {
-    // VIZ surveys only mark the ZPass counter.
     size_t msaa_samples =
         size_t(SpirvShaderTranslator::Modification(description.pixel_shader_modification)
                    .pixel.fsi_msaa_samples());
@@ -3965,8 +3599,7 @@ const std::vector<uint8_t>* PipelineCache::GetDxilHelperPixelShader(
     return description.viz_survey ? &dxil_rov_viz_survey_pixel_shaders_[msaa_samples]
                                   : &dxil_rov_depth_only_pixel_shaders_[msaa_samples];
   }
-  // As the DXBC path: float24 depth converted in the shader, else an empty
-  // shader so D3D doesn't drop a draw writing nothing (occlusion queries).
+
   const bool float24_converted =
       render_target_cache_.depth_float24_convert_in_pixel_shader() &&
       (description.depth_func != xenos::CompareFunction::kAlways || description.depth_write) &&
@@ -3998,8 +3631,7 @@ const std::vector<uint8_t>* PipelineCache::GetDxilGeometryShader(
   if (it != dxil_geometry_shaders_.end()) {
     return it->second.empty() ? nullptr : &it->second;
   }
-  // The same SPIR-V version and float controls as the guest shaders, so the
-  // stages link.
+
   const SpirvShaderTranslator::Features& features = dxil_shader_cache_->translator().features();
   std::vector<unsigned int> spirv = BuildGuestPrimitiveGeometryShaderSpirv(
       BuiltinGeometryShaderType(uint32_t(key.type)), key.interpolator_count,
@@ -4008,8 +3640,8 @@ const std::vector<uint8_t>* PipelineCache::GetDxilGeometryShader(
       features.denorm_flush_to_zero_float32, features.signed_zero_inf_nan_preserve_float32,
       features.rounding_mode_rte_float32);
   std::vector<uint8_t> dxil = SpirvToDxilCompiler::Translate(
-      spirv.data(), spirv.size(), SpirvToDxilCompiler::Stage::kGeometry,
-      /*lower_to_bindless=*/true, key.user_clip_plane_cull ? 0 : key.user_clip_plane_count);
+      spirv.data(), spirv.size(), SpirvToDxilCompiler::Stage::kGeometry, true,
+      key.user_clip_plane_cull ? 0 : key.user_clip_plane_count);
   auto emplaced = dxil_geometry_shaders_.emplace(key.key, std::move(dxil));
   return emplaced.first->second.empty() ? nullptr : &emplaced.first->second;
 }
@@ -4023,8 +3655,6 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     uint32_t bound_depth_and_color_render_target_bits,
     const uint32_t* bound_depth_and_color_render_target_formats, bool zpd_total, bool viz_survey,
     void** pipeline_handle_out, SpirvShader** vertex_shader_out, SpirvShader** pixel_shader_out) {
-  // Vertex shaders, and domain shaders with the host tessellation stages; the
-  // *AsTriangleStrip fallbacks are Vulkan-only.
   if (!dxil_shader_cache_ || (primitive_processing_result.host_vertex_shader_type !=
                                   Shader::HostVertexShaderType::kVertex &&
                               !primitive_processing_result.IsTessellated())) {
@@ -4036,7 +3666,6 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     return DxilPipelineResult::kUnsupported;
   }
 
-  // A title's replacement shaders are DXBC: their draws stay on that path.
   if (!shader_replacements_.empty()) {
     auto replaced = [&](const D3D12Shader::D3D12Translation& translation,
                         ShaderReplacements::Stage stage) {
@@ -4056,19 +3685,18 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
       dxbc_pixel_shader ? GetDxilShader(dxbc_pixel_shader->shader()) : nullptr;
   uint64_t vertex_modification = dxil_shader_cache_->GetVertexShaderModification(
       *vertex_shader, primitive_processing_result.host_vertex_shader_type, interpolator_mask,
-      /*ps_param_gen_used=*/false);
+      false);
   uint64_t pixel_modification = pixel_shader
                                     ? dxil_shader_cache_->GetPixelShaderModification(
                                           *pixel_shader, interpolator_mask, ps_param_gen_pos,
-                                          normalized_depth_control, normalized_color_mask,
-                                          /*apply_polygon_offset_in_shader=*/false)
+                                          normalized_depth_control, normalized_color_mask, false)
                                     : 0;
   if (zpd_total) {
     SpirvShaderTranslator::Modification counting_modification(pixel_modification);
     counting_modification.pixel.set_zpd_total(true);
     pixel_modification = counting_modification.value;
   }
-  // SPIR-V here for the draw's bindings; DXIL when the pipeline is created.
+
   const Shader::Translation* vertex_spirv = GetDxilSpirv(*vertex_shader, vertex_modification);
   const Shader::Translation* pixel_spirv =
       pixel_shader ? GetDxilSpirv(*pixel_shader, pixel_modification) : nullptr;
@@ -4076,14 +3704,12 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     return DxilPipelineResult::kFailed;
   }
 
-  // The fixed function state as for DXBC, then the DXIL shaders.
   PipelineRuntimeDescription runtime_description;
-  if (!GetCurrentStateDescription(dxbc_vertex_shader, dxbc_pixel_shader,
-                                  primitive_processing_result, normalized_depth_control,
-                                  normalized_color_mask, zpd_total, viz_survey,
-                                  bound_depth_and_color_render_target_bits,
-                                  bound_depth_and_color_render_target_formats, runtime_description,
-                                  /*for_placeholder=*/true)) {
+  if (!GetCurrentStateDescription(
+          dxbc_vertex_shader, dxbc_pixel_shader, primitive_processing_result,
+          normalized_depth_control, normalized_color_mask, zpd_total, viz_survey,
+          bound_depth_and_color_render_target_bits, bound_depth_and_color_render_target_formats,
+          runtime_description, true)) {
     return DxilPipelineResult::kFailed;
   }
   PipelineDescription& description = runtime_description.description;
@@ -4104,8 +3730,6 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     }
   }
   if (edram_rov_used && !pixel_shader) {
-    // Selects the EDRAM depth-only pixel shader for the guest sample count,
-    // which host_msaa_samples doesn't keep (2x is drawn as 4x).
     SpirvShaderTranslator::Modification rov_depth_only_modification(0);
     rov_depth_only_modification.pixel.set_fsi_msaa_samples(
         register_file_.Get<reg::RB_SURFACE_INFO>().msaa_samples);
@@ -4122,9 +3746,6 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
     }
   }
   if (!pipeline) {
-    // The SPIR-V is ready, so creation needs no guest translation: on the
-    // creation threads with async_shader_compilation, as DXBC pipelines are,
-    // else here.
     pipeline = new Pipeline;
     std::memcpy(&pipeline->description, &runtime_description, sizeof(runtime_description));
     pipeline->root_signature.store(runtime_description.root_signature, std::memory_order_release);
@@ -4155,7 +3776,7 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
                  pixel_shader ? pixel_shader->ucode_data_hash() : 0, pixel_modification,
                  pipeline->state.load(std::memory_order_relaxed) ? "" : " - creation failed");
   }
-  // Still being created on a creation thread: IssueDraw skips or awaits it.
+
   if (!pipeline->state.load(std::memory_order_acquire) &&
       !pipeline->creation_pending.load(std::memory_order_acquire)) {
     return DxilPipelineResult::kFailed;
@@ -4168,8 +3789,6 @@ PipelineCache::DxilPipelineResult PipelineCache::ConfigurePipelineDxil(
 }
 void PipelineCache::StoreDxilPipeline(uint64_t hash, const PipelineDescription& description,
                                       Shader& vertex_shader, Shader* pixel_shader) {
-  // The guest shaders go to the shader storage as the DXBC path's translated
-  // ones do; DXIL draws may never translate them to DXBC.
   if (shader_storage_file_) {
     for (Shader* shader : {&vertex_shader, pixel_shader}) {
       if (shader && shader->ucode_storage_index() != shader_storage_index_) {
@@ -4263,6 +3882,6 @@ bool PipelineCache::CreateStoredDxilPipeline(const PipelineStoredDescription& st
   }
   return true;
 }
-#endif  // REXGLUE_SHADER_DXIL
+#endif
 
-}  // namespace rex::graphics::d3d12
+}
