@@ -80,6 +80,18 @@ Use the compile database for editor navigation and focused Clang-Tidy checks.
 `.clang-tidy` exists, but a repository-wide clean static-analysis baseline is
 not established. Do not claim it passes or auto-fix all legacy findings.
 
+Pull-request lint runs Clang-Tidy on added or modified lines in compiled C++
+files, with findings treated as errors. The runner uses native absolute paths
+so its line filters match Windows diagnostics. Headers without their own
+compilation database entry are skipped. To run the same check locally from an
+x64 Visual Studio developer shell, configure without precompiled headers and
+pipe the diff into the runner:
+
+```powershell
+cmake --preset win-amd64-gdk -B out/build/tidy -DREXGLUE_BUILD_TESTS=ON -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+git diff -U0 --no-color origin/main -- src include tests | python scripts/clang_tidy_changed.py --build out/build/tidy
+```
+
 CTest is the supported unit invocation: cases run in separate processes.
 The shared test memory fixture owns one live guest address space. Mixing that
 fixture with independent live `Memory` instances in one test process violates
