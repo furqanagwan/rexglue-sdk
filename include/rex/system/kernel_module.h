@@ -13,7 +13,7 @@
 #include <unordered_map>
 
 #include <rex/system/export_resolver.h>
-#include <rex/system/xmodule.h>
+#include <rex/system/kernel_module_object.h>
 
 namespace rex {
 class Runtime;

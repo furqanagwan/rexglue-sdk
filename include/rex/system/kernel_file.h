@@ -17,10 +17,10 @@
 #include <rex/filesystem/device.h>
 #include <rex/filesystem/entry.h>
 #include <rex/filesystem/file.h>
-#include <rex/system/xevent.h>
+#include <rex/system/kernel_event.h>
 #include <rex/system/xio.h>
-#include <rex/system/xiocompletion.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_io_completion.h>
+#include <rex/system/kernel_object.h>
 #include <rex/system/xtypes.h>
 
 namespace rex::system {

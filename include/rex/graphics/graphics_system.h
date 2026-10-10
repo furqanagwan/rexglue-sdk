@@ -25,7 +25,7 @@
 #include <rex/kernel.h>
 #include <rex/memory.h>
 #include <rex/system/interfaces/graphics.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread/mutex.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/presenter.h>

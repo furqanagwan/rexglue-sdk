@@ -16,7 +16,7 @@
 #include <rex/types.h>
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 #include <rex/system/xtypes.h>
 
 #include <rex/platform.h>

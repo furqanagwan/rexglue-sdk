@@ -19,10 +19,10 @@
 #include <rex/thread/fiber.h>
 #include <rex/system/thread_state.h>
 #include <rex/system/util/native_list.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xobject.h>
-#include <rex/system/xsemaphore.h>
-#include <rex/system/xtimer.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_object.h>
+#include <rex/system/kernel_semaphore.h>
+#include <rex/system/kernel_timer.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread.h>
 #include <rex/thread/mutex.h>

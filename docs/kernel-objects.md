@@ -2,8 +2,8 @@
 
 How a guest dispatcher object (event, semaphore, mutant, thread) is tied to
 the host object that implements it, who owns it, and when the two states are
-reconciled (RG-GDK-014). Code: `src/system/xobject.cpp`, `xevent.cpp`,
-`xsemaphore.cpp`, `src/system/util/object_table.cpp`.
+reconciled (RG-GDK-014). Code: `src/system/kernel_object.cpp`, `kernel_event.cpp`,
+`kernel_semaphore.cpp`, `src/system/util/object_table.cpp`.
 
 ## The dispatch header
 

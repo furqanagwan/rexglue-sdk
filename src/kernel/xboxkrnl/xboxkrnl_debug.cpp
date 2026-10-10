@@ -18,7 +18,7 @@
 #include <rex/types.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xexception.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 
 namespace rex::kernel::xboxkrnl {

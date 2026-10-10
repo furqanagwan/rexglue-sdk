@@ -14,7 +14,7 @@
 
 #include <rex/system/module.h>
 #include <rex/system/xio.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 #include <rex/system/xtypes.h>
 
 namespace rex::system {

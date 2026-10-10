@@ -28,7 +28,7 @@
 #include <rex/system/interfaces/graphics.h>
 #include <rex/system/interfaces/input.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 
 struct PPCFuncMapping;
 

@@ -11,7 +11,7 @@
 
 #include <rex/logging.h>
 #include <rex/stream.h>
-#include <rex/system/xevent.h>
+#include <rex/system/kernel_event.h>
 
 namespace rex::system {
 

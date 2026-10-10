@@ -14,7 +14,7 @@
 #include <queue>
 
 #include <rex/math.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 #include <rex/types.h>
 
 namespace rex::system {

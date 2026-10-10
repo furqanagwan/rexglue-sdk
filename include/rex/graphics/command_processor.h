@@ -30,7 +30,7 @@
 #include <rex/graphics/xenos_zpd_report.h>
 #include <rex/memory.h>
 #include <rex/memory/ring_buffer.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/ui/presenter.h>
 

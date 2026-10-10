@@ -29,7 +29,7 @@
 #include <rex/system/lzx.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/xex_module.h>
-#include <rex/system/xmodule.h>
+#include <rex/system/kernel_module_object.h>
 #include <rex/types.h>
 
 static const uint8_t xe_xex2_retail_key[16] = {0x20, 0xB1, 0x85, 0xA5, 0x9D, 0x28, 0xFD, 0xC3,

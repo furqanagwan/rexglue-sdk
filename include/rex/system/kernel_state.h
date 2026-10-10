@@ -39,7 +39,7 @@
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/xcontent.h>
 #include <rex/system/xmemory.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread/mutex.h>
 #include <rex/types.h>

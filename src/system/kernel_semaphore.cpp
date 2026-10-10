@@ -11,7 +11,7 @@
 
 #include <rex/logging.h>
 #include <rex/stream.h>
-#include <rex/system/xsemaphore.h>
+#include <rex/system/kernel_semaphore.h>
 
 namespace rex::system {
 

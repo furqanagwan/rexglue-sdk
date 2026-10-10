@@ -12,8 +12,8 @@
 #include <rex/logging.h>
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_thread.h>
 
 namespace rex::system {
 

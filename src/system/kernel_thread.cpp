@@ -31,9 +31,9 @@
 #include <rex/system/thread_state.h>
 #include <rex/system/user_module.h>
 #include <rex/kernel/xboxkrnl/threading.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/vec128.h>
 

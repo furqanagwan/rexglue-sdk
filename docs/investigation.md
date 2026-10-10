@@ -164,7 +164,7 @@ permission to copy a file without reviewing ABI, dependencies and licensing.
 | XMA: `src/audio/xma_context.cpp`, `xma_decoder.cpp` | E/B/H | Early Canary behavior present; later Edge loop boundary/packet fixes still relevant. Preserve FFmpeg coupling. |
 | Output audio: `src/audio/sdl/*` | B | Add Windows XAudio2 sink after PCM/endian/channel and recovery parity. XMA guest decoding stays above output API. |
 | Input: `src/input/{xinput,sdl,mnk}`, device assignment | B/H | GameInput adapter can replace host acquisition; preserve guest packet counters, slots, subtype and disconnect semantics. |
-| Timing: `src/core/threading_win.cpp`, `src/system/xthread.cpp` | B/C/H/G | QPC, waits and timer resolution need measured contracts. Pending Edge #251 explicitly changes Sleep(0) timing. |
+| Timing: `src/core/threading_win.cpp`, `src/system/kernel_thread.cpp` | B/C/H/G | QPC, waits and timer resolution need measured contracts. Pending Edge #251 explicitly changes Sleep(0) timing. |
 | POSIX/SDL platform and Vulkan backend | F/B | Linux/macOS/Vulkan implementations retire after parity. SDL currently owns Windows window/audio/input too; Windows-only does not make all SDL code dead. |
 | JIT/CPU optimization, debugger code cache, savestates | D | CPU register liveness, x64/a64 code emission, self-modifying-code JIT invalidation are outside static architecture. Semantic instruction tests can still be useful. |
 

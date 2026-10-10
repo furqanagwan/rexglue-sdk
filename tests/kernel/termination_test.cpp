@@ -25,8 +25,8 @@
 
 #include <rex/ppc/context.h>
 #include <rex/system/function_dispatcher.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_thread.h>
 
 namespace {
 

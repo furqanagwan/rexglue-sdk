@@ -11,7 +11,7 @@
 
 #include <rex/kernel/xam/apps/xmp_app.h>
 #include <rex/logging.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 
 namespace rex {

@@ -33,7 +33,7 @@
 #include <rex/runtime.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 
 REXCVAR_DEFINE_BOOL(log_high_frequency_kernel_calls, false, "Kernel",
                     "Log kernel calls with the kHighFrequency tag");

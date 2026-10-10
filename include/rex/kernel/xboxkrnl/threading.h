@@ -12,8 +12,8 @@
 #pragma once
 
 #include <rex/ppc/context.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 #include <rex/types.h>
 

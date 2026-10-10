@@ -11,7 +11,7 @@
 
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xsymboliclink.h>
+#include <rex/system/kernel_symbolic_link.h>
 
 namespace rex::system {
 

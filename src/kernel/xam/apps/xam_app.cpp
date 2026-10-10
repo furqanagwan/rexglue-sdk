@@ -12,7 +12,7 @@
 #include <rex/kernel/xam/apps/app.h>
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 #include <rex/thread.h>
 
 namespace rex {

@@ -29,11 +29,11 @@
 #include <rex/system/thread_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/util/string_utils.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xsemaphore.h>
-#include <rex/system/xthread.h>
-#include <rex/system/xtimer.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_semaphore.h>
+#include <rex/system/kernel_thread.h>
+#include <rex/system/kernel_timer.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread/atomic.h>
 #include <rex/thread/mutex.h>

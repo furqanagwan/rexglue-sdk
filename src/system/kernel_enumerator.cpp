@@ -9,7 +9,7 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 
 namespace rex::system {
 

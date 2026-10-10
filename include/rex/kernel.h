@@ -15,13 +15,13 @@
 
 #include <rex/system/xio.h>
 
-#include <rex/system/xevent.h>
-#include <rex/system/xfile.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xobject.h>
-#include <rex/system/xsemaphore.h>
-#include <rex/system/xthread.h>
-#include <rex/system/xtimer.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_file.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_object.h>
+#include <rex/system/kernel_semaphore.h>
+#include <rex/system/kernel_thread.h>
+#include <rex/system/kernel_timer.h>
 
 #include <rex/system/xmemory.h>
 

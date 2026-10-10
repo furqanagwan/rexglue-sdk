@@ -20,7 +20,7 @@
 #include <rex/memory.h>
 #include <rex/system/interfaces/audio.h>
 #include <rex/system/function_dispatcher.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/thread/mutex.h>
 

@@ -16,17 +16,17 @@
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/util/string_utils.h>
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 
-#include <rex/system/xenumerator.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xfile.h>
-#include <rex/system/xmodule.h>
-#include <rex/system/xmutant.h>
-#include <rex/system/xnotifylistener.h>
-#include <rex/system/xsemaphore.h>
-#include <rex/system/xsymboliclink.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_enumerator.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_file.h>
+#include <rex/system/kernel_module_object.h>
+#include <rex/system/kernel_mutant.h>
+#include <rex/system/kernel_notify_listener.h>
+#include <rex/system/kernel_semaphore.h>
+#include <rex/system/kernel_symbolic_link.h>
+#include <rex/system/kernel_thread.h>
 
 REXCVAR_DEFINE_BOOL(guest_precise_timers, true, "Kernel",
                     "Measure guest delays and timed waits with a high-resolution host timer "

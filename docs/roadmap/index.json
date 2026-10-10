@@ -730,10 +730,10 @@
     "objective": "Align guest dispatcher objects with host state while preserving static runtime ownership.",
     "background": "Canary #1227 synchronizes headers; #1225 signature lifetime remains disputed. Local object_table tests exist and should anchor adaptation.",
     "files": [
-      "src/system/xobject.cpp",
-      "src/system/xevent.cpp",
-      "src/system/xsemaphore.cpp",
-      "src/system/xthread.cpp",
+      "src/system/kernel_object.cpp",
+      "src/system/kernel_event.cpp",
+      "src/system/kernel_semaphore.cpp",
+      "src/system/kernel_thread.cpp",
       "tests/unit/kernel/object_table_test.cpp"
     ],
     "tasks": [
@@ -785,7 +785,7 @@
     "objective": "Define safe timing and lifecycle changes without importing Edge guest scheduling.",
     "background": "Edge #234/#233 show scheduler regressions; #251 changes Sleep(0) with no x64 validation. Canary #1025 teardown and #872 timer behavior are relevant but architecture differs.",
     "files": [
-      "src/system/xthread.cpp",
+      "src/system/kernel_thread.cpp",
       "src/system/function_dispatcher.cpp",
       "include/rex/system/xexception.h",
       "src/core/threading_win.cpp",
@@ -845,7 +845,7 @@
     "objective": "Reproduce timing-sensitive IO and design a bounded guest storage model if needed.",
     "background": "Edge #275 allocation cap was rejected; 5e9eae601 models per-device timing using its scheduler and e987fd7f5 refines sequential seeks.",
     "files": [
-      "src/system/xfile.cpp",
+      "src/system/kernel_file.cpp",
       "src/filesystem/device.cpp",
       "src/kernel/xboxkrnl/xboxkrnl_io.cpp"
     ],

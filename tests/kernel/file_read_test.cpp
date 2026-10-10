@@ -21,7 +21,7 @@
 #include <rex/ppc.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/xio.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/types.h>
 

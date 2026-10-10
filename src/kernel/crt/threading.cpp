@@ -22,7 +22,7 @@
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xmemory.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 #include <rex/thread/fiber.h>
 

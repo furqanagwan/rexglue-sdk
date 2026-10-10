@@ -20,8 +20,8 @@
 #include <rex/system/user_module.h>
 #include <rex/system/user_language.h>
 #include <rex/system/xam/title_launch.h>
-#include <rex/system/xenumerator.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_enumerator.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/system/xtypes.h>
 
 #include <windows.h>

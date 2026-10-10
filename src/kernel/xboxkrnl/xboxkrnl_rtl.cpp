@@ -25,8 +25,8 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/util/string_utils.h>
-#include <rex/system/xevent.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_event.h>
+#include <rex/system/kernel_thread.h>
 #include <rex/thread.h>
 #include <rex/thread/atomic.h>
 

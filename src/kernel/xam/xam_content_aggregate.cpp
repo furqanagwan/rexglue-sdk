@@ -20,7 +20,7 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
 #include <rex/system/xam/content_device.h>
-#include <rex/system/xenumerator.h>
+#include <rex/system/kernel_enumerator.h>
 #include <rex/system/xtypes.h>
 
 namespace rex {

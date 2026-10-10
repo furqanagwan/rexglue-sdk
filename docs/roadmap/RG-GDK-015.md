@@ -46,7 +46,7 @@ Unrelated subsystem replacement; CPU JIT; upstream repository mutations; unvalid
 
 ## Relevant Files
 
-- `src/system/xthread.cpp`
+- `src/system/kernel_thread.cpp`
 - `src/system/function_dispatcher.cpp`
 - `include/rex/system/xexception.h`
 - `src/core/threading_win.cpp`

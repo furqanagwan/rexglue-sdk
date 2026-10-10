@@ -20,7 +20,7 @@
 #include <rex/string/buffer.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
+#include <rex/system/kernel_thread.h>
 
 extern "C" {
 #include "libavutil/log.h"

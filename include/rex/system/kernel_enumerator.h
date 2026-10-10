@@ -14,7 +14,7 @@
 #include <cstring>
 #include <vector>
 
-#include <rex/system/xobject.h>
+#include <rex/system/kernel_object.h>
 #include <rex/system/xtypes.h>
 
 namespace rex::system {

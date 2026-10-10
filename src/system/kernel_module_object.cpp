@@ -14,7 +14,7 @@
 #include <rex/string.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
-#include <rex/system/xmodule.h>
+#include <rex/system/kernel_module_object.h>
 
 namespace rex::system {
 
