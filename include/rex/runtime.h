@@ -124,6 +124,8 @@ class Runtime {
 
   X_STATUS Setup(const PPCImageInfo& image_info, RuntimeConfig config = {});
 
+  bool MountFileSystem();
+
   const PPCCodegenFlags& codegen_flags() const { return codegen_flags_; }
 
   bool is_tool_mode() const { return tool_mode_; }

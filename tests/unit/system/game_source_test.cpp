@@ -123,7 +123,7 @@ TEST_CASE("Game source extraction commits a matching folder and preserves existi
   const auto expected = source.identity;
   {
     rex::Runtime runtime(root / "source.iso", root / "users", {}, root / "cache");
-    REQUIRE(runtime.Setup(rex::RuntimeConfig{.tool_mode = true}) == X_STATUS_SUCCESS);
+    REQUIRE(runtime.MountFileSystem());
     auto* game = runtime.file_system()->ResolvePath("game:\\default.xex");
     auto* drive = runtime.file_system()->ResolvePath("d:\\default.xex");
     REQUIRE(game);
