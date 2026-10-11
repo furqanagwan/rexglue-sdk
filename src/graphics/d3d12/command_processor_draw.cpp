@@ -525,10 +525,12 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   uint32_t normalized_color_mask =
       pixel_shader ? draw_util::GetNormalizedColorMask(regs, pixel_shader->writes_color_targets())
                    : 0;
+  int32_t window_offset_tiles = render_target_cache_->GetWindowOffsetTiles(
+      regs, normalized_depth_control, normalized_color_mask, frame_current_);
   {
     TickAccumulator render_target_time(frame_timings_.render_targets);
     if (!render_target_cache_->Update(is_rasterization_done, normalized_depth_control,
-                                      normalized_color_mask, *vertex_shader)) {
+                                      normalized_color_mask, *vertex_shader, window_offset_tiles)) {
       return false;
     }
   }
@@ -678,23 +680,24 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   std::memcpy(viewport_key.vport_regs, &regs[XE_GPU_REG_PA_CL_VPORT_XSCALE],
               sizeof(viewport_key.vport_regs));
   viewport_key.flags = (uint32_t(convert_z_to_float24) << 0) |
-                       (uint32_t(host_render_targets_used) << 1) | (uint32_t(ps_writes_depth) << 2);
+                       (uint32_t(host_render_targets_used) << 1) |
+                       (uint32_t(ps_writes_depth) << 2) | (uint32_t(window_offset_tiles != 0) << 3);
 
   draw_util::ViewportInfo viewport_info;
   if (viewport_cache_valid_ && viewport_key == previous_viewport_key_) {
     viewport_info = previous_viewport_info_;
   } else {
-    draw_util::GetHostViewportInfo(regs, draw_resolution_scale_x, draw_resolution_scale_y, true,
-                                   D3D12_VIEWPORT_BOUNDS_MAX, D3D12_VIEWPORT_BOUNDS_MAX, false,
-                                   normalized_depth_control, convert_z_to_float24,
-                                   host_render_targets_used, ps_writes_depth, viewport_info);
+    draw_util::GetHostViewportInfo(
+        regs, draw_resolution_scale_x, draw_resolution_scale_y, true, D3D12_VIEWPORT_BOUNDS_MAX,
+        D3D12_VIEWPORT_BOUNDS_MAX, false, normalized_depth_control, convert_z_to_float24,
+        host_render_targets_used, ps_writes_depth, viewport_info, window_offset_tiles != 0);
     previous_viewport_key_ = viewport_key;
     previous_viewport_info_ = viewport_info;
     viewport_cache_valid_ = true;
   }
 
   draw_util::Scissor scissor;
-  draw_util::GetScissor(regs, scissor);
+  draw_util::GetScissor(regs, scissor, true, window_offset_tiles != 0);
   scissor.offset[0] *= draw_resolution_scale_x;
   scissor.offset[1] *= draw_resolution_scale_y;
   scissor.extent[0] *= draw_resolution_scale_x;
@@ -706,17 +709,18 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   if (use_dxil) {
     if (!UpdateBindingsDxil(dxil_vertex_shader, dxil_pixel_shader, memexport_used,
                             primitive_polygonal, primitive_processing_result, viewport_info,
-                            used_texture_mask, normalized_depth_control, normalized_color_mask)) {
+                            used_texture_mask, normalized_depth_control, normalized_color_mask,
+                            window_offset_tiles)) {
       return false;
     }
   } else
 #endif
   {
 
-    UpdateSystemConstantValues(memexport_used, primitive_polygonal,
-                               primitive_processing_result.line_loop_closing_index,
-                               primitive_processing_result.host_shader_index_endian, viewport_info,
-                               used_texture_mask, normalized_depth_control, normalized_color_mask);
+    UpdateSystemConstantValues(
+        memexport_used, primitive_polygonal, primitive_processing_result.line_loop_closing_index,
+        primitive_processing_result.host_shader_index_endian, viewport_info, used_texture_mask,
+        normalized_depth_control, normalized_color_mask, window_offset_tiles);
 
     if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {
       return false;

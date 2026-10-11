@@ -57,7 +57,8 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
   Path GetPath() const override { return path_; }
 
   bool Update(bool is_rasterization_done, reg::RB_DEPTHCONTROL normalized_depth_control,
-              uint32_t normalized_color_mask, const Shader& vertex_shader) override;
+              uint32_t normalized_color_mask, const Shader& vertex_shader,
+              int32_t window_offset_tiles) override;
 
   void InvalidateCommandListRenderTargets() {
     are_current_command_list_render_targets_valid_ = false;
@@ -344,7 +345,8 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
       uint32_t dest_pitch : xenos::kEdramPitchTilesBits;
       uint32_t source_pitch : xenos::kEdramPitchTilesBits;
 
-      int32_t source_to_dest : xenos::kEdramBaseTilesBits + 1;
+      uint32_t source_to_dest : xenos::kEdramBaseTilesBits;
+      uint32_t source_next_period : 1;
     };
     TransferAddressConstant() : constant(0) { static_assert_size(*this, sizeof(constant)); }
     bool operator==(const TransferAddressConstant& other_constant) const {
@@ -421,7 +423,7 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
   union DumpOffsets {
     uint32_t offsets;
     struct {
-      uint32_t dispatch_first_tile : xenos::kEdramBaseTilesBits + 1;
+      uint32_t dispatch_first_tile : xenos::kEdramBaseTilesBits + 2;
       uint32_t source_base_tiles : xenos::kEdramBaseTilesBits;
     };
     DumpOffsets() : offsets(0) { static_assert_size(*this, sizeof(offsets)); }

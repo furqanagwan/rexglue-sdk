@@ -101,8 +101,13 @@ class RenderTargetCache {
 
   virtual void BeginFrame();
 
+  int32_t GetWindowOffsetTiles(const RegisterFile& regs,
+                               reg::RB_DEPTHCONTROL normalized_depth_control,
+                               uint32_t normalized_color_mask, uint64_t frame);
+
   virtual bool Update(bool is_rasterization_done, reg::RB_DEPTHCONTROL normalized_depth_control,
-                      uint32_t normalized_color_mask, const Shader& vertex_shader);
+                      uint32_t normalized_color_mask, const Shader& vertex_shader,
+                      int32_t window_offset_tiles);
 
   uint32_t GetLastUpdateBoundRenderTargets(uint32_t* depth_and_color_formats_out = nullptr) const;
 
@@ -147,6 +152,7 @@ class RenderTargetCache {
       uint32_t is_depth : 1;
 
       uint32_t resource_format : xenos::kRenderTargetFormatBits;
+      uint32_t next_period : 1;
     };
 
     RenderTargetKey() : key(0) { static_assert_size(*this, sizeof(key)); }
@@ -181,6 +187,10 @@ class RenderTargetCache {
     }
 
     uint32_t GetPitchTiles() const { return pitch_tiles_at_32bpp << uint32_t(Is64bpp()); }
+    uint32_t GetNonWrappedTileIndex(uint32_t tile_index) const {
+      return tile_index + (tile_index < base_tiles ? xenos::kEdramTileCount : 0) +
+             (uint32_t(next_period) << xenos::kEdramBaseTilesBits);
+    }
     static constexpr uint32_t GetWidth(uint32_t pitch_tiles_at_32bpp,
                                        xenos::MsaaSamples msaa_samples) {
       return pitch_tiles_at_32bpp *
@@ -189,8 +199,9 @@ class RenderTargetCache {
     uint32_t GetWidth() const { return GetWidth(pitch_tiles_at_32bpp, msaa_samples); }
 
     std::string GetDebugName() const {
-      return fmt::format("RT @ {}t, <{}t>, {}xMSAA, {}", base_tiles, GetPitchTiles(),
-                         uint32_t(1) << uint32_t(msaa_samples), GetFormatName());
+      return fmt::format("RT @ {}t, <{}t>, {}xMSAA, {}{}", base_tiles, GetPitchTiles(),
+                         uint32_t(1) << uint32_t(msaa_samples), GetFormatName(),
+                         next_period ? ", next period" : "");
     }
   };
 
@@ -236,15 +247,11 @@ class RenderTargetCache {
         kMaxRectanglesWithoutCutout * kMaxCutoutBorderRectangles;
 
     static uint32_t GetRangeRectangles(uint32_t start_tiles, uint32_t end_tiles,
-                                       uint32_t base_tiles, uint32_t pitch_tiles,
-                                       xenos::MsaaSamples msaa_samples, bool is_64bpp,
-                                       Rectangle* rectangles_out,
+                                       RenderTargetKey key, Rectangle* rectangles_out,
                                        const Rectangle* cutout = nullptr);
-    uint32_t GetRectangles(uint32_t base_tiles, uint32_t pitch_tiles,
-                           xenos::MsaaSamples msaa_samples, bool is_64bpp,
-                           Rectangle* rectangles_out, const Rectangle* cutout = nullptr) const {
-      return GetRangeRectangles(start_tiles, end_tiles, base_tiles, pitch_tiles, msaa_samples,
-                                is_64bpp, rectangles_out, cutout);
+    uint32_t GetRectangles(RenderTargetKey key, Rectangle* rectangles_out,
+                           const Rectangle* cutout = nullptr) const {
+      return GetRangeRectangles(start_tiles, end_tiles, key, rectangles_out, cutout);
     }
     bool AreSourcesSame(const Transfer& other_transfer) const {
       return source == other_transfer.source &&
@@ -495,6 +502,14 @@ class RenderTargetCache {
   std::unordered_map<RenderTargetKey, RenderTarget*, RenderTargetKey::Hasher> render_targets_;
 
   std::map<uint32_t, OwnershipRange> ownership_ranges_;
+  uint32_t interlock_last_window_offset_ = UINT32_MAX;
+  struct WindowOffsetKeptInViewport {
+    uint32_t window_offset;
+    uint32_t surface_pitch;
+    xenos::MsaaSamples msaa_samples;
+    uint64_t frame;
+  };
+  std::vector<WindowOffsetKeptInViewport> window_offsets_kept_in_viewport_;
 
   RenderTarget* last_update_used_render_targets_[1 + xenos::kMaxColorRenderTargets];
 

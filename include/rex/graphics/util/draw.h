@@ -130,14 +130,26 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
                          uint32_t y_max, bool allow_reverse_z,
                          reg::RB_DEPTHCONTROL normalized_depth_control, bool convert_z_to_float24,
                          bool full_float24_in_0_to_1, bool pixel_shader_writes_depth,
-                         ViewportInfo& viewport_info_out);
+                         ViewportInfo& viewport_info_out, bool window_offset_in_edram = false);
 
 struct Scissor {
   uint32_t offset[2];
 
   uint32_t extent[2];
 };
-void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_surface_pitch = true);
+void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_surface_pitch = true,
+                bool window_offset_in_edram = false);
+
+int32_t GetWindowOffsetTiles(const RegisterFile& regs,
+                             reg::RB_DEPTHCONTROL normalized_depth_control,
+                             uint32_t normalized_color_mask, bool host_render_targets_used,
+                             bool& kept_in_viewport_out);
+
+inline uint32_t AddWindowOffsetToEdramBase(uint32_t base_tiles, int32_t window_offset_tiles,
+                                           bool is_64bpp) {
+  return uint32_t(int32_t(base_tiles) + window_offset_tiles * (is_64bpp ? 2 : 1)) &
+         (xenos::kEdramTileCount - 1);
+}
 
 uint32_t GetNormalizedColorMask(const RegisterFile& regs,
                                 uint32_t pixel_shader_writes_color_targets);

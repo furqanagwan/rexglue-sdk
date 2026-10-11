@@ -102,7 +102,7 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
     bool shared_memory_is_uav, bool primitive_polygonal, uint32_t line_loop_closing_index,
     xenos::Endian index_endian, const draw_util::ViewportInfo& viewport_info,
     uint32_t used_texture_mask, reg::RB_DEPTHCONTROL normalized_depth_control,
-    uint32_t normalized_color_mask) {
+    uint32_t normalized_color_mask, int32_t window_offset_tiles) {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif
@@ -268,6 +268,17 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
     system_constants_.ndc_offset[i] = viewport_info.ndc_offset[i];
   }
 
+  float param_gen_window_offset[2] = {0.0f, 0.0f};
+  if (window_offset_tiles) {
+    auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
+    param_gen_window_offset[0] = float(pa_sc_window_offset.window_x_offset);
+    param_gen_window_offset[1] = float(pa_sc_window_offset.window_y_offset);
+  }
+  for (uint32_t i = 0; i < 2; ++i) {
+    dirty |= system_constants_.param_gen_window_offset[i] != param_gen_window_offset[i];
+    system_constants_.param_gen_window_offset[i] = param_gen_window_offset[i];
+  }
+
   if (vgt_draw_initiator.prim_type == xenos::PrimitiveType::kPointList ||
       vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineList ||
       vgt_draw_initiator.prim_type == xenos::PrimitiveType::kLineStrip ||
@@ -373,7 +384,11 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
       dirty |= system_constants_.edram_rt_keep_mask[i][1] != rt_keep_masks[i][1];
       system_constants_.edram_rt_keep_mask[i][1] = rt_keep_masks[i][1];
       if (rt_keep_masks[i][0] != UINT32_MAX || rt_keep_masks[i][1] != UINT32_MAX) {
-        uint32_t rt_base_dwords_scaled = color_info.color_base * edram_tile_dwords_scaled;
+        uint32_t rt_base_dwords_scaled =
+            draw_util::AddWindowOffsetToEdramBase(
+                color_info.color_base, window_offset_tiles,
+                xenos::IsColorRenderTargetFormat64bpp(color_info.color_format)) *
+            edram_tile_dwords_scaled;
         dirty |= system_constants_.edram_rt_base_dwords_scaled[i] != rt_base_dwords_scaled;
         system_constants_.edram_rt_base_dwords_scaled[i] = rt_base_dwords_scaled;
         uint32_t format_flags = RenderTargetCache::AddPSIColorFormatFlags(color_info.color_format);
@@ -400,7 +415,9 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
   }
 
   if (edram_rov_used) {
-    uint32_t depth_base_dwords_scaled = rb_depth_info.depth_base * edram_tile_dwords_scaled;
+    uint32_t depth_base_dwords_scaled = draw_util::AddWindowOffsetToEdramBase(
+                                            rb_depth_info.depth_base, window_offset_tiles, false) *
+                                        edram_tile_dwords_scaled;
     dirty |= system_constants_.edram_depth_base_dwords_scaled != depth_base_dwords_scaled;
     system_constants_.edram_depth_base_dwords_scaled = depth_base_dwords_scaled;
 
@@ -1212,7 +1229,8 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     bool primitive_polygonal,
     const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
     const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask,
-    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask) {
+    reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
+    int32_t window_offset_tiles) {
   const ui::d3d12::D3D12Provider& provider = GetD3D12Provider();
   const RegisterFile& regs = *register_file_;
 
@@ -1278,6 +1296,11 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
   for (uint32_t i = 0; i < 3; ++i) {
     sc.ndc_scale[i] = viewport_info.ndc_scale[i];
     sc.ndc_offset[i] = viewport_info.ndc_offset[i];
+  }
+  if (window_offset_tiles) {
+    auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
+    sc.param_gen_window_offset[0] = float(pa_sc_window_offset.window_x_offset);
+    sc.param_gen_window_offset[1] = float(pa_sc_window_offset.window_y_offset);
   }
 
   auto pa_cl_clip_cntl = regs.Get<reg::PA_CL_CLIP_CNTL>();
@@ -1357,7 +1380,7 @@ bool D3D12CommandProcessor::UpdateBindingsDxil(
     WriteFragmentShaderInterlockSystemConstants(
         sc, sc.flags, fsi_dirty, regs, primitive_polygonal, normalized_depth_control,
         normalized_color_mask, draw_resolution_scale_x, draw_resolution_scale_y,
-        zpd_active_query_is_rov_ ? zpd_active_query_index_ : UINT32_MAX);
+        zpd_active_query_is_rov_ ? zpd_active_query_index_ : UINT32_MAX, window_offset_tiles);
   }
 
   if (dxil_system_constants_shadow_.size() != sizeof(sc) ||

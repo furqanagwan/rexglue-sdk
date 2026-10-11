@@ -351,7 +351,7 @@ class D3D12CommandProcessor : public CommandProcessor {
                                   const draw_util::ViewportInfo& viewport_info,
                                   uint32_t used_texture_mask,
                                   reg::RB_DEPTHCONTROL normalized_depth_control,
-                                  uint32_t normalized_color_mask);
+                                  uint32_t normalized_color_mask, int32_t window_offset_tiles);
   bool UpdateBindings(const D3D12Shader* vertex_shader, const D3D12Shader* pixel_shader,
                       ID3D12RootSignature* root_signature, bool shared_memory_is_uav);
 #if REXGLUE_SHADER_DXIL
@@ -361,7 +361,7 @@ class D3D12CommandProcessor : public CommandProcessor {
                           const PrimitiveProcessor::ProcessingResult& primitive_processing_result,
                           const draw_util::ViewportInfo& viewport_info, uint32_t used_texture_mask,
                           reg::RB_DEPTHCONTROL normalized_depth_control,
-                          uint32_t normalized_color_mask);
+                          uint32_t normalized_color_mask, int32_t window_offset_tiles);
   uint32_t GetOrCreateDxilBindlessSamplerIndex(D3D12TextureCache::SamplerParameters parameters);
   bool SwitchToNewBindlessSamplerHeap();
 #endif
