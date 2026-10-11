@@ -701,7 +701,7 @@ constexpr uint32_t kMaxResolveSize = (1 << kResolveSizeBits) - kResolveAlignment
 enum class CopyCommand : uint32_t {
   kRaw = 0,
   kConvert = 1,
-  kConstantOne = 2,
+  kConvertTo1111 = 2,
   kNull = 3,
 };
 

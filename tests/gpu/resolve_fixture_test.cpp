@@ -43,6 +43,11 @@ struct ResolveTarget {
   uint32_t height = kSize;
   xenos::ColorFormat format = xenos::ColorFormat::k_8_8_8_8;
   xenos::MsaaSamples msaa = xenos::MsaaSamples::k1X;
+  xenos::CopyCommand command = xenos::CopyCommand::kRaw;
+  bool clear = true;
+  uint32_t copy_func = 0;
+  uint32_t copy_ref = 0;
+  uint32_t copy_mask = 0;
 };
 
 uint32_t AllocRectangle(GpuFixture& fixture, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1) {
@@ -57,6 +62,17 @@ uint32_t AllocRectangle(GpuFixture& fixture, uint32_t width, uint32_t height) {
   return AllocRectangle(fixture, 0, 0, width, height);
 }
 
+constexpr uint32_t CopyFunc(xenos::CompareFunction red, xenos::CompareFunction green,
+                            xenos::CompareFunction blue, xenos::CompareFunction alpha) {
+  return uint32_t(red) | (uint32_t(green) << 4) | (uint32_t(blue) << 8) | (uint32_t(alpha) << 12);
+}
+
+struct CopyCompareCase {
+  const char* name;
+  uint32_t copy_func;
+  uint32_t pixel_bits;
+};
+
 void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& target,
                    uint32_t clear_color) {
   reg::RB_SURFACE_INFO surface_info = {};
@@ -70,8 +86,8 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& 
   reg::RB_MODECONTROL mode_control = {};
   mode_control.edram_mode = xenos::EdramMode::kCopy;
   reg::RB_COPY_CONTROL copy_control = {};
-  copy_control.color_clear_enable = 1;
-  copy_control.copy_command = xenos::CopyCommand::kRaw;
+  copy_control.color_clear_enable = target.clear;
+  copy_control.copy_command = target.command;
   reg::RB_COPY_DEST_PITCH dest_pitch = {};
   dest_pitch.copy_dest_pitch = target.pitch;
   dest_pitch.copy_dest_height = target.height;
@@ -97,6 +113,8 @@ void SubmitResolve(GpuFixture& fixture, uint32_t vertices, const ResolveTarget& 
       XE_GPU_REG_RB_COPY_CONTROL,
       {copy_control.value, target.dest, dest_pitch.value, dest_info.value}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_COLOR_CLEAR, {clear_color, clear_color}));
+  fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_RB_COPY_FUNC,
+                                          {target.copy_func, target.copy_ref, target.copy_mask}));
   fixture.Submit(GpuFixture::SetRegisters(XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0,
                                           {fetch.dword_0, fetch.dword_1}));
 
@@ -276,6 +294,68 @@ TEST_CASE("Resolve readback keeps texel positions", "[gpu][resolve]") {
   CHECK(mismatches == 0);
   CHECK(duplicates == 0);
   CHECK(stray == 0);
+}
+
+TEST_CASE("Copy command 2 packs one bit per component into k_DXT3A_AS_1_1_1_1, red in bit 0",
+          "[gpu][resolve]") {
+  std::string error;
+  auto fixture = GpuFixture::Create(&error);
+  if (!fixture) {
+    SKIP("GPU fixture host unavailable: " << error);
+  }
+  REQUIRE(rex::cvar::SetFlagByName("readback_resolve", "full"));
+
+  constexpr uint32_t kClearColor = 0x11223344;
+  constexpr auto kNever = xenos::CompareFunction::kNever;
+  constexpr auto kAlways = xenos::CompareFunction::kAlways;
+  constexpr auto kEqual = xenos::CompareFunction::kEqual;
+  constexpr auto kNotEqual = xenos::CompareFunction::kNotEqual;
+  const CopyCompareCase test =
+      GENERATE(CopyCompareCase{"red only", CopyFunc(kAlways, kNever, kNever, kNever), 0x1},
+               CopyCompareCase{"alpha only", CopyFunc(kNever, kNever, kNever, kAlways), 0x8},
+               CopyCompareCase{"compared with the reference",
+                               CopyFunc(kEqual, kNotEqual, kEqual, kNotEqual), 0x5});
+  INFO(test.name);
+
+  uint32_t vertices = AllocRectangle(*fixture, kSize, kSize);
+  ResolveTarget clear_target{fixture->AllocPhysical(kSize * kSize * 4)};
+  SubmitResolve(*fixture, vertices, clear_target, kClearColor);
+
+  constexpr uint32_t kBlocks = kSize / 4;
+  constexpr uint32_t kMaskBytes = kSize * kSize * 8;
+  uint32_t dest = fixture->AllocPhysical(kMaskBytes);
+  fixture->WriteDwords(dest, std::vector<uint32_t>(kMaskBytes / 4, 0xDEADBEEF));
+  ResolveTarget mask_target{dest};
+  mask_target.format = xenos::ColorFormat(xenos::TextureFormat::k_DXT3A_AS_1_1_1_1);
+  mask_target.command = xenos::CopyCommand::kConvertTo1111;
+  mask_target.clear = false;
+  mask_target.copy_func = test.copy_func;
+  mask_target.copy_ref = kClearColor;
+  mask_target.copy_mask = 0xFFFFFFFF;
+  SubmitResolve(*fixture, vertices, mask_target, 0);
+  REQUIRE(fixture->Flush());
+
+  uint32_t nibble_word = 0;
+  for (uint32_t i = 0; i < 8; ++i) {
+    nibble_word |= test.pixel_bits << (i * 4);
+  }
+  const bool scaled = rex::cvar::GetFlagByName("draw_resolution_scale_x") != "1" ||
+                      rex::cvar::GetFlagByName("draw_resolution_scale_y") != "1";
+  if (scaled) {
+    nibble_word = 0xDEADBEEF;
+  }
+  uint32_t mismatches = 0;
+  for (uint32_t y = 0; y < kBlocks; ++y) {
+    for (uint32_t x = 0; x < kBlocks; ++x) {
+      uint32_t block = dest + uint32_t(texture_util::GetTiledOffset2D(int32_t(x), int32_t(y),
+                                                                      mask_target.pitch, 3));
+      mismatches += fixture->ReadDword(block) != nibble_word;
+      mismatches += fixture->ReadDword(block + 4) != nibble_word;
+    }
+  }
+  std::printf("copy command 2 %s: first word 0x%08X, %u of %u words differ\n", test.name,
+              fixture->ReadDword(dest), mismatches, kBlocks * kBlocks * 2);
+  CHECK(mismatches == 0);
 }
 
 TEST_CASE("Device removal before a submission is reported", "[.device-removal]") {

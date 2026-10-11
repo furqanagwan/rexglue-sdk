@@ -7,6 +7,7 @@ up (see the [audit plan](../audit/2026-10-09-codebase-audit.md)).
 Topics:
 
 - [Asynchronous pipeline creation](async-pipeline-creation.md)
+- [k_DXT3A_AS_1_1_1_1 and resolve copy command 2](dxt3a-as-1111.md)
 - [Shader operand components](shader-operand-components.md)
 - [Wide 1D textures](wide-1d-textures.md)
 
