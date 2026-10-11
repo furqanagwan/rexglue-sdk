@@ -122,6 +122,38 @@ void PruneLogDirectory(const std::filesystem::path& logs_dir, std::string_view a
 namespace {
 
 std::filesystem::path NextSequentialLogPath(const std::filesystem::path& logs_dir,
+                                            std::string_view app_name);
+
+spdlog::sink_ptr TryOpenFileSink(const std::filesystem::path& path) {
+  try {
+    return std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), false);
+  } catch (const spdlog::spdlog_ex&) {
+    return nullptr;
+  }
+}
+
+}
+
+OpenedLogFile OpenLogFile(const std::filesystem::path& preferred_path, std::string_view app_name) {
+  if (auto sink = TryOpenFileSink(preferred_path)) {
+    return {std::move(sink), preferred_path};
+  }
+  std::error_code ec;
+  auto temp = std::filesystem::temp_directory_path(ec);
+  if (ec) {
+    return {};
+  }
+  std::string_view name = app_name.empty() ? std::string_view("rexglue") : app_name;
+  auto fallback = NextSequentialLogPath(temp / "rexglue-logs", name);
+  if (auto sink = TryOpenFileSink(fallback)) {
+    return {std::move(sink), fallback};
+  }
+  return {};
+}
+
+namespace {
+
+std::filesystem::path NextSequentialLogPath(const std::filesystem::path& logs_dir,
                                             std::string_view app_name) {
   std::error_code ec;
   std::filesystem::create_directories(logs_dir, ec);
@@ -244,11 +276,18 @@ void InitLogging(const LogConfig& config) {
     }
     resolved_path = NextSequentialLogPath(log_dir, config.app_name);
   }
+  std::filesystem::path unopened_path;
   if (!resolved_path.empty()) {
-    auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(resolved_path.string(), false);
-    sink->set_level(spdlog::level::trace);
-    sink->set_pattern(config.file_pattern);
-    g_file_sink = sink;
+    OpenedLogFile opened = OpenLogFile(resolved_path, config.app_name);
+    if (opened.path != resolved_path) {
+      unopened_path = resolved_path;
+    }
+    if (opened.sink) {
+      opened.sink->set_level(spdlog::level::trace);
+      opened.sink->set_pattern(config.file_pattern);
+      g_file_sink = opened.sink;
+    }
+    resolved_path = opened.path;
   }
 
   g_extra_sinks = config.extra_sinks;
@@ -270,6 +309,16 @@ void InitLogging(const LogConfig& config) {
     }
   }
   g_initialized = true;
+
+  if (!unopened_path.empty()) {
+    if (g_file_sink) {
+      spdlog::default_logger()->warn("Could not open the log file {}; logging to {} instead",
+                                     unopened_path.string(), resolved_path.string());
+    } else {
+      spdlog::default_logger()->warn("Could not open the log file {}; no log file this run",
+                                     unopened_path.string());
+    }
+  }
 
   if (config.flush_interval.count() > 0)
     spdlog::flush_every(config.flush_interval);
