@@ -492,6 +492,12 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
     Modification modification = GetSpirvShaderModification();
 
     spv::Id const_sign_bit = builder_->makeUintConstant(UINT32_C(1) << 31);
+    id_vector_temp_.clear();
+    id_vector_temp_.push_back(builder_->makeIntConstant(kSystemConstantParamGenWindowOffset));
+    spv::Id param_gen_window_offset = builder_->createLoad(
+        builder_->createAccessChain(spv::StorageClassUniform, uniform_system_constants_,
+                                    id_vector_temp_),
+        spv::NoPrecision);
 
     assert_true(input_fragment_coordinates_ != spv::NoResult);
     id_vector_temp_.clear();
@@ -510,6 +516,9 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
           spv::OpFMul, type_float_, param_gen_x,
           builder_->makeFloatConstant(1.0f / float(GetCurrentDrawResolutionScaleX())));
     }
+    param_gen_x = builder_->createBinOp(
+        spv::OpFAdd, type_float_, param_gen_x,
+        builder_->createCompositeExtract(param_gen_window_offset, type_float_, 0));
     if (!modification.pixel.param_gen_point) {
       assert_true(input_front_facing_ != spv::NoResult);
       param_gen_x = builder_->createTriOp(
@@ -547,6 +556,9 @@ void SpirvShaderTranslator::StartFragmentShaderInMain() {
           spv::OpFMul, type_float_, param_gen_y,
           builder_->makeFloatConstant(1.0f / float(GetCurrentDrawResolutionScaleY())));
     }
+    param_gen_y = builder_->createBinOp(
+        spv::OpFAdd, type_float_, param_gen_y,
+        builder_->createCompositeExtract(param_gen_window_offset, type_float_, 1));
     if (modification.pixel.param_gen_point) {
       param_gen_y = builder_->createUnaryOp(
           spv::OpBitcast, type_float_,

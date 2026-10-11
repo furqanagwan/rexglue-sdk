@@ -855,7 +855,7 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
     source_tile_pixel_x_reg = 1;
   }
 
-  a.OpIBFE(dxbc::Dest::R(1, 0b1000), dxbc::Src::LU(xenos::kEdramBaseTilesBits + 1),
+  a.OpUBFE(dxbc::Dest::R(1, 0b1000), dxbc::Src::LU(xenos::kEdramBaseTilesBits),
            dxbc::Src::LU(xenos::kEdramPitchTilesBits * 2),
            dxbc::Src::CB(cbuffer_index_address, kTransferCBVRegisterAddress, 0, dxbc::Src::kXXXX));
 
@@ -864,6 +864,11 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
 
   a.OpAnd(dxbc::Dest::R(1, 0b1000), dxbc::Src::R(1, dxbc::Src::kWWWW),
           dxbc::Src::LU(xenos::kEdramTileCount - 1));
+  a.OpUBFE(dxbc::Dest::R(2, 0b0001), dxbc::Src::LU(1),
+           dxbc::Src::LU(xenos::kEdramPitchTilesBits * 2 + xenos::kEdramBaseTilesBits),
+           dxbc::Src::CB(cbuffer_index_address, kTransferCBVRegisterAddress, 0, dxbc::Src::kXXXX));
+  a.OpUMAd(dxbc::Dest::R(1, 0b1000), dxbc::Src::R(2, dxbc::Src::kXXXX),
+           dxbc::Src::LU(xenos::kEdramTileCount), dxbc::Src::R(1, dxbc::Src::kWWWW));
 
   a.OpUBFE(dxbc::Dest::R(2, 0b0001), dxbc::Src::LU(xenos::kEdramPitchTilesBits),
            dxbc::Src::LU(xenos::kEdramPitchTilesBits),
@@ -1336,7 +1341,7 @@ ID3D12PipelineState* const* D3D12RenderTargetCache::GetOrCreateTransferPipelines
                      dxbc::Src::T(srv_index_host_depth, kTransferSRVRegisterHostDepth,
                                   dxbc::Src::kXXXX));
             } else {
-              a.OpIBFE(dxbc::Dest::R(0, 0b1000), dxbc::Src::LU(xenos::kEdramBaseTilesBits + 1),
+              a.OpUBFE(dxbc::Dest::R(0, 0b1000), dxbc::Src::LU(xenos::kEdramBaseTilesBits),
                        dxbc::Src::LU(xenos::kEdramPitchTilesBits * 2),
                        dxbc::Src::CB(cbuffer_index_host_depth_address,
                                      kTransferCBVRegisterHostDepthAddress, 0, dxbc::Src::kXXXX));

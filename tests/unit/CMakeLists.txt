@@ -159,6 +159,7 @@ catch_discover_tests(primitive_tests TEST_PREFIX "primitive." ADD_TAGS_AS_LABELS
 add_executable(shader_parse_tests
     graphics/alu_scalar_operand_test.cpp
     graphics/host_viewport_test.cpp
+    graphics/window_offset_edram_test.cpp
     ${PROJECT_SOURCE_DIR}/src/graphics/util/draw.cpp
     ${PROJECT_SOURCE_DIR}/src/graphics/register_file.cpp
     ${PROJECT_SOURCE_DIR}/src/graphics/registers.cpp

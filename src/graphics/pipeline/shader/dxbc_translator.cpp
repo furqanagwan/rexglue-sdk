@@ -523,6 +523,10 @@ void DxbcShaderTranslator::StartPixelShader() {
                dxbc::Src::LF(1.0f / draw_resolution_scale_x_, 1.0f / draw_resolution_scale_y_, 1.0f,
                              1.0f));
     }
+    a_.OpAdd(
+        dxbc::Dest::R(param_gen_temp, 0b0011), dxbc::Src::R(param_gen_temp),
+        LoadSystemConstant(SystemConstants::Index::kParamGenWindowOffset,
+                           offsetof(SystemConstants, param_gen_window_offset), dxbc::Src::kXYXY));
     if (shader_modification.pixel.param_gen_point) {
       a_.OpMov(dxbc::Dest::R(param_gen_temp, 0b0001),
                dxbc::Src::R(param_gen_temp, dxbc::Src::kXXXX).Abs());
@@ -1663,6 +1667,9 @@ const DxbcShaderTranslator::SystemConstantRdef DxbcShaderTranslator::system_cons
     {"xe_edram_blend_constant", ShaderRdefTypeIndex::kFloat4, sizeof(float) * 4},
 
     {"xe_texture_integer_scale_bits", ShaderRdefTypeIndex::kUint4Array8, sizeof(uint32_t) * 32},
+
+    {"xe_param_gen_window_offset", ShaderRdefTypeIndex::kFloat2, sizeof(float) * 2,
+     sizeof(uint32_t) * 2},
 };
 
 }

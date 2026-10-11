@@ -248,6 +248,9 @@ class DxbcShaderTranslator : public ShaderTranslator {
 
     uint32_t texture_integer_scale_bits[32];
 
+    float param_gen_window_offset[2];
+    uint32_t param_gen_window_offset_padding[2];
+
    private:
     friend class DxbcShaderTranslator;
 
@@ -302,6 +305,8 @@ class DxbcShaderTranslator : public ShaderTranslator {
       kEdramBlendConstant,
 
       kTextureIntegerScaleBits,
+
+      kParamGenWindowOffset,
 
       kCount,
     };

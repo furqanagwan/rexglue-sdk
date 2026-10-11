@@ -327,7 +327,7 @@ ID3D12PipelineState* D3D12RenderTargetCache::GetOrCreateDumpPipeline(DumpPipelin
   a.OpUMAd(dxbc::Dest::R(0, 0b1000), dxbc::Src::R(0, dxbc::Src::kWWWW),
            dxbc::Src::R(1, dxbc::Src::kXXXX), dxbc::Src::R(0, dxbc::Src::kZZZZ));
 
-  a.OpUBFE(dxbc::Dest::R(0, 0b0100), dxbc::Src::LU(xenos::kEdramBaseTilesBits + 1),
+  a.OpUBFE(dxbc::Dest::R(0, 0b0100), dxbc::Src::LU(xenos::kEdramBaseTilesBits + 2),
            dxbc::Src::LU(0),
            dxbc::Src::CB(kDumpCbufferOffsets, kDumpCbufferOffsets, 0, dxbc::Src::kXXXX));
 
@@ -359,7 +359,7 @@ ID3D12PipelineState* D3D12RenderTargetCache::GetOrCreateDumpPipeline(DumpPipelin
   }
 
   a.OpUBFE(dxbc::Dest::R(1, 0b0001), dxbc::Src::LU(xenos::kEdramBaseTilesBits),
-           dxbc::Src::LU(xenos::kEdramBaseTilesBits + 1),
+           dxbc::Src::LU(xenos::kEdramBaseTilesBits + 2),
            dxbc::Src::CB(kDumpCbufferOffsets, kDumpCbufferOffsets, 0, dxbc::Src::kXXXX));
 
   a.OpIAdd(dxbc::Dest::R(0, 0b1000), dxbc::Src::R(0, dxbc::Src::kWWWW),
@@ -859,7 +859,7 @@ bool D3D12RenderTargetCache::DumpRenderTargets(uint32_t dump_base, uint32_t dump
     uint32_t dispatch_count = rectangle.GetDispatches(dump_pitch, dump_row_length_used, dispatches);
     for (uint32_t i = 0; i < dispatch_count; ++i) {
       const ResolveCopyDumpRectangle::Dispatch& dispatch = dispatches[i];
-      offsets.dispatch_first_tile = dump_base + dispatch.offset;
+      offsets.dispatch_first_tile = rt_key.GetNonWrappedTileIndex(dump_base + dispatch.offset);
       if (last_offsets != offsets) {
         last_offsets = offsets;
         root_parameters_set &= ~kDumpRootParameterOffsetsBit;

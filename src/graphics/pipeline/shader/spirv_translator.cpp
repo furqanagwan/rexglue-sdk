@@ -455,6 +455,7 @@ void SpirvShaderTranslator::StartTranslation() {
        type_uint_},
       {"texture_integer_scale_bits", offsetof(SystemConstants, texture_integer_scale_bits),
        type_uint4_array_8},
+      {"param_gen_window_offset", offsetof(SystemConstants, param_gen_window_offset), type_float2_},
   };
   id_vector_temp_.clear();
   id_vector_temp_.reserve(rex::countof(system_constants));

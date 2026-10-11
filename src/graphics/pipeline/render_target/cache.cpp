@@ -200,10 +200,13 @@ bool RenderTargetCache::ColorOverlapsDepthStencil(xenos::ColorRenderTargetFormat
 }
 
 uint32_t RenderTargetCache::Transfer::GetRangeRectangles(uint32_t start_tiles, uint32_t end_tiles,
-                                                         uint32_t base_tiles, uint32_t pitch_tiles,
-                                                         xenos::MsaaSamples msaa_samples,
-                                                         bool is_64bpp, Rectangle* rectangles_out,
+                                                         RenderTargetKey key,
+                                                         Rectangle* rectangles_out,
                                                          const Rectangle* cutout) {
+  uint32_t base_tiles = key.base_tiles;
+  uint32_t pitch_tiles = key.GetPitchTiles();
+  xenos::MsaaSamples msaa_samples = key.msaa_samples;
+  bool is_64bpp = key.Is64bpp();
   assert_true(start_tiles < xenos::kEdramTileCount);
   assert_true(end_tiles <= xenos::kEdramTileCount);
   assert_true(start_tiles <= end_tiles);
@@ -220,9 +223,8 @@ uint32_t RenderTargetCache::Transfer::GetRangeRectangles(uint32_t start_tiles, u
 
   uint32_t rectangle_count = 0;
 
-  uint32_t local_offset = start_tiles < base_tiles ? xenos::kEdramTileCount : 0;
-  uint32_t local_start = local_offset + start_tiles - base_tiles;
-  uint32_t local_end = local_offset + end_tiles - base_tiles;
+  uint32_t local_start = key.GetNonWrappedTileIndex(start_tiles) - base_tiles;
+  uint32_t local_end = local_start + (end_tiles - start_tiles);
 
   uint32_t rows_start = local_start / pitch_tiles;
 
@@ -425,6 +427,47 @@ void RenderTargetCache::BeginFrame() {
   ResetAccumulatedRenderTargets();
 }
 
+int32_t RenderTargetCache::GetWindowOffsetTiles(const RegisterFile& regs,
+                                                reg::RB_DEPTHCONTROL normalized_depth_control,
+                                                uint32_t normalized_color_mask, uint64_t frame) {
+  bool kept_in_viewport;
+  int32_t window_offset_tiles =
+      draw_util::GetWindowOffsetTiles(regs, normalized_depth_control, normalized_color_mask,
+                                      GetPath() == Path::kHostRenderTargets, kept_in_viewport);
+  if (!window_offset_tiles && !kept_in_viewport) {
+    return 0;
+  }
+
+  window_offsets_kept_in_viewport_.erase(
+      std::remove_if(
+          window_offsets_kept_in_viewport_.begin(), window_offsets_kept_in_viewport_.end(),
+          [frame](const WindowOffsetKeptInViewport& kept) { return kept.frame + 1 < frame; }),
+      window_offsets_kept_in_viewport_.end());
+  auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
+  auto rb_surface_info = regs.Get<reg::RB_SURFACE_INFO>();
+  auto kept_it = std::find_if(
+      window_offsets_kept_in_viewport_.begin(), window_offsets_kept_in_viewport_.end(),
+      [&pa_sc_window_offset, &rb_surface_info](const WindowOffsetKeptInViewport& kept) {
+        return kept.window_offset == pa_sc_window_offset.value &&
+               kept.surface_pitch == rb_surface_info.surface_pitch &&
+               kept.msaa_samples == rb_surface_info.msaa_samples;
+      });
+
+  if (kept_it != window_offsets_kept_in_viewport_.end()) {
+    kept_it->frame = frame;
+    return 0;
+  }
+
+  if (kept_in_viewport) {
+    window_offsets_kept_in_viewport_.push_back({pa_sc_window_offset.value,
+                                                rb_surface_info.surface_pitch,
+                                                rb_surface_info.msaa_samples, frame});
+    return 0;
+  }
+
+  return window_offset_tiles;
+}
+
 bool RenderTargetCache::TrackLastUpdateDrawTarget(uint64_t frame) {
   if (last_update_draw_target_.IsEmpty()) {
     return true;
@@ -508,7 +551,8 @@ bool RenderTargetCache::IsResolveNative(const draw_util::ResolveInfo& resolve_in
 
 bool RenderTargetCache::Update(bool is_rasterization_done,
                                reg::RB_DEPTHCONTROL normalized_depth_control,
-                               uint32_t normalized_color_mask, const Shader& vertex_shader) {
+                               uint32_t normalized_color_mask, const Shader& vertex_shader,
+                               int32_t window_offset_tiles) {
   const RegisterFile& regs = register_file();
   bool interlock_barrier_only = GetPath() == Path::kPixelShaderInterlock;
   last_update_draw_target_ = RenderTargetKey();
@@ -555,6 +599,7 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   uint32_t depth_and_color_rts_used_bits = 0;
 
   uint32_t edram_bases[1 + xenos::kMaxColorRenderTargets];
+  uint32_t guest_bases[1 + xenos::kMaxColorRenderTargets];
   uint32_t resource_formats[1 + xenos::kMaxColorRenderTargets];
   uint32_t rts_are_64bpp = 0;
 
@@ -563,7 +608,9 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
     if (normalized_depth_control.z_enable || normalized_depth_control.stencil_enable) {
       depth_and_color_rts_used_bits |= 1;
       auto rb_depth_info = regs.Get<reg::RB_DEPTH_INFO>();
-      edram_bases[0] = rb_depth_info.depth_base;
+      edram_bases[0] = draw_util::AddWindowOffsetToEdramBase(rb_depth_info.depth_base,
+                                                             window_offset_tiles, false);
+      guest_bases[0] = rb_depth_info.depth_base;
 
       resource_formats[0] = interlock_barrier_only ? 0 : uint32_t(rb_depth_info.depth_format);
     }
@@ -574,10 +621,11 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
       auto color_info = regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]);
       uint32_t rt_bit_index = 1 + i;
       depth_and_color_rts_used_bits |= uint32_t(1) << rt_bit_index;
-      edram_bases[rt_bit_index] = color_info.color_base;
-      xenos::ColorRenderTargetFormat color_format =
-          regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]).color_format;
+      xenos::ColorRenderTargetFormat color_format = color_info.color_format;
       bool is_64bpp = xenos::IsColorRenderTargetFormat64bpp(color_format);
+      edram_bases[rt_bit_index] = draw_util::AddWindowOffsetToEdramBase(
+          color_info.color_base, window_offset_tiles, is_64bpp);
+      guest_bases[rt_bit_index] = color_info.color_base;
       if (is_64bpp) {
         rts_are_64bpp |= uint32_t(1) << rt_bit_index;
       }
@@ -607,9 +655,9 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   if (!interlock_barrier_only && REXCVAR_GET(aliased_depth_read_only) &&
       (depth_and_color_rts_used_bits & 1) && normalized_depth_control.z_enable &&
       !normalized_depth_control.z_write_enable && !normalized_depth_control.stencil_enable) {
-    uint32_t depth_base = edram_bases[0];
+    uint32_t depth_base = guest_bases[0];
     for (uint32_t i = 1; i < 1 + xenos::kMaxColorRenderTargets; ++i) {
-      if (!(depth_and_color_rts_used_bits & (uint32_t(1) << i)) || edram_bases[i] != depth_base) {
+      if (!(depth_and_color_rts_used_bits & (uint32_t(1) << i)) || guest_bases[i] != depth_base) {
         continue;
       }
       if (!rts_keep_depth_bits[i]) {
@@ -622,9 +670,9 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
 
   if (!interlock_barrier_only && (depth_and_color_rts_used_bits & 1) &&
       normalized_depth_control.z_write_enable) {
-    uint32_t depth_base = edram_bases[0];
+    uint32_t depth_base = guest_bases[0];
     for (uint32_t i = 1; i < 1 + xenos::kMaxColorRenderTargets; ++i) {
-      if ((depth_and_color_rts_used_bits & (uint32_t(1) << i)) && edram_bases[i] == depth_base) {
+      if ((depth_and_color_rts_used_bits & (uint32_t(1) << i)) && guest_bases[i] == depth_base) {
         rts_keep_depth_bits[i] = false;
       }
     }
@@ -633,13 +681,13 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   rts_remaining = depth_and_color_rts_used_bits & ~(uint32_t(1));
   while (rex::bit_scan_forward(rts_remaining, &rt_index)) {
     rts_remaining &= ~(uint32_t(1) << rt_index);
-    uint32_t edram_base = edram_bases[rt_index];
+    uint32_t guest_base = guest_bases[rt_index];
     uint32_t rts_other_remaining =
         depth_and_color_rts_used_bits & (~((uint32_t(1) << (rt_index + 1)) - 1) | uint32_t(1));
     uint32_t rt_other_index;
     while (rex::bit_scan_forward(rts_other_remaining, &rt_other_index)) {
       rts_other_remaining &= ~(uint32_t(1) << rt_other_index);
-      if (edram_bases[rt_other_index] == edram_base) {
+      if (guest_bases[rt_other_index] == guest_base) {
         if (rt_other_index == 0 && keep_aliased_depth) {
           continue;
         }
@@ -677,13 +725,13 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
     return true;
   }
 
-  uint32_t height_used =
-      std::min(GetRenderTargetHeight(pitch_tiles_at_32bpp, msaa_samples),
-               draw_extent_estimator_.EstimateMaxY(
-                   interlock_barrier_only
-                       ? REXCVAR_GET(execute_unclipped_draw_vs_on_cpu_for_psi_render_backend)
-                       : true,
-                   vertex_shader));
+  uint32_t height_used = draw_extent_estimator_.EstimateMaxY(
+      interlock_barrier_only ? REXCVAR_GET(execute_unclipped_draw_vs_on_cpu_for_psi_render_backend)
+                             : true,
+      vertex_shader, window_offset_tiles != 0);
+  if (!(interlock_barrier_only && window_offset_tiles)) {
+    height_used = std::min(height_used, GetRenderTargetHeight(pitch_tiles_at_32bpp, msaa_samples));
+  }
 
   RenderTargetKey rt_keys[1 + xenos::kMaxColorRenderTargets] = {};
   RenderTarget* rts[1 + xenos::kMaxColorRenderTargets] = {};
@@ -710,7 +758,8 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   std::sort(edram_bases_sorted, edram_bases_sorted + edram_bases_sorted_count);
 
   uint32_t rt_max_distance_tiles_at_64bpp = xenos::kEdramTileCount * 2;
-  if (REXCVAR_GET(mrt_edram_used_range_clamp_to_min) && edram_bases_sorted_count >= 2) {
+  if (!window_offset_tiles && REXCVAR_GET(mrt_edram_used_range_clamp_to_min) &&
+      edram_bases_sorted_count >= 2) {
     for (uint32_t i = 1; i < edram_bases_sorted_count; ++i) {
       const std::pair<uint32_t, uint32_t>& rt_base_prev = edram_bases_sorted[i - 1];
       rt_max_distance_tiles_at_64bpp =
@@ -728,10 +777,27 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   }
 
   uint32_t rt_lengths_tiles[1 + xenos::kMaxColorRenderTargets];
+  uint32_t rt_starts_tiles[1 + xenos::kMaxColorRenderTargets];
   uint32_t length_used_tiles_at_32bpp =
       ((height_used << uint32_t(msaa_samples >= xenos::MsaaSamples::k2X)) +
        (xenos::kEdramTileHeightSamples - 1)) /
       xenos::kEdramTileHeightSamples * pitch_tiles_at_32bpp;
+  uint32_t start_used_tiles_at_32bpp = 0;
+  if (window_offset_tiles) {
+    draw_util::Scissor scissor;
+    draw_util::GetScissor(regs, scissor, true, true);
+    start_used_tiles_at_32bpp =
+        (scissor.offset[1] << uint32_t(msaa_samples >= xenos::MsaaSamples::k2X)) /
+            xenos::kEdramTileHeightSamples * pitch_tiles_at_32bpp +
+        (scissor.offset[0] << msaa_samples_x_log2) / xenos::kEdramTileWidthSamples;
+    uint32_t right_tiles_at_32bpp =
+        (((scissor.offset[0] + scissor.extent[0]) << msaa_samples_x_log2) +
+         (xenos::kEdramTileWidthSamples - 1)) /
+        xenos::kEdramTileWidthSamples;
+    if (right_tiles_at_32bpp > pitch_tiles_at_32bpp) {
+      length_used_tiles_at_32bpp += right_tiles_at_32bpp - pitch_tiles_at_32bpp;
+    }
+  }
   for (uint32_t i = 0; i < edram_bases_sorted_count; ++i) {
     const std::pair<uint32_t, uint32_t>& rt_base_index = edram_bases_sorted[i];
     uint32_t rt_base = rt_base_index.first;
@@ -742,6 +808,18 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
     rt_key.msaa_samples = msaa_samples;
     rt_key.is_depth = rt_bit_index == 0;
     rt_key.resource_format = resource_formats[rt_bit_index];
+    uint32_t rt_is_64bpp = (rts_are_64bpp >> rt_bit_index) & 1;
+    uint32_t range_start_tiles = 0;
+    uint32_t range_end_tiles = 0;
+    if (window_offset_tiles) {
+      range_start_tiles = start_used_tiles_at_32bpp << rt_is_64bpp;
+      range_end_tiles = length_used_tiles_at_32bpp << rt_is_64bpp;
+      if (!interlock_barrier_only) {
+        rt_key.next_period = std::min(range_start_tiles >> xenos::kEdramBaseTilesBits, uint32_t(1));
+        range_end_tiles = std::min(range_end_tiles, (uint32_t(rt_key.next_period) + 1)
+                                                        << xenos::kEdramBaseTilesBits);
+      }
+    }
     if (!interlock_barrier_only) {
       RenderTarget* render_target = GetOrCreateRenderTarget(rt_key);
       if (!render_target) {
@@ -749,14 +827,21 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
       }
       rts[rt_bit_index] = render_target;
     }
-    uint32_t rt_is_64bpp = (rts_are_64bpp >> rt_bit_index) & 1;
-
-    rt_lengths_tiles[i] = std::min(std::min(length_used_tiles_at_32bpp << rt_is_64bpp,
-                                            rt_max_distance_tiles_at_64bpp >> (rt_is_64bpp ^ 1)),
-                                   ((i + 1 < edram_bases_sorted_count)
-                                        ? edram_bases_sorted[i + 1].first
-                                        : (xenos::kEdramTileCount + edram_bases_sorted[0].first)) -
-                                       rt_base);
+    if (window_offset_tiles) {
+      rt_starts_tiles[i] = range_start_tiles & (xenos::kEdramTileCount - 1);
+      rt_lengths_tiles[i] = std::min(
+          range_end_tiles > range_start_tiles ? range_end_tiles - range_start_tiles : uint32_t(0),
+          xenos::kEdramTileCount);
+    } else {
+      rt_starts_tiles[i] = 0;
+      rt_lengths_tiles[i] =
+          std::min(std::min(length_used_tiles_at_32bpp << rt_is_64bpp,
+                            rt_max_distance_tiles_at_64bpp >> (rt_is_64bpp ^ 1)),
+                   ((i + 1 < edram_bases_sorted_count)
+                        ? edram_bases_sorted[i + 1].first
+                        : (xenos::kEdramTileCount + edram_bases_sorted[0].first)) -
+                       rt_base);
+    }
   }
 
   uint32_t draw_target_index;
@@ -766,14 +851,16 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   }
 
   if (keep_aliased_depth) {
+    uint32_t alias_start_tiles = 0;
     uint32_t alias_length_tiles = 0;
     for (uint32_t i = 0; i < edram_bases_sorted_count; ++i) {
       if (edram_bases_sorted[i].first == edram_bases[0]) {
+        alias_start_tiles = rt_starts_tiles[i];
         alias_length_tiles = rt_lengths_tiles[i];
         break;
       }
     }
-    if (IsHostDepthCurrent(rt_keys[0], 0, alias_length_tiles)) {
+    if (IsHostDepthCurrent(rt_keys[0], alias_start_tiles, alias_length_tiles)) {
       rts[0] = GetOrCreateRenderTarget(rt_keys[0]);
       if (!rts[0]) {
         return false;
@@ -787,24 +874,30 @@ bool RenderTargetCache::Update(bool is_rasterization_done,
   }
 
   if (interlock_barrier_only) {
-    bool interlock_barrier_needed = false;
-    for (uint32_t i = 0; i < edram_bases_sorted_count; ++i) {
-      const std::pair<uint32_t, uint32_t>& rt_base_index = edram_bases_sorted[i];
-      if (WouldOwnershipChangeRequireTransfers(rt_keys[rt_base_index.second], 0,
-                                               rt_lengths_tiles[i])) {
-        interlock_barrier_needed = true;
-        break;
+    uint32_t interlock_window_offset =
+        window_offset_tiles ? regs.Get<reg::PA_SC_WINDOW_OFFSET>().value : 0;
+    bool interlock_barrier_needed = interlock_last_window_offset_ != UINT32_MAX &&
+                                    interlock_window_offset != interlock_last_window_offset_;
+    if (!interlock_barrier_needed) {
+      for (uint32_t i = 0; i < edram_bases_sorted_count; ++i) {
+        const std::pair<uint32_t, uint32_t>& rt_base_index = edram_bases_sorted[i];
+        if (WouldOwnershipChangeRequireTransfers(rt_keys[rt_base_index.second], rt_starts_tiles[i],
+                                                 rt_lengths_tiles[i])) {
+          interlock_barrier_needed = true;
+          break;
+        }
       }
     }
     if (interlock_barrier_needed) {
       RequestPixelShaderInterlockBarrier();
     }
+    interlock_last_window_offset_ = interlock_window_offset;
   }
 
   for (uint32_t i = 0; i < edram_bases_sorted_count; ++i) {
     const std::pair<uint32_t, uint32_t>& rt_base_index = edram_bases_sorted[i];
     uint32_t rt_bit_index = rt_base_index.second;
-    ChangeOwnership(rt_keys[rt_bit_index], 0, rt_lengths_tiles[i],
+    ChangeOwnership(rt_keys[rt_bit_index], rt_starts_tiles[i], rt_lengths_tiles[i],
                     interlock_barrier_only ? nullptr : &last_update_transfers_[rt_bit_index],
                     nullptr, rts_keep_depth_bits[rt_bit_index]);
   }
@@ -1210,6 +1303,7 @@ bool RenderTargetCache::PrepareHostRenderTargetsResolveClear(
 
 void RenderTargetCache::PixelShaderInterlockFullEdramBarrierPlaced() {
   assert_true(GetPath() == Path::kPixelShaderInterlock);
+  interlock_last_window_offset_ = UINT32_MAX;
 
   OwnershipRange empty_range(xenos::kEdramTileCount, RenderTargetKey(), RenderTargetKey(),
                              RenderTargetKey());
@@ -1348,8 +1442,6 @@ void RenderTargetCache::ChangeOwnership(RenderTargetKey dest, uint32_t start_til
   if (length_tiles == 0) {
     return;
   }
-  uint32_t dest_pitch_tiles = dest.GetPitchTiles();
-  bool dest_is_64bpp = dest.Is64bpp();
   bool host_depth_encoding_different = dest.is_depth && GetPath() == Path::kHostRenderTargets &&
                                        IsHostDepthEncodingDifferent(dest.GetDepthFormat());
 
@@ -1392,9 +1484,8 @@ void RenderTargetCache::ChangeOwnership(RenderTargetKey dest, uint32_t start_til
         if (!transfer_source.IsEmpty() && transfer_source != dest) {
           uint32_t transfer_end_tiles = std::min(it->second.end_tiles, extent_end);
           if (!resolve_clear_cutout ||
-              Transfer::GetRangeRectangles(it->first, transfer_end_tiles, dest.base_tiles,
-                                           dest_pitch_tiles, dest.msaa_samples, dest_is_64bpp,
-                                           nullptr, resolve_clear_cutout)) {
+              Transfer::GetRangeRectangles(it->first, transfer_end_tiles, dest, nullptr,
+                                           resolve_clear_cutout)) {
             RenderTargetKey transfer_host_depth_source =
                 host_depth_encoding_different
                     ? it->second.GetHostDepthRenderTarget(dest.GetDepthFormat())

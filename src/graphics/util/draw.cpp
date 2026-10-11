@@ -27,6 +27,11 @@
 #include <rex/ui/graphics_util.h>
 
 REXCVAR_DEFINE_BOOL(half_pixel_offset, true, "GPU", "Enable half pixel offset");
+REXCVAR_DEFINE_BOOL(window_offset_in_edram, true, "GPU",
+                    "Draw every tile of a predicated tiling frame at the same position as its "
+                    "depth prepass by moving the window offset into the EDRAM base instead of "
+                    "the viewport. Fixes depth garbage in the bottom tile; turn off if tiles "
+                    "shift or band (xenia-canary e1f4a0d009)");
 
 REXCVAR_DEFINE_BOOL(resolve_resolution_scale_fill_half_pixel_offset, true, "GPU",
                     "Fill half pixel offset during resolution scale resolve");
@@ -155,7 +160,7 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
                          uint32_t y_max, bool allow_reverse_z,
                          reg::RB_DEPTHCONTROL normalized_depth_control, bool convert_z_to_float24,
                          bool full_float24_in_0_to_1, bool pixel_shader_writes_depth,
-                         ViewportInfo& viewport_info_out) {
+                         ViewportInfo& viewport_info_out, bool window_offset_in_edram) {
   assert_not_zero(draw_resolution_scale_x);
   assert_not_zero(draw_resolution_scale_y);
 
@@ -178,7 +183,7 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
       pa_cl_vte_cntl.vport_z_offset_ena ? regs.Get<float>(XE_GPU_REG_PA_CL_VPORT_ZOFFSET) : 0.0f;
 
   float offset_add_xy[2] = {};
-  if (pa_su_sc_mode_cntl.vtx_window_offset_enable) {
+  if (pa_su_sc_mode_cntl.vtx_window_offset_enable && !window_offset_in_edram) {
     auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
     offset_add_xy[0] += float(pa_sc_window_offset.window_x_offset);
     offset_add_xy[1] += float(pa_sc_window_offset.window_y_offset);
@@ -299,19 +304,24 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
   }
 }
 
-void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_surface_pitch) {
+void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_surface_pitch,
+                bool window_offset_in_edram) {
   auto pa_sc_window_scissor_tl = regs.Get<reg::PA_SC_WINDOW_SCISSOR_TL>();
   int32_t tl_x = int32_t(pa_sc_window_scissor_tl.tl_x);
   int32_t tl_y = int32_t(pa_sc_window_scissor_tl.tl_y);
   auto pa_sc_window_scissor_br = regs.Get<reg::PA_SC_WINDOW_SCISSOR_BR>();
   int32_t br_x = int32_t(pa_sc_window_scissor_br.br_x);
   int32_t br_y = int32_t(pa_sc_window_scissor_br.br_y);
+  int32_t window_x_offset_applied = 0;
+  int32_t window_y_offset_applied = 0;
   if (!pa_sc_window_scissor_tl.window_offset_disable) {
     auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
-    tl_x += pa_sc_window_offset.window_x_offset;
-    tl_y += pa_sc_window_offset.window_y_offset;
-    br_x += pa_sc_window_offset.window_x_offset;
-    br_y += pa_sc_window_offset.window_y_offset;
+    window_x_offset_applied = pa_sc_window_offset.window_x_offset;
+    window_y_offset_applied = pa_sc_window_offset.window_y_offset;
+    tl_x += window_x_offset_applied;
+    tl_y += window_y_offset_applied;
+    br_x += window_x_offset_applied;
+    br_y += window_y_offset_applied;
   }
 
   auto pa_sc_screen_scissor_tl = regs.Get<reg::PA_SC_SCREEN_SCISSOR_TL>();
@@ -330,10 +340,106 @@ void GetScissor(const RegisterFile& regs, Scissor& scissor_out, bool clamp_to_su
   tl_y = std::max(tl_y, int32_t(0));
   br_x = std::max(br_x, tl_x);
   br_y = std::max(br_y, tl_y);
+  if (window_offset_in_edram) {
+    tl_x -= window_x_offset_applied;
+    tl_y -= window_y_offset_applied;
+    br_x -= window_x_offset_applied;
+    br_y -= window_y_offset_applied;
+  }
   scissor_out.offset[0] = uint32_t(tl_x);
   scissor_out.offset[1] = uint32_t(tl_y);
   scissor_out.extent[0] = uint32_t(br_x - tl_x);
   scissor_out.extent[1] = uint32_t(br_y - tl_y);
+}
+
+int32_t GetWindowOffsetTiles(const RegisterFile& regs,
+                             reg::RB_DEPTHCONTROL normalized_depth_control,
+                             uint32_t normalized_color_mask, bool host_render_targets_used,
+                             bool& kept_in_viewport_out) {
+  kept_in_viewport_out = false;
+  if (!REXCVAR_GET(window_offset_in_edram)) {
+    return 0;
+  }
+
+  auto pa_sc_window_offset = regs.Get<reg::PA_SC_WINDOW_OFFSET>();
+  int32_t window_x_offset = pa_sc_window_offset.window_x_offset;
+  int32_t window_y_offset = pa_sc_window_offset.window_y_offset;
+  if (!regs.Get<reg::PA_SU_SC_MODE_CNTL>().vtx_window_offset_enable || window_x_offset > 0 ||
+      window_y_offset > 0 || !(window_x_offset | window_y_offset)) {
+    return 0;
+  }
+
+  bool depth_used = normalized_depth_control.z_enable || normalized_depth_control.stencil_enable;
+  if (!depth_used && !normalized_color_mask) {
+    return 0;
+  }
+
+  kept_in_viewport_out = true;
+
+  if (window_x_offset && host_render_targets_used) {
+    return 0;
+  }
+
+  if (regs.Get<reg::PA_SC_WINDOW_SCISSOR_TL>().window_offset_disable) {
+    return 0;
+  }
+
+  auto rb_surface_info = regs.Get<reg::RB_SURFACE_INFO>();
+  uint32_t pitch_pixels = rb_surface_info.surface_pitch;
+  if (!pitch_pixels) {
+    return 0;
+  }
+
+  uint32_t msaa_samples_x_log2 = uint32_t(rb_surface_info.msaa_samples >= xenos::MsaaSamples::k4X);
+  uint32_t msaa_samples_y_log2 = uint32_t(rb_surface_info.msaa_samples >= xenos::MsaaSamples::k2X);
+  int32_t tile_width_pixels = int32_t(xenos::kEdramTileWidthSamples >> msaa_samples_x_log2);
+  int32_t tile_height_pixels = int32_t(xenos::kEdramTileHeightSamples >> msaa_samples_y_log2);
+  if (window_x_offset % tile_width_pixels || window_y_offset % tile_height_pixels) {
+    return 0;
+  }
+
+  uint32_t pitch_tiles_at_32bpp =
+      ((pitch_pixels << msaa_samples_x_log2) + (xenos::kEdramTileWidthSamples - 1)) /
+      xenos::kEdramTileWidthSamples;
+  int32_t window_offset_tiles =
+      (window_y_offset / tile_height_pixels) * int32_t(pitch_tiles_at_32bpp) +
+      window_x_offset / tile_width_pixels;
+  if (host_render_targets_used) {
+    int32_t scissor_bottom =
+        std::min(int32_t(regs.Get<reg::PA_SC_WINDOW_SCISSOR_BR>().br_y),
+                 int32_t(regs.Get<reg::PA_SC_SCREEN_SCISSOR_BR>().br_y) - window_y_offset);
+    uint32_t rows_end_tiles_at_32bpp =
+        uint32_t((scissor_bottom + tile_height_pixels - 1) / tile_height_pixels) *
+        pitch_tiles_at_32bpp;
+    if (rows_end_tiles_at_32bpp > xenos::kEdramTileCount) {
+      return 0;
+    }
+
+    uint32_t rows_end_tiles_at_64bpp = rows_end_tiles_at_32bpp * 2;
+    if (rows_end_tiles_at_64bpp > xenos::kEdramTileCount) {
+      int32_t scissor_top =
+          std::max(int32_t(regs.Get<reg::PA_SC_WINDOW_SCISSOR_TL>().tl_y),
+                   int32_t(regs.Get<reg::PA_SC_SCREEN_SCISSOR_TL>().tl_y) - window_y_offset);
+      uint32_t rows_start_tiles_at_64bpp =
+          uint32_t(scissor_top / tile_height_pixels) * pitch_tiles_at_32bpp * 2;
+      if (rows_end_tiles_at_64bpp > xenos::kEdramTileCount * 2 ||
+          rows_start_tiles_at_64bpp < xenos::kEdramTileCount) {
+        for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
+          if (!(normalized_color_mask & (uint32_t(0b1111) << (4 * i)))) {
+            continue;
+          }
+          if (xenos::IsColorRenderTargetFormat64bpp(
+                  regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i])
+                      .color_format)) {
+            return 0;
+          }
+        }
+      }
+    }
+  }
+
+  kept_in_viewport_out = false;
+  return window_offset_tiles;
 }
 
 uint32_t GetNormalizedColorMask(const RegisterFile& regs,

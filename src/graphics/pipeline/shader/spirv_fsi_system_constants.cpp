@@ -16,6 +16,7 @@
 #include <cstring>
 
 #include <rex/graphics/pipeline/render_target/cache.h>
+#include <rex/graphics/util/draw.h>
 #include <rex/graphics/xenos.h>
 
 namespace rex::graphics {
@@ -25,7 +26,7 @@ void WriteFragmentShaderInterlockSystemConstants(
     const RegisterFile& regs, bool primitive_polygonal,
     reg::RB_DEPTHCONTROL normalized_depth_control, uint32_t normalized_color_mask,
     uint32_t draw_resolution_scale_x, uint32_t draw_resolution_scale_y,
-    uint32_t zpd_fsi_counter_index) {
+    uint32_t zpd_fsi_counter_index, int32_t window_offset_tiles) {
   using SpirvTranslator = SpirvShaderTranslator;
   auto pa_su_sc_mode_cntl = regs.Get<reg::PA_SU_SC_MODE_CNTL>();
   auto rb_colorcontrol = regs.Get<reg::RB_COLORCONTROL>();
@@ -108,7 +109,11 @@ void WriteFragmentShaderInterlockSystemConstants(
     dirty |= system_constants.edram_rt_keep_mask[i][1] != rt_keep_masks[i][1];
     system_constants.edram_rt_keep_mask[i][1] = rt_keep_masks[i][1];
     if (rt_keep_masks[i][0] != UINT32_MAX || rt_keep_masks[i][1] != UINT32_MAX) {
-      uint32_t rt_base_dwords_scaled = color_info.color_base * edram_tile_dwords_scaled;
+      uint32_t rt_base_dwords_scaled =
+          draw_util::AddWindowOffsetToEdramBase(
+              color_info.color_base, window_offset_tiles,
+              xenos::IsColorRenderTargetFormat64bpp(color_info.color_format)) *
+          edram_tile_dwords_scaled;
       dirty |= system_constants.edram_rt_base_dwords_scaled[i] != rt_base_dwords_scaled;
       system_constants.edram_rt_base_dwords_scaled[i] = rt_base_dwords_scaled;
       uint32_t blend_factors_ops = regs[reg::RB_BLENDCONTROL::rt_register_indices[i]] & 0x1FFF1FFF;
@@ -120,7 +125,9 @@ void WriteFragmentShaderInterlockSystemConstants(
     }
   }
 
-  uint32_t depth_base_dwords_scaled = rb_depth_info.depth_base * edram_tile_dwords_scaled;
+  uint32_t depth_base_dwords_scaled =
+      draw_util::AddWindowOffsetToEdramBase(rb_depth_info.depth_base, window_offset_tiles, false) *
+      edram_tile_dwords_scaled;
   dirty |= system_constants.edram_depth_base_dwords_scaled != depth_base_dwords_scaled;
   system_constants.edram_depth_base_dwords_scaled = depth_base_dwords_scaled;
 
