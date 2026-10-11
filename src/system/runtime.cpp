@@ -325,6 +325,13 @@ uint8_t* Runtime::virtual_membase() const {
   return memory_ ? memory_->virtual_membase() : nullptr;
 }
 
+bool Runtime::MountFileSystem() {
+  if (!file_system_) {
+    file_system_ = std::make_unique<rex::filesystem::VirtualFileSystem>();
+  }
+  return SetupVfs();
+}
+
 bool Runtime::SetupVfs() {
   if (game_data_root_.empty()) {
     REXSYS_WARN("Runtime::SetupVfs: No game_data_root specified, skipping VFS setup");
