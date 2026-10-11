@@ -13,6 +13,7 @@ Each folder covers one area. Each file is one topic, named for the topic
 | [cpu](cpu/) | PowerPC instructions, FPSCR, recompiler behavior |
 | [gpu](gpu/) | Xenos, EDRAM, shaders, Direct3D 12 |
 | [io](io/) | Files, storage, disc images |
+| [kernel](kernel/) | Kernel and XAM exports, guest structures |
 | [language](language/) | Language and toolchain decisions |
 | [releases](releases/) | Versioning, releases and the updater |
 

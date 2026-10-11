@@ -41,6 +41,20 @@ static const char* kGameContentHeaderDirName = "Headers";
 
 static int content_device_id_ = 0;
 
+std::optional<std::string> ResolveContentPackageDevicePath(uint64_t xuid, uint32_t title_id,
+                                                           const XCONTENT_AGGREGATE_DATA& data) {
+  std::string_view device_root;
+  if (data.device_id == static_cast<uint32_t>(DummyDeviceId::HDD)) {
+    device_root = "\\Device\\Harddisk0\\Partition1\\Content\\";
+  } else if (data.device_id == static_cast<uint32_t>(DummyDeviceId::ODD)) {
+    device_root = "D:\\content\\";
+  } else {
+    return std::nullopt;
+  }
+  return fmt::format("{}{:016X}\\{:08X}\\{:08X}\\{}", device_root, xuid, title_id,
+                     static_cast<uint32_t>(data.content_type.get()), data.file_name());
+}
+
 ContentPackage::ContentPackage(KernelState* kernel_state, const std::string_view root_name,
                                uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
                                const std::filesystem::path& package_path)

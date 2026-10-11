@@ -2142,3 +2142,16 @@ the `[hybrid]` ZPD fixtures and `gpu.dxil_parity`, strict; mutation check
 (the plain depth-only shader in its place fails "RTV full counters count a
 draw without a pixel shader"). Not run in a title: QoS doesn't enable
 `occlusion_query_full_counters`. Known regressions: none.
+
+## XamContentResolve package paths (2026-10-11)
+
+xenia-canary `canary_experimental` at `c9c8e483` (`xeXamContentResolve`
+in `src/xenia/kernel/xam/xam_content.cc`; the audit clone is shallow, so the
+commit that added it is not pinned). Class A (an export that failed outright
+now builds the console's content package path). Adaptation: the path builder
+is `ResolveContentPackageDevicePath` in the content manager, and the export
+calls it. Canary's `XamContentResolveInternal` is not taken, since no
+representative title imports it. Tests: `kernel_tests` `[content]` path cases.
+Title effect: Legends' only call no longer warns. The package open that
+follows still fails, because ReXGlue stores packages as folders. Known
+regressions: none. Notes: `research/kernel/title-startup-queries.md`.

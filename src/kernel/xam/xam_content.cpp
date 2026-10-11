@@ -44,11 +44,34 @@ u32 XamContentGetLicenseMask_entry(mapped_u32 mask_ptr, mapped_void overlapped_p
 u32 XamContentResolve_entry(u32 user_index, mapped_void content_data_ptr, mapped_void buffer_ptr,
                             u32 buffer_size, u32 create_directory, u32 root_name_ptr,
                             u32 overlapped_ptr) {
-  auto content_data = content_data_ptr.as<XCONTENT_DATA*>();
-
-  assert_always();
-  REXKRNL_WARN("XamContentResolve unimplemented!");
-  return X_ERROR_NOT_FOUND;
+  if (!content_data_ptr || !buffer_ptr || !buffer_size) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  XCONTENT_AGGREGATE_DATA content_data = *content_data_ptr.as<XCONTENT_DATA*>();
+  uint64_t xuid = 0;
+  if (content_data.content_type == XContentType::kSavedGame && user_index < 4) {
+    xuid = REX_KERNEL_STATE()->user_profile()->xuid();
+  }
+  auto run = [content_data, xuid, buffer_ptr, buffer_size, root_name_ptr](
+                 uint32_t& extended_error, uint32_t& length) -> X_RESULT {
+    extended_error = 0;
+    length = 0;
+    if (root_name_ptr) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    auto path = ResolveContentPackageDevicePath(xuid, REX_KERNEL_STATE()->title_id(), content_data);
+    if (!path) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    rex::string::copy_truncating(buffer_ptr.as<char*>(), *path, buffer_size);
+    return X_ERROR_SUCCESS;
+  };
+  if (!overlapped_ptr) {
+    uint32_t extended_error, length;
+    return run(extended_error, length);
+  }
+  REX_KERNEL_STATE()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+  return X_ERROR_IO_PENDING;
 }
 
 u32 XamContentCreateEnumerator_entry(u32 user_index, u32 device_id, u32 content_type,
