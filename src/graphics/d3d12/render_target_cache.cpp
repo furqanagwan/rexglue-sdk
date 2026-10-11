@@ -70,6 +70,7 @@ namespace shaders {
 #include "../shaders/bytecode/d3d12_5_1/resolve_fast_64bpp_4xmsaa_scaled_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/resolve_full_128bpp_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/resolve_full_128bpp_scaled_cs.h"
+#include "../shaders/bytecode/d3d12_5_1/resolve_dxt3aas1111_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/resolve_full_16bpp_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/resolve_full_16bpp_scaled_cs.h"
 #include "../shaders/bytecode/d3d12_5_1/resolve_full_32bpp_cs.h"
@@ -105,6 +106,7 @@ const D3D12RenderTargetCache::ResolveCopyShaderCode
          shaders::resolve_full_64bpp_scaled_cs, sizeof(shaders::resolve_full_64bpp_scaled_cs)},
         {shaders::resolve_full_128bpp_cs, sizeof(shaders::resolve_full_128bpp_cs),
          shaders::resolve_full_128bpp_scaled_cs, sizeof(shaders::resolve_full_128bpp_scaled_cs)},
+        {shaders::resolve_dxt3aas1111_cs, sizeof(shaders::resolve_dxt3aas1111_cs), nullptr, 0},
 };
 
 const uint32_t D3D12RenderTargetCache::kTransferUsedRootParameters[size_t(
@@ -334,8 +336,10 @@ bool D3D12RenderTargetCache::Initialize() {
         draw_util::resolve_copy_shader_info[i];
     const ResolveCopyShaderCode& resolve_copy_shader_code = kResolveCopyShaders[i];
 
-    assert_true(resolve_copy_shader_code.unscaled && resolve_copy_shader_code.unscaled_size &&
-                resolve_copy_shader_code.scaled && resolve_copy_shader_code.scaled_size);
+    assert_true(resolve_copy_shader_code.unscaled && resolve_copy_shader_code.unscaled_size);
+    if (draw_resolution_scaled && !resolve_copy_shader_code.scaled) {
+      continue;
+    }
     ID3D12PipelineState* resolve_copy_pipeline = ui::d3d12::util::CreateComputePipeline(
         device,
         draw_resolution_scaled ? resolve_copy_shader_code.scaled
@@ -1131,6 +1135,12 @@ bool D3D12RenderTargetCache::Resolve(const memory::Memory& memory, D3D12SharedMe
   }
 
   DeferredCommandList& command_list = command_processor_.GetDeferredCommandList();
+
+  if (resolve_info.copy_dest_extent_length && draw_resolution_scaled &&
+      resolve_info.rb_copy_control.copy_command == xenos::CopyCommand::kConvertTo1111) {
+    REXGPU_WARN("Resolve copy command 2 is not supported with resolution scaling");
+    resolve_info.copy_dest_extent_length = 0;
+  }
 
   bool copied = false;
   if (resolve_info.copy_dest_extent_length) {

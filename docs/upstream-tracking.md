@@ -2042,7 +2042,7 @@ A–H scheme above.
 
 | Edge commit | Change | Notes |
 | --- | --- | --- |
-| `ac37478be6`, `7347cd12ef` | `k_DXT3A_AS_1_1_1_1` component bit order; resolve copy command 2 into that format | Shader and resolve changes; rebuild DXBC bytecode; 5345084D upstream |
+| `ac37478be6`, `7347cd12ef` (knuckleslee, 2026-10-03 / 2026-09-30) | `k_DXT3A_AS_1_1_1_1` component bit order; resolve copy command 2 into that format | **Ported 2026-10-11 (#236), class A.** Texture loaders read red from bit 0; new `resolve_dxt3aas1111` shader rewritten in ReXGlue's older shader dialect (`...AddressInts`, uint vector buffer); unscaled only, so a scaled resolve skips the mask copy but still clears. GPU fixture `Copy command 2 packs one bit per component...` (red in bit 0, alpha in bit 3; untouched at 3x2). See [research](../research/gpu/dxt3a-as-1111.md) |
 | `6579cc2a4c` (Tim, 2026-10-01) | Host viewport may start at a negative coordinate | **Ported 2026-10-11 (#236), class A.** `ViewportInfo::xy_offset` is signed and the D3D12 viewport may start at -max. Test `A tile drawn at a negative window offset keeps the full viewport` (-608, Blue Dragon's case), which fails on the old code. 007 title runs batched with the rest of #236 |
 | `e1f4a0d009` | Tiling window offsets moved into EDRAM bases | Large render-target-cache change; depth garbage in tiled titles |
 | `cc4981a465` | Rasterize at Xenos MSAA sample positions | Large D3D12 render-target and DXBC output-merger change |

@@ -229,6 +229,8 @@ enum class ResolveCopyShaderIndex {
   kFull64bpp,
   kFull128bpp,
 
+  kDXT3AAs1111,
+
   kCount,
   kUnknown = kCount,
 };
@@ -256,6 +258,9 @@ struct ResolveCopyShaderConstants {
   };
   DestRelative dest_relative;
   uint32_t dest_base;
+  uint32_t copy_func;
+  uint32_t copy_ref;
+  uint32_t copy_mask;
 };
 
 struct ResolveClearShaderConstants {
@@ -291,6 +296,10 @@ struct ResolveInfo {
   uint32_t rb_depth_clear;
   uint32_t rb_color_clear;
   uint32_t rb_color_clear_lo;
+
+  uint32_t rb_copy_func;
+  uint32_t rb_copy_ref;
+  uint32_t rb_copy_mask;
 
   bool IsCopyingDepth() const {
     return rb_copy_control.copy_src_select >= xenos::kMaxColorRenderTargets;
