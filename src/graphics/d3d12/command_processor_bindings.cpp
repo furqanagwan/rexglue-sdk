@@ -39,6 +39,29 @@
 
 namespace rex::graphics::d3d12 {
 
+void D3D12CommandProcessor::UpdateSamplePositions(xenos::MsaaSamples msaa_samples) {
+  if (!xenos_sample_positions_used_ || current_sample_positions_ == msaa_samples) {
+    return;
+  }
+  SubmitBarriers();
+  current_sample_positions_ = msaa_samples;
+  D3D12_SAMPLE_POSITION positions[4] = {};
+  if (msaa_samples == xenos::MsaaSamples::k1X) {
+    deferred_command_list_.D3DSetSamplePositions(0, 0, positions);
+    return;
+  }
+  int8_t xenos_positions[4][2];
+  uint32_t position_count = draw_util::GetHostSampleXenosPositions(
+      msaa_samples, render_target_cache_->msaa_2x_supported(),
+      render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock,
+      xenos_positions);
+  for (uint32_t i = 0; i < position_count; ++i) {
+    positions[i].X = xenos_positions[i][0];
+    positions[i].Y = xenos_positions[i][1];
+  }
+  deferred_command_list_.D3DSetSamplePositions(position_count, 1, positions);
+}
+
 void D3D12CommandProcessor::UpdateFixedFunctionState(
     const draw_util::ViewportInfo& viewport_info, const draw_util::Scissor& scissor,
     bool primitive_polygonal, reg::RB_DEPTHCONTROL normalized_depth_control) {

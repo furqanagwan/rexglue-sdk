@@ -385,6 +385,14 @@ bool D3D12CommandProcessor::SetupContext() {
     return false;
   }
 
+  xenos_sample_positions_used_ =
+      command_list_1_ != nullptr &&
+      provider.GetProgrammableSamplePositionsTier() !=
+          D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED &&
+      (render_target_cache_->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock ||
+       REXCVAR_GET(xenos_sample_positions));
+  REXGPU_INFO("D3D12 Xenos MSAA sample positions: {}", xenos_sample_positions_used_ ? "yes" : "no");
+
   zpd_hybrid_supported_ =
       REXCVAR_GET(occlusion_query_full_counters) &&
       render_target_cache_->GetPath() == RenderTargetCache::Path::kHostRenderTargets;

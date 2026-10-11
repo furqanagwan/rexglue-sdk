@@ -224,6 +224,8 @@ class D3D12RenderTargetCache final : public RenderTargetCache {
     uint32_t temporary_sort_index_ = 0;
   };
 
+  void TransitionRenderTarget(D3D12RenderTarget& render_target, D3D12_RESOURCE_STATES new_state);
+
   enum TransferCBVRegister : uint32_t {
     kTransferCBVRegisterStencilMask,
     kTransferCBVRegisterAddress,

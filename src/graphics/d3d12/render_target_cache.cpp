@@ -1643,6 +1643,14 @@ RenderTargetCache::RenderTarget* D3D12RenderTargetCache::CreateRenderTarget(Rend
   }
   device->CreateShaderResourceView(resource.Get(), &srv_desc, descriptor_srv.GetHandle());
 
+  if (key.is_depth && key.msaa_samples != xenos::MsaaSamples::k1X &&
+      command_processor_.xenos_sample_positions_used()) {
+    command_processor_.UpdateSamplePositions(key.msaa_samples);
+    command_processor_.GetDeferredCommandList().D3DClearDepthStencilView(
+        descriptor_draw_handle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0,
+        nullptr);
+  }
+
   return new D3D12RenderTarget(key, resource.Get(), std::move(descriptor_draw),
                                std::move(descriptor_load_separate), std::move(descriptor_srv),
                                std::move(descriptor_srv_stencil), resource_state);
@@ -1669,6 +1677,30 @@ void D3D12RenderTargetCache::TransitionEdramBuffer(D3D12_RESOURCE_STATES new_sta
     edram_buffer_modification_status_ = EdramBufferModificationStatus::kUnmodified;
   }
   edram_buffer_state_ = new_state;
+}
+
+void D3D12RenderTargetCache::TransitionRenderTarget(D3D12RenderTarget& render_target,
+                                                    D3D12_RESOURCE_STATES new_state) {
+  D3D12_RESOURCE_STATES old_state = render_target.SetResourceState(new_state);
+  if (old_state == new_state) {
+    return;
+  }
+  RenderTargetKey key = render_target.key();
+  if (key.is_depth) {
+    command_processor_.UpdateSamplePositions(key.msaa_samples);
+    if (old_state == D3D12_RESOURCE_STATE_DEPTH_WRITE &&
+        key.msaa_samples != xenos::MsaaSamples::k1X &&
+        command_processor_.xenos_sample_positions_used()) {
+      command_processor_.PushTransitionBarrier(render_target.resource(), old_state,
+                                               D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+      command_processor_.SubmitBarriers();
+      command_processor_.GetDeferredCommandList().D3DResolveSubresourceRegion(
+          render_target.resource(), 0, 0, 0, render_target.resource(), 0, nullptr,
+          GetDepthDSVDXGIFormat(key.GetDepthFormat()), D3D12_RESOLVE_MODE_DECOMPRESS);
+      old_state = D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+    }
+  }
+  command_processor_.PushTransitionBarrier(render_target.resource(), old_state, new_state);
 }
 
 void D3D12RenderTargetCache::MarkEdramBufferModified(

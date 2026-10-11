@@ -679,9 +679,11 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   viewport_key.normalized_depth_control = normalized_depth_control.value;
   std::memcpy(viewport_key.vport_regs, &regs[XE_GPU_REG_PA_CL_VPORT_XSCALE],
               sizeof(viewport_key.vport_regs));
-  viewport_key.flags = (uint32_t(convert_z_to_float24) << 0) |
-                       (uint32_t(host_render_targets_used) << 1) |
-                       (uint32_t(ps_writes_depth) << 2) | (uint32_t(window_offset_tiles != 0) << 3);
+  viewport_key.flags =
+      (uint32_t(convert_z_to_float24) << 0) | (uint32_t(host_render_targets_used) << 1) |
+      (uint32_t(ps_writes_depth) << 2) | (uint32_t(window_offset_tiles != 0) << 3) |
+      (uint32_t(!host_render_targets_used || xenos_sample_positions_used_) << 4) |
+      (uint32_t(regs.Get<reg::RB_SURFACE_INFO>().msaa_samples) << 5);
 
   draw_util::ViewportInfo viewport_info;
   if (viewport_cache_valid_ && viewport_key == previous_viewport_key_) {
@@ -690,7 +692,8 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     draw_util::GetHostViewportInfo(
         regs, draw_resolution_scale_x, draw_resolution_scale_y, true, D3D12_VIEWPORT_BOUNDS_MAX,
         D3D12_VIEWPORT_BOUNDS_MAX, false, normalized_depth_control, convert_z_to_float24,
-        host_render_targets_used, ps_writes_depth, viewport_info, window_offset_tiles != 0);
+        host_render_targets_used, ps_writes_depth, viewport_info, window_offset_tiles != 0,
+        !host_render_targets_used || xenos_sample_positions_used_);
     previous_viewport_key_ = viewport_key;
     previous_viewport_info_ = viewport_info;
     viewport_cache_valid_ = true;
@@ -704,6 +707,11 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   scissor.extent[1] *= draw_resolution_scale_y;
 
   UpdateFixedFunctionState(viewport_info, scissor, primitive_polygonal, normalized_depth_control);
+
+  UpdateSamplePositions(pipeline_cache_->GetHostMsaaSamplesByHandle(pipeline_handle) !=
+                                xenos::MsaaSamples::k1X
+                            ? regs.Get<reg::RB_SURFACE_INFO>().msaa_samples
+                            : xenos::MsaaSamples::k1X);
 
 #if REXGLUE_SHADER_DXIL
   if (use_dxil) {

@@ -25,6 +25,11 @@ REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU",
                     "#1111). Costs most with ROV")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(native_2x_msaa, true, "GPU", "Enable native 2x MSAA");
+REXCVAR_DEFINE_BOOL(xenos_sample_positions, false, "GPU",
+                    "Rasterize 2x and 4x MSAA host render targets at the Xenos sample positions, "
+                    "like the console, when the GPU supports programmable sample positions. ROV "
+                    "always uses Xenos positions (xenia-canary cc4981a465)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(depth_float24_round, false, "GPU", "Round float24 depth values");
 REXCVAR_DEFINE_BOOL(depth_float24_convert_in_pixel_shader, false, "GPU",
                     "Convert float24 depth in pixel shader");
