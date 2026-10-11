@@ -18,6 +18,12 @@
 REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, true, "GPU",
                     "Allow texture and vertex fetch constants with the invalid type (off skips "
                     "the draws that use them)");
+REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU",
+                    "VIZ_QUERY visibility tests for draws with a VIZ token, the Xbox 360's "
+                    "conditional rendering: occlusion queries over the survey draws predicate "
+                    "the draws that use them, skipping hidden ones on the GPU (xenia-canary "
+                    "#1111). Costs most with ROV")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(native_2x_msaa, true, "GPU", "Enable native 2x MSAA");
 REXCVAR_DEFINE_BOOL(depth_float24_round, false, "GPU", "Round float24 depth values");
 REXCVAR_DEFINE_BOOL(depth_float24_convert_in_pixel_shader, false, "GPU",

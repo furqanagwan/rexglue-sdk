@@ -115,7 +115,7 @@ bool IsPixelShaderNeededWithRasterization(const Shader& shader, const RegisterFi
                                           bool include_memory_export = true);
 
 struct ViewportInfo {
-  uint32_t xy_offset[2];
+  int32_t xy_offset[2];
 
   uint32_t xy_extent[2];
   float z_min;

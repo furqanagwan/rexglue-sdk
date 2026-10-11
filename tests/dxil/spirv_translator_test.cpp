@@ -27,7 +27,6 @@
 
 #include "../gpu/guest_draw.h"
 
-REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU", "");
 REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU", "");
 REXCVAR_DEFINE_BOOL(draw_resolution_scaled_texture_offsets, true, "GPU/Shader", "");
 
