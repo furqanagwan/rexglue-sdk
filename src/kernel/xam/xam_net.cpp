@@ -370,6 +370,10 @@ u32 NetDll_XNetGetTitleXnAddr_entry(u32 caller, ppc_ptr_t<XNADDR> addr_ptr) {
   return XnAddrStatus::XNET_GET_XNADDR_STATIC;
 }
 
+u32 NetDll_XNetGetBroadcastVersionStatus_entry(u32 caller, u32 reset) {
+  return 0;
+}
+
 u32 NetDll_XNetGetDebugXnAddr_entry(u32 caller, ppc_ptr_t<XNADDR> addr_ptr) {
   addr_ptr.Zero();
 
@@ -814,6 +818,8 @@ void NetDll_WSASetLastError_entry(u32 error_code) {
 
 REX_EXPORT(__imp__NetDll_XNetStartup, rex::kernel::xam::NetDll_XNetStartup_entry)
 REX_EXPORT(__imp__NetDll_XNetCleanup, rex::kernel::xam::NetDll_XNetCleanup_entry)
+REX_EXPORT(__imp__NetDll_XNetGetBroadcastVersionStatus,
+           rex::kernel::xam::NetDll_XNetGetBroadcastVersionStatus_entry)
 REX_EXPORT(__imp__NetDll_XNetGetOpt, rex::kernel::xam::NetDll_XNetGetOpt_entry)
 REX_EXPORT(__imp__NetDll_XNetRandom, rex::kernel::xam::NetDll_XNetRandom_entry)
 REX_EXPORT(__imp__NetDll_WSAStartup, rex::kernel::xam::NetDll_WSAStartup_entry)
@@ -909,7 +915,6 @@ REX_EXPORT_STUB(__imp__NetDll_XNetConnect);
 REX_EXPORT_STUB(__imp__NetDll_XNetCreateKey);
 REX_EXPORT_STUB(__imp__NetDll_XNetDnsReverseLookup);
 REX_EXPORT_STUB(__imp__NetDll_XNetDnsReverseRelease);
-REX_EXPORT_STUB(__imp__NetDll_XNetGetBroadcastVersionStatus);
 REX_EXPORT_STUB(__imp__NetDll_XNetGetConnectStatus);
 REX_EXPORT_STUB(__imp__NetDll_XNetGetSystemLinkPort);
 REX_EXPORT_STUB(__imp__NetDll_XNetGetXnAddrPlatform);

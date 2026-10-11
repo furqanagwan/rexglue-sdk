@@ -12,6 +12,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -192,6 +193,9 @@ class ContentManager {
   std::unordered_map<string::string_key_case, ContentPackage*, string::string_key_case::Hash>
       open_packages_;
 };
+
+std::optional<std::string> ResolveContentPackageDevicePath(uint64_t xuid, uint32_t title_id,
+                                                           const XCONTENT_AGGREGATE_DATA& data);
 
 }
 }

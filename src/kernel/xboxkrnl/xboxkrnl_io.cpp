@@ -164,7 +164,9 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
   }
 
   *handle_out = handle;
-  if (XFAILED(result)) {
+  if (result == X_STATUS_NO_SUCH_FILE || result == X_STATUS_OBJECT_NAME_NOT_FOUND) {
+    REXKRNL_DEBUG("[NtCreateFile] not found: path='{}' -> {:#x}", target_path, result);
+  } else if (XFAILED(result)) {
     REXKRNL_IMPORT_FAIL("NtCreateFile", "path='{}' -> {:#x}", target_path, result);
   } else {
     REXKRNL_IMPORT_RESULT("NtCreateFile", "{:#x} handle={:#x}", result, handle);
@@ -649,7 +651,12 @@ u32 IoCreateDevice_entry(u32 device_struct, u32 r4, u32 r5, u32 r6, u32 r7, mapp
 }
 
 u32 IoDismountVolumeByFileHandle_entry(u32 handle) {
-  REXKRNL_WARN("IoDismountVolumeByFileHandle({:#x}) - stub", (uint32_t)handle);
+  auto file = REX_KERNEL_OBJECTS()->LookupObject<XFile>(handle);
+  if (!file) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  REXKRNL_DEBUG("IoDismountVolumeByFileHandle({:#x}) on {}", (uint32_t)handle,
+                file->device()->mount_path());
   return X_STATUS_SUCCESS;
 }
 
