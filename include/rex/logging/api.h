@@ -89,6 +89,13 @@ void ApplyLogCvarOverrides(LogConfig& config);
 void PruneLogDirectory(const std::filesystem::path& logs_dir, std::string_view app_name,
                        uint64_t budget_bytes);
 
+struct OpenedLogFile {
+  spdlog::sink_ptr sink;
+  std::filesystem::path path;
+};
+
+OpenedLogFile OpenLogFile(const std::filesystem::path& preferred_path, std::string_view app_name);
+
 const LogConfig& LoggingConfig();
 
 std::map<std::string, std::string> ParseCategoryLevelsFromConfig(
