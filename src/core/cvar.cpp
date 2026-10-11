@@ -554,8 +554,79 @@ std::vector<std::string> ListModifiedFlags() {
 
 namespace {
 
+std::string QuoteTomlString(std::string_view value) {
+  std::string quoted = "\"";
+  for (char c : value) {
+    switch (c) {
+      case '"':
+        quoted += "\\\"";
+        break;
+      case '\\':
+        quoted += "\\\\";
+        break;
+      case '\n':
+        quoted += "\\n";
+        break;
+      case '\r':
+        quoted += "\\r";
+        break;
+      case '\t':
+        quoted += "\\t";
+        break;
+      default:
+        if (static_cast<unsigned char>(c) < 0x20 || c == 0x7F) {
+          quoted += fmt::format("\\u{:04X}", static_cast<unsigned char>(c));
+        } else {
+          quoted += c;
+        }
+        break;
+    }
+  }
+  quoted += '"';
+  return quoted;
+}
+
+std::string LiteralizeUnescapedStrings(std::string_view text) {
+  std::string result;
+  size_t start = 0;
+  while (start <= text.size()) {
+    size_t end = text.find('\n', start);
+    std::string_view line =
+        text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+    std::string_view content = line;
+    if (!content.empty() && content.back() == '\r') {
+      content.remove_suffix(1);
+    }
+    size_t eq = content.find('=');
+    size_t open = content.find('"', eq == std::string_view::npos ? content.size() : eq);
+    size_t close = content.rfind('"');
+    bool literalize =
+        eq != std::string_view::npos && open != std::string_view::npos && close > open &&
+        content.find_first_not_of(" \t", close + 1) == std::string_view::npos &&
+        content.substr(eq + 1, open - eq - 1).find_first_not_of(" \t") == std::string_view::npos;
+    std::string_view inner =
+        literalize ? content.substr(open + 1, close - open - 1) : std::string_view();
+    if (literalize && inner.find('\\') != std::string_view::npos &&
+        inner.find('\'') == std::string_view::npos) {
+      result.append(content.substr(0, open));
+      result += '\'';
+      result.append(inner);
+      result += '\'';
+      result.append(line.substr(content.size()));
+    } else {
+      result.append(line);
+    }
+    if (end == std::string_view::npos) {
+      break;
+    }
+    result += '\n';
+    start = end + 1;
+  }
+  return result;
+}
+
 std::string TomlLine(const std::string& name, const std::string& value, bool is_string) {
-  return is_string ? name + " = \"" + value + "\"\n" : name + " = " + value + "\n";
+  return is_string ? name + " = " + QuoteTomlString(value) + "\n" : name + " = " + value + "\n";
 }
 
 std::string SerializePersisted(std::optional<std::string_view> category) {
@@ -663,13 +734,22 @@ void LoadConfig(const std::filesystem::path& config_path) {
     return;
   }
 
+  std::ifstream file(config_path, std::ios::binary);
+  std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
   try {
-    auto config = toml::parse_file(config_path.string());
+    auto config = toml::parse(text);
     ApplyTomlTable(config, "");
     REXLOG_DEBUG("Loaded config from {}", config_path.string());
+    return;
   } catch (const toml::parse_error& err) {
     REXLOG_ERROR("Failed to parse config {}: {}", config_path.string(), err.what());
   }
+  try {
+    auto config = toml::parse(LiteralizeUnescapedStrings(text));
+    ApplyTomlTable(config, "");
+    REXLOG_WARN("Loaded config {} after reading its unescaped paths literally",
+                config_path.string());
+  } catch (const toml::parse_error&) {}
 }
 
 void ApplyEnvironment() {

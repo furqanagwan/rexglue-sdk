@@ -855,3 +855,37 @@ TEST_CASE("cvar SaveConfig keeps one-run values out of the file", "[cvar][save]"
   std::filesystem::remove(config_path);
   rex::cvar::testing::ResetAllForTesting();
 }
+
+TEST_CASE("cvar SaveConfig writes Windows paths that load again", "[cvar][save]") {
+  rex::cvar::testing::ResetAllForTesting();
+  auto config_path = std::filesystem::temp_directory_path() / "test_save_paths.toml";
+  const std::string path = R"(C:\Users\Player One\Games\007 "Blood Stone"\disc.iso)";
+  REQUIRE(rex::cvar::SetFlagByName("test_string_flag", path));
+  REQUIRE(rex::cvar::SetFlagByName("test_int32_flag", "12"));
+  REQUIRE(rex::cvar::TrySaveConfig(config_path));
+
+  rex::cvar::testing::ResetAllForTesting();
+  rex::cvar::LoadConfig(config_path);
+  CHECK(REXCVAR_GET(test_string_flag) == path);
+  CHECK(REXCVAR_GET(test_int32_flag) == 12);
+
+  std::filesystem::remove(config_path);
+  rex::cvar::testing::ResetAllForTesting();
+}
+
+TEST_CASE("cvar LoadConfig reads a file saved with unescaped Windows paths", "[cvar][save]") {
+  rex::cvar::testing::ResetAllForTesting();
+  auto config_path = std::filesystem::temp_directory_path() / "test_load_unescaped.toml";
+  {
+    std::ofstream file(config_path, std::ios::binary);
+    file << "# Auto-generated cvar configuration\r\n";
+    file << "test_int32_flag = 33\r\n";
+    file << R"(test_string_flag = "C:\Users\Player\Downloads\007\disc.iso")" << "\r\n";
+  }
+  rex::cvar::LoadConfig(config_path);
+  CHECK(REXCVAR_GET(test_string_flag) == R"(C:\Users\Player\Downloads\007\disc.iso)");
+  CHECK(REXCVAR_GET(test_int32_flag) == 33);
+
+  std::filesystem::remove(config_path);
+  rex::cvar::testing::ResetAllForTesting();
+}
