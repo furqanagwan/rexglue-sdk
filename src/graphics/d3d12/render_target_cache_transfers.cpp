@@ -108,10 +108,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
             offsetof(HostDepthStoreConstants, render_target) / sizeof(uint32_t));
 
         TransitionEdramBuffer(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        command_processor_.PushTransitionBarrier(
-            dest_d3d12_rt.resource(),
-            dest_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        TransitionRenderTarget(dest_d3d12_rt, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
         command_processor_.SetExternalPipeline(
             host_depth_store_pipelines_[size_t(dest_rt_key.msaa_samples)]);
@@ -168,20 +165,15 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
       }
       if (!source_previously_used_as_dest) {
         auto& source_d3d12_rt = *static_cast<D3D12RenderTarget*>(transfer.source);
-        command_processor_.PushTransitionBarrier(
-            source_d3d12_rt.resource(),
-            source_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        TransitionRenderTarget(source_d3d12_rt, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
       }
 
       if (transfer.host_depth_source && transfer.host_depth_source != dest_rt &&
           !host_depth_source_previously_used_as_dest) {
         auto& host_depth_source_d3d12_rt =
             *static_cast<D3D12RenderTarget*>(transfer.host_depth_source);
-        command_processor_.PushTransitionBarrier(
-            host_depth_source_d3d12_rt.resource(),
-            host_depth_source_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        TransitionRenderTarget(host_depth_source_d3d12_rt,
+                               D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
       }
     }
 
@@ -198,8 +190,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
       D3D12_RESOURCE_STATES dest_state = dest_d3d12_rt.key().is_depth
                                              ? D3D12_RESOURCE_STATE_DEPTH_WRITE
                                              : D3D12_RESOURCE_STATE_RENDER_TARGET;
-      command_processor_.PushTransitionBarrier(
-          dest_d3d12_rt.resource(), dest_d3d12_rt.SetResourceState(dest_state), dest_state);
+      TransitionRenderTarget(dest_d3d12_rt, dest_state);
     }
   }
   if (host_depth_store_set_up) {
@@ -311,8 +302,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
 
     D3D12_RESOURCE_STATES dest_state = dest_rt_key.is_depth ? D3D12_RESOURCE_STATE_DEPTH_WRITE
                                                             : D3D12_RESOURCE_STATE_RENDER_TARGET;
-    command_processor_.PushTransitionBarrier(
-        dest_d3d12_rt.resource(), dest_d3d12_rt.SetResourceState(dest_state), dest_state);
+    TransitionRenderTarget(dest_d3d12_rt, dest_state);
 
     if (!current_transfers.empty()) {
       are_current_command_list_render_targets_valid_ = false;
@@ -486,21 +476,17 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
         bool is_stencil_bit =
             (transfer_root_parameters_used & kTransferUsedRootParameterStencilMaskConstantBit) != 0;
 
-        command_processor_.PushTransitionBarrier(
-            source_d3d12_rt.resource(),
-            source_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        TransitionRenderTarget(source_d3d12_rt, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         if (host_depth_source_d3d12_rt) {
           if (transfer_shader_key.host_depth_source_is_copy) {
             TransitionEdramBuffer(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
           } else {
-            command_processor_.PushTransitionBarrier(
-                host_depth_source_d3d12_rt->resource(),
-                host_depth_source_d3d12_rt->SetResourceState(
-                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            TransitionRenderTarget(*host_depth_source_d3d12_rt,
+                                   D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
           }
         }
+
+        command_processor_.UpdateSamplePositions(dest_rt_key.msaa_samples);
 
         uint32_t transfer_vertex_count = 6 * transfer_rectangle_count;
         D3D12_VERTEX_BUFFER_VIEW transfer_rectangle_buffer_view;
@@ -733,6 +719,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
             depth_host_clear_value = xenos::Float20e4To32(depth_guest_clear_value) * 0.5f;
             break;
         }
+        command_processor_.UpdateSamplePositions(dest_rt_key.msaa_samples);
         command_processor_.PushTransitionBarrier(
             dest_d3d12_rt.resource(),
             dest_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_DEPTH_WRITE),
@@ -807,6 +794,7 @@ void D3D12RenderTargetCache::PerformTransfersAndResolveClears(
             dest_d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_RENDER_TARGET),
             D3D12_RESOURCE_STATE_RENDER_TARGET);
         if (clear_via_drawing) {
+          command_processor_.UpdateSamplePositions(dest_rt_key.msaa_samples);
           D3D12_CPU_DESCRIPTOR_HANDLE clear_rtv_handle =
               dest_d3d12_rt.descriptor_load_separate().IsValid()
                   ? dest_d3d12_rt.descriptor_load_separate().GetHandle()
@@ -850,9 +838,7 @@ void D3D12RenderTargetCache::SetCommandListRenderTargets(
 
   if (depth_and_color_render_targets[0]) {
     auto& d3d12_rt = *static_cast<D3D12RenderTarget*>(depth_and_color_render_targets[0]);
-    command_processor_.PushTransitionBarrier(
-        d3d12_rt.resource(), d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_DEPTH_WRITE),
-        D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    TransitionRenderTarget(d3d12_rt, D3D12_RESOURCE_STATE_DEPTH_WRITE);
   }
   for (uint32_t i = 0; i < xenos::kMaxColorRenderTargets; ++i) {
     RenderTarget* render_target = depth_and_color_render_targets[1 + i];

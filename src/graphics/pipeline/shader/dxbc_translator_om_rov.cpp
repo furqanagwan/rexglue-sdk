@@ -220,20 +220,37 @@ void DxbcShaderTranslator::StartPixelShader_LoadROVParameters() {
             dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kYYYY),
             dxbc::Src::LU(tile_size * xenos::kEdramTileCount));
 
+  uint32_t coverage_temp = PushSystemTemp();
+  dxbc::Dest coverage_temp_x_dest(dxbc::Dest::R(coverage_temp, 0b0001));
+  dxbc::Src coverage_temp_x_src(dxbc::Src::R(coverage_temp, dxbc::Src::kXXXX));
   a_.OpIf(true, LoadSystemConstant(SystemConstants::Index::kSampleCountLog2,
                                    offsetof(SystemConstants, sample_count_log2), dxbc::Src::kXXXX));
-  { a_.OpMov(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::VCoverage()); }
-
+  {
+    a_.OpUBFE(coverage_temp_x_dest, dxbc::Src::LU(1), dxbc::Src::LU(3), dxbc::Src::VCoverage());
+    a_.OpBFI(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(1), dxbc::Src::LU(1),
+             coverage_temp_x_src, dxbc::Src::VCoverage());
+    a_.OpUBFE(coverage_temp_x_dest, dxbc::Src::LU(1), dxbc::Src::LU(1), dxbc::Src::VCoverage());
+    a_.OpBFI(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(1), dxbc::Src::LU(3),
+             coverage_temp_x_src, dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX));
+  }
   a_.OpElse();
   {
-    a_.OpUBFE(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(1), dxbc::Src::LU(3),
-              dxbc::Src::VCoverage());
-
-    a_.OpBFI(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(31), dxbc::Src::LU(1),
-             dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX), dxbc::Src::VCoverage());
+    a_.OpIf(true,
+            LoadSystemConstant(SystemConstants::Index::kSampleCountLog2,
+                               offsetof(SystemConstants, sample_count_log2), dxbc::Src::kYYYY));
+    {
+      a_.OpUBFE(coverage_temp_x_dest, dxbc::Src::LU(1), dxbc::Src::LU(1), dxbc::Src::VCoverage());
+      a_.OpUBFE(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(1), dxbc::Src::LU(2),
+                dxbc::Src::VCoverage());
+      a_.OpBFI(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::LU(31), dxbc::Src::LU(1),
+               coverage_temp_x_src, dxbc::Src::R(system_temp_rov_params_, dxbc::Src::kXXXX));
+    }
+    a_.OpElse();
+    { a_.OpMov(dxbc::Dest::R(system_temp_rov_params_, 0b0001), dxbc::Src::VCoverage()); }
+    a_.OpEndIf();
   }
-
   a_.OpEndIf();
+  PopSystemTemp();
 }
 
 void DxbcShaderTranslator::ROV_DepthStencilTest() {
@@ -327,13 +344,23 @@ void DxbcShaderTranslator::ROV_DepthStencilTest() {
     } else {
       switch (i) {
         case 0:
-
+          a_.OpIf(true, LoadSystemConstant(SystemConstants::Index::kSampleCountLog2,
+                                           offsetof(SystemConstants, sample_count_log2),
+                                           dxbc::Src::kXXXX));
           a_.OpMAd(sample_depth_stencil_dest, z_ddx_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[0][0] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions4x[0][0] * (1.0f / 16.0f)),
                    temp_z_src);
           a_.OpMAd(sample_depth_stencil_dest, z_ddy_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[0][1] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions4x[0][1] * (1.0f / 16.0f)),
                    sample_depth_stencil_src);
+          a_.OpElse();
+          a_.OpMAd(sample_depth_stencil_dest, z_ddx_src,
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions2x[0][0] * (1.0f / 16.0f)),
+                   temp_z_src);
+          a_.OpMAd(sample_depth_stencil_dest, z_ddy_src,
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions2x[0][1] * (1.0f / 16.0f)),
+                   sample_depth_stencil_src);
+          a_.OpEndIf();
 
           a_.OpMovC(
               sample_depth_stencil_dest,
@@ -348,23 +375,23 @@ void DxbcShaderTranslator::ROV_DepthStencilTest() {
                                            dxbc::Src::kXXXX));
 
           a_.OpMAd(sample_depth_stencil_dest, z_ddx_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[1][0] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions4x[1][0] * (1.0f / 16.0f)),
                    temp_z_src);
           a_.OpMAd(sample_depth_stencil_dest, z_ddy_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[1][1] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions4x[1][1] * (1.0f / 16.0f)),
                    sample_depth_stencil_src, true);
           a_.OpElse();
 
           a_.OpMAd(sample_depth_stencil_dest, z_ddx_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[3][0] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions2x[1][0] * (1.0f / 16.0f)),
                    temp_z_src);
           a_.OpMAd(sample_depth_stencil_dest, z_ddy_src,
-                   dxbc::Src::LF(draw_util::kD3D10StandardSamplePositions4x[3][1] * (1.0f / 16.0f)),
+                   dxbc::Src::LF(draw_util::kXenosSamplePositions2x[1][1] * (1.0f / 16.0f)),
                    sample_depth_stencil_src, true);
           a_.OpEndIf();
           break;
         default: {
-          const int8_t* sample_position = draw_util::kD3D10StandardSamplePositions4x[i];
+          const int8_t* sample_position = draw_util::kXenosSamplePositions4x[i];
           a_.OpMAd(sample_depth_stencil_dest, z_ddx_src,
                    dxbc::Src::LF(sample_position[0] * (1.0f / 16.0f)), temp_z_src);
           a_.OpMAd(sample_depth_stencil_dest, z_ddy_src,

@@ -122,6 +122,10 @@ class PipelineCache {
     return reinterpret_cast<const Pipeline*>(handle)->state.load(std::memory_order_acquire);
   }
 
+  xenos::MsaaSamples GetHostMsaaSamplesByHandle(void* handle) const {
+    return reinterpret_cast<const Pipeline*>(handle)->description.description.host_msaa_samples;
+  }
+
   bool IsPipelineCreationPending(void* handle) const {
     return reinterpret_cast<const Pipeline*>(handle)->creation_pending.load(
         std::memory_order_acquire);

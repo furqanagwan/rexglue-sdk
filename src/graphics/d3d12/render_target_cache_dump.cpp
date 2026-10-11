@@ -695,10 +695,7 @@ bool D3D12RenderTargetCache::DumpRenderTargets(uint32_t dump_base, uint32_t dump
   uint32_t rt_sort_index = 0;
   for (const ResolveCopyDumpRectangle& rectangle : dump_rectangles_) {
     auto& d3d12_rt = *static_cast<D3D12RenderTarget*>(rectangle.render_target);
-    command_processor_.PushTransitionBarrier(
-        d3d12_rt.resource(),
-        d3d12_rt.SetResourceState(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    TransitionRenderTarget(d3d12_rt, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if (d3d12_rt.temporary_sort_index() == UINT32_MAX) {
       d3d12_rt.SetTemporarySortIndex(rt_sort_index++);
     }

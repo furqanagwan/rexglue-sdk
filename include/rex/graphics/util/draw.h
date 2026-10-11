@@ -82,6 +82,12 @@ bool IsVIZSurveyDraw(const RegisterFile& regs);
 extern const int8_t kD3D10StandardSamplePositions2x[2][2];
 extern const int8_t kD3D10StandardSamplePositions4x[4][2];
 
+constexpr int8_t kXenosSamplePositions2x[2][2] = {{-4, 4}, {4, -4}};
+constexpr int8_t kXenosSamplePositions4x[4][2] = {{-2, -2}, {2, 2}, {-6, 6}, {6, -6}};
+
+uint32_t GetHostSampleXenosPositions(xenos::MsaaSamples msaa_samples, bool native_2x,
+                                     bool interlock, int8_t (*positions_out)[2]);
+
 reg::RB_DEPTHCONTROL GetNormalizedDepthControl(const RegisterFile& regs);
 
 constexpr float kD3D10PolygonOffsetFactorUnorm24 = float((UINT32_C(1) << 24) - 1);
@@ -130,7 +136,8 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
                          uint32_t y_max, bool allow_reverse_z,
                          reg::RB_DEPTHCONTROL normalized_depth_control, bool convert_z_to_float24,
                          bool full_float24_in_0_to_1, bool pixel_shader_writes_depth,
-                         ViewportInfo& viewport_info_out, bool window_offset_in_edram = false);
+                         ViewportInfo& viewport_info_out, bool window_offset_in_edram = false,
+                         bool xenos_sample_positions = false);
 
 struct Scissor {
   uint32_t offset[2];

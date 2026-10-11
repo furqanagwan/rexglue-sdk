@@ -34,12 +34,25 @@ void SpirvShaderTranslator::FSI_LoadSampleMask() {
           builder_->createAccessChain(spv::StorageClassInput, input_sample_mask_, id_vector_temp_),
           spv::NoPrecision));
 
+  spv::Id const_uint_1 = builder_->makeUintConstant(1);
+  if (FSI_GetMsaaSamples() == xenos::MsaaSamples::k4X) {
+    main_fsi_sample_mask_ = builder_->createQuadOp(
+        spv::OpBitFieldInsert, type_uint_,
+        builder_->createQuadOp(
+            spv::OpBitFieldInsert, type_uint_, input_sample_mask_value,
+            builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, input_sample_mask_value,
+                                  builder_->makeUintConstant(3), const_uint_1),
+            const_uint_1, const_uint_1),
+        builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, input_sample_mask_value,
+                              const_uint_1, const_uint_1),
+        builder_->makeUintConstant(3), const_uint_1);
+    return;
+  }
   if (FSI_GetMsaaSamples() != xenos::MsaaSamples::k2X) {
     main_fsi_sample_mask_ = input_sample_mask_value;
     return;
   }
 
-  spv::Id const_uint_1 = builder_->makeUintConstant(1);
   if (native_2x_msaa_no_attachments_) {
     main_fsi_sample_mask_ = builder_->createBinOp(
         spv::OpShiftRightLogical, type_uint_,
@@ -47,9 +60,11 @@ void SpirvShaderTranslator::FSI_LoadSampleMask() {
         builder_->makeUintConstant(32 - 2));
   } else {
     main_fsi_sample_mask_ = builder_->createQuadOp(
-        spv::OpBitFieldInsert, type_uint_, input_sample_mask_value,
+        spv::OpBitFieldInsert, type_uint_,
         builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, input_sample_mask_value,
-                              builder_->makeUintConstant(3), const_uint_1),
+                              builder_->makeUintConstant(2), const_uint_1),
+        builder_->createTriOp(spv::OpBitFieldUExtract, type_uint_, input_sample_mask_value,
+                              const_uint_1, const_uint_1),
         const_uint_1, builder_->makeUintConstant(32 - 1));
   }
 }
@@ -574,9 +589,8 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         if (!msaa_is_2x_4x) {
           sample_location.fill(const_float_0_);
         } else {
-          const int8_t* sample_location_int = (!msaa_is_4x && native_2x_msaa_no_attachments_)
-                                                  ? draw_util::kD3D10StandardSamplePositions2x[1]
-                                                  : draw_util::kD3D10StandardSamplePositions4x[0];
+          const int8_t* sample_location_int = msaa_is_4x ? draw_util::kXenosSamplePositions4x[0]
+                                                         : draw_util::kXenosSamplePositions2x[0];
           for (uint32_t j = 0; j < 2; ++j) {
             sample_location[j] =
                 builder_->makeFloatConstant(sample_location_int[j] * (1.0f / 16.0f));
@@ -584,17 +598,14 @@ void SpirvShaderTranslator::FSI_DepthStencilTest(bool sample_mask_potentially_na
         }
       } break;
       case 1: {
-        const int8_t* sample_location_int =
-            msaa_is_4x
-                ? draw_util::kD3D10StandardSamplePositions4x[1]
-                : (native_2x_msaa_no_attachments_ ? draw_util::kD3D10StandardSamplePositions2x[0]
-                                                  : draw_util::kD3D10StandardSamplePositions4x[3]);
+        const int8_t* sample_location_int = msaa_is_4x ? draw_util::kXenosSamplePositions4x[1]
+                                                       : draw_util::kXenosSamplePositions2x[1];
         for (uint32_t j = 0; j < 2; ++j) {
           sample_location[j] = builder_->makeFloatConstant(sample_location_int[j] * (1.0f / 16.0f));
         }
       } break;
       default: {
-        const int8_t* sample_location_int = draw_util::kD3D10StandardSamplePositions4x[i];
+        const int8_t* sample_location_int = draw_util::kXenosSamplePositions4x[i];
         for (uint32_t j = 0; j < 2; ++j) {
           sample_location[j] = builder_->makeFloatConstant(sample_location_int[j] * (1.0f / 16.0f));
         }

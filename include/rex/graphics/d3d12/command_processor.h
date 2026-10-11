@@ -186,6 +186,9 @@ class D3D12CommandProcessor : public CommandProcessor {
   void SetStencilReference(uint32_t stencil_ref);
   void SetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY primitive_topology);
 
+  void UpdateSamplePositions(xenos::MsaaSamples msaa_samples);
+  bool xenos_sample_positions_used() const { return xenos_sample_positions_used_; }
+
   std::string GetWindowTitleText() const;
 
  protected:
@@ -453,6 +456,8 @@ class D3D12CommandProcessor : public CommandProcessor {
   CommandAllocator* command_allocator_submitted_last_ = nullptr;
   ID3D12GraphicsCommandList* command_list_ = nullptr;
   ID3D12GraphicsCommandList1* command_list_1_ = nullptr;
+  bool xenos_sample_positions_used_ = false;
+  xenos::MsaaSamples current_sample_positions_ = xenos::MsaaSamples::k1X;
   DeferredCommandList deferred_command_list_;
 
   bool debug_markers_enabled_ = false;
