@@ -222,12 +222,13 @@ void GetHostViewportInfo(const RegisterFile& regs, uint32_t draw_resolution_scal
       float scale_axis = scale_xy[i];
       float scale_axis_abs = std::abs(scale_xy[i]);
       float axis_max_unscaled_float = float(xy_max_unscaled[i]);
-      uint32_t axis_0_int =
-          uint32_t(rex::clamp_float(offset_axis - scale_axis_abs, 0.0f, axis_max_unscaled_float));
-      uint32_t axis_1_int =
-          uint32_t(rex::clamp_float(offset_axis + scale_axis_abs, 0.0f, axis_max_unscaled_float));
-      uint32_t axis_extent_int = axis_1_int - axis_0_int;
-      viewport_info_out.xy_offset[i] = axis_0_int * axis_resolution_scale;
+      int32_t axis_1_int = int32_t(std::floor(
+          rex::clamp_float(offset_axis + scale_axis_abs, 0.0f, axis_max_unscaled_float)));
+      int32_t axis_0_int = int32_t(std::floor(
+          rex::clamp_float(offset_axis - scale_axis_abs,
+                           float(axis_1_int) - axis_max_unscaled_float, axis_max_unscaled_float)));
+      uint32_t axis_extent_int = axis_1_int > 0 ? uint32_t(axis_1_int - axis_0_int) : 0;
+      viewport_info_out.xy_offset[i] = axis_0_int * int32_t(axis_resolution_scale);
       viewport_info_out.xy_extent[i] = axis_extent_int * axis_resolution_scale;
       float ndc_scale_axis;
       float ndc_offset_axis;

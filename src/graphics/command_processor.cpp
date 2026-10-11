@@ -67,12 +67,6 @@ REXCVAR_DEFINE_STRING(occlusion_query, "fast", "GPU",
     .allowed({"fake", "fast", "fast-alt", "strict"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-REXCVAR_DEFINE_BOOL(occlusion_query_viz, false, "GPU",
-                    "VIZ_QUERY visibility tests for draws with a VIZ token, the Xbox 360's "
-                    "conditional rendering: occlusion queries over the survey draws predicate "
-                    "the draws that use them, skipping hidden ones on the GPU (xenia-canary "
-                    "#1111). Costs most with ROV")
-    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(occlusion_query_full_counters, false, "GPU",
                     "Also count the samples that fail the depth or stencil test in occlusion "
                     "queries, as the Xbox 360 does. Only the ROV path "
